@@ -130,3 +130,6 @@ _ocr_test/
 frontend/.playwright-browsers/
 frontend/_pw_browsers/
 /test_graph_query_resp.json
+
+# === 开发期调试/迁移 SQL（含密码/内网 IP，不入库）===
+backend/_*.sql
