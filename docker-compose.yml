@@ -1,0 +1,6 @@
+services:
+  # postgres + neo4j 已移除: tupu backend 100% 走本地 MySQL 3306，不引用这两个
+  # 历史保留: 早期规划留的占位，但代码最终没接进去
+
+volumes:
+

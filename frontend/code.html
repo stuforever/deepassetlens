@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能体技能管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: { DEFAULT:'#0a0b10', s:'#10121a', card:'#161923', hover:'#1c1f2e', input:'#0d0e15' },
+                        bd: { DEFAULT:'#22263a', light:'#2e3348' },
+                        ac: { DEFAULT:'#10b981', light:'#34d399', dark:'#059669' },
+                        wn: { DEFAULT:'#f59e0b', light:'#fbbf24' },
+                        dg: { DEFAULT:'#ef4444', light:'#f87171' },
+                        tx: { DEFAULT:'#e5e7eb', s:'#9ca3af', m:'#6b7280', dim:'#4b5563' }
+                    },
+                    fontFamily: {
+                        sans: ['"Noto Sans SC"','sans-serif'],
+                        mono: ['"JetBrains Mono"','monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Noto Sans SC', sans-serif; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #22263a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2e3348; }
+
+        /* 代码编辑器 */
+        .code-editor-wrap { display: flex; position: relative; }
+        .line-nums {
+            padding: 14px 10px 14px 12px; text-align: right; user-select: none;
+            color: #3b3f54; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+            line-height: 1.65; min-width: 44px; overflow: hidden; flex-shrink: 0;
+            background: #0d0e15; border-right: 1px solid #1a1d2e;
+        }
+        .code-area {
+            flex: 1; padding: 14px 16px; background: #0d0e15; color: #d4d4d8;
+            font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.65;
+            border: none; outline: none; resize: none; tab-size: 4; white-space: pre;
+            overflow: auto;
+        }
+        .code-area::placeholder { color: #3b3f54; }
+
+        /* 技能卡片 */
+        .skill-item { transition: all 0.15s ease; }
+        .skill-item:hover { background: #1c1f2e; }
+        .skill-item.active { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.25); }
+
+        /* 类型chip */
+        .type-chip { transition: all 0.15s ease; cursor: pointer; }
+        .type-chip:hover { background: #1c1f2e; }
+        .type-chip.active { background: rgba(16,185,129,0.12); color: #10b981; border-color: rgba(16,185,129,0.3); }
+
+        /* Tab */
+        .tab-item { transition: all 0.15s ease; position: relative; }
+        .tab-item::after {
+            content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px;
+            background: #10b981; transform: scaleX(0); transition: transform 0.2s ease;
+        }
+        .tab-item.active { color: #10b981; }
+        .tab-item.active::after { transform: scaleX(1); }
+
+        /* 弹窗遮罩 */
+        .modal-overlay {
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            opacity: 0; transition: opacity 0.2s ease; pointer-events: none;
+        }
+        .modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .modal-box {
+            transform: translateY(12px) scale(0.97); opacity: 0;
+            transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
+        }
+        .modal-overlay.show .modal-box { transform: translateY(0) scale(1); opacity: 1; }
+
+        /* Toast */
+        .toast-item {
+            animation: toastIn 0.3s cubic-bezier(0.16,1,0.3,1) forwards;
+        }
+        .toast-item.out { animation: toastOut 0.25s ease forwards; }
+        @keyframes toastIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(40px); opacity: 0; } }
+
+        /* 参数表格输入 */
+        .param-input {
+            background: #0d0e15; border: 1px solid #22263a; color: #e5e7eb; padding: 6px 10px;
+            border-radius: 6px; font-size: 13px; outline: none; transition: border-color 0.15s;
+        }
+        .param-input:focus { border-color: #10b981; }
+        .param-input::placeholder { color: #3b3f54; }
+
+        /* 按钮微动效 */
+        .btn-press { transition: all 0.1s ease; }
+        .btn-press:active { transform: scale(0.97); }
+
+        /* 背景网格 */
+        .bg-grid {
+            background-image:
+                linear-gradient(rgba(34,38,58,0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(34,38,58,0.3) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* 状态标签 */
+        .status-draft { background: rgba(107,114,128,0.15); color: #9ca3af; }
+        .status-published { background: rgba(16,185,129,0.12); color: #10b981; }
+        .status-disabled { background: rgba(239,68,68,0.12); color: #ef4444; }
+
+        /* 闪烁光标 */
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+        .cursor-blink::after { content:'|'; animation: blink 1s step-end infinite; color: #10b981; }
+
+        /* 渐入 */
+        @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        .fade-up { animation: fadeUp 0.3s ease forwards; }
+    </style>
+</head>
+<body class="bg-bg text-tx min-h-screen overflow-hidden">
+
+<!-- Toast容器 -->
+<div id="toastBox" class="fixed top-5 right-5 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+<!-- ===================== 新建技能弹窗 ===================== -->
+<div id="createModal" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center">
+    <div class="modal-box bg-bg-card border border-bd rounded-2xl shadow-2xl w-[480px] max-w-[90vw]">
+        <div class="p-6 border-b border-bd">
+            <h3 class="text-base font-semibold">新建技能</h3>
+            <p class="text-tx-m text-xs mt-1">选择技能类型并填写基本信息</p>
+        </div>
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="text-xs text-tx-s font-medium mb-1.5 block">技能名称</label>
+                <input id="newSkillName" type="text" placeholder="例如：查询用户订单" class="param-input w-full">
+            </div>
+            <div>
+                <label class="text-xs text-tx-s font-medium mb-1.5 block">技能类型</label>
+                <div id="newSkillTypes" class="grid grid-cols-3 gap-2"></div>
+            </div>
+            <div>
+                <label class="text-xs text-tx-s font-medium mb-1.5 block">技能描述 <span class="text-tx-dim">(可选)</span></label>
+                <textarea id="newSkillDesc" rows="2" placeholder="简要描述技能用途..." class="param-input w-full resize-none"></textarea>
+            </div>
+        </div>
+        <div class="p-6 border-t border-bd flex justify-end gap-2">
+            <button onclick="hideModal('createModal')" class="btn-press px-4 py-2 text-xs text-tx-s bg-bg-hover rounded-lg hover:bg-bd-light transition-colors">取消</button>
+            <button onclick="doCreateSkill()" class="btn-press px-4 py-2 text-xs font-medium text-white bg-ac rounded-lg hover:bg-ac-dark transition-colors">创建</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== 类型管理弹窗 ===================== -->
+<div id="typeModal" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center">
+    <div class="modal-box bg-bg-card border border-bd rounded-2xl shadow-2xl w-[640px] max-w-[90vw] max-h-[80vh] flex flex-col">
+        <div class="p-6 border-b border-bd flex items-center justify-between flex-shrink-0">
+            <div>
+                <h3 class="text-base font-semibold">技能类型管理</h3>
+                <p class="text-tx-m text-xs mt-1">自定义技能类型及其编辑器模式，支持灵活扩展</p>
+            </div>
+            <button onclick="hideModal('typeModal')" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors text-tx-m">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+        <!-- 类型列表 -->
+        <div class="flex-1 overflow-y-auto p-6">
+            <div id="typeList" class="space-y-2 mb-4"></div>
+            <!-- 添加/编辑类型表单 -->
+            <div id="typeForm" class="border border-bd border-dashed rounded-xl p-5 space-y-3" style="display:none;">
+                <h4 id="typeFormTitle" class="text-sm font-medium text-ac">添加新类型</h4>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-tx-m mb-1 block">类型标识</label>
+                        <input id="tfKey" type="text" placeholder="如：graphql" class="param-input w-full">
+                    </div>
+                    <div>
+                        <label class="text-xs text-tx-m mb-1 block">类型名称</label>
+                        <input id="tfName" type="text" placeholder="如：GraphQL" class="param-input w-full">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-tx-m mb-1 block">图标</label>
+                        <input id="tfIcon" type="text" placeholder="如：fa-diagram-project" class="param-input w-full">
+                    </div>
+                    <div>
+                        <label class="text-xs text-tx-m mb-1 block">编辑器模式</label>
+                        <select id="tfEditor" class="param-input w-full">
+                            <option value="prompt">提示词编辑器</option>
+                            <option value="code">代码编辑器</option>
+                            <option value="http">HTTP请求编辑器</option>
+                            <option value="mixed">混合模式（代码+配置）</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-tx-m mb-1 block">默认模板 <span class="text-tx-dim">(可选)</span></label>
+                    <textarea id="tfTemplate" rows="3" placeholder="创建该类型技能时的默认内容模板..." class="param-input w-full resize-none font-mono text-xs"></textarea>
+                </div>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button onclick="cancelTypeForm()" class="btn-press px-3 py-1.5 text-xs text-tx-s bg-bg-hover rounded-lg hover:bg-bd-light transition-colors">取消</button>
+                    <button onclick="saveTypeForm()" class="btn-press px-3 py-1.5 text-xs font-medium text-white bg-ac rounded-lg hover:bg-ac-dark transition-colors">保存</button>
+                </div>
+            </div>
+            <button id="addTypeBtn" onclick="showTypeForm()" class="w-full py-2.5 border border-dashed border-bd rounded-xl text-xs text-tx-m hover:text-ac hover:border-ac/30 transition-colors btn-press">
+                <i class="fas fa-plus mr-1"></i> 添加新类型
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== 删除确认弹窗 ===================== -->
+<div id="deleteModal" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center">
+    <div class="modal-box bg-bg-card border border-bd rounded-2xl shadow-2xl w-[400px] max-w-[90vw]">
+        <div class="p-6 text-center">
+            <div class="w-12 h-12 rounded-full bg-dg/10 flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-trash-can text-dg"></i>
+            </div>
+            <h3 class="text-base font-semibold">确认删除</h3>
+            <p class="text-tx-m text-sm mt-2">删除后无法恢复，确定要删除技能「<span id="deleteSkillName" class="text-tx"></span>」吗？</p>
+        </div>
+        <div class="p-4 border-t border-bd flex justify-center gap-3">
+            <button onclick="hideModal('deleteModal')" class="btn-press px-5 py-2 text-sm text-tx-s bg-bg-hover rounded-lg hover:bg-bd-light transition-colors">取消</button>
+            <button onclick="doDeleteSkill()" class="btn-press px-5 py-2 text-sm font-medium text-white bg-dg rounded-lg hover:bg-red-600 transition-colors">删除</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== 主布局 ===================== -->
+<div class="flex h-screen">
+    <!-- 左侧边栏 -->
+    <aside class="w-[280px] bg-bg-s border-r border-bd flex flex-col flex-shrink-0">
+        <!-- 头部 -->
+        <div class="p-4 border-b border-bd">
+            <div class="flex items-center gap-2.5 mb-3">
+                <div class="w-8 h-8 rounded-lg bg-ac/15 flex items-center justify-center">
+                    <i class="fas fa-bolt text-ac text-sm"></i>
+                </div>
+                <div>
+                    <div class="text-sm font-semibold leading-tight">技能管理</div>
+                    <div class="text-[10px] text-tx-dim mt-0.5">Agent Skill Manager</div>
+                </div>
+            </div>
+            <div class="relative">
+                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-tx-dim text-[11px]"></i>
+                <input id="searchInput" type="text" placeholder="搜索技能名称..." oninput="onSearch(this.value)"
+                    class="w-full bg-bg-input border border-bd rounded-lg pl-8 pr-3 py-2 text-xs text-tx placeholder:text-tx-dim focus:outline-none focus:border-ac/50 transition-colors">
+            </div>
+        </div>
+        <!-- 类型筛选 -->
+        <div class="px-3 py-2.5 border-b border-bd">
+            <div id="filterChips" class="flex flex-wrap gap-1"></div>
+        </div>
+        <!-- 技能列表 -->
+        <div id="skillList" class="flex-1 overflow-y-auto px-2 py-2 space-y-1"></div>
+        <!-- 底部操作 -->
+        <div class="p-3 border-t border-bd space-y-2">
+            <button onclick="showModal('createModal');initCreateModal()" class="btn-press w-full py-2.5 bg-ac/10 text-ac text-xs font-medium rounded-lg hover:bg-ac/20 transition-colors">
+                <i class="fas fa-plus mr-1.5"></i>新建技能
+            </button>
+            <button onclick="showModal('typeModal');renderTypeList()" class="btn-press w-full py-2 bg-bg-hover text-tx-s text-xs rounded-lg hover:bg-bd-light transition-colors">
+                <i class="fas fa-sliders mr-1.5"></i>类型管理
+            </button>
+        </div>
+    </aside>
+
+    <!-- 右侧主区域 -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-grid">
+        <!-- 顶部操作栏 -->
+        <header id="topBar" class="h-14 border-b border-bd bg-bg-s/80 backdrop-blur-sm flex items-center justify-between px-6 flex-shrink-0"></header>
+        <!-- Tab栏 -->
+        <div id="tabBar" class="border-b border-bd bg-bg-s/50 backdrop-blur-sm px-6 flex-shrink-0"></div>
+        <!-- 内容区 -->
+        <div id="contentArea" class="flex-1 overflow-y-auto"></div>
+    </main>
+</div>
+
+<script>
+/* ============================================================
+   数据层：技能类型定义 + 技能数据
+   ============================================================ */
+
+// 技能类型定义（前台灵活管理，不写死）
+let skillTypes = [
+    { key:'natural', name:'自然语言', icon:'fa-comment-dots',  editor:'prompt', template:'请根据以下信息完成任务：\n\n{{input}}\n\n要求：\n1. \n2. ' },
+    { key:'script',  name:'脚本',     icon:'fa-code',         editor:'code',   template:'// 可用上下文变量：inputs, params, context\nfunction execute(inputs) {\n    // 在此编写你的处理逻辑\n    const result = {};\n    \n    return result;\n}' },
+    { key:'sql',     name:'SQL',      icon:'fa-database',     editor:'code',   template:'SELECT \n    *\nFROM \n    table_name\nWHERE \n    1 = 1\n    -- AND field = {{param}}\nLIMIT 100;' },
+    { key:'python',  name:'Python',   icon:'fa-python',       editor:'mixed',  template:'# 可用输入：inputs (dict)\ndef execute(inputs):\n    """技能处理逻辑"""\n    result = {}\n    \n    return result' },
+    { key:'http',    name:'HTTP请求', icon:'fa-globe',        editor:'http',   template:'' }
+];
+
+// 技能数据
+let skills = [
+    {
+        id:'sk_001', name:'意图分类', desc:'对用户输入进行意图识别与分类，输出标准意图标签',
+        type:'natural', icon:'fa-comment-dots', tags:['NLP','分类'],
+        status:'published', version:'1.2.0', createdAt:'2024-11-08', updatedAt:'2025-01-10',
+        content:'你是一个专业的意图分类助手。根据用户输入，判断其意图类别。\n\n可用意图类别：\n- query_order：查询订单\n- refund：退款申请\n- complaint：投诉建议\n- greeting：问候寒暄\n- other：其他\n\n用户输入：{{userInput}}\n\n请以JSON格式返回：\n{"intent": "意图标签", "confidence": 0.95, "reason": "判断理由"}',
+        inputs:[{name:'userInput',type:'string',desc:'用户原始输入文本',required:true,defaultVal:''}],
+        outputs:[{name:'intent',type:'string',desc:'意图标签'},{name:'confidence',type:'number',desc:'置信度'},{name:'reason',type:'string',desc:'判断理由'}],
+        httpConfig:{method:'GET',url:'',headers:[],body:''},
+        deps:[]
+    },
+    {
+        id:'sk_002', name:'数据格式转换', desc:'将原始JSON数据转换为智能体所需的标准化格式',
+        type:'script', icon:'fa-code', tags:['数据处理','转换'],
+        status:'published', version:'1.0.1', createdAt:'2024-12-01', updatedAt:'2025-01-15',
+        content:'function execute(inputs) {\n    const rawData = inputs.rawData;\n    if (!rawData) return { error: "缺少原始数据" };\n    \n    const parsed = typeof rawData === "string" \n        ? JSON.parse(rawData) \n        : rawData;\n    \n    // 提取关键字段并标准化\n    const result = {\n        items: (parsed.list || []).map(item => ({\n            id: item.id || item.ID,\n            title: item.title || item.name,\n            value: Number(item.value) || 0,\n            timestamp: new Date(item.created_at).getTime()\n        })),\n        total: parsed.total || parsed.list?.length || 0,\n        page: parsed.page || 1\n    };\n    \n    return result;\n}',
+        inputs:[{name:'rawData',type:'object',desc:'原始JSON数据',required:true,defaultVal:''},{name:'format',type:'string',desc:'目标格式',required:false,defaultVal:'standard'}],
+        outputs:[{name:'items',type:'array',desc:'标准化后的数据列表'},{name:'total',type:'number',desc:'总数量'},{name:'page',type:'number',desc:'页码'}],
+        httpConfig:{method:'GET',url:'',headers:[],body:''},
+        deps:[]
+    },
+    {
+        id:'sk_003', name:'订单明细查询', desc:'根据条件从业务数据库查询订单详情列表',
+        type:'sql', icon:'fa-database', tags:['订单','查询'],
+        status:'draft', version:'0.3.0', createdAt:'2025-01-05', updatedAt:'2025-01-18',
+        content:"SELECT \n    o.order_id,\n    o.user_id,\n    o.status,\n    o.total_amount,\n    o.created_at,\n    COUNT(oi.item_id) AS item_count,\n    GROUP_CONCAT(p.product_name, ', ') AS products\nFROM orders o\nLEFT JOIN order_items oi ON o.order_id = oi.order_id\nLEFT JOIN products p ON oi.product_id = p.product_id\nWHERE 1=1\n    AND o.user_id = '{{userId}}'\n    {{#if status}}AND o.status = '{{status}}'{{/if}}\n    {{#if dateFrom}}AND o.created_at >= '{{dateFrom}}'{{/if}}\nGROUP BY o.order_id\nORDER BY o.created_at DESC\nLIMIT {{limit}};",
+        inputs:[{name:'userId',type:'string',desc:'用户ID',required:true,defaultVal:''},{name:'status',type:'string',desc:'订单状态筛选',required:false,defaultVal:''},{name:'dateFrom',type:'string',desc:'起始日期',required:false,defaultVal:''},{name:'limit',type:'number',desc:'返回条数',required:false,defaultVal:'50'}],
+        outputs:[{name:'order_id',type:'string',desc:'订单号'},{name:'total_amount',type:'number',desc:'订单金额'},{name:'products',type:'string',desc:'商品列表'},{name:'item_count',type:'number',desc:'商品数量'}],
+        httpConfig:{method:'GET',url:'',headers:[],body:''},
+        deps:[]
+    },
+    {
+        id:'sk_004', name:'文本摘要提取', desc:'对长文本进行智能摘要，提取关键信息点',
+        type:'python', icon:'fa-python', tags:['NLP','摘要'],
+        status:'draft', version:'0.1.0', createdAt:'2025-01-12', updatedAt:'2025-01-20',
+        content:"def execute(inputs):\n    \"\"\"文本摘要提取技能\n    \n    Args:\n        inputs: dict, 包含 text(原文) 和 max_length(最大长度)\n    \"\"\"\n    text = inputs.get('text', '')\n    max_len = int(inputs.get('max_length', 200))\n    \n    if not text:\n        return {'error': '输入文本不能为空'}\n    \n    # 简单的抽取式摘要逻辑\n    sentences = text.replace('。', '。|||').replace('！', '！|||').replace('？', '？|||')\n    sentences = [s.strip() for s in sentences.split('|||') if s.strip()]\n    \n    # 按句子重要性排序（简化版：取前N个）\n    summary_sentences = sentences[:max(1, len(sentences) // 3)]\n    summary = ''.join(summary_sentences)\n    \n    return {\n        'summary': summary,\n        'original_length': len(text),\n        'summary_length': len(summary),\n        'compression_ratio': round(len(summary) / max(len(text), 1), 2)\n    }",
+        inputs:[{name:'text',type:'string',desc:'原始文本',required:true,defaultVal:''},{name:'max_length',type:'number',desc:'摘要最大长度',required:false,defaultVal:'200'}],
+        outputs:[{name:'summary',type:'string',desc:'摘要结果'},{name:'compression_ratio',type:'number',desc:'压缩比'}],
+        httpConfig:{method:'GET',url:'',headers:[],body:''},
+        deps:['numpy']
+    },
+    {
+        id:'sk_005', name:'天气数据获取', desc:'调用外部天气API获取指定城市的实时天气信息',
+        type:'http', icon:'fa-globe', tags:['天气','外部API'],
+        status:'published', version:'2.0.0', createdAt:'2024-10-20', updatedAt:'2025-01-22',
+        content:'',
+        inputs:[{name:'city',type:'string',desc:'城市名称',required:true,defaultVal:'北京'},{name:'days',type:'number',desc:'预报天数',required:false,defaultVal:'3'}],
+        outputs:[{name:'temperature',type:'string',desc:'温度'},{name:'weather',type:'string',desc:'天气状况'},{name:'wind',type:'string',desc:'风力信息'}],
+        httpConfig:{method:'GET',url:'https://api.weather.example/v3/weather',headers:[{key:'Authorization',value:'Bearer {{API_KEY}}'},{key:'Content-Type',value:'application/json'}],body:''},
+        deps:[]
+    },
+    {
+        id:'sk_006', name:'知识库检索', desc:'根据查询向量在知识库中进行相似度检索，返回相关文档片段',
+        type:'natural', icon:'fa-book-open', tags:['知识库','RAG'],
+        status:'disabled', version:'0.5.0', createdAt:'2025-01-15', updatedAt:'2025-01-25',
+        content:'你是知识库检索助手。请根据用户的问题，从以下检索结果中提取最相关的信息并整理回答。\n\n用户问题：{{query}}\n\n检索到的文档片段：\n{{context}}\n\n回答要求：\n1. 仅基于提供的文档片段回答，不要编造信息\n2. 如果文档片段不足以回答问题，明确说明\n3. 引用信息时标注来源编号\n4. 回答简洁精准，控制在300字以内',
+        inputs:[{name:'query',type:'string',desc:'用户查询问题',required:true,defaultVal:''},{name:'context',type:'string',desc:'检索到的文档片段',required:true,defaultVal:''},{name:'topK',type:'number',desc:'返回文档数量',required:false,defaultVal:'5'}],
+        outputs:[{name:'answer',type:'string',desc:'检索回答'},{name:'sources',type:'array',desc:'引用来源'}],
+        httpConfig:{method:'GET',url:'',headers:[],body:''},
+        deps:[]
+    }
+];
+
+/* ============================================================
+   状态管理
+   ============================================================ */
+const state = {
+    currentId: null,    // 当前选中的技能ID
+    activeTab: 'basic', // basic | editor | params | test
+    filterType: 'all',  // 筛选类型
+    searchQuery: '',
+    editingTypeId: null, // 类型管理中正在编辑的类型key
+    newSkillType: ''     // 新建技能时选中的类型
+};
+
+/* ============================================================
+   工具函数
+   ============================================================ */
+function uid() { return 'sk_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function getTypeDef(key) { return skillTypes.find(t => t.key === key); }
+function getCurrentSkill() { return skills.find(s => s.id === state.currentId); }
+function now() { return new Date().toISOString().slice(0,10); }
+
+function statusLabel(s) {
+    const m = { draft:'草稿', published:'已发布', disabled:'已禁用' };
+    return m[s] || s;
+}
+
+// Toast通知
+function toast(msg, type='success') {
+    const box = document.getElementById('toastBox');
+    const colors = { success:'border-ac bg-ac/10 text-ac', error:'border-dg bg-dg/10 text-dg', warn:'border-wn bg-wn/10 text-wn', info:'border-blue-500 bg-blue-500/10 text-blue-400' };
+    const icons = { success:'fa-check-circle', error:'fa-circle-xmark', warn:'fa-triangle-exclamation', info:'fa-circle-info' };
+    const el = document.createElement('div');
+    el.className = `toast-item pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl border ${colors[type]} text-sm shadow-lg backdrop-blur-sm`;
+    el.innerHTML = `<i class="fas ${icons[type]}"></i><span>${msg}</span>`;
+    box.appendChild(el);
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 2500);
+}
+
+// 弹窗
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function hideModal(id) { document.getElementById(id).classList.remove('show'); }
+
+/* ============================================================
+   渲染：类型筛选 Chips
+   ============================================================ */
+function renderFilters() {
+    const wrap = document.getElementById('filterChips');
+    const all = [{ key:'all', name:'全部' }, ...skillTypes];
+    wrap.innerHTML = all.map(t => `
+        <div class="type-chip px-2.5 py-1 text-[11px] rounded-md border border-transparent text-tx-m ${state.filterType===t.key?'active':''}"
+             onclick="setFilter('${t.key}')">
+            ${t.icon ? `<i class="fas ${t.icon} mr-1 text-[10px]"></i>` : ''}${t.name}
+        </div>
+    `).join('');
+}
+
+function setFilter(type) {
+    state.filterType = type;
+    renderFilters();
+    renderSkillList();
+}
+
+/* ============================================================
+   渲染：技能列表
+   ============================================================ */
+function renderSkillList() {
+    const wrap = document.getElementById('skillList');
+    let list = skills;
+    if (state.filterType !== 'all') list = list.filter(s => s.type === state.filterType);
+    if (state.searchQuery) {
+        const q = state.searchQuery.toLowerCase();
+        list = list.filter(s => s.name.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q));
+    }
+
+    if (!list.length) {
+        wrap.innerHTML = `<div class="text-center py-10 text-tx-dim text-xs"><i class="fas fa-inbox text-2xl mb-2 block"></i>暂无技能</div>`;
+        return;
+    }
+
+    wrap.innerHTML = list.map(s => {
+        const td = getTypeDef(s.type);
+        return `
+        <div class="skill-item rounded-lg border border-transparent px-3 py-2.5 cursor-pointer ${state.currentId===s.id?'active':''}"
+             onclick="selectSkill('${s.id}')">
+            <div class="flex items-start gap-2.5">
+                <div class="w-7 h-7 rounded-md bg-bg-hover flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <i class="fas ${s.icon || (td?.icon||'fa-puzzle-piece')} text-[11px] text-tx-s"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-xs font-medium truncate">${s.name}</div>
+                    <div class="flex items-center gap-1.5 mt-1">
+                        <span class="text-[10px] text-tx-dim">${td?.name||s.type}</span>
+                        <span class="w-0.5 h-0.5 rounded-full bg-tx-dim"></span>
+                        <span class="text-[10px] status-${s.status} px-1.5 py-0 rounded">${statusLabel(s.status)}</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function onSearch(val) {
+    state.searchQuery = val.trim();
+    renderSkillList();
+}
+
+/* ============================================================
+   渲染：顶部栏
+   ============================================================ */
+function renderTopBar() {
+    const bar = document.getElementById('topBar');
+    const sk = getCurrentSkill();
+    if (!sk) {
+        bar.innerHTML = `
+            <div class="text-tx-m text-sm">选择或新建一个技能开始编辑</div>
+            <div></div>`;
+        return;
+    }
+    const td = getTypeDef(sk.type);
+    bar.innerHTML = `
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-ac/10 flex items-center justify-center">
+                <i class="fas ${sk.icon || (td?.icon||'fa-puzzle-piece')} text-ac text-sm"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold">${sk.name}</span>
+                    <span class="text-[10px] status-${sk.status} px-2 py-0.5 rounded-full">${statusLabel(sk.status)}</span>
+                </div>
+                <div class="text-[11px] text-tx-dim mt-0.5">v${sk.version} · ${td?.name||sk.type} · 更新于 ${sk.updatedAt}</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="saveSkill()" class="btn-press px-3.5 py-1.5 text-xs text-tx-s bg-bg-hover rounded-lg hover:bg-bd-light transition-colors border border-bd">
+                <i class="fas fa-floppy-disk mr-1.5"></i>保存草稿
+            </button>
+            <button onclick="publishSkill()" class="btn-press px-3.5 py-1.5 text-xs font-medium text-white bg-ac rounded-lg hover:bg-ac-dark transition-colors">
+                <i class="fas fa-rocket mr-1.5"></i>发布
+            </button>
+            <div class="relative group">
+                <button class="btn-press w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors text-tx-m">
+                    <i class="fas fa-ellipsis-vertical"></i>
+                </button>
+                <div class="absolute right-0 top-full mt-1 bg-bg-card border border-bd rounded-xl shadow-2xl py-1 w-36 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
+                    <button onclick="duplicateSkill()" class="w-full text-left px-3 py-2 text-xs text-tx-s hover:bg-bg-hover transition-colors"><i class="fas fa-copy mr-2 text-tx-dim"></i>复制技能</button>
+                    <button onclick="showDeleteModal()" class="w-full text-left px-3 py-2 text-xs text-dg hover:bg-bg-hover transition-colors"><i class="fas fa-trash-can mr-2"></i>删除技能</button>
+                </div>
+            </div>
+        </div>`;
+}
+
+/* ============================================================
+   渲染：Tab栏
+   ============================================================ */
+function renderTabs() {
+    const bar = document.getElementById('tabBar');
+    if (!state.currentId) { bar.innerHTML = ''; return; }
+    const tabs = [
+        { key:'basic', label:'基础配置', icon:'fa-gear' },
+        { key:'editor', label:'技能编辑', icon:'fa-pen-to-square' },
+        { key:'params', label:'输入输出', icon:'fa-arrow-right-arrow-left' },
+        { key:'test', label:'调试测试', icon:'fa-play' }
+    ];
+    bar.innerHTML = tabs.map(t => `
+        <div class="tab-item px-4 py-3.5 text-xs text-tx-m cursor-pointer hover:text-tx-s transition-colors ${state.activeTab===t.key?'active':''}"
+             onclick="switchTab('${t.key}')">
+            <i class="fas ${t.icon} mr-1.5 text-[10px]"></i>${t.label}
+        </div>
+    `).join('');
+}
+
+function switchTab(tab) {
+    state.activeTab = tab;
+    renderTabs();
+    renderContent();
+}
+
+/* ============================================================
+   渲染：内容区（根据tab分发）
+   ============================================================ */
+function renderContent() {
+    const area = document.getElementById('contentArea');
+    if (!state.currentId) {
+        area.innerHTML = `
+            <div class="flex items-center justify-center h-full">
+                <div class="text-center">
+                    <div class="w-16 h-16 rounded-2xl bg-bg-card border border-bd flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-wand-magic-sparkles text-2xl text-tx-dim"></i>
+                    </div>
+                    <div class="text-tx-m text-sm mb-1">从左侧选择一个技能</div>
+                    <div class="text-tx-dim text-xs">或点击「新建技能」创建你的第一个技能</div>
+                </div>
+            </div>`;
+        return;
+    }
+    const renderers = { basic: renderBasicTab, editor: renderEditorTab, params: renderParamsTab, test: renderTestTab };
+    (renderers[state.activeTab] || renderBasicTab)(area);
+}
+
+/* ============================================================
+   Tab：基础配置
+   ============================================================ */
+function renderBasicTab(area) {
+    const sk = getCurrentSkill();
+    const td = getTypeDef(sk.type);
+    area.innerHTML = `
+    <div class="max-w-3xl mx-auto fade-up">
+        <div class="bg-bg-card border border-bd rounded-2xl p-6 space-y-5">
+            <!-- 名称 -->
+            <div>
+                <label class="text-xs text-tx-s font-medium mb-1.5 block">技能名称 <span class="text-dg">*</span></label>
+                <input type="text" value="${sk.name}" oninput="upd('name',this.value);renderTopBar()"
+                    class="param-input w-full text-sm">
+            </div>
+            <!-- 描述 -->
+            <div>
+                <label class="text-xs text-tx-s font-medium mb-1.5 block">技能描述</label>
+                <textarea rows="3" oninput="upd('desc',this.value)" class="param-input w-full resize-none text-sm">${sk.desc}</textarea>
+            </div>
+            <!-- 类型 + 图标 + 状态 -->
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <label class="text-xs text-tx-s font-medium mb-1.5 block">技能类型</label>
+                    <div class="param-input w-full flex items-center gap-2 text-sm opacity-80 cursor-default">
+                        <i class="fas ${td?.icon||'fa-puzzle-piece'} text-ac text-xs"></i>
+                        ${td?.name||sk.type}
+                        <span class="text-tx-dim text-[10px] ml-auto">创建后不可更改</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-tx-s font-medium mb-1.5 block">图标</label>
+                    <input type="text" value="${sk.icon||''}" oninput="upd('icon',this.value);renderTopBar()"
+                        placeholder="fa-puzzle-piece" class="param-input w-full text-sm font-mono">
+                </div>
+                <div>
+                    <label class="text-xs text-tx-s font-medium mb-1.5 block">状态</label>
+                    <select onchange="upd('status',this.value);renderTopBar();renderSkillList()" class="param-input w-full text-sm">
+                        <option value="draft" ${sk.status==='draft'?'selected':''}>草稿</option>
+                        <option value="published" ${sk.status==='published'?'selected':''}>已发布</option>
+                        <option value="disabled" ${sk.status==='disabled'?'selected':''}>已禁用</option>
+                    </select>
+                </div>
+            </div>
+            <!-- 标签 -->
+            <div>
+                <label class="text-xs text-tx-s font-medium mb-1.5 block">标签</label>
+                <div class="flex flex-wrap gap-1.5 mb-2" id="tagWrap">
+                    ${sk.tags.map((t,i) => `
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] bg-bg-hover border border-bd rounded-lg text-tx-s">
+                            ${t}
+                            <button onclick="removeTag(${i})" class="text-tx-dim hover:text-dg transition-colors ml-0.5"><i class="fas fa-xmark text-[9px]"></i></button>
+                        </span>
+                    `).join('')}
+                </div>
+                <input type="text" placeholder="输入标签后按回车添加" onkeydown="addTag(event)" class="param-input w-full text-xs">
+            </div>
+            <!-- 版本 + 时间 -->
+            <div class="grid grid-cols-3 gap-4 pt-2 border-t border-bd">
+                <div>
+                    <label class="text-xs text-tx-dim mb-1 block">版本号</label>
+                    <div class="text-sm text-tx-s font-mono">v${sk.version}</div>
+                </div>
+                <div>
+                    <label class="text-xs text-tx-dim mb-1 block">创建时间</label>
+                    <div class="text-sm text-tx-s">${sk.createdAt}</div>
+                </div>
+                <div>
+                    <label class="text-xs text-tx-dim mb-1 block">更新时间</label>
+                    <div class="text-sm text-tx-s">${sk.updatedAt}</div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function addTag(e) {
+    if (e.key !== 'Enter') return;
+    const val = e.target.value.trim();
+    if (!val) return;
+    const sk = getCurrentSkill();
+    if (sk.tags.includes(val)) { toast('标签已存在','warn'); return; }
+    sk.tags.push(val);
+    e.target.value = '';
+    renderContent();
+}
+
+function removeTag(i) {
+    getCurrentSkill().tags.splice(i,1);
+    renderContent();
+}
+
+/* ============================================================
+   Tab：技能编辑（核心！根据类型动态切换编辑器）
+   ============================================================ */
+function renderEditorTab(area) {
+    const sk = getCurrentSkill();
+    const td = getTypeDef(sk.type);
+    if (!td) { area.innerHTML = '<div class="p-6 text-tx-dim text-sm">未知的技能类型</div>'; return; }
+
+    let editorHTML = '';
+    switch(td.editor) {
+        case 'prompt': editorHTML = renderPromptEditor(sk, td); break;
+        case 'code':   editorHTML = renderCodeEditor(sk, td); break;
+        case 'http':   editorHTML = renderHttpEditor(sk, td); break;
+        case 'mixed':  editorHTML = renderMixedEditor(sk, td); break;
+    }
+
+    area.innerHTML = `
+    <div class="max-w-5xl mx-auto fade-up">
+        <!-- 编辑器类型提示 -->
+        <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-ac/8 border border-ac/20 rounded-md text-ac">
+                <i class="fas ${td.icon} text-[10px]"></i>${td.name}
+            </span>
+            <span class="text-[11px] text-tx-dim">编辑器模式：${{prompt:'提示词',code:'代码',http:'HTTP请求',mixed:'混合模式'}[td.editor]}</span>
+        </div>
+        ${editorHTML}
+    </div>`;
+
+    // 初始化代码编辑器（行号同步等）
+    initCodeEditor();
+}
+
+// --- 提示词编辑器 ---
+function renderPromptEditor(sk, td) {
+    const vars = extractVars(sk.content);
+    return `
+    <div class="flex gap-4">
+        <div class="flex-1">
+            <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-2.5 border-b border-bd">
+                    <span class="text-xs text-tx-s font-medium">提示词模板</span>
+                    <span class="text-[10px] text-tx-dim">使用 {'{'}{'{'}变量名{'}'}{'}'} 插入变量</span>
+                </div>
+                <textarea id="mainEditor" rows="18" oninput="upd('content',this.value);updateVarPanel()"
+                    class="w-full bg-bg-input p-4 text-sm text-tx leading-relaxed outline-none resize-none font-mono placeholder:text-tx-dim"
+                    placeholder="在此编写提示词模板...">${sk.content}</textarea>
+            </div>
+        </div>
+        <!-- 变量面板 -->
+        <div class="w-52 flex-shrink-0">
+            <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden sticky top-0">
+                <div class="px-4 py-2.5 border-b border-bd">
+                    <span class="text-xs text-tx-s font-medium">检测到的变量</span>
+                </div>
+                <div id="varPanel" class="p-3 space-y-1.5 max-h-80 overflow-y-auto">
+                    ${vars.length ? vars.map(v => `
+                        <div class="flex items-center justify-between px-2.5 py-1.5 bg-bg-hover rounded-lg">
+                            <span class="text-xs font-mono text-ac">${v}</span>
+                            <button onclick="insertVar('${v}')" class="text-[10px] text-tx-dim hover:text-ac transition-colors">插入</button>
+                        </div>
+                    `).join('') : '<div class="text-xs text-tx-dim text-center py-4">暂无变量</div>'}
+                </div>
+                ${sk.inputs.length ? `
+                <div class="px-4 py-2.5 border-t border-bd">
+                    <span class="text-xs text-tx-s font-medium">输入参数快捷插入</span>
+                </div>
+                <div class="p-3 space-y-1.5">
+                    ${sk.inputs.map(p => `
+                        <div class="flex items-center justify-between px-2.5 py-1.5 bg-bg-hover rounded-lg">
+                            <span class="text-xs font-mono text-tx-s">${p.name}</span>
+                            <button onclick="insertVar('${p.name}')" class="text-[10px] text-tx-dim hover:text-ac transition-colors">插入</button>
+                        </div>
+                    `).join('')}
+                </div>` : ''}
+            </div>
+        </div>
+    </div>`;
+}
+
+// --- 代码编辑器（通用：脚本/SQL） ---
+function renderCodeEditor(sk, td) {
+    const lang = sk.type === 'sql' ? 'sql' : 'javascript';
+    const hint = sk.type === 'sql' ? '-- 在此编写SQL查询语句...' : '// 在此编写脚本代码...';
+    return `
+    <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-2.5 border-b border-bd">
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-tx-s font-medium">${td.name} 编辑器</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-bg-hover text-tx-dim font-mono">${lang}</span>
+            </div>
+            <button onclick="formatCode()" class="text-[11px] text-tx-dim hover:text-ac transition-colors"><i class="fas fa-align-left mr-1"></i>格式化</button>
+        </div>
+        <div class="code-editor-wrap" style="height:480px;">
+            <div class="line-nums" id="lineNums">1</div>
+            <textarea id="mainEditor" class="code-area" oninput="upd('content',this.value);syncLines()" onscroll="scrollLines()" onkeydown="handleTab(event)"
+                placeholder="${hint}">${sk.content}</textarea>
+        </div>
+    </div>`;
+}
+
+// --- HTTP请求编辑器 ---
+function renderHttpEditor(sk, td) {
+    const cfg = sk.httpConfig || { method:'GET', url:'', headers:[], body:'' };
+    return `
+    <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-bd">
+            <span class="text-xs text-tx-s font-medium">HTTP 请求配置</span>
+        </div>
+        <div class="p-5 space-y-4">
+            <!-- Method + URL -->
+            <div class="flex gap-2">
+                <select onchange="updHttp('method',this.value)" class="param-input w-28 text-sm font-mono font-medium">
+                    ${['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => `<option value="${m}" ${cfg.method===m?'selected':''} style="color:${m==='GET'?'#10b981':m==='POST'?'#f59e0b':m==='DELETE'?'#ef4444':'#9ca3af'}">${m}</option>`).join('')}
+                </select>
+                <input type="text" value="${cfg.url}" oninput="updHttp('url',this.value)" placeholder="https://api.example.com/endpoint" class="param-input flex-1 text-sm font-mono">
+            </div>
+            <!-- Headers -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-xs text-tx-s font-medium">请求头</label>
+                    <button onclick="addHttpHeader()" class="text-[11px] text-ac hover:text-ac-light transition-colors"><i class="fas fa-plus mr-1"></i>添加</button>
+                </div>
+                <div id="httpHeaders" class="space-y-1.5">
+                    ${cfg.headers.map((h,i) => `
+                        <div class="flex gap-2 items-center">
+                            <input type="text" value="${h.key}" oninput="updHeader(${i},'key',this.value)" placeholder="Header Name" class="param-input flex-1 text-xs font-mono">
+                            <input type="text" value="${h.value}" oninput="updHeader(${i},'value',this.value)" placeholder="Value" class="param-input flex-1 text-xs font-mono">
+                            <button onclick="removeHttpHeader(${i})" class="w-7 h-7 flex items-center justify-center text-tx-dim hover:text-dg transition-colors rounded"><i class="fas fa-xmark text-xs"></i></button>
+                        </div>
+                    `).join('')}
+                    ${!cfg.headers.length ? '<div class="text-xs text-tx-dim text-center py-2">暂无请求头</div>' : ''}
+                </div>
+            </div>
+            <!-- Body -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-xs text-tx-s font-medium">请求体</label>
+                    <span class="text-[10px] text-tx-dim">仅 POST/PUT/PATCH 时生效</span>
+                </div>
+                <div class="code-editor-wrap rounded-xl border border-bd overflow-hidden" style="height:160px;">
+                    <div class="line-nums" id="lineNums" style="font-size:12px;">1</div>
+                    <textarea id="mainEditor" class="code-area" style="font-size:12px;" oninput="updHttp('body',this.value);syncLines()" onscroll="scrollLines()" onkeydown="handleTab(event)"
+                        placeholder='{"key": "value"}'>${cfg.body}</textarea>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+// --- 混合编辑器（代码 + 配置，如Python） ---
+function renderMixedEditor(sk, td) {
+    return `
+    <div class="space-y-4">
+        <!-- 依赖管理 -->
+        <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 border-b border-bd">
+                <span class="text-xs text-tx-s font-medium">依赖包管理</span>
+                <span class="text-[10px] text-tx-dim">运行时将自动 pip install</span>
+            </div>
+            <div class="p-4">
+                <div class="flex flex-wrap gap-1.5 mb-2" id="depWrap">
+                    ${(sk.deps||[]).map((d,i) => `
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-bg-hover border border-bd rounded-lg text-tx-s font-mono">
+                            <i class="fas fa-cube text-[9px] text-tx-dim"></i>${d}
+                            <button onclick="removeDep(${i})" class="text-tx-dim hover:text-dg transition-colors"><i class="fas fa-xmark text-[9px]"></i></button>
+                        </span>
+                    `).join('')}
+                </div>
+                <div class="flex gap-2">
+                    <input id="depInput" type="text" placeholder="包名，如：numpy" class="param-input flex-1 text-xs font-mono"
+                        onkeydown="if(event.key==='Enter'){addDep();}">
+                    <button onclick="addDep()" class="btn-press px-3 py-1.5 text-xs text-ac bg-ac/10 rounded-lg hover:bg-ac/20 transition-colors">添加</button>
+                </div>
+            </div>
+        </div>
+        <!-- 代码编辑器 -->
+        <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 border-b border-bd">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-tx-s font-medium">${td.name} 编辑器</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded bg-bg-hover text-tx-dim font-mono">python</span>
+                </div>
+            </div>
+            <div class="code-editor-wrap" style="height:400px;">
+                <div class="line-nums" id="lineNums">1</div>
+                <textarea id="mainEditor" class="code-area" oninput="upd('content',this.value);syncLines()" onscroll="scrollLines()" onkeydown="handleTab(event)"
+                    placeholder="# 在此编写Python代码...">${sk.content}</textarea>
+            </div>
+        </div>
+    </div>`;
+}
+
+/* ============================================================
+   Tab：输入输出参数定义
+   ============================================================ */
+function renderParamsTab(area) {
+    const sk = getCurrentSkill();
+    const typeOpts = ['string','number','boolean','array','object'].map(t =>
+        `<option value="${t}">${t}</option>`
+    ).join('');
+
+    area.innerHTML = `
+    <div class="max-w-4xl mx-auto fade-up space-y-6">
+        <!-- 输入参数 -->
+        <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-bd">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-arrow-right-to-bracket text-ac text-xs"></i>
+                    <span class="text-sm font-medium">输入参数</span>
+                    <span class="text-[10px] text-tx-dim bg-bg-hover px-2 py-0.5 rounded">${sk.inputs.length} 个</span>
+                </div>
+                <button onclick="addParam('inputs')" class="text-xs text-ac hover:text-ac-light transition-colors btn-press">
+                    <i class="fas fa-plus mr-1"></i>添加参数
+                </button>
+            </div>
+            ${sk.inputs.length ? `
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="text-tx-dim text-[11px] border-b border-bd">
+                            <th class="text-left px-5 py-2.5 font-medium w-44">参数名</th>
+                            <th class="text-left px-3 py-2.5 font-medium w-28">类型</th>
+                            <th class="text-left px-3 py-2.5 font-medium">描述</th>
+                            <th class="text-center px-3 py-2.5 font-medium w-20">必填</th>
+                            <th class="text-left px-3 py-2.5 font-medium w-40">默认值</th>
+                            <th class="px-3 py-2.5 w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sk.inputs.map((p,i) => `
+                        <tr class="border-b border-bd/50 hover:bg-bg-hover/50 transition-colors">
+                            <td class="px-5 py-2"><input value="${p.name}" oninput="updParam('inputs',${i},'name',this.value)" class="param-input w-full text-xs font-mono" placeholder="paramName"></td>
+                            <td class="px-3 py-2"><select onchange="updParam('inputs',${i},'type',this.value)" class="param-input w-full text-xs">${typeOpts.replace(`value="${p.type}"`,`value="${p.type}" selected`)}</select></td>
+                            <td class="px-3 py-2"><input value="${p.desc}" oninput="updParam('inputs',${i},'desc',this.value)" class="param-input w-full text-xs" placeholder="参数说明"></td>
+                            <td class="px-3 py-2 text-center">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" ${p.required?'checked':''} onchange="updParam('inputs',${i},'required',this.checked)" class="sr-only peer">
+                                    <div class="w-8 h-4 bg-bd rounded-full peer peer-checked:bg-ac/50 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-tx-dim after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-ac"></div>
+                                </label>
+                            </td>
+                            <td class="px-3 py-2"><input value="${p.defaultVal||''}" oninput="updParam('inputs',${i},'defaultVal',this.value)" class="param-input w-full text-xs font-mono" placeholder="null"></td>
+                            <td class="px-3 py-2">
+                                <button onclick="removeParam('inputs',${i})" class="w-6 h-6 flex items-center justify-center text-tx-dim hover:text-dg transition-colors rounded"><i class="fas fa-trash-can text-[10px]"></i></button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>` : '<div class="text-center py-8 text-tx-dim text-xs">暂无输入参数，点击上方按钮添加</div>'}
+        </div>
+
+        <!-- 输出参数 -->
+        <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-bd">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-arrow-right-from-bracket text-wn text-xs"></i>
+                    <span class="text-sm font-medium">输出参数</span>
+                    <span class="text-[10px] text-tx-dim bg-bg-hover px-2 py-0.5 rounded">${sk.outputs.length} 个</span>
+                </div>
+                <button onclick="addParam('outputs')" class="text-xs text-ac hover:text-ac-light transition-colors btn-press">
+                    <i class="fas fa-plus mr-1"></i>添加参数
+                </button>
+            </div>
+            ${sk.outputs.length ? `
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="text-tx-dim text-[11px] border-b border-bd">
+                            <th class="text-left px-5 py-2.5 font-medium w-44">参数名</th>
+                            <th class="text-left px-3 py-2.5 font-medium w-28">类型</th>
+                            <th class="text-left px-3 py-2.5 font-medium">描述</th>
+                            <th class="px-3 py-2.5 w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sk.outputs.map((p,i) => `
+                        <tr class="border-b border-bd/50 hover:bg-bg-hover/50 transition-colors">
+                            <td class="px-5 py-2"><input value="${p.name}" oninput="updParam('outputs',${i},'name',this.value)" class="param-input w-full text-xs font-mono" placeholder="paramName"></td>
+                            <td class="px-3 py-2"><select onchange="updParam('outputs',${i},'type',this.value)" class="param-input w-full text-xs">${typeOpts.replace(`value="${p.type}"`,`value="${p.type}" selected`)}</select></td>
+                            <td class="px-3 py-2"><input value="${p.desc}" oninput="updParam('outputs',${i},'desc',this.value)" class="param-input w-full text-xs" placeholder="参数说明"></td>
+                            <td class="px-3 py-2">
+                                <button onclick="removeParam('outputs',${i})" class="w-6 h-6 flex items-center justify-center text-tx-dim hover:text-dg transition-colors rounded"><i class="fas fa-trash-can text-[10px]"></i></button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>` : '<div class="text-center py-8 text-tx-dim text-xs">暂无输出参数，点击上方按钮添加</div>'}
+        </div>
+
+        <!-- 参数结构预览 -->
+        <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-bd">
+                <span class="text-sm font-medium">JSON Schema 预览</span>
+                <button onclick="copySchema()" class="text-[11px] text-tx-dim hover:text-ac transition-colors"><i class="fas fa-copy mr-1"></i>复制</button>
+            </div>
+            <pre class="p-4 text-xs font-mono text-tx-s leading-relaxed bg-bg-input overflow-x-auto" id="schemaPreview">${generateSchema()}</pre>
+        </div>
+    </div>`;
+}
+
+/* ============================================================
+   Tab：调试测试
+   ============================================================ */
+function renderTestTab(area) {
+    const sk = getCurrentSkill();
+    area.innerHTML = `
+    <div class="max-w-4xl mx-auto fade-up space-y-5">
+        <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-bd">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-flask text-ac text-xs"></i>
+                    <span class="text-sm font-medium">测试参数输入</span>
+                </div>
+                <button onclick="fillDefaultParams()" class="text-[11px] text-tx-dim hover:text-ac transition-colors"><i class="fas fa-fill-drip mr-1"></i>填充默认值</button>
+            </div>
+            <div class="p-5">
+                ${sk.inputs.length ? `
+                <div class="grid grid-cols-2 gap-4">
+                    ${sk.inputs.map((p,i) => `
+                    <div>
+                        <label class="text-xs text-tx-s font-medium mb-1.5 block">
+                            ${p.name}
+                            ${p.required ? '<span class="text-dg">*</span>' : '<span class="text-tx-dim">(可选)</span>'}
+                            <span class="text-tx-dim font-normal ml-1">${p.desc}</span>
+                        </label>
+                        <input id="test_${p.name}" type="text" value="${p.defaultVal||''}" placeholder="${p.type} 类型${p.required?' · 必填':''}"
+                            class="param-input w-full text-xs font-mono">
+                        <span class="text-[10px] text-tx-dim mt-1 block">${p.type}</span>
+                    </div>
+                    `).join('')}
+                </div>` : '<div class="text-center py-6 text-tx-dim text-xs">该技能没有定义输入参数</div>'}
+                <div class="mt-5 flex items-center gap-3">
+                    <button onclick="runTest()" id="testRunBtn" class="btn-press px-5 py-2.5 text-sm font-medium text-white bg-ac rounded-xl hover:bg-ac-dark transition-colors shadow-lg shadow-ac/20">
+                        <i class="fas fa-play mr-2 text-xs"></i>执行测试
+                    </button>
+                    <button onclick="clearTestResult()" class="btn-press px-4 py-2.5 text-sm text-tx-s bg-bg-hover rounded-xl hover:bg-bd-light transition-colors">
+                        清空结果
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 执行结果 -->
+        <div class="bg-bg-card border border-bd rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-bd">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-terminal text-tx-dim text-xs"></i>
+                    <span class="text-sm font-medium">执行结果</span>
+                    <span id="testStatus" class="text-[10px] px-2 py-0.5 rounded hidden"></span>
+                </div>
+                <div id="testTime" class="text-[11px] text-tx-dim hidden"></div>
+            </div>
+            <div id="testResult" class="p-5 min-h-[120px]">
+                <div class="text-center py-8 text-tx-dim text-xs">
+                    <i class="fas fa-circle-play text-xl mb-2 block"></i>
+                    填入参数后点击「执行测试」查看结果
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+/* ============================================================
+   代码编辑器辅助函数
+   ============================================================ */
+function initCodeEditor() {
+    syncLines();
+}
+
+function syncLines() {
+    const editor = document.getElementById('mainEditor');
+    const nums = document.getElementById('lineNums');
+    if (!editor || !nums) return;
+    const lines = editor.value.split('\n').length;
+    nums.innerHTML = Array.from({length:lines},(_,i) => i+1).join('<br>');
+}
+
+function scrollLines() {
+    const editor = document.getElementById('mainEditor');
+    const nums = document.getElementById('lineNums');
+    if (editor && nums) nums.scrollTop = editor.scrollTop;
+}
+
+function handleTab(e) {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        const ta = e.target;
+        const s = ta.selectionStart, end = ta.selectionEnd;
+        ta.value = ta.value.substring(0, s) + '    ' + ta.value.substring(end);
+        ta.selectionStart = ta.selectionEnd = s + 4;
+        syncLines();
+    }
+}
+
+function formatCode() {
+    const editor = document.getElementById('mainEditor');
+    if (!editor) return;
+    // 简单格式化：统一缩进
+    try {
+        const sk = getCurrentSkill();
+        if (sk.type === 'sql') {
+            // SQL简单格式化
+            let sql = editor.value;
+            const keywords = ['SELECT','FROM','WHERE','AND','OR','ORDER BY','GROUP BY','HAVING','LIMIT','LEFT JOIN','RIGHT JOIN','INNER JOIN','JOIN','ON','INSERT','UPDATE','DELETE','SET','VALUES','INTO'];
+            keywords.forEach(kw => {
+                sql = sql.replace(new RegExp('\\b' + kw + '\\b', 'gi'), '\n' + kw);
+            });
+            sql = sql.replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n');
+            editor.value = sql;
+            upd('content', sql);
+        } else {
+            // JS简单格式化
+            let code = editor.value;
+            try {
+                code = JSON.stringify(JSON.parse(code), null, 4);
+            } catch(e) {
+                // 不是JSON，保持原样
+            }
+            editor.value = code;
+            upd('content', code);
+        }
+        syncLines();
+        toast('格式化完成');
+    } catch(err) {
+        toast('格式化失败：' + err.message, 'error');
+    }
+}
+
+/* ============================================================
+   提示词编辑器辅助
+   ============================================================ */
+function extractVars(text) {
+    const matches = text.match(/\{\{(\w+)\}\}/g);
+    if (!matches) return [];
+    return [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))];
+}
+
+function updateVarPanel() {
+    const panel = document.getElementById('varPanel');
+    if (!panel) return;
+    const sk = getCurrentSkill();
+    const vars = extractVars(sk.content);
+    panel.innerHTML = vars.length ? vars.map(v => `
+        <div class="flex items-center justify-between px-2.5 py-1.5 bg-bg-hover rounded-lg">
+            <span class="text-xs font-mono text-ac">${v}</span>
+            <button onclick="insertVar('${v}')" class="text-[10px] text-tx-dim hover:text-ac transition-colors">插入</button>
+        </div>
+    `).join('') : '<div class="text-xs text-tx-dim text-center py-4">暂无变量</div>';
+}
+
+function insertVar(name) {
+    const editor = document.getElementById('mainEditor');
+    if (!editor) return;
+    const insert = `{{${name}}}`;
+    const s = editor.selectionStart;
+    editor.value = editor.value.substring(0, s) + insert + editor.value.substring(s);
+    editor.selectionStart = editor.selectionEnd = s + insert.length;
+    editor.focus();
+    upd('content', editor.value);
+}
+
+/* ============================================================
+   HTTP编辑器辅助
+   ============================================================ */
+function updHttp(field, val) {
+    const sk = getCurrentSkill();
+    if (!sk.httpConfig) sk.httpConfig = { method:'GET', url:'', headers:[], body:'' };
+    sk.httpConfig[field] = val;
+}
+
+function addHttpHeader() {
+    const sk = getCurrentSkill();
+    if (!sk.httpConfig) sk.httpConfig = { method:'GET', url:'', headers:[], body:'' };
+    sk.httpConfig.headers.push({ key:'', value:'' });
+    renderContent();
+}
+
+function removeHttpHeader(i) {
+    const sk = getCurrentSkill();
+    sk.httpConfig.headers.splice(i, 1);
+    renderContent();
+}
+
+function updHeader(i, field, val) {
+    const sk = getCurrentSkill();
+    sk.httpConfig.headers[i][field] = val;
+}
+
+/* ============================================================
+   混合编辑器辅助（依赖管理）
+   ============================================================ */
+function addDep() {
+    const input = document.getElementById('depInput');
+    const val = input.value.trim();
+    if (!val) return;
+    const sk = getCurrentSkill();
+    if (!sk.deps) sk.deps = [];
+    if (sk.deps.includes(val)) { toast('依赖已存在','warn'); return; }
+    sk.deps.push(val);
+    input.value = '';
+    renderContent();
+}
+
+function removeDep(i) {
+    const sk = getCurrentSkill();
+    sk.deps.splice(i, 1);
+    renderContent();
+}
+
+/* ============================================================
+   参数管理辅助
+   ============================================================ */
+function addParam(kind) {
+    const sk = getCurrentSkill();
+    sk[kind].push({ name:'', type:'string', desc:'', required: kind==='inputs', defaultVal:'' });
+    renderContent();
+}
+
+function removeParam(kind, i) {
+    getCurrentSkill()[kind].splice(i, 1);
+    renderContent();
+}
+
+function updParam(kind, i, field, val) {
+    getCurrentSkill()[kind][i][field] = val;
+    // 如果更新了参数，也更新schema预览
+    const sp = document.getElementById('schemaPreview');
+    if (sp) sp.textContent = generateSchema();
+}
+
+function generateSchema() {
+    const sk = getCurrentSkill();
+    const schema = {
+        type: 'object',
+        properties: {},
+        required: []
+    };
+    sk.inputs.forEach(p => {
+        schema.properties[p.name] = { type: p.type, description: p.desc };
+        if (p.required) schema.required.push(p.name);
+    });
+    if (!schema.required.length) delete schema.required;
+    const out = {
+        type: 'object',
+        properties: {}
+    };
+    sk.outputs.forEach(p => {
+        out.properties[p.name] = { type: p.type, description: p.desc };
+    });
+    return JSON.stringify({ input: schema, output: out }, null, 2);
+}
+
+function copySchema() {
+    navigator.clipboard.writeText(generateSchema()).then(() => toast('已复制到剪贴板'));
+}
+
+/* ============================================================
+   测试执行
+   ============================================================ */
+function fillDefaultParams() {
+    const sk = getCurrentSkill();
+    sk.inputs.forEach(p => {
+        const el = document.getElementById('test_' + p.name);
+        if (el && p.defaultVal) el.value = p.defaultVal;
+    });
+    toast('已填充默认值', 'info');
+}
+
+function runTest() {
+    const sk = getCurrentSkill();
+    const btn = document.getElementById('testRunBtn');
+    const result = document.getElementById('testResult');
+    const status = document.getElementById('testStatus');
+    const time = document.getElementById('testTime');
+
+    // 收集参数
+    const params = {};
+    let hasEmpty = false;
+    sk.inputs.forEach(p => {
+        const el = document.getElementById('test_' + p.name);
+        if (el) params[p.name] = el.value;
+        if (p.required && !el?.value) hasEmpty = true;
+    });
+    if (hasEmpty) { toast('请填写所有必填参数', 'warn'); return; }
+
+    // 显示加载
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2 text-xs"></i>执行中...';
+    result.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-ac text-xl mb-2 block"></i><span class="text-tx-dim text-xs">正在执行技能...</span></div>';
+    status.classList.add('hidden');
+    time.classList.add('hidden');
+
+    // 模拟执行
+    const startTime = performance.now();
+    setTimeout(() => {
+        const elapsed = Math.round(performance.now() - startTime);
+        const mockResult = generateMockResult(sk, params);
+
+        status.classList.remove('hidden');
+        time.classList.remove('hidden');
+        status.className = 'text-[10px] px-2 py-0.5 rounded ' + (mockResult.success ? 'bg-ac/10 text-ac' : 'bg-dg/10 text-dg');
+        status.textContent = mockResult.success ? '成功' : '失败';
+        time.textContent = `${elapsed}ms`;
+
+        result.innerHTML = `
+            <pre class="text-xs font-mono leading-relaxed text-tx-s overflow-x-auto whitespace-pre-wrap bg-bg-input rounded-xl p-4 border border-bd">${syntaxHighlight(JSON.stringify(mockResult, null, 2))}</pre>
+        `;
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play mr-2 text-xs"></i>执行测试';
+        toast(mockResult.success ? '执行成功' : '执行失败', mockResult.success ? 'success' : 'error');
+    }, 800 + Math.random() * 600);
+}
+
+function generateMockResult(sk, params) {
+    const td = getTypeDef(sk.type);
+    try {
+        if (td.editor === 'http') {
+            return { success: true, status: 200, data: { message: "模拟HTTP响应", params }, headers: { "content-type": "application/json" } };
+        }
+        if (td.editor === 'prompt') {
+            return { success: true, output: "这是一个模拟的提示词执行结果。在实际运行中，该内容将被发送至LLM处理并返回结构化输出。", inputParams: params };
+        }
+        if (sk.type === 'sql') {
+            return { success: true, columns: sk.outputs.map(o => o.name), rows: [{ order_id: "ORD20250120001", total_amount: 299.00, products: "商品A, 商品B", item_count: 2 }, { order_id: "ORD20250115003", total_amount: 158.50, products: "商品C", item_count: 1 }], rowCount: 2 };
+        }
+        // script / python
+        const outObj = {};
+        sk.outputs.forEach(o => {
+            outObj[o.name] = o.type === 'number' ? Math.round(Math.random()*100) : o.type === 'array' ? ["item1", "item2"] : o.type === 'boolean' ? true : "模拟输出值";
+        });
+        return { success: true, result: outObj };
+    } catch(e) {
+        return { success: false, error: e.message };
+    }
+}
+
+function syntaxHighlight(json) {
+    return json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+        let color = '#f59e0b'; // number
+        if (/^"/.test(match)) {
+            color = /:$/.test(match) ? '#10b981' : '#34d399'; // key : string
+        } else if (/true|false/.test(match)) color = '#818cf8';
+        else if (/null/.test(match)) color = '#6b7280';
+        return `<span style="color:${color}">${match}</span>`;
+    });
+}
+
+function clearTestResult() {
+    const result = document.getElementById('testResult');
+    const status = document.getElementById('testStatus');
+    const time = document.getElementById('testTime');
+    if (result) result.innerHTML = '<div class="text-center py-8 text-tx-dim text-xs"><i class="fas fa-circle-play text-xl mb-2 block"></i>填入参数后点击「执行测试」查看结果</div>';
+    if (status) status.classList.add('hidden');
+    if (time) time.classList.add('hidden');
+}
+
+/* ============================================================
+   技能CRUD操作
+   ============================================================ */
+function selectSkill(id) {
+    state.currentId = id;
+    state.activeTab = 'basic';
+    renderAll();
+}
+
+function upd(field, val) {
+    const sk = getCurrentSkill();
+    if (sk) sk[field] = val;
+}
+
+function saveSkill() {
+    const sk = getCurrentSkill();
+    if (!sk) return;
+    if (!sk.name.trim()) { toast('请输入技能名称','warn'); return; }
+    sk.updatedAt = now();
+    // 自动升级小版本号
+    const parts = sk.version.split('.');
+    parts[2] = String(Number(parts[2]) + 1);
+    sk.version = parts.join('.');
+    renderTopBar();
+    renderSkillList();
+    toast('草稿已保存');
+}
+
+function publishSkill() {
+    const sk = getCurrentSkill();
+    if (!sk) return;
+    if (!sk.name.trim()) { toast('请输入技能名称','warn'); return; }
+    sk.status = 'published';
+    sk.updatedAt = now();
+    const parts = sk.version.split('.');
+    parts[1] = String(Number(parts[1]) + 1);
+    parts[2] = '0';
+    sk.version = parts.join('.');
+    renderAll();
+    toast('技能已发布');
+}
+
+function duplicateSkill() {
+    const sk = getCurrentSkill();
+    if (!sk) return;
+    const copy = JSON.parse(JSON.stringify(sk));
+    copy.id = uid();
+    copy.name = sk.name + ' (副本)';
+    copy.status = 'draft';
+    copy.version = '0.1.0';
+    copy.createdAt = now();
+    copy.updatedAt = now();
+    skills.unshift(copy);
+    state.currentId = copy.id;
+    renderAll();
+    toast('技能已复制');
+}
+
+function showDeleteModal() {
+    const sk = getCurrentSkill();
+    if (!sk) return;
+    document.getElementById('deleteSkillName').textContent = sk.name;
+    showModal('deleteModal');
+}
+
+function doDeleteSkill() {
+    const id = state.currentId;
+    skills = skills.filter(s => s.id !== id);
+    state.currentId = skills.length ? skills[0].id : null;
+    hideModal('deleteModal');
+    renderAll();
+    toast('技能已删除');
+}
+
+/* ============================================================
+   新建技能
+   ============================================================ */
+function initCreateModal() {
+    state.newSkillType = skillTypes[0]?.key || '';
+    document.getElementById('newSkillName').value = '';
+    document.getElementById('newSkillDesc').value = '';
+    renderNewSkillTypes();
+}
+
+function renderNewSkillTypes() {
+    const wrap = document.getElementById('newSkillTypes');
+    wrap.innerHTML = skillTypes.map(t => `
+        <div class="type-chip flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-center ${state.newSkillType===t.key?'active border-ac/30':'border-bd'}"
+             onclick="state.newSkillType='${t.key}';renderNewSkillTypes()">
+            <i class="fas ${t.icon} text-base"></i>
+            <span class="text-[11px]">${t.name}</span>
+        </div>
+    `).join('');
+}
+
+function doCreateSkill() {
+    const name = document.getElementById('newSkillName').value.trim();
+    if (!name) { toast('请输入技能名称','warn'); return; }
+    if (!state.newSkillType) { toast('请选择技能类型','warn'); return; }
+
+    const td = getTypeDef(state.newSkillType);
+    const sk = {
+        id: uid(),
+        name,
+        desc: document.getElementById('newSkillDesc').value.trim(),
+        type: state.newSkillType,
+        icon: td?.icon || 'fa-puzzle-piece',
+        tags: [],
+        status: 'draft',
+        version: '0.1.0',
+        createdAt: now(),
+        updatedAt: now(),
+        content: td?.template || '',
+        inputs: [],
+        outputs: [],
+        httpConfig: { method:'GET', url:'', headers:[], body:'' },
+        deps: []
+    };
+    skills.unshift(sk);
+    state.currentId = sk.id;
+    state.activeTab = 'basic';
+    hideModal('createModal');
+    renderAll();
+    toast('技能创建成功');
+}
+
+/* ============================================================
+   类型管理
+   ============================================================ */
+function renderTypeList() {
+    const wrap = document.getElementById('typeList');
+    const editorLabels = { prompt:'提示词编辑器', code:'代码编辑器', http:'HTTP请求编辑器', mixed:'混合模式' };
+    wrap.innerHTML = skillTypes.map(t => `
+        <div class="flex items-center gap-3 p-3 rounded-xl border border-bd hover:bg-bg-hover transition-colors group">
+            <div class="w-9 h-9 rounded-lg bg-bg-hover flex items-center justify-center flex-shrink-0">
+                <i class="fas ${t.icon} text-sm text-tx-s"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">${t.name}</span>
+                    <span class="text-[10px] font-mono text-tx-dim bg-bg-input px-1.5 py-0.5 rounded">${t.key}</span>
+                </div>
+                <div class="text-[11px] text-tx-dim mt-0.5">${editorLabels[t.editor] || t.editor}</div>
+            </div>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="editType('${t.key}')" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-ac/10 text-tx-dim hover:text-ac transition-colors"><i class="fas fa-pen text-[10px]"></i></button>
+                <button onclick="deleteType('${t.key}')" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-dg/10 text-tx-dim hover:text-dg transition-colors"><i class="fas fa-trash-can text-[10px]"></i></button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function showTypeForm(editKey) {
+    state.editingTypeId = editKey || null;
+    const form = document.getElementById('typeForm');
+    const addBtn = document.getElementById('addTypeBtn');
+    const title = document.getElementById('typeFormTitle');
+
+    if (editKey) {
+        const t = getTypeDef(editKey);
+        title.textContent = '编辑类型：' + t.name;
+        document.getElementById('tfKey').value = t.key;
+        document.getElementById('tfKey').disabled = true;
+        document.getElementById('tfName').value = t.name;
+        document.getElementById('tfIcon').value = t.icon;
+        document.getElementById('tfEditor').value = t.editor;
+        document.getElementById('tfTemplate').value = t.template || '';
+    } else {
+        title.textContent = '添加新类型';
+        document.getElementById('tfKey').value = '';
+        document.getElementById('tfKey').disabled = false;
+        document.getElementById('tfName').value = '';
+        document.getElementById('tfIcon').value = 'fa-puzzle-piece';
+        document.getElementById('tfEditor').value = 'code';
+        document.getElementById('tfTemplate').value = '';
+    }
+    form.style.display = 'block';
+    addBtn.style.display = 'none';
+}
+
+function cancelTypeForm() {
+    document.getElementById('typeForm').style.display = 'none';
+    document.getElementById('addTypeBtn').style.display = 'block';
+    state.editingTypeId = null;
+}
+
+function saveTypeForm() {
+    const key = document.getElementById('tfKey').value.trim();
+    const name = document.getElementById('tfName').value.trim();
+    const icon = document.getElementById('tfIcon').value.trim();
+    const editor = document.getElementById('tfEditor').value;
+    const template = document.getElementById('tfTemplate').value;
+
+    if (!key || !name) { toast('请填写类型标识和名称','warn'); return; }
+    if (!state.editingTypeId && skillTypes.find(t => t.key === key)) { toast('类型标识已存在','warn'); return; }
+
+    if (state.editingTypeId) {
+        const t = getTypeDef(state.editingTypeId);
+        t.name = name; t.icon = icon; t.editor = editor; t.template = template;
+    } else {
+        skillTypes.push({ key, name, icon, editor, template });
+    }
+
+    cancelTypeForm();
+    renderTypeList();
+    renderFilters();
+    renderSkillList();
+    toast(state.editingTypeId ? '类型已更新' : '类型已添加');
+}
+
+function editType(key) { showTypeForm(key); }
+
+function deleteType(key) {
+    const inUse = skills.some(s => s.type === key);
+    if (inUse) { toast('该类型正在使用中，无法删除','warn'); return; }
+    skillTypes = skillTypes.filter(t => t.key !== key);
+    if (state.filterType === key) state.filterType = 'all';
+    renderTypeList();
+    renderFilters();
+    renderSkillList();
+    toast('类型已删除');
+}
+
+/* ============================================================
+   总渲染
+   ============================================================ */
+function renderAll() {
+    renderFilters();
+    renderSkillList();
+    renderTopBar();
+    renderTabs();
+    renderContent();
+}
+
+/* ============================================================
+   初始化
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+    // 默认选中第一个技能
+    if (skills.length) state.currentId = skills[0].id;
+    renderAll();
+});
+
+// 点击弹窗外部关闭
+document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.addEventListener('click', e => {
+        if (e.target === m) m.classList.remove('show');
+    });
+});
+
+// ESC关闭弹窗
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+    }
+});
+</script>
+</body>
+</html>

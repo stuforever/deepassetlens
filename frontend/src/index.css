@@ -1,0 +1,110 @@
+/**
+ * 全局样式与设计 Token 的 CSS 变量映射。
+ * TS 侧的权威定义在 src/theme/tokens.ts，本文件保持同名 CSS 变量供全局/自定义样式使用。
+ * 铁律：新代码不得新增零散硬编码颜色/间距，用 var(--xxx) 或 tokens 常量。
+ */
+
+:root {
+  /* 品牌色 */
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
+  --color-primary-active: #1E40AF;
+  --color-primary-bg: #EFF6FF;
+  --color-ai: #7C3AED;
+  --color-ai-bg: #F5F3FF;
+
+  /* 语义色 */
+  --color-success: #16A34A;
+  --color-success-bg: #F0FDF4;
+  --color-warning: #D97706;
+  --color-warning-bg: #FFFBEB;
+  --color-error: #DC2626;
+  --color-error-bg: #FEF2F2;
+  --color-info: #2563EB;
+  --color-info-bg: #EFF6FF;
+
+  /* 中性色（slate 冷色调） */
+  --bg-page: #F6F8FC;
+  --bg-content: #FFFFFF;
+  --bg-subtle: #F9FAFB;
+  --bg-hover: #F3F4F6;
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --text-tertiary: #94A3B8;
+  --text-disabled: #9CA3AF;
+  --text-inverse: #FFFFFF;
+  --border-color: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+
+  /* 圆角 */
+  --radius-default: 6px;
+  --radius-card: 8px;
+  --radius-pill: 999px;
+
+  /* 布局尺寸 */
+  --header-height: 48px;
+  --sider-width: 216px;
+  --sider-collapsed-width: 64px;
+  --tabs-height: 36px;
+  --content-padding: 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Roboto', 'Helvetica Neue', Arial,
+    sans-serif;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100vh;
+}
+
+/* 轻量滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-disabled);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 页签条/侧栏等场景下，去除默认 ul 外边距 */
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

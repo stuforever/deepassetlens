@@ -1,0 +1,80 @@
+﻿
+=== dim_ps_wbs_cost | WBS成本主表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'cost_id', 'type': 'VARCHAR(50) COLLATE "utf8mb4_unicode_ci"', 'cnName': 'cost_id', 'description': 'cost_id', 'isPrimaryKey': False}, {'name': 'wbs_element', 'type': 'VARCHAR(50) COLLATE "utf8mb4_unicode_ci"', 'cnName': 'wbs_element', 'description': 'wbs_element', 'isPrimaryKey': False}, {
+
+=== dim_ps_wbs_element | WBS元素主表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'wbs_element', 'type': 'string', 'cnName': 'WBS元素编号', 'description': 'WBS唯一编码，对应BAPI_BUS2054_GETDATA-WBS_ELEMENT', 'isPrimaryKey': True}, {'name': 'description', 'type': 'string', 'cnName': 'WBS描述', 'description': 'WBS名称描述，对应BAPI_BUS2054_GETDATA-DESCRIPTION', 'isPrimaryKey': False}, {'name
+
+=== dim_ps_wbs_budget | WBS预算主表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'budget_id', 'type': 'string', 'cnName': '预算记录ID', 'description': '预算记录唯一标识，WBS+年度组合', 'isPrimaryKey': True}, {'name': 'wbs_element', 'type': 'string', 'cnName': 'WBS元素', 'description': '所属WBS编号，对应BAPI_BUDGET_GETDETAIL-WBS_ELEMENT', 'isPrimaryKey': False}, {'name': 'fiscal_year', 'type': '
+
+=== dim_ps_object_status | 业务对象状态通用表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'objnr', 'type': 'string', 'cnName': '对象编号', 'description': '状态对象唯一标识，各PS对象共用，对应JEST-OBJNR', 'isPrimaryKey': True}, {'name': 'status_code', 'type': 'string', 'cnName': '状态编码', 'description': '状态编码，系统状态如REL/TECO/CLSD，用户状态自定义，对应JEST-STAT', 'isPrimaryKey': True}, {'name': 'status_type', 'type
+
+=== dim_ps_network_component | 活动物料组件主表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'component_id', 'type': 'string', 'cnName': '组件编号', 'description': '物料组件唯一标识，对应BAPI_NETWORK_GETDETAIL-E_COMPONENT-COMPONENT', 'isPrimaryKey': True}, {'name': 'network_number', 'type': 'string', 'cnName': '所属网络', 'description': '上级网络编号，对应BAPI_NETWORK_GETDETAIL-E_COMPONENT-NETWORK', 'isPrima
+
+=== dwd_cust_analog_f | 用户遥测功率因数表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'inst_id', 'type': 'varchar', 'cnName': '安装点ID', 'description': '安装点ID', 'isPrimaryKey': False}, {'name': 'equip_src_id', 'type': 'varchar', 'cnName': '电能表ID', 'description': '电能表ID，即meter_id', 'isPrimaryKey': False}, {'name': 'measuerment_type', 'type': 'varchar', 'cnName': 'TotPF功率因数', '
+
+=== dwd_cust_analog_p | 用户遥测功率表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'inst_id', 'type': 'varchar', 'cnName': '安装点ID', 'description': '安装点ID', 'isPrimaryKey': False}, {'name': 'equip_src_id', 'type': 'varchar', 'cnName': '电能表ID', 'description': '电能表ID，即meter_id', 'isPrimaryKey': False}, {'name': 'measuerment_type', 'type': 'varchar', 'cnName': 'TotW有功功率Totva
+
+=== dwd_cust_analog_u | 用户遥测电压表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'inst_id', 'type': 'varchar', 'cnName': '安装点ID', 'description': '安装点ID', 'isPrimaryKey': False}, {'name': 'equip_src_id', 'type': 'varchar', 'cnName': '电能表ID', 'description': '电能表ID，即meter_id', 'isPrimaryKey': False}, {'name': 'measuerment_type', 'type': 'varchar', 'cnName': 'PhV电压PhV_phsA
+
+=== dwd_cust_analog_i | 用户遥测电流表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'inst_id', 'type': 'varchar', 'cnName': '安装点ID', 'description': '安装点ID，关联计量点档案', 'isPrimaryKey': False}, {'name': 'equip_src_id', 'type': 'varchar', 'cnName': '电能表ID', 'description': '电能表ID，即meter_id，关联计量表计', 'isPrimaryKey': False}, {'name': 'measuerment_type', 'type': 'varchar', 'cnName':
+
+=== dwd_cst_mtcl_cust_cons_power_min | 计量采集用电户功率曲线业务数据联接表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: []
+
+=== dwd_cst_mtcl_cust_cons_vol_min | 计量采集用电户电压曲线业务数据联接表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: []
+
+=== dwd_cst_mtcl_cust_cons_cur_min | 计量采集用电户电流曲线业务数据联接表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: []
+
+=== dim_ps_network_activity | 网络活动主表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'activity_number', 'type': 'string', 'cnName': '活动编号', 'description': '活动唯一编码，对应BAPI_NETWORK_GETDETAIL-E_ACTIVITY-ACTIVITY', 'isPrimaryKey': True}, {'name': 'network_number', 'type': 'string', 'cnName': '所属网络', 'description': '上级网络编号，对应BAPI_NETWORK_GETDETAIL-E_ACTIVITY-NETWORK', 'isPrimary
+
+=== cms20_adj_volt_dev | 调压设备表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'adj_volt_dev_id', 'type': 'number', 'cnName': '调压设备标识', 'description': '调压设备标识，通过流水号产生', 'isPrimaryKey': True}, {'name': 'adj_volt_dev_asset_id', 'type': 'number', 'cnName': '关联调压设备资产表主键', 'description': '关联调压设备资产表主键', 'isPrimaryKey': False}, {'name': 'cust_id', 'type': 'varchar', 'cnName
+
+=== cms20_adj_volt_dev_asset | 调压设备资产表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'adj_volt_dev_asset_id', 'type': 'number', 'cnName': '调压设备资产标识', 'description': '调压设备资产标识，通过流水编号产生', 'isPrimaryKey': True}, {'name': 'pms_equip_id', 'type': 'varchar', 'cnName': '电网设备标识', 'description': '电网设备标识，关联柱上/配电变压器psrid', 'isPrimaryKey': False}]
+
+=== dwd_psr_d_grid_analog_f | 配网遥测功率因数表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'equip_type', 'type': 'varchar', 'cnName': '设备类型编码', 'description': '设备类型编码', 'isPrimaryKey': False}, {'name': 'psrid', 'type': 'varchar', 'cnName': '电网资源ID', 'description': '电网资源ID', 'isPrimaryKey': False}, {'name': 'pos_code', 'type': 'varchar', 'cnName': '位置编码', 'description': '位置编码', '
+
+=== dwd_psr_d_grid_analog_p | 配网遥测功率表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'equip_type', 'type': 'varchar', 'cnName': '设备类型编码', 'description': '设备类型编码', 'isPrimaryKey': False}, {'name': 'psrid', 'type': 'varchar', 'cnName': '电网资源ID', 'description': '电网资源ID', 'isPrimaryKey': False}, {'name': 'pos_code', 'type': 'varchar', 'cnName': '位置编码', 'description': '位置编码', '
+
+=== dwd_psr_d_grid_analog_u | 配网遥测电压表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'equip_type', 'type': 'varchar', 'cnName': '设备类型编码', 'description': '设备类型编码', 'isPrimaryKey': False}, {'name': 'psrid', 'type': 'varchar', 'cnName': '电网资源ID', 'description': '电网资源ID，关联馈线/配变档案', 'isPrimaryKey': False}, {'name': 'pos_code', 'type': 'varchar', 'cnName': '位置编码', 'description':
+
+=== dwd_psr_d_grid_analog_i | 配网遥测电流表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'equip_type', 'type': 'varchar', 'cnName': '设备类型编码', 'description': '设备类型编码，0403000馈线0401004柱上变压器0408001配电变压器', 'isPrimaryKey': False}, {'name': 'psrid', 'type': 'varchar', 'cnName': '电网资源ID', 'description': '电网资源ID，关联馈线/配变档案', 'isPrimaryKey': False}, {'name': 'pos_code', 'type': 'varchar'
+
+=== dim_ps_milestone | 里程碑主表 ===
+  schema parse error: 'list' object has no attribute 'get'
+  raw: [{'name': 'milestone_number', 'type': 'string', 'cnName': '里程碑编号', 'description': '里程碑唯一编码，对应BAPI_MILESTONE_GETDETAIL-MILESTONE_NUMBER', 'isPrimaryKey': True}, {'name': 'description', 'type': 'string', 'cnName': '里程碑描述', 'description': '里程碑名称描述，对应BAPI_MILESTONE_GETDETAIL-DESCRIPTION', 'isPrimaryKey'

@@ -1,0 +1,155 @@
+[
+  {
+    "user_query": "帮我查用电客户的客户名称、行业分类、重要性等级、联系电话",
+    "legacy": {
+      "success": true,
+      "elapsed_ms": 205365,
+      "response_type": "query_attribute",
+      "step_count": 6,
+      "step_ids": [
+        "step1",
+        "step2",
+        "step3",
+        "step4",
+        "step5",
+        "step6"
+      ],
+      "final_l1": "客户",
+      "final_l2": "用电客户",
+      "scope_type": "mixed",
+      "error": null,
+      "raw_keys": [
+        "clarification",
+        "debug_mode",
+        "execution_code",
+        "final_result",
+        "llm_debug",
+        "llm_error",
+        "metadata_summary",
+        "response_type",
+        "result_panels",
+        "results",
+        "skill_pipeline",
+        "step_trace",
+        "user_query",
+        "workflow"
+      ]
+    },
+    "langgraph": {
+      "success": false,
+      "elapsed_ms": 137442,
+      "response_type": "query_attribute",
+      "step_count": 6,
+      "step_ids": [
+        "step1",
+        "step2",
+        "step3",
+        "step4",
+        "step5",
+        "step6"
+      ],
+      "final_l1": null,
+      "final_l2": null,
+      "scope_type": null,
+      "error": "大模型调用失败，请检查连接配置、模型服务状态或返回内容。",
+      "raw_keys": [
+        "clarification",
+        "debug_mode",
+        "execution_code",
+        "final_result",
+        "llm_debug",
+        "llm_error",
+        "metadata_summary",
+        "response_type",
+        "result_panels",
+        "results",
+        "skill_pipeline",
+        "step_trace",
+        "user_query",
+        "workflow"
+      ]
+    },
+    "consistent": false,
+    "diffs": [
+      "success 不一致: legacy=True, langgraph=False"
+    ]
+  },
+  {
+    "user_query": "查询计量点的安装位置和抄表周期",
+    "legacy": {
+      "success": true,
+      "elapsed_ms": 126113,
+      "response_type": "query_attribute_clarification",
+      "step_count": 6,
+      "step_ids": [
+        "step1",
+        "step2",
+        "step3",
+        "step4",
+        "step5",
+        "step6"
+      ],
+      "final_l1": null,
+      "final_l2": null,
+      "scope_type": null,
+      "error": null,
+      "raw_keys": [
+        "clarification",
+        "debug_mode",
+        "execution_code",
+        "final_result",
+        "llm_debug",
+        "llm_error",
+        "metadata_summary",
+        "response_type",
+        "result_panels",
+        "results",
+        "skill_pipeline",
+        "step_trace",
+        "user_query",
+        "workflow"
+      ]
+    },
+    "langgraph": {
+      "success": true,
+      "elapsed_ms": 108172,
+      "response_type": "query_attribute",
+      "step_count": 6,
+      "step_ids": [
+        "step1",
+        "step2",
+        "step3",
+        "step4",
+        "step5",
+        "step6"
+      ],
+      "final_l1": "设备",
+      "final_l2": "计量点",
+      "scope_type": "master_only",
+      "error": null,
+      "raw_keys": [
+        "clarification",
+        "debug_mode",
+        "execution_code",
+        "final_result",
+        "llm_debug",
+        "llm_error",
+        "metadata_summary",
+        "response_type",
+        "result_panels",
+        "results",
+        "skill_pipeline",
+        "step_trace",
+        "user_query",
+        "workflow"
+      ]
+    },
+    "consistent": false,
+    "diffs": [
+      "response_type 不一致: legacy=query_attribute_clarification vs lg=query_attribute",
+      "final_l1 不一致: legacy=None vs lg='设备'",
+      "final_l2 不一致: legacy=None vs lg='计量点'",
+      "scope_type 不一致: legacy=None vs lg=master_only"
+    ]
+  }
+]

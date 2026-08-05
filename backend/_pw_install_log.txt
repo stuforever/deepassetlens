@@ -1,0 +1,2 @@
+﻿Failed to install browsers
+Error: EPERM: operation not permitted, open 'C:\Users\李钢柱\AppData\Local\ms-playwright\.links\20773523ba4e2be962f764cdfeaa5dd4013d6e89'

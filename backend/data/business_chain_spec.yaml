@@ -1,0 +1,128 @@
+L3-MARKETING:
+  name: 营销
+  L4:
+  - code: L4-MARKETING-CAMPAIGN
+    name: 营销活动
+  - code: L4-MARKETING-LEAD
+    name: 潜客管理
+  - code: L4-MARKETING-ORDER
+    name: 营销工单
+  L4X:
+  - code: L4X-MARKETING-CAMPAIGN-001
+    name: 夏季用电优惠活动
+    parent: L4-MARKETING-CAMPAIGN
+    relates_to: L2X-CUSTOMER-ARCHIVE
+  - code: L4X-MARKETING-LEAD-001
+    name: 高潜客户挖掘
+    parent: L4-MARKETING-LEAD
+    relates_to: L2X-CUSTOMER-ARCHIVE
+L3-ORDER:
+  name: 工单
+  L4:
+  - code: L4-ORDER-REPAIR
+    name: 报修工单
+  - code: L4-ORDER-INSPECT
+    name: 检查工单
+  - code: L4-ORDER-INSTALL
+    name: 装表工单
+  L4X:
+  - code: L4X-ORDER-REPAIR-001
+    name: 客户报修-表计故障
+    parent: L4-ORDER-REPAIR
+    relates_to: L2X-CUSTOMER-METER
+  - code: L4X-ORDER-INSTALL-001
+    name: 新装电表-居民
+    parent: L4-ORDER-INSTALL
+    relates_to: L2X-EQUIPMENT-METER
+L3-METERING:
+  name: 计量
+  L4:
+  - code: L4-METERING-READ
+    name: 抄表
+  - code: L4-METERING-VERIFY
+    name: 核表
+  L4X:
+  - code: L4X-METERING-READ-001
+    name: 远程自动抄表-2024Q1
+    parent: L4-METERING-READ
+    relates_to: L2X-EQUIPMENT-METER
+  - code: L4X-METERING-VERIFY-001
+    name: 电能表周期核验
+    parent: L4-METERING-VERIFY
+    relates_to: L2X-EQUIPMENT-METER
+L3-ACCOUNTING:
+  name: 电费结算
+  L4:
+  - code: L4-ACCOUNTING-CALC
+    name: 电费计算
+  - code: L4-ACCOUNTING-PAY
+    name: 电费支付
+  L4X:
+  - code: L4X-ACCOUNTING-CALC-001
+    name: 月结电费计算
+    parent: L4-ACCOUNTING-CALC
+    relates_to: L2X-CUSTOMER-ACCOUNT
+  - code: L4X-ACCOUNTING-PAY-001
+    name: 线上缴费
+    parent: L4-ACCOUNTING-PAY
+    relates_to: L2X-CUSTOMER-ACCOUNT
+L3-LINE_LOSS:
+  name: 线损
+  L4:
+  - code: L4-LINE_LOSS-STAT
+    name: 线损统计
+  - code: L4-LINE_LOSS-ANALYSIS
+    name: 线损分析
+  L4X:
+  - code: L4X-LINE_LOSS-STAT-001
+    name: 台区线损月报
+    parent: L4-LINE_LOSS-STAT
+    relates_to: L2X-ORGANIZATION-MGT
+L3-INSPECTION:
+  name: 用电检查
+  L4:
+  - code: L4-INSPECTION-ROUTINE
+    name: 例行检查
+  - code: L4-INSPECTION-SPECIAL
+    name: 专项检查
+  L4X:
+  - code: L4X-INSPECTION-ROUTINE-001
+    name: 大客户例行检查
+    parent: L4-INSPECTION-ROUTINE
+    relates_to: L2X-CUSTOMER-ARCHIVE
+L3-CUSTOMER_SERVICE:
+  name: 客户服务
+  L4:
+  - code: L4-CS-COMPLAINT
+    name: 投诉处理
+  - code: L4-CS-CONSULT
+    name: 咨询答疑
+  L4X:
+  - code: L4X-CS-COMPLAINT-001
+    name: 客户投诉-电费异议
+    parent: L4-CS-COMPLAINT
+    relates_to: L2X-CUSTOMER-ARCHIVE
+L3-RELIABILITY:
+  name: 供电可靠性
+  L4:
+  - code: L4-RELIABILITY-OUTAGE
+    name: 停电管理
+  - code: L4-RELIABILITY-QUALITY
+    name: 电能质量
+  L4X:
+  - code: L4X-RELIABILITY-OUTAGE-001
+    name: 计划停电事件
+    parent: L4-RELIABILITY-OUTAGE
+    relates_to: L2X-EQUIPMENT-CONN
+L3-ENERGY:
+  name: 电量
+  L4:
+  - code: L4-ENERGY-COLLECT
+    name: 电量采集
+  - code: L4-ENERGY-STAT
+    name: 电量统计
+  L4X:
+  - code: L4X-ENERGY-COLLECT-001
+    name: 台区电量日采
+    parent: L4-ENERGY-COLLECT
+    relates_to: L2X-EQUIPMENT-CONN

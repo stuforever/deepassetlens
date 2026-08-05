@@ -1,0 +1,54 @@
+services:
+  doris-fe:
+    image: apache/doris:fe-2.1.8.1
+    container_name: tupu_doris_fe
+    hostname: doris-fe
+    environment:
+      - FE_SERVERS=fe1:172.28.80.2:9010
+      - FE_ID=1
+    ports:
+      - "18030:8030"
+      - "9030:9030"
+    volumes:
+      - doris_fe_meta:/opt/apache-doris/fe/doris-meta
+      - doris_fe_log:/opt/apache-doris/fe/log
+      - ./backend/mysql-connector-j-8.0.33.jar:/opt/apache-doris/fe/jdbc_drivers/mysql-connector-j-8.0.33.jar
+    networks:
+      doris_net:
+        ipv4_address: 172.28.80.2
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  doris-be:
+    image: apache/doris:be-2.1.8.1
+    container_name: tupu_doris_be
+    hostname: doris-be
+    depends_on:
+      - doris-fe
+    environment:
+      - FE_SERVERS=fe1:172.28.80.2:9010
+      - BE_ADDR=172.28.80.3:9050
+    ports:
+      - "18040:8040"
+    volumes:
+      - doris_be_storage:/opt/apache-doris/be/storage
+      - doris_be_log:/opt/apache-doris/be/log
+      - ./backend/mysql-connector-j-8.0.33.jar:/opt/apache-doris/be/jdbc_drivers/mysql-connector-j-8.0.33.jar
+    networks:
+      doris_net:
+        ipv4_address: 172.28.80.3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  doris_fe_meta:
+  doris_fe_log:
+  doris_be_storage:
+  doris_be_log:
+
+networks:
+  doris_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.80.0/24

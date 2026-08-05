@@ -1,0 +1,132 @@
+# ====================================================================
+# tupu 项目 .gitignore
+# 敏感信息绝不入库；大文件/临时文件不入库
+# ====================================================================
+
+# === 🔴 敏感信息（绝不入库）===
+.env
+.env.*
+!.env.example
+!.env.infra.example
+*.env
+authentik_bootstrap.json
+backend/.env
+backend/authentik_bootstrap.json
+**/secrets/
+**/credentials*
+**/id_rsa*
+**/id_ed25519*
+
+# === 🟡 大文件 / 模型（独立分发，不入库）===
+models/
+*.bin
+*.onnx
+*.onnx_data
+*.pt
+*.ckpt
+*.safetensors
+**/pytorch_model.bin
+
+# === 🟡 运行时产物 ===
+.runtime-logs/
+*.log
+*.log.*
+backend/data/di_threads/
+backend/data/deepagent_checkpoints.db*
+backend/.langgraph_api/
+backend/data/router_decisions/
+data/gitea/
+
+# === 🟡 临时脚本 / 截图（_ 前缀的调试脚本）===
+backend/_*.py
+backend/_*.json
+backend/_*.log
+backend/_*.png
+backend/tmp_e2e_screens/
+backend/_artifacts_e2e/
+backend/_test_*.json
+.playwright-mcp/
+_playwright-mcp/
+_*.py
+_*.json
+_*.png
+
+# === 截图 / 临时图片 ===
+e2e/_screenshots/
+e2e/_shots/
+e2e/_shots2/
+e2e/_results/
+e2e/_visual_audit/
+e2e/_baseline/
+**/*.png
+**/*.jpg
+!docs/**/*.png
+!docs/**/*.jpg
+
+# === 构建产物 ===
+frontend/build/
+frontend/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.cache/
+*.pyc
+*.pyo
+
+# === IDE / 编辑器 ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === 系统文件 ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === 临时测试数据 ===
+*.csv
+!backend/test_upload.csv
+*.xlsx
+!docs/**/*.xlsx
+
+# === Windows 保留设备名（git 无法索引）===
+nul
+NUL
+CON
+PRN
+AUX
+COM1
+LPT1
+
+# === 旧版备份文件 ===
+*.bak
+*.orig
+
+# === 开源清理追加（根级调试脚本 + 备份 + 临时目录）===
+# 根级一次性调试脚本（/ 前缀限定根目录，不影响 backend/tests/ 正式测试）
+/test_*.py
+/debug_*.py
+/check_*.py
+/fix_*.py
+/migrate_*.py
+/parse_resp*.py
+/qc
+/queryex
+/start
+/stop
+# 数据库备份目录
+backups/
+# 临时目录
+tmp/
+gui-test-screenshots/
+test_screenshots/
+test_shots/
+_ocr_test/
+图片/
+
+
+# === Playwright 浏览器二进制 + 大测试响应（不入库）===
+frontend/.playwright-browsers/
+frontend/_pw_browsers/
+/test_graph_query_resp.json

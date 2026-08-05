@@ -1,0 +1,52 @@
+﻿tupu FreePlan 30题前端测试 v2 | 2026-07-30 12:45
+测试集: 30 题 | 拦截SSE流解析done事件
+===============================================================================================
+[ 1/30] Q01 查询所有项目定义信息                   意图:ProjectDefinition 单表全量 ... OK  55.2s  rows=2  done=True
+[ 2/30] Q02 查询所有WBS元素信息                  意图:WbsElement 单表全量        ... OK  47.8s  rows=7  done=True
+[ 3/30] Q03 查询所有网络信息                     意图:Network 单表全量           ... OK  43.6s  rows=3  done=True
+[ 4/30] Q04 查询所有网络活动信息                   意图:NetworkActivity 单表全量   ... OK  46.9s  rows=4  done=True
+[ 5/30] Q05 查询所有里程碑信息                    意图:Milestone 单表全量         ... OK  52.9s  rows=11  done=True
+[ 6/30] Q06 查询所有WBS预算信息                  意图:ProjectBudget 单表全量     ... OK  49.6s  rows=7  done=True
+[ 7/30] Q07 查询所有WBS成本信息                  意图:ProjectCost 单表全量       ... OK  50.4s  rows=7  done=False
+[ 8/30] Q08 查询所有网络组件信息                   意图:NetworkComponent 单表全量  ... XX  10.2s  rows=0  done=-
+[ 9/30] Q09 查询所有业务对象状态信息                 意图:PsStatus 单表全量          ... XX  10.1s  rows=0  done=-
+[10/30] Q10 查询项目编号为P-2024-001的项目定义信息     意图:ProjectDefinition 条件查询 ... OK  54.4s  rows=1  done=True
+[11/30] Q11 查询WBS元素W-001-2的预算和成本         意图:WbsElement+Budget+Cost ... OK  66.3s  rows=1  done=True
+[12/30] Q12 查询项目P-2024-001下的所有WBS元素      意图:PD→WBS 1:N             ... OK  50.6s  rows=4  done=True
+[13/30] Q13 查询网络N-001下的所有网络活动            意图:NW→NA 1:N              ... OK  45.1s  rows=2  done=True
+[14/30] Q14 查询网络活动A-001下的所有网络组件          意图:NA→NC 1:N              ... OK  54.5s  rows=1  done=True
+[15/30] Q15 查询WBS元素W-001下的所有里程碑          意图:WBS→MS 1:N             ... OK  57.8s  rows=1  done=True
+[16/30] Q16 查询网络活动A-001下的所有里程碑           意图:NA→MS 1:N              ... OK  48.5s  rows=1  done=True
+[17/30] Q17 查询WBS元素W-001的所有下级WBS         意图:WBS→WBS 自循环 1:N        ... OK  58.2s  rows=3  done=True
+[18/30] Q18 查询项目P-2024-001的状态信息          意图:PD→PS 1:1              ... OK  77.5s  rows=1  done=True
+[19/30] Q19 查询项目P-2024-001下的所有WBS元素及其预算金 意图:PD→WBS→PB 三表关联         ... OK  71.9s  rows=4  done=True
+[20/30] Q20 查询所有项目的WBS数量统计               意图:PD→WBS 聚合              ... OK  39.5s  rows=2  done=True
+[21/30] Q21 统计每个项目下有多少个WBS元素             意图:aggregate-query 分组统计   ... OK  31.5s  rows=2  done=False
+[22/30] Q22 统计所有WBS的预算总金额                意图:aggregate-query SUM聚合  ... XX  10.2s  rows=0  done=-
+[23/30] Q23 查询预算金额最高的前3个WBS元素            意图:topn-query 排序取前N       ... XX  9.8s  rows=0  done=-
+[24/30] Q24 查询实际成本最高的前3个WBS元素            意图:topn-query 成本排序        ... OK  77.4s  rows=3  done=True
+[25/30] Q25 什么是WBS元素                     意图:explain-concept 概念解释   ... OK  24.2s  rows=0  done=True
+[26/30] Q26 项目域有哪些实体                     意图:explore-graph 浏览结构     ... OK  29.3s  rows=0  done=True
+[27/30] Q27 预算金额字段在哪个表                   意图:find-entity 反查字段       ... OK  20.9s  rows=0  done=True
+[28/30] Q28 检查项目定义表有哪些字段是空值              意图:data-quality 空值检测      ... OK  65.9s  rows=19  done=True
+[29/30] Q29 查询每个WBS元素的预算和实际成本对比          意图:multi-hop-query 预算成本对比 ... OK  76.0s  rows=7  done=True
+[30/30] Q30 对比P-2024-001和P-2024-002两个项目的 意图:compare-query 两项目对比    ... OK  72.2s  rows=2  done=True
+
+===============================================================================================
+测试完成: 26/30 PASS (86%)  平均: 46.9s
+报告: _webtest_30q_report.json | 截图: _webtest_30q_shots/
+===============================================================================================
+
+失败项 (4):
+  Q08 查询所有网络组件信息  err: Locator.wait_for: Timeout 8000ms exceeded.
+Call log:
+  - waiting for locator("te
+  Q09 查询所有业务对象状态信息  err: Locator.wait_for: Timeout 8000ms exceeded.
+Call log:
+  - waiting for locator("te
+  Q22 统计所有WBS的预算总金额  err: Locator.wait_for: Timeout 8000ms exceeded.
+Call log:
+  - waiting for locator("te
+  Q23 查询预算金额最高的前3个WBS元素  err: Locator.wait_for: Timeout 8000ms exceeded.
+Call log:
+  - waiting for locator("te

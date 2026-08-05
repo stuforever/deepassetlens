@@ -1,0 +1,239 @@
+{
+  "total_pages": 18,
+  "passed": 18,
+  "issues_found": 0,
+  "total_issues": 0,
+  "results": [
+    {
+      "page": "数据问答",
+      "key": "question_data",
+      "parent": "智能对话",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\01_question_data.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "图谱管理",
+      "key": "graph",
+      "parent": "图谱实体管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\02_graph.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "四区建模",
+      "key": "tree_model",
+      "parent": "图谱实体管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\03_tree_model.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "资产矩阵",
+      "key": "matrix_model",
+      "parent": "图谱实体管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\04_matrix_model.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "主数据建模",
+      "key": "master_data",
+      "parent": "图谱实体管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\05_master_data.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "业务活动建模",
+      "key": "activity_data",
+      "parent": "图谱实体管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\06_activity_data.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "实体关系管理",
+      "key": "entity_relation_manage",
+      "parent": "图谱实体管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\07_entity_relation_manage.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "来源表管理",
+      "key": "source",
+      "parent": "来源表映射管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\08_source.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "来源表到实体映射",
+      "key": "mapping",
+      "parent": "来源表映射管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\09_mapping.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "指标中心",
+      "key": "metric_manager",
+      "parent": "来源表映射管理",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\10_metric_manager.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "标准语义管理",
+      "key": "semantic",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\11_semantic.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "智能问指标",
+      "key": "smartmetric",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\12_smartmetric.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "技能管理",
+      "key": "skills",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\13_skills.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "API与技能查询",
+      "key": "api_skill_manage",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\14_api_skill_manage.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "数据源配置",
+      "key": "datasource",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\15_datasource.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "向量管理",
+      "key": "vector_manage",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\16_vector_manage.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "LLM配置",
+      "key": "llmconfig",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\17_llmconfig.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "page": "模型对话",
+      "key": "llmchat",
+      "parent": "扩展能力",
+      "issues": [],
+      "screenshot": "D:\\gitcangku\\DB-GPT\\tupu\\frontend\\_screenshots\\18_llmchat.png",
+      "status": "pass",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    }
+  ],
+  "chat_layout_issues": [],
+  "chat_layout_info": {
+    "rootWidth": 1904,
+    "rootHeight": 941,
+    "rootDisplay": "flex",
+    "rootFlexDirection": "row",
+    "splitDirection": "horizontal",
+    "leftWidth": 180,
+    "rightWidth": 1724,
+    "gap": 0,
+    "leftRatio": "9%",
+    "rightRatio": "91%",
+    "inputWidth": 1688,
+    "inputBottom": 1026
+  }
+}

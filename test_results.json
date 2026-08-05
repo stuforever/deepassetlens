@@ -1,0 +1,44 @@
+[
+  {
+    "name": "explore-graph(实体列表)",
+    "question": "用电客户概念下有哪些实体",
+    "status": "TIMEOUT",
+    "errors": [],
+    "response_preview": ""
+  },
+  {
+    "name": "basic-query(基础查询)",
+    "question": "查一下用电客户的名称和联系电话",
+    "status": "TIMEOUT",
+    "errors": [],
+    "response_preview": ""
+  },
+  {
+    "name": "aggregate-query(聚合统计)",
+    "question": "一共有多少用电客户",
+    "status": "TIMEOUT",
+    "errors": [],
+    "response_preview": ""
+  },
+  {
+    "name": "explain-concept(概念解释)",
+    "question": "什么是用电客户",
+    "status": "TIMEOUT",
+    "errors": [],
+    "response_preview": ""
+  },
+  {
+    "name": "explore-graph(层级结构)",
+    "question": "客户板块下面有哪些业务域",
+    "status": "TIMEOUT",
+    "errors": [],
+    "response_preview": ""
+  },
+  {
+    "name": "multi-hop-query(关联查询)",
+    "question": "用电客户关联了哪些电能表",
+    "status": "TIMEOUT",
+    "errors": [],
+    "response_preview": ""
+  }
+]
