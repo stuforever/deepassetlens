@@ -28,6 +28,11 @@ HEADERS = {"Content-Type": "application/json"}
 def put_index(name: str, mapping_file: Path) -> bool:
     raw = json.loads(mapping_file.read_text(encoding="utf-8"))
     body = raw.get(name, raw)  # {index_name: {mappings, settings, aliases}} 或直接 body
+    # ES 导出文件会带上只读的运行时元数据；新建索引时必须删除。
+    index_settings = (body.get("settings") or {}).get("index")
+    if isinstance(index_settings, dict):
+        for key in ("creation_date", "provided_name", "uuid", "version"):
+            index_settings.pop(key, None)
     r = requests.put(f"{ES_HOST}/{name}", headers=HEADERS, json=body, auth=AUTH)
     ok = r.status_code in (200, 201)
     print(f"  create index {name}: {'OK' if ok else 'FAIL ' + str(r.status_code)}")

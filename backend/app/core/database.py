@@ -328,6 +328,8 @@ def ensure_schema_compatibility():
             alter_sqls.append("ALTER TABLE `kg_smart_planner_configs` ADD COLUMN `query_entity_pipeline_code` VARCHAR(100) DEFAULT 'query_entity_pipeline'")
         if "query_entity_workflow_code" not in planner_cols:
             alter_sqls.append("ALTER TABLE `kg_smart_planner_configs` ADD COLUMN `query_entity_workflow_code` VARCHAR(100) DEFAULT 'query_entity_main_workflow'")
+        if "query_attribute_workflow_code" not in planner_cols:
+            alter_sqls.append("ALTER TABLE `kg_smart_planner_configs` ADD COLUMN `query_attribute_workflow_code` VARCHAR(100) DEFAULT 'query_attribute_main_workflow'")
         if alter_sqls:
             with engine.begin() as conn:
                 for sql in alter_sqls:

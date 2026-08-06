@@ -1,3 +1,5 @@
-$ErrorActionPreference = 'Stop'
-Set-Location 'd:\gitcangku\DB-GPT\tupu'
-& py -3.11 check_embedding_storage.py
+﻿$ErrorActionPreference = 'Stop'
+Set-Location 'D:\gitcangku\deepassetlens'
+& .\check_health.ps1
+Write-Output ""
+& .\check_ports.ps1

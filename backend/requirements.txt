@@ -1,4 +1,4 @@
-fastapi
+﻿fastapi
 uvicorn
 sqlalchemy
 pymysql
@@ -12,16 +12,16 @@ langsmith>=0.1.0
 langchain-openai>=0.1.0
 langchain-community>=0.1.0
 langchain-huggingface>=0.1.0
-# Authentik OIDC 集成
+# Authentik OIDC 闆嗘垚
 PyJWT[crypto]>=2.8.0
 cryptography>=42.0.0
 requests>=2.31.0
-qdrant-client>=1.7.0
+qdrant-client>=1.12,<1.14
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-# 跨源改造：实体业务数据迁 PostgreSQL + Elasticsearch(API)
+# 璺ㄦ簮鏀归€狅細瀹炰綋涓氬姟鏁版嵁杩?PostgreSQL + Elasticsearch(API)
 psycopg2-binary>=2.9.0
 elasticsearch>=8.11.0,<9.0.0
-# DuckDB 多源联邦查询（duckdb_engine.py 依赖，原漏写）
-duckdb>=1.0.0
+# DuckDB 澶氭簮鑱旈偊鏌ヨ锛坉uckdb_engine.py 渚濊禆锛屽師婕忓啓锛?duckdb>=1.0.0
 sqlglot>=23.0.0
+langchain-mcp-adapters>=0.3.0

@@ -19,6 +19,8 @@ backend/authentik_bootstrap.json
 
 # === 🟡 大文件 / 模型（独立分发，不入库）===
 models/
+!backend/app/models/
+!backend/app/models/**
 *.bin
 *.onnx
 *.onnx_data
@@ -39,6 +41,7 @@ data/gitea/
 
 # === 🟡 临时脚本 / 截图（_ 前缀的调试脚本）===
 backend/_*.py
+!backend/__start_8000.py
 backend/_*.json
 backend/_*.log
 backend/_*.png

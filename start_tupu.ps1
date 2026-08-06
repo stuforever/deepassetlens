@@ -3,8 +3,8 @@
 # 启动顺序：
 #   1) Docker 容器  qdrant + neo4j   (业务必备)
 #      [可选] authentik 4 个容器     (-SkipAuth:$false 才启)
-#   2) 后端 FastAPI   :8100  (py -3.11 -m uvicorn app.main:app)
-#   3) 前端 CRA       :3000  (npm start，BROWSER=none)
+#   2) 后端 FastAPI   :28000  (python backend/__start_8000.py)
+#   3) 前端 CRA       :23000  (npm start，BROWSER=none，PORT=23000)
 #   4) LangGraph Studio :2024  (langgraph dev)
 #
 # 全部用 Start-Process -WindowStyle Hidden 静默后台启动，
@@ -156,10 +156,10 @@ Wait-Port 7474 "neo4j"  90 | Out-Null
 # ============================================================
 # 2) 后端 :8100
 # ============================================================
-Write-Host "`n=== 2/4  后端 FastAPI :8100 ===" -ForegroundColor Cyan
+Write-Host "`n=== 2/4  后端 FastAPI :28000 ===" -ForegroundColor Cyan
 
-if (Test-Port 8100) {
-    Write-Host "  [SKIP] 后端 :8100 已在监听" -ForegroundColor DarkGray
+if (Test-Port 28000) {
+    Write-Host "  [SKIP] 后端 :28000 已在监听" -ForegroundColor DarkGray
 } else {
     $py = Resolve-Python
     if (-not $py) {
@@ -168,12 +168,12 @@ if (Test-Port 8100) {
     }
     $stamp   = Get-Date -Format "yyyyMMdd-HHmmss"
     $logFile = Join-Path $LogDir "backend-$stamp.log"
-    $args    = @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8100')
+        $args    = @('__start_8000.py')
     $proc    = Start-BgProcess -FilePath $py -Arguments $args -WorkingDirectory $BackendDir -LogFile $logFile
     Write-Host "  [OK]   后端已后台启动 PID=$($proc.Id)，日志: $logFile" -ForegroundColor Green
 }
 
-if (-not (Wait-Port 8100 "backend" 90)) {
+if (-not (Wait-Port 28000 "backend" 90)) {
     Write-Host "  [ERR]  后端起不来，前端 / langgraph 可能依赖它，先看日志" -ForegroundColor Red
 }
 
@@ -181,11 +181,11 @@ if (-not (Wait-Port 8100 "backend" 90)) {
 # 3) 前端 :3000
 # ============================================================
 if ($SkipFrontend) {
-    Write-Host "`n=== 3/4  前端 :3000  [SKIP] (-SkipFrontend) ===" -ForegroundColor Cyan
+    Write-Host "`n=== 3/4  前端 :23000  [SKIP] (-SkipFrontend) ===" -ForegroundColor Cyan
 } else {
-    Write-Host "`n=== 3/4  前端 CRA :3000 ===" -ForegroundColor Cyan
-    if (Test-Port 3000) {
-        Write-Host "  [SKIP] 前端 :3000 已在监听" -ForegroundColor DarkGray
+    Write-Host "`n=== 3/4  前端 CRA :23000 ===" -ForegroundColor Cyan
+    if (Test-Port 23000) {
+        Write-Host "  [SKIP] 前端 :23000 已在监听" -ForegroundColor DarkGray
     } else {
         if (-not (Test-Path (Join-Path $FrontendDir 'node_modules'))) {
             Write-Host "  [WARN] frontend/node_modules 不存在，请先在 frontend 目录跑 npm install" -ForegroundColor Yellow
@@ -200,11 +200,11 @@ if ($SkipFrontend) {
             } else {
                 $proc = Start-BgProcess -FilePath $npm.Source -Arguments @('start') `
                     -WorkingDirectory $FrontendDir -LogFile $logFile `
-                    -EnvVars @{ BROWSER = 'none' }
+                    -EnvVars @{ BROWSER = 'none'; PORT = '23000' }
                 Write-Host "  [OK]   前端已后台启动 PID=$($proc.Id)，日志: $logFile" -ForegroundColor Green
             }
         }
-        Wait-Port 3000 "frontend" 120 | Out-Null
+        Wait-Port 23000 "frontend" 120 | Out-Null
     }
 }
 
@@ -239,8 +239,8 @@ if ($SkipLangGraph) {
 # 总结
 # ============================================================
 Write-Host "`n=== 入口 ===" -ForegroundColor Cyan
-Write-Host "  前端          : http://127.0.0.1:3000" -ForegroundColor White
-Write-Host "  后端 docs     : http://127.0.0.1:8100/docs" -ForegroundColor White
+Write-Host "  前端          : http://127.0.0.1:23000" -ForegroundColor White
+Write-Host "  后端 docs     : http://127.0.0.1:28000/docs" -ForegroundColor White
 Write-Host "  LangGraph UI  : https://smith.langchain.com/studio?baseUrl=http://127.0.0.1:2024" -ForegroundColor White
 Write-Host "  Qdrant        : http://127.0.0.1:6333/dashboard" -ForegroundColor White
 Write-Host "  Neo4j Browser : http://127.0.0.1:7474" -ForegroundColor White

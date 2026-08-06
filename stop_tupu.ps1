@@ -1,7 +1,7 @@
 ﻿# tupu 工程统一停止脚本（纯静默，不弹窗）
 #
 # 覆盖：
-#   进程：前端 :3000 / 后端 :8100 / LangGraph Studio :2024
+#   进程：前端 :23000 / 后端 :28000 / LangGraph Studio :2024
 #   容器：tupu_qdrant / tupu_neo4j (核心)
 #         tupu_authentik_pg / tupu_authentik_redis / tupu_authentik_server / tupu_authentik_worker (默认也停)
 #
@@ -81,13 +81,13 @@ Stop-PortOwners -Ports @(2024) -What "langgraph"
 Stop-LeftoversByCmdline -Pattern 'langgraph(\.exe)?\s+dev|langgraph_api' -Label "langgraph"
 
 # 2) 前端
-Write-Host "`n=== 2/4  停前端 :3000 ===" -ForegroundColor Cyan
-Stop-PortOwners -Ports @(3000) -What "frontend"
+Write-Host "`n=== 2/4  停前端 :23000 ===" -ForegroundColor Cyan
+Stop-PortOwners -Ports @(23000) -What "frontend"
 Stop-LeftoversByCmdline -Pattern 'react-scripts\s+start' -Label "react-scripts"
 
 # 3) 后端
-Write-Host "`n=== 3/4  停后端 :8100 ===" -ForegroundColor Cyan
-Stop-PortOwners -Ports @(8100) -What "backend"
+Write-Host "`n=== 3/4  停后端 :28000 ===" -ForegroundColor Cyan
+Stop-PortOwners -Ports @(28000) -What "backend"
 Stop-LeftoversByCmdline -Pattern 'uvicorn\s+app\.main:app' -Label "uvicorn"
 
 # 4) Docker 容器
@@ -103,7 +103,7 @@ if ($SkipAuth) {
 
 # 核验
 Write-Host "`n=== 核验 ===" -ForegroundColor Cyan
-foreach ($p in 3000, 6333, 7474, 7687, 8100, 2024) {
+foreach ($p in 23000, 6333, 7474, 7687, 28000, 2024) {
     $busy = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
     if (-not $busy) {
         Write-Host ("  [OK]   :{0} 空闲" -f $p) -ForegroundColor Green
