@@ -17,6 +17,54 @@ DeepAssetLens 将企业数据资产组织为**知识图谱**（L1 业务域 → 
 - **多源联邦查询**：Doris catalog 跨 MySQL / PostgreSQL / ES 联邦取数
 - **技能管理**：可编排的问答技能（locate / explore / sql-exec / trace-lineage 等）
 
+## 项目特色
+
+### 1. 本体建模：严格的主数据/业务活动双链四层体系
+
+不是简单的表/字段堆砌，而是严格按业务语义建模，有明确的层级关系与上下文：
+
+- **双链四层**：主数据链（L1 行业域 -> L2 主数据小类 -> L2X 实体）+ 业务链（L3 业务活动 -> L4 业务实体 -> L4X 实体），L4X 通过 `business_chain_spec` 跨链关联到 L2X
+- **层级约束**：每层有父级约束（L2 必须挂 L1、L4 必须挂 L3），实体只能挂在 L2/L4
+- **一个本体三套存储**：MySQL 存元数据、Neo4j 供图查询、Qdrant 供向量召回，各司其职
+
+### 2. 真正的图检索：图节点定位 -> 子图内容 -> 向量化保底
+
+不是单纯靠向量相似度匹配，而是图谱结构优先、向量化兜底的分层检索：
+
+- **第一段 · 图节点定位**：通过 Neo4j 图谱邻居展开，先定位到业务域/实体节点（L2/L2X）
+- **第二段 · 子图内容定位**：在已锁实体下定位属性、关系（L4/L4X 及跨链关联）
+- **第三段 · 向量化保底**：双向量召回（实体名 + 属性名）+ Hybrid 检索（整句向量 + 分词向量 + 关键词 LIKE），覆盖语义与字面双维度
+
+### 3. 本体对象虚拟化连接：跨源计算 + 跨API计算
+
+知识图谱里的实体不必绑定单一物理表，通过 `source_mode` 支持三种取数来源，真正实现一体化数据探查：
+
+| 来源 | 引擎 | 能力 |
+|------|------|------|
+| 落地实体表映射 | PostgreSQL 直查 | 已落库表的字段级血缘治理 |
+| 虚拟SQL映射 | **Doris 联邦** | **跨源计算**：jdbc catalog 跨 MySQL/PG/ES 等库联邦 JOIN（3 段命名） |
+| 多源API映射 | **DuckDB 内存联邦** | **跨API计算**：多 API 端点 -> DataFrame -> 内存库联邦 JOIN/聚合 |
+
+- **跨源计算**：一段 `integration_sql` 用 `catalog.db.table` 命名，由 Doris 跨 catalog JOIN，filters 经 sqlglot 下推，并支持 LLM AI 校验改写
+- **跨API计算**：每个 API 端点定义虚拟表名，`pseudo_sql` 引用多虚拟表做 JOIN，DuckDB 内存库执行联邦，可 ATTACH PG/Doris 做更广整合
+
+### 4. LangGraph 状态机驱动对话
+
+- `SecretaryState` 秘书态贯穿多轮对话，5 旗标跟踪进度（chain/entity/attribute/relation/sql_executed）
+- 8 任务节点状态机：实体定位 -> 属性定位 -> SQL 拼装 -> SQL 执行 -> 答案生成 -> 推荐
+- 条件边自动链：定位锁完直接进 SQL 拼装，省一轮路由
+
+### 5. 流式体验与可解释推理
+
+- 后端 LangGraph StreamWriter + SSE，前端 fetch ReadableStream + 8 事件回调
+- ThinkStream 推理面板：token 级实时展示思考过程（策略标签：向量召回+LLM / LLM推理+分类 / 精准查询 / 规则拼装）
+- 5 段式结构化答案：总结 / 执行过程 / 属性清单 / 实体间关系 / 联接SQL
+
+### 6. 技能沙箱与 MCP 集成
+
+- 技能脚本以 `data/skills/{name}/scripts/main.py` 存在，importlib 动态加载 + 依赖注入，与核心解耦
+- MCP Server 暴露 16 个工具，集成 deepagents 框架，支持技能编排与外部工具调用
+
 ## 技术栈
 
 | 层 | 技术 |

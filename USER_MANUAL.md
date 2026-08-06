@@ -291,31 +291,154 @@ DeepAssetLens 将企业数据资产组织为**知识图谱**（L1 业务域 → 
 
 ### 6.4 映射管理（/mapping）
 
-#### 功能说明
+#### 6.4.1 功能概述：业务对象的三种来源
 
-映射管理包含 3 个 Tab：
+映射管理是 DeepAssetLens「本体对象虚拟化连接」的核心，解决"知识图谱里的实体，数据到底从哪来、怎么取"的问题。每个实体（业务对象）通过 `source_mode` 字段指定取数方式，对应三种来源：
 
-| Tab | 说明 |
-|-----|------|
-| 落地实体表映射 | 映射规则：实体 → 物理表的字段映射配置 |
-| 虚拟SQL映射 | SqlIntegrationTab：用 SQL 视图方式映射，支持 SQL 预览与数据预览 |
-| 多源API映射 | ApiMappingTab：通过 API 接口映射，支持测试与执行 |
+| source_mode | 来源类型 | 取数引擎 | 跨源/跨API能力 |
+|-------------|---------|---------|---------------|
+| `physical_table` | 落地实体表映射 | PostgreSQL 直查 | 不跨源（已落库） |
+| `sql_integration` | 虚拟SQL映射 | **Doris 联邦** | **跨源计算**（跨 catalog JOIN） |
+| `api_integration` | 多源API映射 | **DuckDB 内存联邦** | **跨API计算**（多 API 联邦 JOIN） |
 
-#### 操作步骤
+映射管理页面提供 3 个 Tab 分别配置这三种来源。统一的取数入口是后端 `/entity-preview/{entity_id}` 和 `/entity-data/{entity_code}`，后端按 `source_mode` 自动分发到对应引擎。
 
-1. 左侧菜单 → 数据资产 → 映射管理
-2. 切换 Tab 选择映射类型
-3. 选择实体 → 配置字段映射 / SQL / API
-4. 可「预览 SQL」「预览数据」验证映射
+![映射管理-落地实体表映射](docs/screenshots/mapping.png)
 
-![映射管理](docs/screenshots/mapping.png)
+#### 6.4.2 落地实体表映射（physical_table）
+
+**适用场景**：主数据/业务表已物理落库到 PostgreSQL，做字段级血缘治理与映射文档化。本身不跨源执行取数，预览时直连 PG 查 `entity_en_name` 对应的表。
+
+**界面**：映射规则列表（实体中文名称、实体落地中文表名、来源表名、规则ID、创建时间、操作），支持新建/查看/查看SQL/修改/删除，可按规则名、图谱实体、来源表筛选。
+
+**操作步骤**：
+1. 左侧菜单 -> 数据资产 -> 映射管理 -> 「落地实体表映射」Tab
+2. 点击「新建映射规则」
+3. 选择目标实体（强制只能一个）+ 来源表（树形多选，分主数据/业务/参考三类）
+4. 配置字段映射：每个属性点「选择来源字段(多选)」，可勾选主键、设主表、写「提取逻辑」说明
+5. 辅助操作：「智能自动匹配」（按名称模糊匹配自动填映射）、「生成SQL」（拼 SELECT+LEFT JOIN 模板）、「导入映射」(CSV)、「导出模板」
+6. 保存
+
+> 这是字段级映射文档，记录实体每个属性来自哪张来源表哪个字段，偏元数据治理/溯源。
+
+#### 6.4.3 虚拟SQL映射（sql_integration）—— 跨源计算
+
+**适用场景**：数据分布在多个库（MySQL/PostgreSQL/Oracle 等），需要跨库 JOIN 出一个对象视图。数据已在 Doris 体系内，或可为各数据源建 jdbc catalog。
+
+**跨源计算原理**：
+
+```
+┌─────────────────────────────────────────────┐
+│  虚拟SQL映射：integration_sql               │
+│  SELECT a.x, b.y                            │
+│  FROM pg_tupu.public.dim_ps_wbs_cost a      │  <- 3段命名: catalog.db.table
+│  LEFT JOIN es_tupu.default_db.tupu_xxx b    │  <- 跨 catalog JOIN
+│    ON a.id = b.id                           │
+└──────────────────┬──────────────────────────┘
+                   │ pymysql -> localhost:9030
+                   ▼
+            ┌────────────┐
+            │   Doris    │  联邦查询引擎
+            └─────┬──────┘
+         ┌────────┼────────┐
+         ▼        ▼        ▼
+     ┌──────┐ ┌──────┐ ┌──────┐
+     │ PG   │ │ ES   │ │MySQL │  ...各数据源 catalog
+     └──────┘ └──────┘ └──────┘
+```
+
+SQL 用 **3 段命名 `catalog.db.table`**，由 Doris 自身做跨 catalog JOIN。`doris_catalog` 字段存到实体上，执行时 `SWITCH` 到该 catalog。filters 通过 sqlglot 解析，把 WHERE 条件下推到 Doris。
+
+**界面**：左侧对象列表（仅 `source_mode=sql_integration` 的实体，带搜索）+ 右侧 Monaco SQL 编辑器 + 验证结果表。
+
+**操作步骤**：
+1. 「虚拟SQL映射」Tab -> 左侧选择对象（或新建）
+2. 在 Monaco 编辑器填写 `integration_sql`（建议不含 WHERE，3 段命名）
+3. 选择 `doris_catalog`（存到实体字段）
+4. 点击「保存」更新实体
+5. 点击「验证执行」—— 后端 `POST /integration-sql/verify` 执行 SQL（限 100 行返回），结果显示在右侧表
+6. （可选）点击「AI 校验改写」—— 后端 `POST /integration-sql/ai-rewrite`：执行 `LIMIT 0` 取 SQL 输出列，与实体 `properties_schema` 比对，列名/类型不匹配时 LLM 自动改写（加 `AS` 别名 / `CAST`），弹窗对比可一键应用
+
+> LLM 智能问答取数时，调用 `POST /integration-sql/execute`（带 filters）执行该 SQL。
+
+#### 6.4.4 多源API映射（api_integration）—— 跨API计算
+
+**适用场景**：数据只能通过 API 取（如 Elasticsearch `_search`、外部 REST 服务），需要把多个 API 的数据联邦整合成一个对象。
+
+**跨API计算原理**：
+
+```
+┌───────────────────────────────────────────────┐
+│  对象API映射：pseudo_sql（伪逻辑SQL）          │
+│  SELECT a.col, b.col                          │
+│  FROM dim_ps_xxx a   <- API端点1 虚拟表名      │
+│  LEFT JOIN dim_ps_yyy b  <- API端点2 虚拟表名  │
+│    ON a.id = b.id                             │
+└───────────────────┬───────────────────────────┘
+                    │ sqlglot 解析 + 下推参数
+        ┌───────────┴───────────┐
+        ▼                       ▼
+   ┌─────────┐             ┌─────────┐
+   │ API端点1 │             │ API端点2 │  各自 HTTP 调用
+   └────┬────┘             └────┬────┘
+        │ DataFrame              │ DataFrame
+        ▼                        ▼
+   ┌─────────────────────────────────┐
+   │  DuckDB 内存库                   │
+   │  register(虚拟表名, DataFrame)   │
+   │  执行 pseudo_sql 联邦 JOIN/聚合   │
+   └─────────────────────────────────┘
+```
+
+每个 API 端点定义一个「虚拟表名」（`table_name`），pseudo_sql 引用这些虚拟表名做 JOIN。执行时：sqlglot 解析 SQL 提取表名 + WHERE 常量 + JOIN 等值条件 -> 推导下推参数 -> 对每个表调 API -> DataFrame -> DuckDB register 临时表 -> 执行原 SQL 内存 JOIN。DuckDB 还可 ATTACH PostgreSQL/Doris 做更广联邦。
+
+**界面**：内部再分两个子 Tab：
+- **对象API映射**：左侧对象API映射列表 + 右侧表单（对象 + API端点(多选) + pseudo_sql + 描述）
+- **远程调用API**：左侧端点列表（按 `table_name` 前缀分组）+ 右侧 SQL 模拟区
+
+**操作步骤（配置一个 API 端点）**：
+1. 「多源API映射」Tab -> 「远程调用API」子 Tab
+2. 新增端点，填写：
+   - `name` 中文名、`table_name` 虚拟表名（英文唯一，如 `dim_ps_project`）
+   - `api_url`（如 ES `_search` 地址）、`method` GET/POST
+   - `params` 过滤参数数组：`{name(API参数名), column(SQL列名/JOIN列), map_to(如 query)}`
+   - `columns` 返回列数组：`{name(SQL列名), json_path(响应JSON字段,支持点号嵌套如 `_source.col`), type(DuckDB类型)}`
+   - `data_path` 响应数据路径（如 `hits.hits` 或 `data.TABLES.XXX`）
+3. 点击「测」—— 后端 `POST /api-endpoints/{id}/test` 单端点无参拉前 10 行验证
+
+**操作步骤（配置对象API映射，实现跨API联邦）**：
+1. 「多源API映射」Tab -> 「对象API映射」子 Tab
+2. 新增映射，选择对象（实体）+ 多个 API 端点 + 填写 `pseudo_sql`（引用端点虚拟表名做 JOIN，不含 WHERE）+ 描述
+3. 点击「验证SQL」—— 后端 `POST /entity-api-mappings/{id}/verify` 执行 pseudo_sql（无 filters），多 API 在 DuckDB 内存联邦 JOIN 返回结果
+4. 保存
+
+> LLM 智能问答取数时，调用 `POST /entity-api-mappings/execute`（带 filters）—— build_sql_with_filters 拼 WHERE 后 DuckDB 联邦执行。
+
+#### 6.4.5 三种来源对比
+
+| 维度 | 落地实体表映射 | 虚拟SQL映射（跨源） | 多源API映射（跨API） |
+|------|--------------|-------------------|---------------------|
+| source_mode | physical_table | sql_integration | api_integration |
+| 执行引擎 | PostgreSQL 直查 | Doris 联邦 | DuckDB 内存库 |
+| 跨源方式 | 不跨源 | Doris jdbc catalog 跨库 JOIN | 多 API 虚拟表内存 JOIN；可 ATTACH pg/doris |
+| 配置粒度 | 实体属性 ↔ 来源表字段 | 整段 integration_sql + doris_catalog | 端点(meta) + 对象映射(pseudo_sql) |
+| filters 下推 | 无 | sqlglot 别名映射拼 WHERE 下推 Doris | sqlglot 解析 WHERE+JOIN 推导下推到 API query |
+| 数据源形态 | 已落库关系表 | Doris 可达的库/视图 | HTTP API（REST/ES _search） |
+| AI 辅助 | 智能自动匹配 | AI 校验改写 SQL | 无 |
+| 典型场景 | 字段血缘治理、映射文档化 | 跨库 JOIN 出对象视图 | 多 API 联邦整合 |
+
+> 三者通过 `Entity.source_mode` 统一切换，在「主数据/活动数据」建模树里可改 source_mode 并跳到对应映射 Tab。
 
 #### 测试用例
 
 | 编号 | 场景 | 操作步骤 | 预期结果 |
 |------|------|---------|---------|
-| TC-6.7 | 切换映射类型 | 点击「虚拟SQL映射」Tab | 切换到 SQL 映射视图 |
-| TC-6.8 | 查看映射规则 | 默认 Tab 选择实体 | 显示该实体的字段映射配置 |
+| TC-6.7 | 查看映射规则 | 落地表映射 Tab 查看列表 | 显示映射规则记录 |
+| TC-6.8 | 新建映射规则 | 新建 -> 选实体+来源表+字段映射 -> 保存 | 规则列表新增一条 |
+| TC-6.9 | 跨源验证执行 | 虚拟SQL Tab -> 填 integration_sql -> 验证执行 | 返回跨源 JOIN 结果（限100行） |
+| TC-6.10 | 跨源 AI 改写 | 虚拟SQL Tab -> AI 校验改写 | 弹窗显示列差异 + 改写后 SQL |
+| TC-6.11 | 配置 API 端点 | 多源API Tab -> 远程调用API -> 新增端点 -> 测 | 返回端点前 10 行数据 |
+| TC-6.12 | 跨API联邦验证 | 多源API Tab -> 对象API映射 -> 填 pseudo_sql -> 验证SQL | 多 API 在 DuckDB 联邦 JOIN 返回结果 |
 
 ### 6.5 数据源（/datasource）
 
@@ -504,11 +627,11 @@ LLM 大模型连接管理，是智能问答的前置依赖：
 |------|--------|---------|
 | 数据资产探查 | 4 | TC-4.1 ~ TC-4.4 |
 | 图谱建模 | 8 | TC-5.1 ~ TC-5.8 |
-| 数据资产 | 10 | TC-6.1 ~ TC-6.10 |
+| 数据资产 | 12 | TC-6.1 ~ TC-6.12 |
 | 语义指标 | 3 | TC-7.1 ~ TC-7.3 |
 | 能力管理 | 5 | TC-8.1 ~ TC-8.5 |
 | 系统配置 | 6 | TC-9.1 ~ TC-9.6 |
-| **合计** | **36** | |
+| **合计** | **38** | |
 
 ### 测试前置条件
 
