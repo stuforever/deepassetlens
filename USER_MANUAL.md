@@ -351,6 +351,8 @@ SQL 用 **3 段命名 `catalog.db.table`**，由 Doris 自身做跨 catalog JOIN
 
 **界面**：左侧对象列表（仅 `source_mode=sql_integration` 的实体，带搜索）+ 右侧 Monaco SQL 编辑器 + 验证结果表。
 
+![虚拟SQL映射](docs/screenshots/mapping-sql.png)
+
 **操作步骤**：
 1. 「虚拟SQL映射」Tab -> 左侧选择对象（或新建）
 2. 在 Monaco 编辑器填写 `integration_sql`（建议不含 WHERE，3 段命名）
@@ -395,6 +397,8 @@ SQL 用 **3 段命名 `catalog.db.table`**，由 Doris 自身做跨 catalog JOIN
 **界面**：内部再分两个子 Tab：
 - **对象API映射**：左侧对象API映射列表 + 右侧表单（对象 + API端点(多选) + pseudo_sql + 描述）
 - **远程调用API**：左侧端点列表（按 `table_name` 前缀分组）+ 右侧 SQL 模拟区
+
+![多源API映射](docs/screenshots/mapping-api.png)
 
 **操作步骤（配置一个 API 端点）**：
 1. 「多源API映射」Tab -> 「远程调用API」子 Tab
