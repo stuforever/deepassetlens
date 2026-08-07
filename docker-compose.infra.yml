@@ -19,6 +19,8 @@
 #   Neo4j HTTP UI    : 7474
 #   Neo4j Bolt       : 7687
 #   tupu PG          : 5432   (实体业务数据迁 PG，physical_table 预览走这里)
+#   tupu MySQL       : 3306   (主数据/配置库，独立于 ragflow 的 33066)
+#   tupu ES          : 9200   (向量检索，独立于 ragflow 的 11200)
 
 x-authentik-env: &authentik-env
   AUTHENTIK_REDIS__HOST: authentik_redis
@@ -161,39 +163,55 @@ services:
       retries: 6
 
   # --------------------------------------------------------------------- #
-  # Gitea 私有 Git 仓库（自建代码托管）
-  # - 仅内网访问，需登录才能查看
-  # - 禁止自助注册，管理员手动建账号
-  # - SSH 推送端口 2222，Web UI 端口 3001
+  # tupu 业务 MySQL (主数据/配置库，tupu backend 主库)
+  # - 独立于 ragflow 栈，端口 3306（ragflow MySQL 用 33066，互不冲突）
   # --------------------------------------------------------------------- #
-  gitea:
-    image: gitea/gitea:1.22
-    container_name: tupu_gitea
+  tupu_mysql:
+    image: mysql:8.0.39
+    container_name: tupu_mysql
     restart: unless-stopped
     environment:
-      - USER_UID=1000
-      - USER_GID=1000
-      - GITEA__server__DOMAIN=${GITEA_DOMAIN:-gitea.tupu.local}
-      - GITEA__server__ROOT_URL=${GITEA_ROOT_URL:-http://localhost:3001/}
-      - GITEA__server__SSH_PORT=2222
-      - GITEA__service__REQUIRE_SIGNIN_VIEW=true   # 必须登录才能看
-      - GITEA__service__DISABLE_REGISTRATION=true  # 禁止自助注册
-      - GITEA__security__INSTALL_LOCK=true          # 跳过安装向导
-      - GITEA__database__DB_TYPE=sqlite3
-      - GITEA__database__PATH=/data/gitea/gitea.db
-    volumes:
-      - gitea_data:/data
-      - /etc/timezone:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
+      MYSQL_ROOT_PASSWORD: ${TUPU_MYSQL_PASSWORD:?set in .env.infra}
+      MYSQL_DATABASE: ${TUPU_MYSQL_DB:-tupu}
+    command:
+      --max_connections=1000
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
     ports:
-      - "${GITEA_PORT_HTTP:-3001}:3000"
-      - "${GITEA_PORT_SSH:-2222}:22"
+      - "${TUPU_MYSQL_PORT:-3306}:3306"
+    volumes:
+      - tupu_mysql_data:/var/lib/mysql
     networks:
       - tupu_infra
     healthcheck:
-      test: [CMD, curl, -f, http://localhost:3000/api/healthz]
-      interval: 15s
-      timeout: 10s
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-p${TUPU_MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # --------------------------------------------------------------------- #
+  # tupu 业务 Elasticsearch (实体/属性/标准语义向量检索)
+  # - 独立于 ragflow 栈，端口 9200（ragflow ES 用 11200，互不冲突）
+  # --------------------------------------------------------------------- #
+  tupu_es:
+    image: elasticsearch:8.11.3
+    container_name: tupu_es
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${TUPU_ES_PASSWORD:?set in .env.infra}
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "${TUPU_ES_PORT:-9200}:9200"
+    volumes:
+      - tupu_es_data:/usr/share/elasticsearch/data
+    networks:
+      - tupu_infra
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
       retries: 6
 
   # --------------------------------------------------------------------- #
@@ -241,7 +259,9 @@ volumes:
     name: tupu_neo4j_logs
   neo4j_plugins:
     name: tupu_neo4j_plugins
-  gitea_data:
-    name: tupu_gitea_data
+  tupu_mysql_data:
+    name: tupu_mysql_data
+  tupu_es_data:
+    name: tupu_es_data
   tupu_pg_data:
     name: tupu_pg_data

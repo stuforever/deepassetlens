@@ -44,28 +44,28 @@ DeepAssetLens 由「前端 + 后端 + 7 类数据基础设施」组成。基础�
        │ MySQL  │        │ PG   ││Neo4j││ ES   │        │Qdrant  │
        │ 元数据 │        │业务库││ 图  ││检索  │        │ 向量库 │
        └────────┘        └──────┘└─────┘└──────┘        └────────┘
-            │                                                 
-            ▼  联邦查询                                       
-       ┌────────┐  Redis(缓存) ← RAGFlow 栈共用              
-       │ Doris  │                                             
-       └────────┘                                             
+            │
+            ▼  联邦查询
+       ┌────────┐
+       │ Doris  │
+       └────────┘
 ```
 
 **基础设施来源说明（重要）**：
 
+所有数据基础设施均由项目自带 compose 文件启动，**独立于任何外部栈（如 RAGFlow）**。
+
 | 组件 | 来源 | 说明 |
 |------|------|------|
-| MySQL 8 | RAGFlow 栈 **或** 独立部署 | tupu 主库（元数据），端口 33066 |
-| Elasticsearch | RAGFlow 栈 **或** 独立部署 | 全文检索，端口 11200 |
-| Redis | RAGFlow 栈 **或** 独立部署 | 缓存，端口 6379 |
+| MySQL 8 | `docker-compose.infra.yml` | tupu 主库（元数据），端口 3306 |
+| Elasticsearch | `docker-compose.infra.yml` | 全文检索，端口 9200 |
 | PostgreSQL 16 | `docker-compose.infra.yml` | tupu 业务库，端口 5432 |
 | Neo4j 5 | `docker-compose.infra.yml` | 图数据库，端口 7474/7687 |
 | Qdrant 1.12 | `docker-compose.infra.yml` | 向量库，端口 6333/6334 |
 | Doris | `docker-compose.doris.yml` | 联邦查询，端口 9030/18030/18040 |
 | Authentik | `docker-compose.infra.yml` | SSO/RBAC（可选），端口 9100/9143 |
-| Gitea | `docker-compose.infra.yml` | 私有 Git（可选），端口 3001/2222 |
 
-> 若你已部署 RAGFlow，可直接复用其 MySQL/ES/Redis；否则按 §5.1 独立部署这三个组件。
+> 全部基础设施由 `docker-compose.infra.yml`（含 MySQL/ES/PG/Neo4j/Qdrant/Authentik）与 `docker-compose.doris.yml`（Doris）启动，不依赖 RAGFlow。
 
 ---
 
@@ -103,19 +103,17 @@ node --version      # 应为 v18+
 |------|---------|------|---------|
 | tupu 后端 | 28000 | FastAPI / Uvicorn | ✅ 必需 |
 | 前端 dev server | 23000 | React dev server | ✅ 必需 |
-| MySQL | 33066 | tupu 主库 | ✅ 必需 |
+| MySQL | 3306 | tupu 主库 | ✅ 必需 |
 | PostgreSQL | 5432 | tupu 业务库 | ✅ 必需 |
-| Elasticsearch | 11200 | ES 全文检索 | ✅ 必需 |
+| Elasticsearch | 9200 | ES 全文检索 | ✅ 必需 |
 | Neo4j | 7474 / 7687 | Browser / Bolt | ✅ 必需 |
 | Qdrant | 6333 / 6334 | REST / gRPC | ✅ 必需 |
 | Doris FE | 9030 / 18030 | MySQL 协议 / Web UI | ⬜ 联邦查询用 |
 | Doris BE | 18040 | BE 数据节点 | ⬜ 联邦查询用 |
-| Redis | 6379 | 缓存 | ✅ 必需 |
 | Authentik | 9100 / 9143 | SSO/RBAC | ⬜ 可选 |
-| Gitea | 3001 / 2222 | Web / SSH | ⬜ 可选 |
 
 > **端口固定，禁止修改。** 前端代码一律用相对路径，由 `setupProxy.js` 转发到 28000。
-> Windows 用户注意：避开 Hyper-V 保留端口范围（1177-1876 等），本表端口均已在 10000 以上或避开保留区。
+> Windows 用户注意：避开 Hyper-V 保留端口范围（1177-1876 等）。
 
 ---
 
@@ -162,6 +160,15 @@ QDRANT_API_KEY=<你的qdrant密钥>
 NEO4J_AUTH=neo4j/<你的neo4j密码>
 NEO4J_PASSWORD=<同上>
 
+# tupu 业务 MySQL（主库）
+TUPU_MYSQL_DB=tupu
+TUPU_MYSQL_PASSWORD=<你的mysql密码>
+TUPU_MYSQL_PORT=3306
+
+# tupu 业务 Elasticsearch
+TUPU_ES_PASSWORD=<你的es密码>
+TUPU_ES_PORT=9200
+
 # tupu 业务 PostgreSQL
 TUPU_PG_USER=postgres
 TUPU_PG_DB=tupu
@@ -183,8 +190,8 @@ cp .env.example .env
 编辑 `backend/.env`，关键字段：
 
 ```ini
-# MySQL（端口 33066；密码取决于是 RAGFlow 的 MySQL 还是独立部署）
-DATABASE_URL=mysql+pymysql://root:root@localhost:33066/tupu?charset=utf8mb4
+# MySQL（端口 3306；密码与 .env.infra 的 TUPU_MYSQL_PASSWORD 一致）
+DATABASE_URL=mysql+pymysql://root:<你的mysql密码>@localhost:3306/tupu?charset=utf8mb4
 
 # Neo4j（密码与 .env.infra 一致）
 NEO4J_URI=bolt://localhost:7687
@@ -196,8 +203,8 @@ QDRANT_HOST=127.0.0.1
 QDRANT_PORT=6333
 QDRANT_API_KEY=<你的qdrant密钥>
 
-# Elasticsearch（密码来自 RAGFlow 部署，独立部署则自定）
-ES_HOST=http://localhost:11200
+# Elasticsearch（端口 9200；密码与 .env.infra 的 TUPU_ES_PASSWORD 一致）
+ES_HOST=http://localhost:9200
 ES_USER=elastic
 ES_PASSWORD=<你的ES密码>
 
@@ -215,9 +222,9 @@ DEEPSEEK_API_KEY=
 
 | 服务 | 连接字符串 |
 |------|-----------|
-| MySQL | `mysql+pymysql://root:root@localhost:33066/tupu` |
+| MySQL | `mysql+pymysql://root:<密码>@localhost:3306/tupu` |
 | PostgreSQL | `postgresql://postgres:<密码>@localhost:5432/tupu` |
-| Elasticsearch | `http://elastic:<密码>@localhost:11200` |
+| Elasticsearch | `http://elastic:<密码>@localhost:9200` |
 | Doris | `mysql://root:@localhost:9030` |
 | Neo4j | `bolt://localhost:7687` |
 
@@ -225,59 +232,26 @@ DEEPSEEK_API_KEY=
 
 ## 5. 基础设施启动
 
-### 5.1 启动 MySQL / ES / Redis（RAGFlow 栈 或 独立部署）
+### 5.1 启动全部数据基础设施（MySQL / ES / PG / Neo4j / Qdrant / Authentik）
 
-**方案 A：已有 RAGFlow 部署**
-
-若已部署 RAGFlow，其 MySQL(33066)/ES(11200)/Redis(6379) 可直接复用。确认容器在运行：
-
-```powershell
-docker ps | findstr "mysql elasticsearch redis"
-```
-
-**方案 B：独立部署 MySQL / ES / Redis**
-
-若没有 RAGFlow，用以下 docker 命令独立启动（端口须与上表一致）：
-
-```powershell
-# MySQL 8（端口 33066，root/root）
-docker run -d --name tupu_mysql -p 33066:3306 `
-  -e MYSQL_ROOT_PASSWORD=root `
-  -e MYSQL_DATABASE=tupu `
-  -e MYSQL_CHARSET=utf8mb4 -e MYSQL_COLLATION=utf8mb4_unicode_ci `
-  mysql:8 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-
-# Elasticsearch 8（端口 11200，密码自定，此处用 infiniragflow）
-docker run -d --name tupu_es -p 11200:9200 `
-  -e "discovery.type=single-node" `
-  -e "xpack.security.enabled=true" `
-  -e "ELASTIC_PASSWORD=infiniragflow" `
-  docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-
-# Redis（端口 6379）
-docker run -d --name tupu_redis -p 6379:6379 redis:7-alpine
-```
-
-✓ **验证**：
-```powershell
-docker exec tupu_mysql mysql -uroot -proot -e "SELECT 1"       # MySQL 正常
-curl -u elastic:infiniragflow http://localhost:11200            # ES 返回集群信息
-docker exec tupu_redis redis-cli ping                           # PONG
-```
-
-### 5.2 启动项目专用容器（PG + Qdrant + Neo4j + Authentik + Gitea）
+所有数据基础设施统一由 `docker-compose.infra.yml` 启动，**独立于任何外部栈（如 RAGFlow）**：
 
 ```powershell
 cd D:\gitcangku\deepassetlens
 docker compose --env-file .env.infra -f docker-compose.infra.yml up -d
 ```
 
-✓ **验证**：6 个容器全部 Up（authentik_postgres / redis / server / worker / qdrant / neo4j / gitea / tupu_pg）：
+> 启动前先按 §4.1 配好 `.env.infra`（含 `TUPU_MYSQL_PASSWORD` / `TUPU_ES_PASSWORD` 等密码）。
+> MySQL(3306) / ES(9200) / PG(5432) / Neo4j / Qdrant / Authentik 一次性全部拉起。
+
+✓ **验证**：容器全部 Up（tupu_mysql / tupu_es / tupu_pg / qdrant / neo4j / authentik_*）：
 ```powershell
 docker compose -f docker-compose.infra.yml ps --format "table {{.Name}}\t{{.Status}}"
+docker exec tupu_mysql mysql -uroot -p<你的mysql密码> -e "SELECT 1"   # MySQL 正常
+curl -u elastic:<你的es密码> http://localhost:9200                      # ES 返回集群信息
 ```
 
-### 5.3 启动 Doris（联邦查询，可选）
+### 5.2 启动 Doris（联邦查询，可选）
 
 ```powershell
 # 必须用 -p tupu 项目名，否则容器名不匹配 tupu_doris_fe / tupu_doris_be
@@ -286,12 +260,11 @@ docker compose -p tupu -f docker-compose.doris.yml up -d
 
 ✓ **验证**：`curl http://localhost:18030/api/health` 返回 `{"status":"UP"}`。
 
-### 5.4 重置项目数据卷（仅首次或需要清空时）
+### 5.3 重置数据卷（仅首次或需要清空时）
 
 ```powershell
-# 仅重置项目专用卷，不影响 RAGFlow 的 MySQL/ES/Redis
+# 重置全部项目数据卷（MySQL/ES/PG/Neo4j/Qdrant/Authentik）
 docker compose -f docker-compose.infra.yml down -v
-docker volume rm tupu_qdrant_data tupu_neo4j_data tupu_pg_data 2>$null
 docker compose --env-file .env.infra -f docker-compose.infra.yml up -d
 ```
 
@@ -336,7 +309,7 @@ python data/init/create_missing_seed_tables.py
 docker exec -i tupu_mysql mysql -uroot -proot --default-character-set=utf8mb4 tupu < backend/data/init/mysql_init_data.sql
 
 # 方式二：宿主 mysql 客户端（同样必须加 --default-character-set=utf8mb4）
-mysql --default-character-set=utf8mb4 --force -h 127.0.0.1 -P 33066 -uroot -proot tupu < backend/data/init/mysql_init_data.sql
+mysql --default-character-set=utf8mb4 --force -h 127.0.0.1 -P 3306 -uroot -p<密码> tupu < backend/data/init/mysql_init_data.sql
 ```
 
 > 种子 SQL 有两条重复唯一键（`kg_graph_schema.field_name`、`kg_semantic_intent_norm.word`），用 `--force` 容错导入即可，重复记录会被跳过。
@@ -368,7 +341,7 @@ python data/init/init_es.py
 
 > `init_es.py` 会在导入前剔除 ES 导出文件中的只读索引元数据（`creation_date`、`uuid` 等），解决 ES 400 错误。创建 12 个 `tupu_*` 索引。
 
-✓ **验证**：`curl -u elastic:<密码> "http://localhost:11200/_cat/indices/tupu_*?v"` 列出 12 个索引。
+✓ **验证**：`curl -u elastic:<密码> "http://localhost:9200/_cat/indices/tupu_*?v"` 列出 12 个索引。
 
 ### 6.6 创建 Doris 外部 Catalog（联邦查询，可选）
 
@@ -632,7 +605,6 @@ taskkill /PID <PID> /F
 - `.env.infra` 和 `backend/.env` 含本地开发密码，**已被 `.gitignore` 忽略，禁止提交**。
 - 种子数据中的 LLM API Key 已清空，需自行填入。
 - 所有密码均为本地开发默认值（root/root、postgres/postgres 等），**生产环境必须全部替换**。
-- Gitea 已配置禁止自助注册、必须登录才能查看。
 - Neo4j、Qdrant 的认证凭据在 `.env.infra` 配置，不要使用空密码。
 - Authentik 默认未启用（`ENABLE_AUTH=false`），所有请求按匿名 admin 处理；生产环境应启用并配置 RBAC。
 
@@ -674,7 +646,7 @@ deepassetlens/
 │   └── package.json
 ├── models/                       # 嵌入模型（git-ignored，自行下载）
 ├── docs/screenshots/             # 用户手册截图
-├── docker-compose.infra.yml      # PG + Qdrant + Neo4j + Authentik + Gitea
+├── docker-compose.infra.yml      # MySQL + ES + PG + Qdrant + Neo4j + Authentik
 ├── docker-compose.doris.yml      # Doris FE + BE
 ├── docker-compose.yml            # 占位（已弃用）
 ├── .env.infra                    # 基础设施配置（git-ignored）

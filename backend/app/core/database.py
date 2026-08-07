@@ -4,7 +4,7 @@ import os
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "mysql+pymysql://root:root@localhost:33066/tupu?charset=utf8mb4",
+    "mysql+pymysql://root:root@localhost:3306/tupu?charset=utf8mb4",
 )
 
 engine = create_engine(

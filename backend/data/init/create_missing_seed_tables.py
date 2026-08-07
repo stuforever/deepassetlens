@@ -48,7 +48,7 @@ def connection_settings() -> dict[str, object]:
     load_dotenv(BACKEND_DIR / ".env", override=False)
     raw_url = os.getenv(
         "DATABASE_URL",
-        "mysql+pymysql://root:root@127.0.0.1:33066/tupu?charset=utf8mb4",
+        "mysql+pymysql://root:root@127.0.0.1:3306/tupu?charset=utf8mb4",
     )
     parsed = urlparse(raw_url.replace("mysql+pymysql://", "mysql://", 1))
     if not parsed.hostname or not parsed.path:

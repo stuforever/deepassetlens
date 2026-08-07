@@ -2,10 +2,10 @@
 """Elasticsearch 索引初始化：从 backend/data/init/es/ 导入 mapping + data。
 
 用法（在 backend 目录执行）：
-    ES_PASSWORD=infini_rag_flow python data/init/init_es.py
+    ES_PASSWORD=<your_es_password> python data/init/init_es.py
 
 环境变量：
-    ES_HOST     ES 地址（默认 http://localhost:11200）
+    ES_HOST     ES 地址（默认 http://localhost:9200）
     ES_USER     用户名（默认 elastic）
     ES_PASSWORD 密码
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import requests
 
-ES_HOST = os.getenv("ES_HOST", "http://localhost:11200").rstrip("/")
+ES_HOST = os.getenv("ES_HOST", "http://localhost:9200").rstrip("/")
 ES_USER = os.getenv("ES_USER", "elastic")
 ES_PASS = os.getenv("ES_PASSWORD", "")
 ES_DIR = Path(__file__).parent / "es"

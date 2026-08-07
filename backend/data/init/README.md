@@ -18,7 +18,7 @@ python -c "from app.core.database import engine; from app.models import Base; Ba
 ### 2. 导入 MySQL 种子数据
 
 ```bash
-mysql -h 127.0.0.1 -P 33066 -u root -p tupu < mysql_init_data.sql
+mysql -h 127.0.0.1 -P 3306 -u root -p tupu < mysql_init_data.sql
 ```
 
 包含：项目域概念层级（L0 项目域 → L1 项目主数据 → L2 实体）、6 个实体定义（WBS 元素/活动物料组件/网络/网络活动/里程碑/项目定义）、Doris 查询配置、LLM 连接记录（api_key 已清空，需自行填入）、技能、指标、API 端点等。
