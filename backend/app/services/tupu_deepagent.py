@@ -632,6 +632,49 @@ from .kg_action_handlers import dispatch_kg_action
 
 
 # ---------------------------------------------------------------------------
+# M3（融合设计 §5.1）：RubricMiddleware on_evaluation 钩子 + 每请求桥接
+# rubric 评估事件经 runtime.stream_writer 走 stream_mode="custom"，astream_events 收不到，
+# 故以 on_evaluation 回调为可靠通道：治理双落 + contextvar 桥到当前请求的 run_event_sink/契约。
+# ---------------------------------------------------------------------------
+import contextvars as _cvars
+
+_RUBRIC_HOOK_CTX: _cvars.ContextVar = _cvars.ContextVar("tupu_rubric_hook", default=None)
+
+
+def _on_rubric_evaluation(evaluation: dict) -> None:
+    """M3 DA-2：grader 每次评估回调 -> 治理 + 当前请求 sink/契约（SSE 可见）。
+
+    回调内异常只记不抛（框架对 on_evaluation 异常同样抑制）。
+    """
+    try:
+        from app.services import skill_governance as _gov
+        _gov.get_governance().record_policy(
+            "rubric.evaluation", "_rubric_", "_rubric_",
+            f"result={evaluation.get('result')} iter={evaluation.get('iteration', 0)}")
+    except Exception:
+        pass
+    try:
+        bridge = _RUBRIC_HOOK_CTX.get()
+        if not bridge:
+            return
+        sink = bridge.get("sink")
+        if sink is not None:
+            sink.append("rubric_evaluation_end", {
+                "result": evaluation.get("result"),
+                "iteration": evaluation.get("iteration"),
+                "explanation": (evaluation.get("explanation") or "")[:500],
+                "grading_run_id": evaluation.get("grading_run_id"),
+            })
+        contract = bridge.get("contract")
+        if contract is not None:
+            contract._runtime["rubric_status"] = evaluation.get("result")
+            contract._runtime["rubric_iterations"] = int(evaluation.get("iteration", 0) or 0) + 1
+            contract._runtime["rubric_explanation"] = (evaluation.get("explanation") or "")[:500]
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # 4. Agent 工厂函数
 # ---------------------------------------------------------------------------
 
@@ -783,6 +826,17 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     middleware_list.append(_summ_mw)
     middleware_list.append(SummarizationToolMiddleware(_summ_mw))
     logger.info("[Summarization] 显式保守摘要中间件已装配（30k/10/15，替代 monkey-patch）+ compact_conversation 工具")
+
+    # M3（融合设计 §5.1）：自评闸门 RubricMiddleware —— 仅调用方传 rubric 时激活（generic 契约，
+    # scenario 不传即不激活）。grader 模型缺省会话模型；TUPU_RUBRIC_CONNECTION_ID 可指轻量连接。
+    # max_iterations=1（只评不改，grader 放弃时不篡改消息，前端按 SSE 展示）；on_evaluation 走治理+sink。
+    from deepagents.middleware.rubric import RubricMiddleware
+    import os as _os3
+    _rubric_conn = _os3.getenv("TUPU_RUBRIC_CONNECTION_ID", "") or connection_id
+    _rubric_model = get_chat_model(temperature=0.0, streaming=True, connection_id=_rubric_conn)
+    middleware_list.append(RubricMiddleware(model=_rubric_model, max_iterations=1,
+                                           on_evaluation=_on_rubric_evaluation))
+    logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'）")
 
     # F5: response_format（统一最终交付协议）。当前模型(GLM/DeepSeek)与嵌套结构化 schema
     # 不兼容：接入后会破坏 Agent 的最终文本生成（SQL 执行后不再产出结论），故不启用。

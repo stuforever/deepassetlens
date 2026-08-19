@@ -52,6 +52,15 @@ ENGINE_TO_TOOLS: Dict[str, List[str]] = {
 # 数据工具集合（用于 stop_when / 引擎一致性判断）
 DATA_TOOLS = frozenset({"execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api"})
 
+# M3（融合设计 §5.1）：generic 模式自评 rubric（RubricMiddleware 激活文案；scenario 模板已保证结构，rubric=None）
+GENERIC_RUBRIC = (
+    "本回答必须满足：\n"
+    "1. 数字必须来自工具返回结果，禁止编造或心算；\n"
+    "2. 注明统计口径：实体表、时间范围、过滤条件；\n"
+    "3. 结果为空或验证失败时明示原因，不得给猜测值；\n"
+    "4. 直接回答用户问题本身的量词与维度（总数/ TopN/占比…）。"
+)
+
 
 @dataclass
 class QueryContract:
@@ -71,6 +80,7 @@ class QueryContract:
     stop_when: List[str] = field(default_factory=list)
     route_reason: str = ""
     route_type: str = "scenario"                                   # scenario | generic | ...
+    rubric: Optional[str] = None                                   # M3 DA-2：自评闸门 rubric（generic 默认文案；scenario 为 None）
     multi_engine: bool = False                                     # 批4/场景迁移：多数据源逐源分发（引擎不唯一）
     forbid_markdown_detail_table: bool = True                      # 输出契约：结果已推前端时禁 Markdown 明细表
     entity_engine_map: Dict[str, str] = field(default_factory=dict)  # 实体 -> 引擎 真实映射（源模式工具返回）
@@ -139,6 +149,7 @@ class QueryContract:
             output_mode="default",
             route_reason=route_reason or "未命中场景剧本，进入低权限只读通用模式",
             route_type="generic",
+            rubric=GENERIC_RUBRIC,
             _runtime={"engine_locked": False, "result_obtained": False, "violations": 0},
         )
         return c
@@ -297,6 +308,7 @@ class QueryContract:
             "stop_when": list(self.stop_when),
             "route_reason": self.route_reason,
             "route_type": self.route_type,
+            "rubric": self.rubric,
             "multi_engine": self.multi_engine,
             "forbid_markdown_detail_table": self.forbid_markdown_detail_table,
             "confirmed_engines": list(self._runtime.get("confirmed_engines") or []),

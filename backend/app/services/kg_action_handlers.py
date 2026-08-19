@@ -8,13 +8,17 @@ from __future__ import annotations
 # v3.5: 无 entity_code 时，从 SQL FROM 子句提取主表名（反查实体配置的 source_mode/data_source_id）
 # 支持 WITH CTE -> ... FROM main_table 和直接 FROM main_table
 # 不处理子查询别名（取第一个 FROM 后的裸表名，已覆盖场景剧本的 SQL 模板模式）
-_MAIN_TABLE_RE = __import__('re').compile(r'\bFROM\s+([a-zA-Z_][\w]*)', __import__('re').IGNORECASE)
+# M3 G7：支持点分表名（internal.test_db.dim_xxx）——取末段（真实表名），证据链/反查实体用
+_MAIN_TABLE_RE = __import__('re').compile(r'\bFROM\s+([a-zA-Z_][\w]*(?:\.[a-zA-Z_][\w]*)*)', __import__('re').IGNORECASE)
 def _extract_main_table(sql: str) -> str:
-    """从 SQL 的 FROM 子句提取主表名。返回表名或空字符串。"""
+    """从 SQL 的 FROM 子句提取主表名（点分名取末段）。返回表名或空字符串。"""
     if not sql or not isinstance(sql, str):
         return ""
     m = _MAIN_TABLE_RE.search(sql)
-    return m.group(1) if m else ""
+    if not m:
+        return ""
+    name = m.group(1)
+    return name.rsplit(".", 1)[-1] if name else ""
 
 
 def _explain_precheck(exec_fn, sql: str, _ts: str) -> Optional[dict]:
@@ -41,6 +45,42 @@ def _explain_precheck(exec_fn, sql: str, _ts: str) -> Optional[dict]:
             return {"error": f"EXPLAIN 预检拦截: {res['error']}", "error_class": ec,
                     "log": f"[{_ts}] EXPLAIN 预检拦截（{ec}），未执行完整查询"}
     return None
+
+def _build_verification(result: dict) -> dict:
+    """G4（融合设计 §5.2）：引擎侧结果验证——row_count + 列空值率 + 告警。
+
+    v1 单规则：返回样本行上近似计算各列空值率，>80% 记 warning（提示可能选错列）。
+    成功结果统一追加 verification 字段（前端证据链/置信度用）；错误/非 dict 返回空。
+    """
+    if not isinstance(result, dict) or result.get("error"):
+        return {}
+    rows = result.get("rows") or []
+    columns = result.get("columns") or []
+    row_count = result.get("row_count") or len(rows)
+    if not columns:
+        return {"row_count": row_count, "null_rates": {}, "warnings": []}
+    null_rates: dict = {}
+    warnings: list = []
+    total = len(rows) or 1
+    _idx = {str(c): i for i, c in enumerate(columns)}
+    for col in columns:
+        _i = _idx.get(str(col))
+        if _i is None:
+            continue
+        nulls = 0
+        for r in rows:
+            if not isinstance(r, (list, tuple)) or _i >= len(r):
+                nulls += 1
+                continue
+            v = r[_i]
+            if v is None or v == "" or (isinstance(v, str) and v.strip().lower() in ("null", "none", "nan")):
+                nulls += 1
+        rate = round(nulls / total, 2) if total else 0.0
+        null_rates[str(col)] = rate
+        if rate > 0.8:
+            warnings.append(f"列 {col} 空值率 {int(rate * 100)}%，可能选错列")
+    return {"row_count": row_count, "null_rates": null_rates, "warnings": warnings}
+
 
 # ============== 16 个 action 处理器（原 dispatch_kg_action 分支） ==============
 
@@ -201,6 +241,9 @@ def _kg_execute_sql(body: dict, _ts: str) -> dict:
             else:
                 row_cnt = res.get("row_count", 0)
                 cols = res.get("columns", []) or []
+                # G4（融合设计 §5.2）：引擎侧结果验证字段
+                res["verification"] = _build_verification(res)
+                res["sql"] = current_sql
                 res["log"] = f"[{_ts}] SQL执行成功：返回 {row_cnt} 行数据，字段（{', '.join(cols[:6])}{'...' if len(cols) > 6 else ''}）"
                 res["sql"] = current_sql
     return res
@@ -456,6 +499,8 @@ def _kg_execute_api_sql(body: dict, _ts: str) -> dict:
         result = _exec_api_sql(sql_text, endpoints)
         pushed = result.get("pushed_down", {})
         result["log"] = f"[{_ts}] API联邦SQL执行成功：返回 {result.get('row_count', 0)} 行，下推表 {list(pushed.keys())}"
+        result["verification"] = _build_verification(result)  # G4 引擎侧结果验证
+        result["sql"] = sql_text
         return result
     except Exception as e:
         from app.services.engine_errors import wrap_engine_exception
@@ -499,7 +544,8 @@ def _kg_execute_entity_api(body: dict, _ts: str) -> dict:
             return {"error": "尚未配置任何API端点", "log": f"[{_ts}] 无API端点"}
         result = _exec_api_sql(sql, endpoints)
         pushed = result.get("pushed_down", {})
-        result["log"] = f"[{_ts}] 对象「{entity_code}」API执行成功：返回 {result.get('row_count', 0)} 行，下推 {list(pushed.keys())}"
+        result["log"] = f"[{_ts}] 对象「{entity_code}」API执行成功：返回 {result.get('row_count', 0)} 行，下推 {list((result.get('pushed_down') or {}).keys())}"
+        result["verification"] = _build_verification(result)  # G4 引擎侧结果验证ist(pushed.keys())}"
         return result
     except Exception as e:
         from app.services.engine_errors import wrap_engine_exception
@@ -556,6 +602,8 @@ def _kg_execute_doris_sql(body: dict, _ts: str) -> dict:
     try:
         result = _doris_exec(sql_text, catalog=doris_catalog)
         _rc = result.get("row_count", 0)
+        result["verification"] = _build_verification(result)  # G4 引擎侧结果验证
+        result["sql"] = sql_text
         if _rc == 0:
             result["hint"] = "未查到相关数据"
             result["log"] = f"[{_ts}] Doris「{entity_code or 'inline'}」SQL执行成功：返回 0 行，已停止，不降级不重试"

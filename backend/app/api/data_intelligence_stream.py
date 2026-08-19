@@ -189,8 +189,15 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
 
             # 复用 ReAct 路径的事件消费逻辑
             # F4: 通过原生 context= 传递 runtime.context（astream_events 的 **kwargs 会透传给底层）
+            # M3 DA-2：generic 契约带 rubric -> 激活 RubricMiddleware（scenario 为 None 不传，保持不激活）
+            _inv_state: dict = {"messages": input_messages}
+            if _contract is not None and _contract.rubric:
+                _inv_state["rubric"] = _contract.rubric
+            # M3：on_evaluation 回调 -> 当前请求 sink/契约（contextvar 同任务上下文可见）
+            from app.services.tupu_deepagent import _RUBRIC_HOOK_CTX
+            _rubric_hook_token = _RUBRIC_HOOK_CTX.set({"sink": _evt_sink, "contract": _contract})
             aiter = agent.astream_events(
-                {"messages": input_messages},
+                _inv_state,
                 config=config,
                 context=_ctx,
                 version="v2",
@@ -817,6 +824,57 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                     "result_available_for_ui": True,
                 }
 
+            # M3（融合设计 §5.1/§5.3）：证据链聚合 + 置信度三级（答案头部小徽标）
+            _ev_route = {
+                "skill": _contract.skill_id if _contract is not None else "__generic__",
+                "route_type": _contract.route_type if _contract is not None else "generic",
+            }
+            _ev_tables = []
+            _ev_verification = {}
+            _sr_ev = tool_results.get("sql_result")
+            if isinstance(_sr_ev, dict):
+                _ev_verification = _sr_ev.get("verification") or {}
+                _ev_sql_txt = str(tool_results.get("assembled_sql") or _sr_ev.get("sql") or "")
+                if _ev_sql_txt:
+                    try:
+                        from app.services.kg_action_handlers import _extract_main_table
+                        _t = _extract_main_table(_ev_sql_txt)
+                        if _t:
+                            _ev_tables = [_t]
+                    except Exception:
+                        pass
+            _ev_examples = []
+            for _h in ((_contract._runtime.get("example_hits") or []) if _contract is not None else []):
+                if isinstance(_h, dict):
+                    _ev_examples.append({"q": _h.get("question_raw") or _h.get("question") or "",
+                                         "sim": _h.get("score")})
+            _ev_rubric = {
+                "status": _contract._runtime.get("rubric_status") if _contract is not None else None,
+                "iterations": int((_contract._runtime.get("rubric_iterations") or 0)) if _contract is not None else 0,
+            }
+            _ev_corrections = int((_contract._runtime.get("corrections") or 0)) if _contract is not None else 0
+            # 置信度三级：高=rubric satisfied 且 verification 无 warning；低=corrections>0 或 rubric 失败/超限/grader错；
+            # 中=无 rubric（scenario）或 verification 有 warning
+            _ev_confidence = "中"
+            _rs = _ev_rubric["status"]
+            if _ev_corrections > 0 or _rs in ("failed", "max_iterations_reached", "grader_error"):
+                _ev_confidence = "低"
+            elif _rs == "satisfied" and not _ev_verification.get("warnings"):
+                _ev_confidence = "高"
+            _evidence = {
+                "route": _ev_route, "tables": _ev_tables, "examples_used": _ev_examples,
+                "verification": _ev_verification, "rubric": _ev_rubric, "corrections": _ev_corrections,
+            }
+            # SSE：query_verified（G4 验证结论） + rubric（DA-2 自评状态），均带置信度
+            if _ev_verification:
+                yield f"event: query_verified\n"
+                yield f"data: {json.dumps({'verification': _ev_verification, 'confidence': _ev_confidence, 'thread_id': req.thread_id}, ensure_ascii=False)}\n\n"
+            if _ev_rubric.get("status"):
+                yield f"event: rubric\n"
+                yield f"data: {json.dumps({'status': _ev_rubric['status'], 'iterations': _ev_rubric['iterations'],
+                                           'feedback_summary': (_contract._runtime.get('rubric_explanation') or '') if _contract is not None else '',
+                                           'confidence': _ev_confidence}, ensure_ascii=False)}\n\n"
+
             # 推送 done
             final_response = {
                 "thread_id": req.thread_id,
@@ -844,6 +902,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 "recommendations": [{"label": r, "shortcut": r} for r in recs],
                 "next_step_recommendation": None,
                 "message_card": None,
+                "evidence": _evidence,   # M3 G7：证据链（路由/表/示例/验证/自评/纠错）
+                "confidence": _ev_confidence,  # M3 G7：置信度三级（高/中/低）
             }
             yield f"event: done\n"
             yield f"data: {json.dumps(final_response, ensure_ascii=False, default=str)}\n\n"
@@ -859,6 +919,11 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
         finally:
             # 客户端断开(abort)或异常时, 关闭 LangGraph 事件迭代器, 取消底层 agent task
             # (停止后续 LLM/MCP/SQL 调用, 不再烧 token; GeneratorExit 也会经此清理)
+            # M3：重置 rubric on_evaluation 桥（防跨请求串扰）
+            try:
+                _RUBRIC_HOOK_CTX.reset(_rubric_hook_token)
+            except Exception:
+                pass
             if _evt_sink is not None:
                 _evt_sink.close()
             if aiter is not None:
