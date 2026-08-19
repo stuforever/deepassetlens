@@ -8,6 +8,8 @@ import { tokens } from '../../theme/tokens';
 
 interface EmptyStateProps {
   icon?: React.ReactNode;
+  /** B4 增强：插画位（比 icon 更大，空态图形/情感位；传入则替换默认图标位） */
+  illustration?: React.ReactNode;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
@@ -16,6 +18,7 @@ interface EmptyStateProps {
 
 const EmptyState: React.FC<EmptyStateProps> = ({
   icon,
+  illustration,
   title = '暂无数据',
   description,
   action,
@@ -33,9 +36,15 @@ const EmptyState: React.FC<EmptyStateProps> = ({
         ...style,
       }}
     >
-      <div style={{ fontSize: 40, color: tokens.colors.textDisabled, marginBottom: tokens.space.s3 }}>
-        {icon ?? <InboxOutlined />}
-      </div>
+      {illustration ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: tokens.space.s3 }}>
+          {illustration}
+        </div>
+      ) : (
+        <div style={{ fontSize: 40, color: tokens.colors.textDisabled, marginBottom: tokens.space.s3 }}>
+          {icon ?? <InboxOutlined />}
+        </div>
+      )}
       <div style={{ fontSize: tokens.fontSize.body, color: tokens.colors.textSecondary, fontWeight: tokens.fontWeight.medium }}>
         {title}
       </div>

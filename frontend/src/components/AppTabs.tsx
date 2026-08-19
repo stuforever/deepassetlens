@@ -5,8 +5,8 @@
  * 固定首页(home)不可关。
  * 内容区：KeepAlive -- 所有已开页签同时挂载，display:none 隐藏非活动页，切换不重载。
  */
-import React, { useRef } from 'react';
-import { Dropdown, type MenuProps } from 'antd';
+import React, { Suspense, useRef } from 'react';
+import { Dropdown, Spin, type MenuProps } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import type { RouteConfig } from '../routes';
 import { tokens } from '../theme/tokens';
@@ -59,14 +59,14 @@ const AppTabs: React.FC<AppTabsProps> = ({
 
   return (
     <>
-      {/* 标签栏 */}
+      {/* 标签栏（B1 美化：背景 bgPage，让激活页签白底"连接"内容区） */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           height: tokens.layout.tabsHeight,
           padding: `0 ${tokens.space.s3}px`,
-          background: tokens.colors.bgContent,
+          background: tokens.colors.bgPage,
           borderBottom: `1px solid ${tokens.colors.border}`,
           flexShrink: 0,
           overflowX: 'auto',
@@ -88,14 +88,16 @@ const AppTabs: React.FC<AppTabsProps> = ({
                 padding: `0 ${tokens.space.s3}px`,
                 height: 28,
                 flexShrink: 0,
-                borderRadius: tokens.radius.default,
                 cursor: 'pointer',
                 fontSize: 13,
                 whiteSpace: 'nowrap',
-                background: isActive ? tokens.colors.primaryBg : 'transparent',
+                // B1 美化：Chrome 页签形态 —— 激活 = 白底 + 2px 主色顶边 + 仅顶部圆角
+                background: isActive ? tokens.colors.bgContent : 'transparent',
                 color: isActive ? tokens.colors.primary : tokens.colors.textTertiary,
                 fontWeight: isActive ? tokens.fontWeight.semibold : tokens.fontWeight.regular,
-                transition: 'color .15s, background .15s',
+                borderTop: isActive ? `2px solid ${tokens.colors.primary}` : '2px solid transparent',
+                borderRadius: isActive ? '6px 6px 0 0' : tokens.radius.default,
+                transition: `color ${tokens.motion.duration.fast}ms ${tokens.motion.easing.enter}, background ${tokens.motion.duration.fast}ms ${tokens.motion.easing.enter}`,
               }}
             >
               {tab.label}
@@ -115,31 +117,33 @@ const AppTabs: React.FC<AppTabsProps> = ({
         })}
       </div>
 
-      {/* KeepAlive 内容区 */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {pageTabs.map((tab) => {
-          const route = routes.find((r) => r.menuKey === tab.menuKey);
-          if (!route) return null;
-          const Component = route.element;
-          const isActive = tab.key === activeTabKey;
-          const isCanvas = canvasMenuKeys.has(route.menuKey);
-          return (
-            <div
-              key={tab.key}
-              style={{
-                display: isActive ? 'flex' : 'none',
-                flex: 1,
-                overflow: 'hidden',
-                flexDirection: 'column',
-                minHeight: 0,
-                padding: isCanvas ? 0 : tokens.layout.contentPadding,
-              }}
-            >
-              {needsOpenTarget.has(route.menuKey) ? <Component onOpenTarget={onOpenTarget} /> : <Component />}
-            </div>
-          );
-        })}
-      </div>
+      {/* KeepAlive 内容区：外层 Suspense 兜底路由 lazy 的首次加载（不影响已挂载页签） */}
+      <Suspense fallback={<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin size="large" /></div>}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {pageTabs.map((tab) => {
+            const route = routes.find((r) => r.menuKey === tab.menuKey);
+            if (!route) return null;
+            const Component = route.element;
+            const isActive = tab.key === activeTabKey;
+            const isCanvas = canvasMenuKeys.has(route.menuKey);
+            return (
+              <div
+                key={tab.key}
+                style={{
+                  display: isActive ? 'flex' : 'none',
+                  flex: 1,
+                  overflow: 'hidden',
+                  flexDirection: 'column',
+                  minHeight: 0,
+                  padding: isCanvas ? 0 : tokens.layout.contentPadding,
+                }}
+              >
+                {needsOpenTarget.has(route.menuKey) ? <Component onOpenTarget={onOpenTarget} /> : <Component />}
+              </div>
+            );
+          })}
+        </div>
+      </Suspense>
     </>
   );
 };

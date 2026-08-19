@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Tabs, Row, Col, Card, Button, List, Modal, Form, Input, Select, Table, Space, Tag, message, Popconfirm, Empty, Collapse } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, ThunderboltOutlined, PlayCircleOutlined, ApiOutlined, DatabaseOutlined, MinusCircleOutlined, SearchOutlined } from '@ant-design/icons';
-import { apiEndpointApi, entityApiMappingApi, entityApi } from '../services/api';
+import { Tabs, Row, Col, Card, Button, List, Modal, Form, Input, Select, Table, Space, Tag, message, Popconfirm, Empty, Collapse, Drawer, InputNumber } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, ThunderboltOutlined, PlayCircleOutlined, ApiOutlined, DatabaseOutlined, MinusCircleOutlined, SearchOutlined, ClearOutlined, SettingOutlined } from '@ant-design/icons';
+import { apiEndpointApi, entityApiMappingApi, entityApi, engineApi } from '../services/api';
 import { StatusTag } from './shell';
 
 const { TextArea } = Input;
 const TYPE_OPTIONS = ['VARCHAR', 'INTEGER', 'BIGINT', 'DOUBLE', 'BOOLEAN', 'DATE', 'TIMESTAMP'].map(t => ({ value: t }));
+// 批3：dtype 采样定类型（存 columns[].dtype，register 前 astype；空=自动推断）
+const DTYPE_OPTIONS = [
+  { value: '', label: '自动' },
+  { value: 'int64', label: 'int64（整数）' },
+  { value: 'float64', label: 'float64（浮点）' },
+  { value: 'bool', label: 'bool（布尔）' },
+  { value: 'datetime64[ns]', label: 'datetime64[ns]（日期）' },
+  { value: 'object', label: 'object（文本）' },
+];
 
 // ===================== 对象API映射 section（主） =====================
 function EntityApiMappingSection({ entityId }: { entityId?: string }) {
@@ -97,8 +106,8 @@ function EntityApiMappingSection({ entityId }: { entityId?: string }) {
     try { await entityApiMappingApi.delete(id); message.success('已删除'); fetchAll(); } catch { message.error('删除失败'); }
   };
 
-  const resultColumns = verifyResult?.columns?.map((c: string) => ({ title: c, dataIndex: c, ellipsis: true })) || [];
-  const resultData = verifyResult?.rows?.map((r: any[], i: number) => {
+  const resultColumns = verifyResult?.columns?.map((c: string) => ({ title: c, dataIndex: c, ellipsis: true, width: 120 })) || [];
+  const resultData = (verifyResult?.rows || []).slice(0, 200).map((r: any[], i: number) => {
     const obj: any = { _key: i };
     (verifyResult.columns || []).forEach((c: string, j: number) => { obj[c] = r[j]; });
     return obj;
@@ -153,8 +162,9 @@ function EntityApiMappingSection({ entityId }: { entityId?: string }) {
               placeholder="SELECT d.budget_id, d.wbs_element, a.total_budget FROM dim_ps_wbs_budget_dim d JOIN dim_ps_wbs_budget_amt a ON d.budget_id=a.budget_id" />
             {verifyResult ? (
               <div style={{ marginTop: 8 }}>
-                {verifyResult.pushed_down && <div style={{ fontSize: 12, color: 'var(--color-success)', marginBottom: 4 }}>下推参数: {JSON.stringify(verifyResult.pushed_down)}</div>}
-                <Table columns={resultColumns} dataSource={resultData} rowKey="_key" size="small" pagination={{ pageSize: 10 }} />
+                {verifyResult.pushed_down && Object.keys(verifyResult.pushed_down).length > 0 && <div style={{ fontSize: 12, color: 'var(--color-success)', marginBottom: 4 }}>下推参数: {JSON.stringify(verifyResult.pushed_down)}</div>}
+                {verifyResult.rows?.length > 200 && <div style={{ fontSize: 12, color: 'var(--color-warning)', marginBottom: 4 }}>数据量较大（{verifyResult.rows.length} 行），仅显示前 200 行</div>}
+                <Table columns={resultColumns} dataSource={resultData} rowKey="_key" size="small" pagination={{ pageSize: 10 }} scroll={{ x: 'max-content', y: 320 }} />
               </div>
             ) : <Empty style={{ marginTop: 12 }} description={editingId ? '点上方「验证SQL」查看执行结果' : '保存后可验证执行'} />}
           </Card>
@@ -177,6 +187,71 @@ function ApiEndpointSection() {
   const [sql, setSql] = useState('');
   const [result, setResult] = useState<any>(null);
   const [execLoading, setExecLoading] = useState(false);
+  // 批3：缓存观测 + 分页配置
+  const [cacheStats, setCacheStats] = useState<any>(null);
+  const [pagEp, setPagEp] = useState<any>(null);
+  const [pagForm, setPagForm] = useState<any>({ page_param: '', size_param: '', page_size: 100, max_pages: 5, cache_ttl_seconds: 300, rate_limit_min_interval_ms: 0, circuit_threshold: 5, circuit_open_seconds: 60 });
+  // P3：熔断/限速状态（endpoint_id -> {state, failures, opened_at}）
+  const [circuits, setCircuits] = useState<Record<string, any>>({});
+
+  const loadCacheStats = async () => {
+    try { const res = await engineApi.cacheStats({ silent: true }); setCacheStats(res.data?.data || null); }
+    catch { /* 观测失败不打扰 */ }
+  };
+  const loadCircuits = async () => {
+    try { const res = await engineApi.circuits({ silent: true }); setCircuits(res.data?.data || {}); }
+    catch { /* 观测失败不打扰 */ }
+  };
+  useEffect(() => { loadCacheStats(); loadCircuits(); }, []);
+
+  const handleInvalidate = async (endpointId?: string) => {
+    try {
+      const res = await engineApi.cacheInvalidate(endpointId, { silent: true });
+      message.success(`缓存已失效（${res.data?.data?.cleared ?? 0} 条）`);
+      loadCacheStats();
+    } catch (e: any) { message.error('缓存失效失败: ' + (e?.response?.data?.detail || e?.message)); }
+  };
+
+  const openPagination = (ep: any) => {
+    const p = ep.pagination || {};
+    const rc = ep.run_config || {};
+    setPagEp(ep);
+    setPagForm({
+      page_param: p.page_param || 'page', size_param: p.size_param || 'size',
+      page_size: p.page_size ?? 100, max_pages: p.max_pages ?? 5,
+      cache_ttl_seconds: ep.cache_ttl_seconds ?? 300,
+      rate_limit_min_interval_ms: rc.rate_limit_min_interval_ms ?? 0,
+      circuit_threshold: rc.circuit_threshold ?? 5,
+      circuit_open_seconds: rc.circuit_open_seconds ?? 60,
+    });
+  };
+  const savePagination = async () => {
+    if (!pagEp) return;
+    const pagination = {
+      page_param: pagForm.page_param || 'page', size_param: pagForm.size_param || 'size',
+      page_size: Math.min(Math.max(Number(pagForm.page_size) || 100, 1), 1000),
+      max_pages: Math.min(Math.max(Number(pagForm.max_pages) || 5, 1), 50),
+    };
+    const run_config = {
+      rate_limit_min_interval_ms: Math.max(Number(pagForm.rate_limit_min_interval_ms) || 0, 0),
+      circuit_threshold: Math.min(Math.max(Number(pagForm.circuit_threshold) || 5, 1), 100),
+      circuit_open_seconds: Math.min(Math.max(Number(pagForm.circuit_open_seconds) || 60, 1), 3600),
+    };
+    try {
+      const payload: any = {
+        name: pagEp.name, table_name: pagEp.table_name, api_url: pagEp.api_url,
+        method: pagEp.method, params: pagEp.params || [], columns: pagEp.columns || [],
+        data_path: pagEp.data_path, headers: pagEp.headers, description: pagEp.description,
+        cache_ttl_seconds: Number(pagForm.cache_ttl_seconds) || 0,
+        pagination,
+        run_config,
+      };
+      await apiEndpointApi.update(pagEp.id, payload);
+      message.success('分页/缓存/限速配置已保存');
+      setPagEp(null);
+      fetchEndpoints();
+    } catch (e: any) { message.error(e?.response?.data?.detail || '保存失败'); }
+  };
 
   const fetchEndpoints = async () => {
     setLoading(true);
@@ -247,25 +322,40 @@ function ApiEndpointSection() {
     // 测试 = 选中该端点并生成 SQL + 执行，一步到位
     genSqlForId(id);
     setSelectedEpId(id);
-    try { const res = await apiEndpointApi.test(id); const d = res.data?.data || {}; if (d.error) { message.error('测试失败: ' + d.error); return; } message.success(`测试成功，返回 ${d.row_count} 行`); setResult({ columns: d.columns, rows: d.rows }); } catch { message.error('测试失败'); }
+    try { const res = await apiEndpointApi.test(id); const d = res.data?.data || {}; if (d.error) { message.error('测试失败: ' + d.error); return; } message.success(`测试成功，返回 ${d.row_count} 行`); setResult({ columns: d.columns, rows: d.rows }); loadCacheStats(); loadCircuits(); } catch { message.error('测试失败'); }
   };
   const handleExecute = async () => {
     if (!sql.trim()) { message.warning('SQL不能为空'); return; }
     setExecLoading(true);
-    try { const res = await apiEndpointApi.execute(sql); const d = res.data?.data || {}; if (d.error) { message.error('执行失败: ' + d.error); setResult(null); } else { setResult({ columns: d.columns, rows: d.rows, pushed_down: d.pushed_down }); message.success(`返回 ${d.row_count} 行`); } } catch (e: any) { message.error(e?.response?.data?.detail || '执行失败'); }
+    try { const res = await apiEndpointApi.execute(sql); const d = res.data?.data || {}; if (d.error) { message.error('执行失败: ' + d.error); setResult(null); } else { setResult({ columns: d.columns, rows: d.rows, pushed_down: d.pushed_down }); message.success(`返回 ${d.row_count} 行`); } loadCacheStats(); loadCircuits(); } catch (e: any) { message.error(e?.response?.data?.detail || '执行失败'); }
     setExecLoading(false);
   };
 
-  const resultColumns = result?.columns?.map((c: string) => ({ title: c, dataIndex: c, ellipsis: true })) || [];
-  const resultData = result?.rows?.map((r: any[], i: number) => { const obj: any = { _key: i }; (result.columns || []).forEach((c: string, j: number) => { obj[c] = r[j]; }); return obj; }) || [];
+  const resultColumns = result?.columns?.map((c: string) => ({ title: c, dataIndex: c, ellipsis: true, width: 120 })) || [];
+  const resultData = (result?.rows || []).slice(0, 200).map((r: any[], i: number) => { const obj: any = { _key: i }; (result.columns || []).forEach((c: string, j: number) => { obj[c] = r[j]; }); return obj; }) || [];
 
   return (
     <div>
       <Row gutter={12}>
         <Col span={8}>
           <Card title={<Space><ApiOutlined />远程调用API</Space>} size="small"
-            extra={<Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>新增</Button>}
+            extra={<Space>
+              <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>新增</Button>
+              <Button size="small" icon={<ClearOutlined />} onClick={() => handleInvalidate()} title="清空 API 内存缓存">清缓存</Button>
+            </Space>}
             bodyStyle={{ overflowY: 'auto', maxHeight: 'calc(100vh - 320px)' }}>
+            {cacheStats ? (
+              <div style={{ marginBottom: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--color-fill-1, #F9FAFB)', fontSize: 12, color: 'var(--text-tertiary, #64748B)' }}>
+                <Space size="large" wrap>
+                  <span>缓存命中率 <b style={{ color: 'var(--color-success, #16A34A)' }}>{(cacheStats.hit_rate * 100).toFixed(0)}%</b></span>
+                  <span>命中 {cacheStats.hit} / 未命中 {cacheStats.miss}</span>
+                  <span>条目 {cacheStats.entries}/{cacheStats.max}（LRU·TTL 300s）</span>
+                </Space>
+              </div>
+            ) : null}
+            <div style={{ marginBottom: 8, fontSize: 12, color: 'var(--text-tertiary, #64748B)' }}>
+              左列表每条端点提供「测」「失效」；「分页」配置 API 页码型翻页 + 缓存 TTL；dtype 在列编辑里手动定类型（留空自动推断）。
+            </div>
             {grouped.length === 0 ? <Empty description="暂无端点" /> : (
               <Collapse size="small" defaultActiveKey={grouped.length ? [grouped[0].name] : []} items={grouped.map(g => ({
                 key: g.name,
@@ -275,11 +365,25 @@ function ApiEndpointSection() {
                     <List.Item style={{ cursor: 'pointer', background: ep.id === selectedEpId ? 'var(--color-primary-bg)' : undefined, padding: '6px 8px', border: 'none' }}
                       actions={[
                         <Button size="small" type="link" icon={<ThunderboltOutlined />} onClick={(e) => { e.stopPropagation(); handleTest(ep.id); }}>测</Button>,
+                        <Button size="small" type="link" icon={<SettingOutlined />} title="分页/缓存配置" onClick={(e) => { e.stopPropagation(); openPagination(ep); }} />,
+                        <Button size="small" type="link" icon={<ClearOutlined />} title="失效该端点缓存" onClick={(e) => { e.stopPropagation(); handleInvalidate(ep.id); }} />,
                         <Button size="small" type="link" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); openEdit(ep); }} />,
                         <Popconfirm title="确认删除?" onConfirm={(e) => { e?.stopPropagation(); handleDelete(ep.id); }}><Button size="small" type="link" danger icon={<DeleteOutlined />} onClick={e => e.stopPropagation()} /></Popconfirm>,
                       ]}
                       onClick={() => selectEndpoint(ep)}>
-                      <List.Item.Meta title={ep.name} description={<Space size={4}><StatusTag preset="info">{ep.table_name}</StatusTag><Tag>{ep.method}</Tag></Space>} />
+                      <List.Item.Meta title={ep.name} description={
+                        <Space size={4} wrap>
+                          <StatusTag preset="info">{ep.table_name}</StatusTag>
+                          <Tag>{ep.method}</Tag>
+                          {circuits[ep.id]?.state === 'OPEN' ? (
+                            <StatusTag preset="error" dot>熔断 OPEN（失败 {circuits[ep.id]?.failures ?? 0} 次）</StatusTag>
+                          ) : circuits[ep.id]?.state === 'HALF_OPEN' ? (
+                            <StatusTag preset="warning" dot>熔断 HALF_OPEN 试探</StatusTag>
+                          ) : circuits[ep.id]?.failures ? (
+                            <StatusTag preset="warning" dot>失败 {circuits[ep.id]?.failures} 次</StatusTag>
+                          ) : null}
+                        </Space>
+                      } />
                     </List.Item>
                   )} />
                 ),
@@ -302,7 +406,7 @@ function ApiEndpointSection() {
           </Card>
           {result?.pushed_down && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--color-success)' }}>下推参数: {JSON.stringify(result.pushed_down)}</div>}
           <Card title="执行结果" size="small" style={{ marginTop: 8 }} bodyStyle={{ overflowY: 'auto', maxHeight: '260px' }}>
-            {result?.columns?.length ? <Table columns={resultColumns} dataSource={resultData} rowKey="_key" size="small" pagination={{ pageSize: 10 }} /> : <Empty description="执行SQL后显示结果" />}
+            {result?.columns?.length ? <Table columns={resultColumns} dataSource={resultData} rowKey="_key" size="small" pagination={{ pageSize: 10 }} scroll={{ x: 'max-content', y: 260 }} /> : <Empty description="执行SQL后显示结果" />}
           </Card>
         </Col>
       </Row>
@@ -313,7 +417,7 @@ function ApiEndpointSection() {
             <Col span={12}><Form.Item label="中文名" required><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Form.Item></Col>
             <Col span={12}><Form.Item label="虚拟表名(DuckDB用,英文唯一)" required><Input value={form.table_name} onChange={e => setForm({ ...form, table_name: e.target.value })} placeholder="dim_ps_xxx" /></Form.Item></Col>
           </Row>
-          <Form.Item label="API URL" required><Input value={form.api_url} onChange={e => setForm({ ...form, api_url: e.target.value })} placeholder="http://localhost:1200/tupu_dim_ps_xxx/_search" /></Form.Item>
+          <Form.Item label="API URL" required><Input value={form.api_url} onChange={e => setForm({ ...form, api_url: e.target.value })} placeholder="例如 http://&lt;API服务主机&gt;:&lt;端口&gt;/tupu_dim_ps_xxx/_search" /></Form.Item>
           <Row gutter={12}>
             <Col span={6}><Form.Item label="方法"><Select value={form.method} onChange={v => setForm({ ...form, method: v })} options={[{ value: 'GET' }, { value: 'POST' }]} /></Form.Item></Col>
             <Col span={18}><Form.Item label="响应数据路径(如 data.TABLES.PROJECT_DEFINITION)"><Input value={form.data_path} onChange={e => setForm({ ...form, data_path: e.target.value })} /></Form.Item></Col>
@@ -330,21 +434,62 @@ function ApiEndpointSection() {
             ))}
             <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={() => setParamsArr([...paramsArr, { name: '', column: '', map_to: 'query' }])}>加参数</Button>
           </Form.Item>
-          <Form.Item label="返回列 columns" tooltip='name是SQL列名,json_path是API响应JSON字段,type是DuckDB类型'>
-            <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}><Row gutter={4}><Col span={6}>列名(name)</Col><Col span={9}>JSON字段(json_path)</Col><Col span={6}>类型(type)</Col><Col span={3}></Col></Row></div>
+          <Form.Item label="返回列 columns" tooltip='name是SQL列名,json_path是API响应JSON字段,type是DuckDB类型,dtype是批3采样定类型(留空=自动)'>
+            <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}><Row gutter={4}><Col span={6}>列名(name)</Col><Col span={8}>JSON字段(json_path)</Col><Col span={5}>类型(type)</Col><Col span={3}>dtype</Col><Col span={2}></Col></Row></div>
             {columnsArr.map((c, i) => (
               <Row key={i} gutter={4} style={{ marginBottom: 4 }}>
                 <Col span={6}><Input size="small" placeholder="pspid" value={c.name} onChange={e => updCol(i, 'name', e.target.value)} /></Col>
-                <Col span={9}><Input size="small" placeholder="pspid" value={c.json_path} onChange={e => updCol(i, 'json_path', e.target.value)} /></Col>
-                <Col span={6}><Select size="small" value={c.type} onChange={v => updCol(i, 'type', v)} options={TYPE_OPTIONS} showSearch /></Col>
-                <Col span={3}><Button size="small" danger icon={<MinusCircleOutlined />} onClick={() => setColumnsArr(arr => arr.filter((_, idx) => idx !== i))} /></Col>
+                <Col span={8}><Input size="small" placeholder="pspid" value={c.json_path} onChange={e => updCol(i, 'json_path', e.target.value)} /></Col>
+                <Col span={5}><Select size="small" value={c.type} onChange={v => updCol(i, 'type', v)} options={TYPE_OPTIONS} showSearch /></Col>
+                <Col span={3}><Select size="small" value={c.dtype || ''} onChange={v => updCol(i, 'dtype', v)} options={DTYPE_OPTIONS} /></Col>
+                <Col span={2}><Button size="small" danger icon={<MinusCircleOutlined />} onClick={() => setColumnsArr(arr => arr.filter((_, idx) => idx !== i))} /></Col>
               </Row>
             ))}
-            <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={() => setColumnsArr([...columnsArr, { name: '', json_path: '', type: 'VARCHAR' }])}>加列</Button>
+            <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={() => setColumnsArr([...columnsArr, { name: '', json_path: '', type: 'VARCHAR', dtype: '' }])}>加列</Button>
           </Form.Item>
           <Form.Item label="请求头 headers (JSON,可选)"><TextArea rows={2} value={form.headers} onChange={e => setForm({ ...form, headers: e.target.value })} style={{ fontFamily: 'monospace', fontSize: 12 }} placeholder='{"Authorization":"Bearer xxx"}' /></Form.Item>
         </Form>
       </Modal>
+
+      {/* 批3：分页 + 缓存 TTL 配置 Drawer */}
+      <Drawer
+        title={pagEp ? `分页/缓存配置 · ${pagEp.name} [${pagEp.table_name}]` : '分页/缓存配置'}
+        open={!!pagEp}
+        onClose={() => setPagEp(null)}
+        width={420}
+        extra={<Space>
+          <Button onClick={() => setPagEp(null)}>取消</Button>
+          <Button type="primary" onClick={savePagination}>保存</Button>
+        </Space>}
+      >
+        <div style={{ marginBottom: 8, fontSize: 12, color: 'var(--text-tertiary, #64748B)' }}>
+          页码型分页：按 page_param/size_param 循环拉取直至数据取完；max_pages 硬护栏防翻页风暴；page_size ≤ 1000。
+        </div>
+        <Form layout="vertical">
+          <Row gutter={8}>
+            <Col span={12}><Form.Item label="页码参数名"><Input value={pagForm.page_param} onChange={e => setPagForm({ ...pagForm, page_param: e.target.value })} placeholder="page" /></Form.Item></Col>
+            <Col span={12}><Form.Item label="每页参数名"><Input value={pagForm.size_param} onChange={e => setPagForm({ ...pagForm, size_param: e.target.value })} placeholder="size" /></Form.Item></Col>
+          </Row>
+          <Row gutter={8}>
+            <Col span={12}><Form.Item label="page_size（每页行数）"><InputNumber min={1} max={1000} value={pagForm.page_size} onChange={v => setPagForm({ ...pagForm, page_size: v })} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="max_pages（最多页数）"><InputNumber min={1} max={50} value={pagForm.max_pages} onChange={v => setPagForm({ ...pagForm, max_pages: v })} style={{ width: '100%' }} /></Form.Item></Col>
+          </Row>
+          <Form.Item label="cache_ttl_seconds（缓存 TTL 秒，0=禁用）">
+            <InputNumber min={0} max={86400} value={pagForm.cache_ttl_seconds} onChange={v => setPagForm({ ...pagForm, cache_ttl_seconds: v })} style={{ width: '100%' }} />
+          </Form.Item>
+          <div style={{ marginBottom: 8, fontSize: 12, color: 'var(--text-tertiary, #64748B)' }}>
+            P3 限速/熔断：连续失败达阈值 → OPEN 熔断快速失败，超时半开试探；min_interval 令牌间隔。
+          </div>
+          <Row gutter={8}>
+            <Col span={12}><Form.Item label="min_interval_ms（限速间隔）"><InputNumber min={0} value={pagForm.rate_limit_min_interval_ms} onChange={v => setPagForm({ ...pagForm, rate_limit_min_interval_ms: v })} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="熔断阈值（连续失败）"><InputNumber min={1} max={100} value={pagForm.circuit_threshold} onChange={v => setPagForm({ ...pagForm, circuit_threshold: v })} style={{ width: '100%' }} /></Form.Item></Col>
+          </Row>
+          <Form.Item label="熔断 OPEN 时长（秒）">
+            <InputNumber min={1} max={3600} value={pagForm.circuit_open_seconds} onChange={v => setPagForm({ ...pagForm, circuit_open_seconds: v })} style={{ width: '100%' }} />
+          </Form.Item>
+          {pagEp && <div style={{ fontSize: 12, color: 'var(--text-tertiary, #64748B)' }}>当前配置：TTL {pagEp.cache_ttl_seconds ?? 300}s{pagEp.pagination?.page_param ? ` · 分页 ${pagEp.pagination.page_param}/${pagEp.pagination.size_param} size=${pagEp.pagination.page_size} max=${pagEp.pagination.max_pages}` : ' · 未启用分页'}</div>}
+        </Form>
+      </Drawer>
     </div>
   );
 }

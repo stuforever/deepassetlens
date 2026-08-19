@@ -3,7 +3,7 @@ import { Drawer, Table, Button, Form, Input, Select, Space, Alert, message, Tag,
 import { LinkOutlined, ThunderboltOutlined, SaveOutlined, EyeOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import { mappingApi, entityApi, entityApiMappingApi, apiEndpointApi, kgApi } from '../services/api';
 import { useStore } from '../store/useStore';
-import { StatusTag } from './shell';
+import { StatusTag, DrawerFooter } from './shell';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -33,6 +33,43 @@ const EntityMappingDrawer: React.FC<Props> = ({ entity, sourceMode, open, onClos
   const { setMappingFilterEntityId } = useStore();
   const entityId = entity?.id;
 
+  // sql_integration：保存/验证状态提升到 Drawer 级（B4：底部操作条经 DrawerFooter 始终可见）
+  const [sql, setSql] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  useEffect(() => {
+    if (sourceMode === 'sql_integration') {
+      setSql(entity?.integration_sql || '');
+      setResult(null);
+    }
+  }, [entity?.id, sourceMode, entity?.integration_sql]);
+
+  const handleSaveSql = async () => {
+    if (!entityId) return;
+    setSaving(true);
+    try {
+      await entityApi.updateEntity(entityId, { integration_sql: sql });
+      message.success('整合 SQL 已保存');
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '保存失败');
+    } finally { setSaving(false); }
+  };
+
+  const handleVerifySql = async () => {
+    if (!sql.trim()) { message.warning('请先填写整合 SQL'); return; }
+    setVerifying(true); setResult(null);
+    try {
+      const res = await kgApi.executeSql(sql);
+      const data = res.data || {};
+      if (data.error) { message.error(data.error); return; }
+      setResult(data);
+      message.success(`执行成功，返回 ${data.row_count || (data.rows || []).length} 行`);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || e?.response?.data?.error || '执行失败');
+    } finally { setVerifying(false); }
+  };
+
   return (
     <Drawer
       width={760}
@@ -46,13 +83,20 @@ const EntityMappingDrawer: React.FC<Props> = ({ entity, sourceMode, open, onClos
         </Space>
       }
       destroyOnHidden
+      footer={sourceMode === 'sql_integration' && entity ? (
+        <DrawerFooter extra={<Text type="secondary" style={{ fontSize: 12 }}>通过 Doris 执行整合 SQL</Text>}>
+          <Button onClick={onClose}>关闭</Button>
+          <Button icon={<ThunderboltOutlined />} loading={verifying} onClick={handleVerifySql}>验证执行</Button>
+          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSaveSql}>保存整合 SQL</Button>
+        </DrawerFooter>
+      ) : undefined}
     >
       {!entity ? (
         <Empty description="未选中实体" />
       ) : sourceMode === 'physical_table' ? (
         <PhysicalView entityId={entityId} entity={entity} onJump={() => { setMappingFilterEntityId(entityId); onOpenTarget?.('mapping'); }} />
       ) : sourceMode === 'sql_integration' ? (
-        <SqlView entityId={entityId} initialSql={entity.integration_sql || ''} />
+        <SqlView sql={sql} onSqlChange={setSql} saving={saving} verifying={verifying} result={result} />
       ) : sourceMode === 'api_integration' ? (
         <ApiView entityId={entityId} entityCode={entity.entity_code} />
       ) : (
@@ -139,40 +183,11 @@ const PhysicalView: React.FC<{ entityId: string; entity: any; onJump: () => void
 };
 
 // --------------------------------------------------------------------------- //
-// sql_integration：integration_sql 编辑器 + 验证执行
+// sql_integration：integration_sql 编辑器 + 验证结果（保存/验证在 Drawer footer，B4 底部操作条）
 // --------------------------------------------------------------------------- //
-const SqlView: React.FC<{ entityId: string; initialSql: string }> = ({ entityId, initialSql }) => {
-  const [sql, setSql] = useState(initialSql);
-  const [saving, setSaving] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [result, setResult] = useState<any>(null);
-
-  useEffect(() => { setSql(initialSql); }, [initialSql]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await entityApi.updateEntity(entityId, { integration_sql: sql });
-      message.success('整合 SQL 已保存');
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || '保存失败');
-    } finally { setSaving(false); }
-  };
-
-  const handleVerify = async () => {
-    if (!sql.trim()) { message.warning('请先填写整合 SQL'); return; }
-    setVerifying(true); setResult(null);
-    try {
-      const res = await kgApi.executeSql(sql);
-      const data = res.data || {};
-      if (data.error) { message.error(data.error); return; }
-      setResult(data);
-      message.success(`执行成功，返回 ${data.row_count || (data.rows || []).length} 行`);
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || e?.response?.data?.error || '执行失败');
-    } finally { setVerifying(false); }
-  };
-
+const SqlView: React.FC<{ sql: string; onSqlChange: (v: string) => void; saving: boolean; verifying: boolean; result: any }> = ({
+  sql, onSqlChange, saving, verifying, result,
+}) => {
   const cols = result?.columns || [];
   const rows2d = result?.rows || [];
 
@@ -188,14 +203,10 @@ const SqlView: React.FC<{ entityId: string; initialSql: string }> = ({ entityId,
       <TextArea
         rows={8}
         value={sql}
-        onChange={(e) => setSql(e.target.value)}
+        onChange={(e) => onSqlChange(e.target.value)}
         placeholder={'-- 整合 SQL 示例：\n-- SELECT cust_no, cust_name, ec_addr\n-- FROM doris_db.dim_cst_elec_cons_cust'}
         style={{ fontFamily: 'monospace', fontSize: 12 }}
       />
-      <Space style={{ marginTop: 8 }}>
-        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>保存整合 SQL</Button>
-        <Button icon={<ThunderboltOutlined />} loading={verifying} onClick={handleVerify}>验证执行</Button>
-      </Space>
       {result && (
         <div style={{ marginTop: 12 }}>
           <Text type="secondary" style={{ fontSize: 12 }}>执行结果（{result.row_count || rows2d.length} 行）：</Text>

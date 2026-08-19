@@ -6,3 +6,4 @@ export { default as CanvasToolbar } from './CanvasToolbar';
 export { default as StatusTag, type StatusPreset } from './StatusTag';
 export { default as EmptyState } from './EmptyState';
 export { default as ErrorState } from './ErrorState';
+export { default as DrawerFooter } from './DrawerFooter';

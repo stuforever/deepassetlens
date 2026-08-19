@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Drawer, Input, Button, List, Typography, Space, Empty, Spin } from 'antd';
 import { SendOutlined, RobotOutlined, UserOutlined, CodeOutlined } from '@ant-design/icons';
 import { chatApi } from '../services/api';
-import { StatusTag } from './shell';
+import { StatusTag, DrawerFooter } from './shell';
 
 const { Text, Paragraph } = Typography;
 
@@ -63,16 +63,17 @@ const ChatDrawer: React.FC<ChatDrawerProps> = ({ visible, onClose }) => {
       onClose={onClose}
       open={visible}
       footer={
-        <div style={{ display: 'flex', gap: '8px', padding: '10px 0' }}>
-          <Input 
-            placeholder="输入您的问询..." 
-            value={query} 
+        <DrawerFooter extra={
+          <Input
+            placeholder="输入您的问询..."
+            value={query}
             onChange={e => setQuery(e.target.value)}
             onPressEnter={handleSend}
             disabled={loading}
           />
+        }>
           <Button type="primary" icon={<SendOutlined />} onClick={handleSend} loading={loading}>发送</Button>
-        </div>
+        </DrawerFooter>
       }
     >
       <List
@@ -85,7 +86,7 @@ const ChatDrawer: React.FC<ChatDrawerProps> = ({ visible, onClose }) => {
                 <Text strong>{msg.role === 'user' ? '我' : '智能助手'}</Text>
               </div>
               <div style={{ 
-                background: msg.role === 'user' ? '#e6f7ff' : 'var(--color-success-bg)', 
+                background: msg.role === 'user' ? 'var(--color-primary-bg)' : 'var(--color-success-bg)', 
                 padding: '12px', 
                 borderRadius: '8px',
                 alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',

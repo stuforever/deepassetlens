@@ -32,7 +32,7 @@ const ProgressFlagsCard: React.FC<ProgressFlagsCardProps> = ({ data }) => {
       title={
         <Space>
           <span>任务进度</span>
-          <StatusTag preset={done === total ? 'success' : done > 0 ? 'info' : 'default'}>
+          <StatusTag preset={done === total ? 'success' : done > 0 ? 'info' : 'default'} dot pulse={done > 0 && done < total}>
             {done}/{total} 已完成
           </StatusTag>
         </Space>

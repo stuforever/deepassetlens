@@ -234,19 +234,8 @@ const FinalAnswer: React.FC<FinalAnswerProps> = ({
         }}
       >
         {live}
-        <span className="final-answer-cursor">|</span>
-        <style>{`
-          .final-answer-cursor {
-            color: var(--color-primary);
-            font-weight: 300;
-            margin-left: 1px;
-            animation: final-answer-blink 1s step-end infinite;
-          }
-          @keyframes final-answer-blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
-          }
-        `}</style>
+        {/* B2 美化：呼吸光标（样式在 index.css .final-answer-cursor，只动 opacity） */}
+        <span className="final-answer-cursor">▍</span>
       </div>
     );
   }
@@ -256,9 +245,9 @@ const FinalAnswer: React.FC<FinalAnswerProps> = ({
     return <TableAnswer answer={answer} tableData={tableData} />;
   }
 
-  // 3. 默认 markdown 变体：问财风格扁平长文
+  // 3. 默认 markdown 变体：问财风格扁平长文（P3：挂 .dal-reading 阅读排版，消除死 CSS）
   return (
-    <div style={{ padding: 16, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.8 }}>
+    <div className="dal-reading" style={{ padding: 16, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.8 }}>
       {renderMarkdown(answer)}
     </div>
   );

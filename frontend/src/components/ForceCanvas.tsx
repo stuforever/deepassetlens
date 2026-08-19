@@ -20,11 +20,12 @@ import { StatusTag } from './shell';
 
 const { Text } = Typography;
 
-// 实体类型语义色（图谱领域专属，fill 统一白色，stroke 标识类型；#0891B2 为活动实体 teal，无对应设计 token）
+// 实体类型语义色：取 chartPalette（设计 C34：画布节点配色走图表色板，禁止零散硬编码）
+// 主数据=蓝(chart1) / 活动实体=teal(chart3) / 数据实体=红(chart6)
 const ENTITY_CATEGORY_META: Record<string, { label: string; stroke: string }> = {
-  master_entity: { label: '主数据实体', stroke: tokens.colors.warning },
-  activity_entity: { label: '业务活动实体', stroke: '#0891B2' },
-  data_entity: { label: '数据实体', stroke: tokens.colors.error },
+  master_entity: { label: '主数据实体', stroke: tokens.chartPalette[0] },
+  activity_entity: { label: '业务活动实体', stroke: tokens.chartPalette[2] },
+  data_entity: { label: '数据实体', stroke: tokens.chartPalette[5] },
 };
 
 // 关系边语义色
@@ -65,7 +66,7 @@ const ForceCanvas: React.FC = () => {
   const [showEntities, setShowEntities] = useState(true);
   const [showConcepts, setShowConcepts] = useState(true);
   const [graphData, setGraphData] = useState<any>(null);
-  const [l1Id, setL1Id] = useState<string>('');
+  const [l1Ids, setL1Ids] = useState<string[]>([]);
   const [l1Options, setL1Options] = useState<{ label: string; value: string }[]>([]);
   // 右侧属性面板：单击节点显示精简属性
   const [panelNode, setPanelNode] = useState<any | null>(null);
@@ -161,13 +162,28 @@ const ForceCanvas: React.FC = () => {
     setTimeout(() => { if (graphRef.current) graphRef.current.fitView(20); }, 650);
   };
 
-  const fetchGraphData = async (selectedL1Id?: string) => {
-    const filterL1Id = selectedL1Id ?? l1Id;
+  const fetchGraphData = async (selectedL1Ids?: string[]) => {
+    const ids = selectedL1Ids ?? l1Ids;
     setLoading(true);
     try {
       let response: any;
-      if (filterL1Id) {
-        response = await conceptApi.getSubgraphByL1(filterL1Id);
+      if (ids && ids.length > 0) {
+        if (ids.length === 1) {
+          response = await conceptApi.getSubgraphByL1(ids[0]);
+        } else {
+          // 多选：并行拉取各 L1 子图后按 id 合并去重
+          const responses = await Promise.all(ids.map((id) => conceptApi.getSubgraphByL1(id)));
+          const nodeMap = new Map<string, any>();
+          const edgeMap = new Map<string, any>();
+          for (const sub of responses) {
+            for (const n of sub.data?.nodes || []) if (!nodeMap.has(String(n.id))) nodeMap.set(String(n.id), n);
+            for (const e of sub.data?.edges || []) {
+              const key = String(e.id) || `${e.source}|${e.target}|${e.edge_type || ''}`;
+              if (!edgeMap.has(key)) edgeMap.set(key, e);
+            }
+          }
+          response = { data: { nodes: Array.from(nodeMap.values()), edges: Array.from(edgeMap.values()) } };
+        }
       } else {
         response = await conceptApi.getGraphData();
       }
@@ -185,13 +201,10 @@ const ForceCanvas: React.FC = () => {
       try {
         const resp = await conceptApi.getConcepts(1);
         const list = resp.data || [];
-        const opts = [
-          { label: '全图（无过滤）', value: '' },
-          ...list.map((c: any) => ({
-            label: c.name || c.label || '-',
-            value: c.id || '',
-          })).filter((o: any) => o.value),
-        ];
+        const opts = list.map((c: any) => ({
+          label: c.name || c.label || '-',
+          value: c.id || '',
+        })).filter((o: any) => o.value);
         setL1Options(opts);
       } catch (e) {
         // 静默回退
@@ -213,6 +226,8 @@ const ForceCanvas: React.FC = () => {
         container: containerRef.current,
         width: containerRef.current.scrollWidth || 800,
         height: containerRef.current.scrollHeight || 800,
+        // B3 美化：右下小地图（G6 内置 Minimap，零新依赖；位置由 index.css .g6-minimap 固定）
+        plugins: [new G6.Minimap({ size: [180, 120], type: 'delegate' })],
         modes: {
           default: ['drag-canvas', 'zoom-canvas', 'drag-node', {
             type: 'tooltip',
@@ -251,9 +266,9 @@ const ForceCanvas: React.FC = () => {
             },
           },
         },
-        // 选中态：2px 主色描边（不放大）；暗化态：低透明度
+        // 选中态：2px 主色描边 + 4px 外发光（B3 美化）；暗化态：低透明度
         nodeStateStyles: {
-          highlight: { stroke: tokens.colors.primary, lineWidth: 2 },
+          highlight: { stroke: tokens.colors.primary, lineWidth: 2, shadowColor: tokens.colors.primary, shadowBlur: 8 },
           dim: { opacity: 0.12 },
         },
         edgeStateStyles: {
@@ -422,8 +437,6 @@ const ForceCanvas: React.FC = () => {
         nodes: processedNodes,
         edges: filteredEdges.map((e: any) => {
           const isEntityRel = e.edge_type === 'entity_relation';
-          const isHierarchy = e.edge_type === 'concept_hierarchy';
-          const isConceptLink = e.edge_type === 'concept_entity_link';
           const isCrossChain = e.edge_type === 'concept_cross_chain';
           const isEntityGen = e.edge_type === 'entity_generation';
           let edgeColor: string = EDGE_COLORS.default;
@@ -479,9 +492,10 @@ const ForceCanvas: React.FC = () => {
     }
   }, [graphData, showEntities, showConcepts]);
 
-  const handleL1Change = (id: string) => {
-    setL1Id(id);
-    fetchGraphData(id);
+  const handleL1Change = (ids: string[]) => {
+    const next = ids || [];
+    setL1Ids(next);
+    fetchGraphData(next);
   };
 
   // 右侧面板"查看完整详情" -> 打开 Drawer 1100
@@ -502,19 +516,46 @@ const ForceCanvas: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 二级工具栏 40px */}
-      <div
-        style={{
-          height: 40,
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.space.s2,
-          padding: `0 ${tokens.space.s4}px`,
-          background: tokens.colors.bgSubtle,
-          borderBottom: `1px solid ${tokens.colors.border}`,
-        }}
-      >
+      {/* 画布 + 右侧属性面板（B3：浮动玻璃工具条 + 图例 + 小地图浮在画布上，画布满撑） */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+          {/* B3 美化：点阵网格背景（radial-gradient 1px 点 / 24px 间距） */}
+          <div
+            ref={containerRef}
+            style={{
+              width: '100%', height: '100%',
+              backgroundColor: tokens.colors.bgPage,
+              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(15,23,42,0.07) 1px, transparent 0)',
+              backgroundSize: '24px 24px',
+            }}
+          />
+          {loading ? (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: `${tokens.colors.bgContent}CC`,
+                zIndex: 30,
+              }}
+            >
+              <Spin />
+            </div>
+          ) : null}
+          {/* B3 美化：浮动玻璃工具条（S2 阴影 + blur(8px) + radius.card） */}
+          <div
+            style={{
+              position: 'absolute', top: 12, left: 12, zIndex: 20,
+              display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: tokens.space.s2,
+              padding: '6px 10px', borderRadius: tokens.radius.card,
+              background: 'rgba(255,255,255,.88)',
+              WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)',
+              boxShadow: tokens.elevation.s2, border: `1px solid ${tokens.colors.border}`,
+              maxWidth: 'calc(100% - 24px)',
+            }}
+          >
         <Select
           showSearch
           allowClear
@@ -541,13 +582,16 @@ const ForceCanvas: React.FC = () => {
           }}
         />
         <Select
+          mode="multiple"
           showSearch
+          allowClear
           size="small"
-          style={{ minWidth: 200 }}
-          placeholder="按 L1 行业域过滤"
-          value={l1Id}
+          style={{ minWidth: 220, maxWidth: 360 }}
+          placeholder="按 L1 行业域过滤（可多选）"
+          value={l1Ids}
           onChange={handleL1Change}
           options={l1Options}
+          maxTagCount="responsive"
         />
         <Button
           size="small"
@@ -563,7 +607,6 @@ const ForceCanvas: React.FC = () => {
         >
           实体
         </Button>
-        <div style={{ flex: 1 }} />
         <Tooltip title="适应画布">
           <Button
             size="small"
@@ -572,26 +615,29 @@ const ForceCanvas: React.FC = () => {
           />
         </Tooltip>
         <Button size="small" icon={<SyncOutlined />} onClick={() => fetchGraphData()}>刷新</Button>
-      </div>
-
-      {/* 画布 + 右侧属性面板 */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
-          <div ref={containerRef} style={{ width: '100%', height: '100%', background: tokens.colors.bgPage }} />
-          {loading ? (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: `${tokens.colors.bgContent}CC`,
-              }}
-            >
-              <Spin />
+          </div>
+          {/* B3 美化：左下固定图例卡（节点色 = 实体类别色，概念 = 主色） */}
+          <div
+            style={{
+              position: 'absolute', left: 12, bottom: 12, zIndex: 20,
+              padding: '8px 12px', borderRadius: tokens.radius.card,
+              background: 'rgba(255,255,255,.9)',
+              WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)',
+              boxShadow: tokens.elevation.s1, border: `1px solid ${tokens.colors.border}`,
+            }}
+          >
+            <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>图例</Text>
+            {(['master_entity', 'activity_entity', 'data_entity'] as const).map((cat) => (
+              <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tokens.colors.textSecondary, lineHeight: '20px' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 3, border: `2px solid ${(ENTITY_CATEGORY_META[cat] || ENTITY_CATEGORY_META.data_entity).stroke}`, background: tokens.colors.bgContent, flexShrink: 0 }} />
+                {(ENTITY_CATEGORY_META[cat] || ENTITY_CATEGORY_META.data_entity).label}
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tokens.colors.textSecondary, lineHeight: '20px' }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, border: `2px solid ${tokens.colors.primary}`, background: tokens.colors.primaryBg, flexShrink: 0 }} />
+              概念分类
             </div>
-          ) : null}
+          </div>
         </div>
 
         {/* 右侧属性面板 320 */}

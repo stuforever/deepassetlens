@@ -14,6 +14,9 @@ type SqlPreviewCardProps = {
     rows_preview?: any[][];
     exec_time_ms?: number;
     execute_error?: string;
+    // 批3：数据快照披露（API 内存缓存命中时携带）
+    data_snapshot_at?: string;
+    cache_sources?: string[];
   };
   onExecute?: () => void;
 };
@@ -42,9 +45,18 @@ const SqlPreviewCard: React.FC<SqlPreviewCardProps> = ({ data, onExecute }) => {
           <CodeOutlined style={{ color: 'var(--color-ai)' }} />
           <span>SQL 预览</span>
           {data.executed ? (
-            <StatusTag icon={<CheckCircleFilled />} preset="success">
-              已执行 · {data.row_count} 行 · {data.exec_time_ms}ms
-            </StatusTag>
+            <Space size={4} wrap>
+              <StatusTag icon={<CheckCircleFilled />} preset="success">
+                已执行 · {data.row_count} 行 · {data.exec_time_ms}ms
+              </StatusTag>
+              {data.data_snapshot_at ? (
+                <Tooltip title={`缓存来源表：${(data.cache_sources || []).join('、') || '未知'}（同问题二问直接命中 API 内存缓存，不再重复拉取上游）`}>
+                  <StatusTag preset="info">
+                    <ThunderboltOutlined /> 缓存命中 · 数据快照 {data.data_snapshot_at}
+                  </StatusTag>
+                </Tooltip>
+              ) : null}
+            </Space>
           ) : (
             <StatusTag preset="info">已拼装 · 待执行</StatusTag>
           )}

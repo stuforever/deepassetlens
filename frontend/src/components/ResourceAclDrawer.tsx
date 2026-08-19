@@ -12,9 +12,8 @@
 import React, { useEffect, useState } from 'react';
 import { Drawer, Table, Tag, Button, Space, Form, Select, Input, message, Popconfirm } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
-import { StatusTag } from './shell';
-import axios from 'axios';
-import { getStoredToken, isTokenValid } from '../auth/oidc';
+import { StatusTag, DrawerFooter } from './shell';
+import { aclApi } from '../services/api';
 
 interface Props {
   open: boolean;
@@ -44,15 +43,6 @@ interface UserItem {
 
 const ALL_ACTIONS = ['read', 'write', 'execute', 'delete', 'admin'];
 
-function authedClient() {
-  const t = getStoredToken();
-  const headers: Record<string, string> = {};
-  if (t && isTokenValid(t)) {
-    headers['Authorization'] = `${t.token_type} ${t.access_token}`;
-  }
-  return axios.create({ baseURL: '/api/v1', headers });
-}
-
 const ResourceAclDrawer: React.FC<Props> = ({ open, onClose, resourceType, resourceId, title }) => {
   const [grants, setGrants] = useState<Grant[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -63,10 +53,9 @@ const ResourceAclDrawer: React.FC<Props> = ({ open, onClose, resourceType, resou
     if (!open) return;
     setLoading(true);
     try {
-      const c = authedClient();
       const [g, u] = await Promise.all([
-        c.get('/auth/grants', { params: { resource_type: resourceType, resource_id: resourceId } }),
-        c.get('/auth/users').catch(() => ({ data: { data: [] } })),
+        aclApi.getGrants(resourceType, resourceId, { silent: true }),
+        aclApi.listUsers({ silent: true }).catch(() => ({ data: { data: [] } })),
       ]);
       setGrants(g.data.data || []);
       setUsers(u.data.data || []);
@@ -81,13 +70,13 @@ const ResourceAclDrawer: React.FC<Props> = ({ open, onClose, resourceType, resou
 
   const handleAdd = async (values: any) => {
     try {
-      await authedClient().post('/auth/grant', {
+      await aclApi.grant({
         resource_type: resourceType,
         resource_id: resourceId,
         principal_type: values.principal_type,
         principal_id: values.principal_id,
         actions: values.actions,
-      });
+      }, { silent: true });
       message.success('授权成功');
       form.resetFields();
       refresh();
@@ -98,7 +87,7 @@ const ResourceAclDrawer: React.FC<Props> = ({ open, onClose, resourceType, resou
 
   const handleRevoke = async (id: number) => {
     try {
-      await authedClient().delete(`/auth/grant/${id}`);
+      await aclApi.revoke(id, { silent: true });
       message.success('已撤销');
       refresh();
     } catch (e: any) {
@@ -113,6 +102,12 @@ const ResourceAclDrawer: React.FC<Props> = ({ open, onClose, resourceType, resou
       open={open}
       onClose={onClose}
       destroyOnHidden
+      footer={
+        <DrawerFooter extra={<Tag>{grants.length} 条授权</Tag>}>
+          <Button onClick={onClose}>关闭</Button>
+          <Button type="primary" htmlType="submit" onClick={() => form.submit()}>授权</Button>
+        </DrawerFooter>
+      }
     >
       <h4 style={{ marginTop: 0 }}>新增授权</h4>
       <Form layout="inline" form={form} onFinish={handleAdd} style={{ marginBottom: 24, gap: 8, flexWrap: 'wrap' }}>
@@ -128,9 +123,6 @@ const ResourceAclDrawer: React.FC<Props> = ({ open, onClose, resourceType, resou
         <Form.Item name="actions" rules={[{ required: true, type: 'array', min: 1 }]} initialValue={['read']}>
           <Select mode="multiple" style={{ width: 240 }} placeholder="动作"
                   options={ALL_ACTIONS.map(a => ({ value: a, label: a }))} />
-        </Form.Item>
-        <Form.Item>
-          <Button type="primary" htmlType="submit">授权</Button>
         </Form.Item>
       </Form>
 

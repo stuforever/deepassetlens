@@ -3,13 +3,17 @@
  * 用于请求失败位：原因 + 重试 + 修改，不弹全局 message。
  */
 import React from 'react';
-import { Button, Space } from 'antd';
+import { Button, Space, Collapse, Typography } from 'antd';
 import { ExclamationCircleOutlined, ReloadOutlined, EditOutlined } from '@ant-design/icons';
 import { tokens } from '../../theme/tokens';
+
+const { Text } = Typography;
 
 interface ErrorStateProps {
   title?: React.ReactNode;
   description?: React.ReactNode;
+  /** B4 增强：技术详情（折叠展示，如响应体/堆栈），不默认打扰用户 */
+  detail?: React.ReactNode;
   onRetry?: () => void;
   onModify?: () => void;
   retryText?: React.ReactNode;
@@ -20,6 +24,7 @@ interface ErrorStateProps {
 const ErrorState: React.FC<ErrorStateProps> = ({
   title = '请求失败',
   description,
+  detail,
   onRetry,
   onModify,
   retryText = '重试',
@@ -59,6 +64,22 @@ const ErrorState: React.FC<ErrorStateProps> = ({
             <Button type="primary" size="small" icon={<ReloadOutlined />} onClick={onRetry}>{retryText}</Button>
           ) : null}
         </Space>
+      ) : null}
+      {detail ? (
+        <Collapse
+          size="small"
+          ghost
+          style={{ marginTop: tokens.space.s2, maxWidth: 480, width: '100%' }}
+          items={[{
+            key: 'tech',
+            label: <Text type="secondary" style={{ fontSize: 12 }}>技术详情</Text>,
+            children: (
+              <div style={{ fontSize: 12, color: tokens.colors.textTertiary, textAlign: 'left', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {detail}
+              </div>
+            ),
+          }]}
+        />
       ) : null}
     </div>
   );

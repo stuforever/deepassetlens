@@ -133,9 +133,13 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
     setEditingId(null);
   };
 
-  const handleDelete = (sid: string) => {
-    deleteSessionById(sid);
-    message.success('已删除对话');
+  const handleDelete = async (sid: string) => {
+    const ok = await deleteSessionById(sid);
+    if (ok) {
+      message.success('已删除对话');
+    } else {
+      message.warning('服务端记忆清理失败，当前会话未删除，下次问答可能仍受旧上下文影响');
+    }
   };
 
   return (
@@ -153,7 +157,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
         position: 'relative',
       }}
     >
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="dal-sider" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* 导航菜单 */}
       <Menu
         mode="inline"
@@ -188,6 +192,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
                 <div
                   key={s.id}
                   onClick={() => handleSessionClick(s.id)}
+                  className="dal-session-row"
                   style={{
                     padding: '6px 8px',
                     cursor: 'pointer',
@@ -220,7 +225,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
                     </Text>
                   )}
                   {editingId !== s.id && (
-                    <>
+                    <div className="dal-session-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                       <EditOutlined
                         style={{ color: tokens.colors.textTertiary, fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
                         onClick={(e) => { e.stopPropagation(); startEdit(s.id, s.title); }}
@@ -235,7 +240,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
                           onClick={(e) => e.stopPropagation()}
                         />
                       </Popconfirm>
-                    </>
+                    </div>
                   )}
                 </div>
               ))}

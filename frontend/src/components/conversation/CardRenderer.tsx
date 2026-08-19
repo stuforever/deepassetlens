@@ -78,4 +78,4 @@ const CardRenderer: React.FC<{
   );
 };
 
-export default CardRenderer;
+export default React.memo(CardRenderer);

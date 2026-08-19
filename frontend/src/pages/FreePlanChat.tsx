@@ -5,9 +5,12 @@
  * 有消息：消息列表 + 底部输入框
  * 侧边栏「数据资产探查」= 新建会话
  */
-import React, { useEffect, useRef, useState } from 'react';
-import { Button, Input, Select, Space, Typography, message } from 'antd';
-import { PlayCircleOutlined, StopOutlined } from '@ant-design/icons';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Input, Popconfirm, Select, Space, Typography, message } from 'antd';
+import {
+  ApiOutlined, ApartmentOutlined, ArrowDownOutlined, BookOutlined, ClearOutlined,
+  DatabaseOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
+} from '@ant-design/icons';
 import ConversationMessageList from '../components/conversation/ConversationMessageList';
 import { DATA_INTELLIGENCE_SCENE_CONFIG } from '../components/conversation/sceneConfigs';
 import {
@@ -17,7 +20,11 @@ import {
 } from '../services/dataIntelligenceApi';
 import { llmAdminApi, sourceTableApi } from '../services/api';
 import { useStore } from '../store/useStore';
-import type { ChatMessage } from '../components/conversation/types';
+import type { ChatMessage, ChatMessagePayload } from '../components/conversation/types';
+import { thinkReducer, decisionCommittedReducer } from '../utils/thinkStreamReducer';
+import { buildFinalDeliveryView, resolveFinalAnswer } from '../utils/finalDelivery';
+import RouteSimulator from '../components/conversation/contractCards/RouteSimulator';
+import { tokens } from '../theme/tokens';
 
 const { Text } = Typography;
 
@@ -30,6 +37,14 @@ const FREEPLAN_EXAMPLE_QUERIES = [
   '用电客户数据的来源',
 ];
 
+// B2 美化：2×2 建议卡图标（与示例问题一一对应）
+const FREEPLAN_SUGGEST_ICONS: React.ReactNode[] = [
+  <TeamOutlined key="s1" />,
+  <BookOutlined key="s2" />,
+  <DatabaseOutlined key="s3" />,
+  <ApiOutlined key="s4" />,
+];
+
 type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error' | 'stopped';
 
 const FreePlanChat: React.FC = () => {
@@ -39,6 +54,8 @@ const FreePlanChat: React.FC = () => {
   const setSessions = useStore((s) => s.setSessions);
   const updateSession = useStore((s) => s.updateSession);
   const createNewSession = useStore((s) => s.createNewSession);
+  const deleteMessage = useStore((s) => s.deleteMessage);
+  const clearMessages = useStore((s) => s.clearMessages);
 
   // 本地状态（仅对话相关）
   const [question, setQuestion] = useState('');
@@ -50,6 +67,26 @@ const FreePlanChat: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  // B2 美化：滚动到底按钮（新内容到达且不在底部时浮出）
+  const [showScrollDown, setShowScrollDown] = useState(false);
+  const handleChatScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+    setShowScrollDown(!nearBottom);
+  }, []);
+  const scrollToBottom = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, []);
+  // reasoning(思考流)缓冲: LLM 决策某步骤前的思考累积于此, on_tool_start 新步骤产生时挂到该步骤
+  const reasoningBufRef = useRef('');
+  // v3.4 rAF 批处理：token 增量缓冲 + 已关闭 round 防护
+  const tokenBufRef = useRef<Map<string, {kind: string, text: string}[]>>(new Map());
+  const closedRoundsRef = useRef<Set<string>>(new Set());
+  const rafRef = useRef(0);
+  // v3.5: 当前流式会话 id, flushTokens 只写该会话（防多会话串流）
+  const streamingSidRef = useRef<string | null>(null);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const isBusy = status === 'submitted' || status === 'streaming';
@@ -115,6 +152,7 @@ const FreePlanChat: React.FC = () => {
   ): Promise<ChatResponse | null> => {
     return new Promise((resolve) => {
       let resolved = false;
+      streamingSidRef.current = sid;  // v3.5: flushTokens 只写该会话
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true;
@@ -138,6 +176,28 @@ const FreePlanChat: React.FC = () => {
         }));
       };
 
+      // 评审 P2-2（二轮）：策略/模板事件按 kind+tool_call_id+内容 追加去重，
+      // 不再"每条覆盖前一条"（此前 policy_events: [policyEvent] 只留最后一条）。
+      const accumulateAssistantEvent = (payloadKey: 'policy_events' | 'template_events', event: Record<string, any> | null | undefined) => {
+        if (!event) return;
+        setSessions((prev) => prev.map((s) => {
+          if (s.id !== sid) return s;
+          const messages = s.messages.map((m) => ({ ...m }));
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'assistant' && messages[i].loading) {
+              const list: Array<Record<string, any>> = [...((messages[i].payload?.[payloadKey] as Array<Record<string, any>> | undefined) || [])];
+              const key = `${event.kind || ''}|${event.tool_call_id || ''}|${event.detail || event.reason || ''}`;
+              if (!list.some((e) => `${e.kind || ''}|${e.tool_call_id || ''}|${e.detail || e.reason || ''}` === key)) {
+                list.push(event);
+              }
+              messages[i].payload = { ...(messages[i].payload || {}), [payloadKey]: list };
+              break;
+            }
+          }
+          return { ...s, messages };
+        }));
+      };
+
       const controller = dataIntelligenceApi.freePlanChatStream(
         {
           thread_id: sid,
@@ -148,24 +208,31 @@ const FreePlanChat: React.FC = () => {
           mode: MODE,
         },
         (thinkItem) => {
+          // v3.5: phase 由后端显式发送(done/error/running)；兼容旧版 result_status 映射
+          const _rs = (thinkItem as any).result_status;
+          if (!(thinkItem as any).phase) {
+            if (_rs === 'running') (thinkItem as any).phase = 'running';
+            else if (_rs === 'done') (thinkItem as any).phase = 'done';
+            else if (_rs === 'error') (thinkItem as any).phase = 'error';
+          }
           setSessions((prev) => prev.map((s) => {
             if (s.id !== sid) return s;
-            const taskKey = thinkItem.task || '';
-            const existIdx = s.thinkStream.findIndex((t) => (t.task || '') === taskKey);
-            let newThink: any[];
-            if (existIdx >= 0) {
-              newThink = s.thinkStream.map((t, idx) => idx === existIdx
-                ? { ...t, ...thinkItem, live_reason: t.live_reason || thinkItem.live_reason }
-                : t);
-            } else {
-              newThink = [...s.thinkStream, thinkItem];
-            }
+            // v3.5: 从 loading 消息的 payload.thinkStream 读取（单一数据源）。
+            // 不再从 s.thinkStream 读取 —— decision_committed 只写 payload，
+            // 从 s.thinkStream 读会拿到不含 live_reason 的旧列表，覆盖丢失判断文本。
             const messages = s.messages.map((m) => ({ ...m }));
+            let loadingIdx = -1;
             for (let i = messages.length - 1; i >= 0; i--) {
-              if (messages[i].role === 'assistant' && messages[i].loading) {
-                messages[i].payload = { ...(messages[i].payload || {}), thinkStream: newThink };
-                break;
-              }
+              if (messages[i].role === 'assistant' && messages[i].loading) { loadingIdx = i; break; }
+            }
+            const currentThink = loadingIdx >= 0
+              ? [...(messages[loadingIdx].payload?.thinkStream || [])]
+              : [...s.thinkStream];
+            // P2-2: 使用提取的生产 reducer（thinkStreamReducer.ts），测试直接覆盖
+            const newThink = thinkReducer(currentThink, thinkItem as any);
+            // 写回 loading 消息（单一数据源）+ session.thinkStream（兼容）
+            if (loadingIdx >= 0) {
+              messages[loadingIdx].payload = { ...(messages[loadingIdx].payload || {}), thinkStream: newThink };
             }
             return { ...s, thinkStream: newThink, messages };
           }));
@@ -233,36 +300,255 @@ const FreePlanChat: React.FC = () => {
           patchAssistant({ recommendations: rec.questions });
         },
         (tk) => {
+          // reasoning(思考流)累积到缓冲, 不进 thinkStream/对话流; 等 on_tool_start 新步骤产生时挂到该步骤
+          if (tk.kind === 'reasoning') {
+            reasoningBufRef.current += tk.token || '';
+            return;
+          }
+
+          // v3.4 候选判断实时流：decision_draft / answer_draft 逐 token 流式（rAF 批处理）
+          if (tk.kind === 'decision_draft' || tk.kind === 'answer_draft') {
+            const roundId = (tk as any).round_id || '';
+            const delta = tk.delta || '';
+            if (!roundId || !delta) return;
+            // 检查该 round 是否已关闭（committed/rejected 已处理）
+            if (closedRoundsRef.current.has(roundId)) return;
+            // 缓冲到 ref
+            if (!tokenBufRef.current.has(roundId)) {
+              tokenBufRef.current.set(roundId, []);
+            }
+            tokenBufRef.current.get(roundId)!.push({ kind: tk.kind, text: delta });
+            // 排队 rAF 批量刷新
+            if (!rafRef.current) {
+              rafRef.current = requestAnimationFrame(flushTokens);
+            }
+            return;
+          }
+
+          // decision_committed: 闸门通过，覆盖校准 + 绑定 tool_call_id
+          if (tk.kind === 'decision_committed') {
+            const roundId = (tk as any).round_id;
+            const tcid = (tk as any).tool_call_id;
+            const content = (tk as any).content || '';
+            const task = (tk as any).task || '';
+            const toolName = (tk as any).tool_name || '';
+            // 原子清缓冲：删除该 round_id 的待处理 delta + 标记已关闭
+            tokenBufRef.current.delete(roundId || '');
+            if (roundId) closedRoundsRef.current.add(roundId);
+            setSessions((prev) => prev.map((s) => {
+              if (s.id !== sid) return s;
+              const messages = s.messages.map((m) => ({ ...m }));
+              for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === 'assistant' && messages[i].loading) {
+                  const ts = [...(messages[i].payload?.thinkStream || [])];
+                  // P2-2: 使用提取的生产 reducer（补判不删除 rejected，标记 superseded）
+                  const filtered = decisionCommittedReducer(ts, {
+                    tool_call_id: tcid, round_id: roundId, tool_name: toolName,
+                    content, task,
+                  });
+                  // 按 round_id 找草稿步骤（降级按 tool_call_id 找/建）
+                  let idx = -1;
+                  if (roundId) {
+                    idx = filtered.findIndex((t: any) => t.round_id === roundId);
+                  }
+                  if (idx === -1 && tcid) {
+                    idx = filtered.findIndex((t: any) => t.tool_call_id === tcid);
+                  }
+                  const finalTs = idx >= 0 ? filtered : [...filtered]; // reducer 已处理新建/覆盖
+                  messages[i].payload = { ...(messages[i].payload || {}), thinkStream: finalTs };
+                  break;
+                }
+              }
+              return { ...s, messages };
+            }));
+            return;
+          }
+
+          // decision_rejected: 闸门拒绝。区分格式拒绝（静默删步骤）和范围拒绝（显示详情）
+          if (tk.kind === 'decision_rejected') {
+            const roundId = (tk as any).round_id;
+            const tcid = (tk as any).tool_call_id;
+            const candidateContent = (tk as any).candidate_content || '';
+            const rejectReason = (tk as any).reason || '';
+            // 原子清缓冲
+            tokenBufRef.current.delete(roundId || '');
+            if (roundId) closedRoundsRef.current.add(roundId);
+            // 空内容拒绝（LLM 忘写【下一步判断】标记，纯格式问题）->
+            // 删除 on_tool_start 创建的空壳步骤，用户完全不可见，LLM 自动补判重发
+            if (!candidateContent.trim()) {
+              setSessions((prev) => prev.map((s) => {
+                if (s.id !== sid) return s;
+                const messages = s.messages.map((m) => ({ ...m }));
+                for (let i = messages.length - 1; i >= 0; i--) {
+                  if (messages[i].role === 'assistant' && messages[i].loading) {
+                    let ts = [...(messages[i].payload?.thinkStream || [])];
+                    // 删除该 tool_call_id / round_id 的空壳步骤（on_tool_start 创建的）
+                    ts = ts.filter((t: any) =>
+                      !(tcid && t.tool_call_id === tcid) && !(roundId && t.round_id === roundId));
+                    messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts };
+                    break;
+                  }
+                }
+                return { ...s, messages };
+              }));
+              return;
+            }
+            // 非空内容（范围拒绝等真实业务拒绝）-> 显示详情：存 reject_reason + candidate_content
+            setSessions((prev) => prev.map((s) => {
+              if (s.id !== sid) return s;
+              const messages = s.messages.map((m) => ({ ...m }));
+              for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === 'assistant' && messages[i].loading) {
+                  const ts = [...(messages[i].payload?.thinkStream || [])];
+                  let idx = -1;
+                  if (roundId) idx = ts.findIndex((t: any) => t.round_id === roundId);
+                  if (idx === -1 && tcid) idx = ts.findIndex((t: any) => t.tool_call_id === tcid);
+                  if (idx >= 0) {
+                    ts[idx] = { ...ts[idx], phase: 'rejected', result_status: 'rejected',
+                               result_summary: '判定需补充信息·补判中',
+                               reject_reason: rejectReason,
+                               candidate_content: candidateContent,
+                               tool_call_id: tcid || ts[idx].tool_call_id };
+                  } else {
+                    ts.push({ task: '判定需补充信息', strategy: 'free_plan', kind: 'decision',
+                             phase: 'rejected', result_status: 'rejected',
+                             result_summary: '判定需补充信息·补判中',
+                             reject_reason: rejectReason,
+                             candidate_content: candidateContent,
+                             tool_call_id: tcid, round_id: roundId });
+                  }
+                  messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts };
+                  break;
+                }
+              }
+              return { ...s, messages };
+            }));
+            return;
+          }
+
+          // answer_committed: 最终答案完整正文校准
+          // 流式期间 draft 实时打字给用户看"正在生成答案"；committed 后清 draft 改用 result_summary
+          // 避免完整答案在 ThinkStream 和主消息区重复展示（用户反馈"两遍"）
+          if (tk.kind === 'answer_committed') {
+            const roundId = (tk as any).round_id;
+            const content = (tk as any).content || '';
+            const charCount = content.length;
+            tokenBufRef.current.delete(roundId || '');
+            if (roundId) closedRoundsRef.current.add(roundId);
+            setSessions((prev) => prev.map((s) => {
+              if (s.id !== sid) return s;
+              const messages = s.messages.map((m) => ({ ...m }));
+              for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === 'assistant' && messages[i].loading) {
+                  const ts = [...(messages[i].payload?.thinkStream || [])];
+                  let idx = ts.findIndex((t: any) => t.kind === 'answer' || t.kind === 'draft');
+                  if (idx === -1) {
+                    ts.push({ task: '答案生成', strategy: 'free_plan', kind: 'answer',
+                             phase: 'done', draft: content, round_id: roundId,
+                             result_summary: `答案已生成（${charCount} 字）` });
+                    idx = ts.length - 1;
+                  } else {
+                    // P0-fix: answer_committed 是流式完整正文，draft 存完整内容（不再只存字数）
+                    ts[idx] = { ...ts[idx], kind: 'answer', phase: 'done', draft: content,
+                               round_id: roundId || ts[idx].round_id,
+                               result_summary: `答案已生成（${charCount} 字）` };
+                  }
+                  // P0-fix: 把完整答案写入 payload.final_answer，作为 done 事件的兜底
+                  // （done 若 resp.final_answer 为空，applyResponse 会用此值，不覆盖为空）
+                  messages[i].payload = {
+                    ...(messages[i].payload || {}),
+                    thinkStream: ts,
+                    final_answer: (messages[i].payload?.final_answer || content),
+                  };
+                  break;
+                }
+              }
+              return { ...s, messages };
+            }));
+            return;
+          }
+
+          // 兼容旧版 draft 事件（answer_draft 已处理，这里处理旧 kind=draft）
+          if (tk.kind === 'draft') {
+            setSessions((prev) => prev.map((s) => {
+              if (s.id !== sid) return s;
+              const messages = s.messages.map((m) => ({ ...m }));
+              for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === 'assistant' && messages[i].loading) {
+                  const ts = [...(messages[i].payload?.thinkStream || [])];
+                  let idx = ts.findIndex((t: any) => t.kind === 'draft' || t.kind === 'answer');
+                  if (idx === -1) {
+                    const reasoning = reasoningBufRef.current;
+                    reasoningBufRef.current = '';
+                    ts.push({ task: '答案生成', strategy: 'free_plan', kind: 'answer', draft: '', reason: reasoning || undefined });
+                    idx = ts.length - 1;
+                  }
+                  ts[idx] = { ...ts[idx], draft: (ts[idx].draft || '') + (tk.token || '') };
+                  messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts };
+                  break;
+                }
+              }
+              return { ...s, messages };
+            }));
+            return;
+          }
+
+          // 兼容旧版 decision 事件（kind=decision，有 token 字段）
+          if (tk.kind === 'decision' && tk.token) {
+            setSessions((prev) => prev.map((s) => {
+              if (s.id !== sid) return s;
+              const messages = s.messages.map((m) => ({ ...m }));
+              for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === 'assistant' && messages[i].loading) {
+                  const ts = [...(messages[i].payload?.thinkStream || [])];
+                  const _tcid = (tk as any).tool_call_id;
+                  let targetIdx = -1;
+                  if (_tcid) {
+                    for (let j = ts.length - 1; j >= 0; j--) {
+                      if (ts[j].tool_call_id === _tcid) { targetIdx = j; break; }
+                    }
+                  } else if (tk.task) {
+                    for (let j = ts.length - 1; j >= 0; j--) {
+                      if (!ts[j].tool_call_id && ts[j].task === tk.task) { targetIdx = j; break; }
+                    }
+                  }
+                  if (targetIdx === -1) {
+                    ts.push({ task: tk.task || '', strategy: 'free_plan', kind: 'decision', live_reason: '', tool_call_id: _tcid || undefined });
+                    targetIdx = ts.length - 1;
+                  }
+                  ts[targetIdx] = { ...ts[targetIdx], live_reason: (ts[targetIdx].live_reason || '') + tk.token };
+                  if (_tcid && !ts[targetIdx].tool_call_id) ts[targetIdx].tool_call_id = _tcid;
+                  if (tk.kind && !ts[targetIdx].kind) ts[targetIdx].kind = tk.kind;
+                  messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts };
+                  break;
+                }
+              }
+              return { ...s, messages };
+            }));
+            return;
+          }
+        },
+        (sqlResult) => {
+          // 按 step_id 归属到对应执行步骤(不覆盖, 剧本多步 execute_sql 各存各的); 同时保留顶部最后一次结果
+          // 注意: stepId 是步骤序号(定位 thinkStream 项), 不要与外层会话 sid(会话UUID)混淆——
+          // 旧代码此处 const sid = step_id 会遮蔽外层 sid, 导致 s.id !== sid 恒真, 结果永远挂不上步骤。
+          const stepId = (sqlResult as any).step_id;
           setSessions((prev) => prev.map((s) => {
             if (s.id !== sid) return s;
             const messages = s.messages.map((m) => ({ ...m }));
-            let ts: any[] = [];
             for (let i = messages.length - 1; i >= 0; i--) {
               if (messages[i].role === 'assistant' && messages[i].loading) {
-                ts = [...(messages[i].payload?.thinkStream || [])];
-                let targetIdx = -1;
-                if (tk.task) {
-                  for (let j = ts.length - 1; j >= 0; j--) {
-                    if (ts[j].task === tk.task) { targetIdx = j; break; }
-                  }
+                const ts = [...(messages[i].payload?.thinkStream || [])];
+                if (stepId != null) {
+                  const idx = ts.findIndex((t: any) => t.step_id === stepId);
+                  if (idx >= 0) ts[idx] = { ...ts[idx], sql_result: sqlResult };
                 }
-                if (targetIdx === -1) {
-                  const newItem: any = { task: tk.task || '', strategy: 'free_plan', action: tk.task || '', kind: tk.kind || 'decision', live_reason: '' };
-                  ts.push(newItem);
-                  targetIdx = ts.length - 1;
-                }
-                ts[targetIdx] = { ...ts[targetIdx], live_reason: (ts[targetIdx].live_reason || '') + tk.token };
-                // 同步 kind（行动事件重建时会话级缺推理条目，导致推理被覆盖；这里统一同步会话级+消息级）
-                if (tk.kind && !ts[targetIdx].kind) ts[targetIdx].kind = tk.kind;
-                messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts };
+                messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts, sql_result: sqlResult };
                 break;
               }
             }
-            return { ...s, thinkStream: ts, messages };
+            return { ...s, messages };
           }));
-        },
-        (sqlResult) => {
-          patchAssistant({ sql_result: sqlResult });
         },
         (trace) => {
           if (!trace.detail) return;
@@ -279,6 +565,36 @@ const FreePlanChat: React.FC = () => {
             return { ...s, messages };
           }));
         },
+        (intent) => {
+          // 意图理解卡：任务+过滤条件，置顶显示让用户一眼确认AI听懂了
+          patchAssistant({ intent });
+        },
+        (filterCheck) => {
+          // 过滤对照：实际SQL的WHERE + 行数，与用户过滤意图对照
+          patchAssistant({ filter_check: filterCheck });
+        },
+        (route) => {
+          // 受控 Skill 问答平台 v2：确定性路由结果（RouteCard）
+          patchAssistant({ route });
+        },
+        (contract) => {
+          // 受控执行契约（五张业务卡数据源）
+          patchAssistant({ contract });
+        },
+        (contractUpdate) => {
+          // 评审 P1-3：运行中引擎确认/复合终止实时更新契约（五卡即时刷新，不等 done）
+          if (contractUpdate && contractUpdate.contract) {
+            patchAssistant({ contract: contractUpdate.contract });
+          }
+        },
+        (policyEvent) => {
+          // 策略拒绝/阻断：实时追加去重到 payload（评审 P2：不再覆盖前一条）
+          accumulateAssistantEvent('policy_events', policyEvent);
+        },
+        (templateEvent) => {
+          // 模板绑定/漂移：实时追加去重到 payload（评审 P2）
+          accumulateAssistantEvent('template_events', templateEvent);
+        },
       );
       abortControllerRef.current = controller;
     });
@@ -290,28 +606,96 @@ const FreePlanChat: React.FC = () => {
       if (!sess) return prev;
       const messages = sess.messages.map((m) => ({ ...m }));
       const title = (sess.title === '新对话' && userText) ? userText.slice(0, 20) : sess.title;
-      // 保留 loading 占位消息的 live thinkStream（含 LLM 推理条目，比后端 think_stream 更全；
+      // v3.5: 保留 loading 占位消息的 live thinkStream（含 LLM 推理条目，比后端 think_stream 更全；
       // 后端 think_stream 只含行动条目，直接替换会丢失推理步骤）
       let liveThinkStream: any[] = [];
+      // P0-fix: 兜底答案优先级 done.final_answer → loading.payload.final_answer → answer draft → 失败提示
+      // final 事件已通过 patchAssistant 写入 payload.final_answer；answer_committed 也已写入。
+      // done 若 resp.final_answer 为空，必须保留已写入的答案，不能覆盖为空。
+      let payloadFinalAnswer = '';
+      // 评审 P1-1（三轮）：完成态继承 loading payload 的运行治理状态——
+      // policy_events/template_events（执行期间追加去重）必须随历史消息保存，
+      // 否则 loading 消息被最终消息替换后，折叠条徽标与展开后的审计事件全部丢失。
+      let loadingPayload: ChatMessagePayload | undefined;
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === 'assistant' && messages[i].loading) {
           liveThinkStream = messages[i].payload?.thinkStream || [];
+          payloadFinalAnswer = messages[i].payload?.final_answer || '';
+          loadingPayload = messages[i].payload;
           break;
         }
       }
+      // P0-fix: 兜底优先级 done.final_answer → loading.payload.final_answer → answer draft
+      // （final 事件已写入 payload，done.final_answer 为空时保留，不覆盖为空）
+      const finalAnswer = resolveFinalAnswer(resp.final_answer, payloadFinalAnswer, liveThinkStream);
+      // v3.5: 不再"实时非空就完全放弃后端快照"。改为按 ID 合并：
+      // live 保留 live_reason/决策步骤，backend 补 result_status/phase/duration_ms/result_summary
+      const backendThink = resp.think_stream || sess.thinkStream || [];
+      let mergedThink: any[];
+      if (liveThinkStream.length > 0 && backendThink.length > 0) {
+        // 按 tool_call_id / step_id 合并：live 为基底，backend 补终态字段
+        mergedThink = liveThinkStream.map((t: any) => {
+          const bStep = backendThink.find((b: any) =>
+            (b.tool_call_id && b.tool_call_id === t.tool_call_id) ||
+            (b.step_id != null && b.step_id === t.step_id));
+          if (bStep) {
+            // backend 有权威的 result_status/phase/duration_ms/result_summary
+            const merged = { ...t, ...bStep, live_reason: t.live_reason || bStep.live_reason };
+            // 保护 live 的 rejected 状态：后端 think_stream 可能标 done，不应覆盖 rejected
+            if (t.phase === 'rejected' || t.result_status === 'rejected') {
+              merged.phase = 'rejected';
+              merged.result_status = 'rejected';
+            }
+            return merged;
+          }
+          return t;
+        });
+        // 补上 backend 有但 live 没有的步骤
+        for (const b of backendThink) {
+          const exists = mergedThink.some((t: any) =>
+            (t.tool_call_id && t.tool_call_id === b.tool_call_id) ||
+            (t.step_id != null && t.step_id === b.step_id));
+          if (!exists) mergedThink.push(b);
+        }
+      } else {
+        mergedThink = liveThinkStream.length > 0 ? liveThinkStream : backendThink;
+      }
+      // v3.5 终态兜底：所有 running/drafting/committed 步骤强制 done（防遗漏完成事件）
+      mergedThink = mergedThink.map((t: any) => {
+        if (t.phase === 'running' || t.phase === 'drafting' || t.phase === 'committed') {
+          return { ...t, phase: 'done', result_status: t.result_status === 'error' ? 'error' : (t.result_status || 'done') };
+        }
+        return t;
+      });
+      // v3.5: 答案草稿保留（不再清除）-- 完成后 ThinkStream 仍显示推理过程
+      // phase:'done' 时 ThinkStream 自动停光标，文字保留作为推理记录
+      const assistantPayload: ChatMessagePayload = {
+        thinkStream: mergedThink,
+        final_answer: finalAnswer,
+        final_answer_structured: resp.final_answer_structured,
+        final_delivery: (resp as any).final_delivery || null,
+        response_format_degraded: (resp as any).response_format_degraded || false,
+        sql_result: (resp as any).sql_result || null,
+        recommendations: resp.recommendations || [],
+        confirmed: resp.confirmed || {},
+        // 受控 Skill 问答平台 v2：路由+契约（五张业务卡）
+        // 优先用后端 done 快照；缺失时继承 loading payload 的流式最新值（含 contract_update 后的契约）
+        route: (resp as any).route ?? loadingPayload?.route ?? null,
+        contract: (resp as any).contract ?? loadingPayload?.contract ?? null,
+        // 评审 P1-1（三轮）：事件随历史消息持久化 —— 完成态继承执行期间累积的策略/模板事件
+        policy_events: loadingPayload?.policy_events || [],
+        template_events: loadingPayload?.template_events || [],
+      };
+      // 统一最终交付视图：模型无文本但确有查询数据时，用交付摘要兜底主区文字
+      const deliveryView = buildFinalDeliveryView(assistantPayload);
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        text: resp.final_answer || '（自由规划未生成最终答案，可能因 LLM 连接中断。请查看上方思考步骤或重试）',
+        // P0-fix: 用兜底答案（done.final_answer → loading.payload.final_answer → answer draft），
+        // 空时再退回交付摘要行，最后才显示失败提示，避免"已生成结果但主区为空"
+        text: finalAnswer || deliveryView.deliverySummaryLine || '（自由规划未生成最终答案，可能因 LLM 连接中断。请查看上方思考步骤或重试）',
         loading: false,
-        payload: {
-          thinkStream: liveThinkStream.length > 0 ? liveThinkStream : (resp.think_stream || sess.thinkStream),
-          final_answer: resp.final_answer || '',
-          final_answer_structured: resp.final_answer_structured,
-          sql_result: (resp as any).sql_result || null,
-          recommendations: resp.recommendations || [],
-          confirmed: resp.confirmed || {},
-        },
+        payload: assistantPayload,
       };
       // 把 loading 占位消息替换为最终消息
       let replaced = false;
@@ -334,7 +718,7 @@ const FreePlanChat: React.FC = () => {
         liveStatus: '',
         liveMetaInfo: '',
         finalTokens: [],
-        finalAnswer: resp.final_answer || '',
+        finalAnswer: finalAnswer,
         recommendations: resp.recommendations || [],
         title,
       } : s);
@@ -362,10 +746,54 @@ const FreePlanChat: React.FC = () => {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    // v3.4: 停止时冲刷 + 清理 rAF/缓冲
+    flushTokens();
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
+    tokenBufRef.current.clear();
+    closedRoundsRef.current.clear();
     setStatus('stopped');
     if (activeSession) {
       finalizePlaceholderMessage(activeSession.id);
     }
+  };
+
+  // v3.4 rAF 批量刷新 token 缓冲到 setSessions（避免每个 token 一次重渲染）
+  const flushTokens = () => {
+    rafRef.current = 0;
+    const buf = tokenBufRef.current;
+    if (buf.size === 0) return;
+    tokenBufRef.current = new Map();  // 原子换出
+    const _sid = streamingSidRef.current;
+    setSessions((prev) => prev.map((s) => {
+      if (s.id !== _sid) return s;  // v3.5: 只写当前流式会话，防多会话串流
+      const messages = s.messages.map((m) => ({ ...m }));
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant' && messages[i].loading) {
+          const ts = [...(messages[i].payload?.thinkStream || [])];
+          for (const [roundId, tokens] of Array.from(buf)) {
+            if (closedRoundsRef.current.has(roundId)) continue;  // 已关闭 round 的旧 delta 丢弃
+            const kind = tokens[0]?.kind || 'decision_draft';
+            const field = kind === 'answer_draft' ? 'draft' : 'live_reason';
+            const stepKind = kind === 'answer_draft' ? 'answer' : 'decision';
+            // answer_draft: 答案只有一个步骤，复用已有 answer item（LLM 可能跨多轮生成答案文本，round_id 不同但应归并）
+            // decision_draft: 每个决策是独立步骤，按 round_id 归并
+            let idx = stepKind === 'answer'
+              ? ts.findIndex((t: any) => t.kind === 'answer')
+              : ts.findIndex((t: any) => t.round_id === roundId);
+            if (idx === -1) {
+              ts.push({ task: stepKind === 'answer' ? '答案生成' : '', strategy: 'free_plan',
+                       kind: stepKind, phase: 'drafting', round_id: roundId, [field]: '' });
+              idx = ts.length - 1;
+            }
+            const combined = tokens.map((t: { kind: string; text: string }) => t.text).join('');
+            ts[idx] = { ...ts[idx], [field]: (ts[idx][field] || '') + combined };
+          }
+          messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts };
+          break;
+        }
+      }
+      return { ...s, messages };
+    }));
   };
 
   const handleSubmit = async () => {
@@ -395,6 +823,11 @@ const FreePlanChat: React.FC = () => {
     const wasStopped = stoppedRef.current;
     stoppedRef.current = false;
     abortControllerRef.current = null;
+    // v3.4: SSE 结束/停止时冲刷残留 token + 清理 rAF + 清空缓冲
+    flushTokens();
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
+    tokenBufRef.current.clear();
+    closedRoundsRef.current.clear();
     if (wasStopped) {
       setStatus('ready');
       return;
@@ -404,26 +837,35 @@ const FreePlanChat: React.FC = () => {
     applyResponse(sid, resp, userText);
   };
 
-  const handleRecommendationSelect = (rec: any) => {
+  const handleRecommendationSelect = useCallback((rec: any) => {
     setQuestion(rec.shortcut || rec.label);
-  };
+  }, [setQuestion]);
+
+  // 稳定引用：避免内联箭头导致消息列表项 React.memo 失效
+  const handleDeleteMessage = useCallback(
+    (msgId: string) => deleteMessage(activeSessionId, msgId),
+    [activeSessionId, deleteMessage],
+  );
 
   const CONTENT_WIDTH = 1200;
 
-  // 输入卡片（两种状态共用）
+  // 输入卡片（两种状态共用；B2 美化：S3 阴影 + 聚焦主色描边环 + 渐变发送钮）
   const inputCard = (
-    <div style={{
-      borderRadius: 12,
-      border: `1px solid var(--color-border)`,
-      background: 'var(--bg-content)',
-      overflow: 'hidden',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-    }}>
+    <div
+      className="dal-composer"
+      style={{
+        borderRadius: 12,
+        border: '1px solid var(--color-border)',
+        background: 'var(--bg-content)',
+        overflow: 'hidden',
+        boxShadow: tokens.elevation.s3,
+      }}
+    >
       <Input.TextArea
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         rows={2}
-        placeholder="输入要探查的问题..."
+        placeholder="想问什么数据？"
         autoSize={{ minRows: 2, maxRows: 6 }}
         bordered={false}
         onPressEnter={(e) => {
@@ -432,10 +874,9 @@ const FreePlanChat: React.FC = () => {
             if (!isBusy && question.trim()) handleSubmit();
           }
         }}
-        style={{ padding: '12px 16px 4px', resize: 'none' }}
+        style={{ padding: '14px 16px 4px', resize: 'none' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 8px 6px 12px' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Shift+Enter 换行</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Select
             size="small"
@@ -448,10 +889,30 @@ const FreePlanChat: React.FC = () => {
             options={llmConnections.map((c: any) => ({ label: c.name || c.model_name || c.id, value: c.id }))}
             popupMatchSelectWidth={180}
           />
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Shift+Enter 换行</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isBusy ? (
-            <Button type="primary" danger size="small" shape="circle" icon={<StopOutlined />} onClick={handleStop} />
+            /* P3 修正：Stop 白底红边（规格），非 antd danger 实心 */
+            <Button
+              size="small"
+              icon={<StopOutlined />}
+              onClick={handleStop}
+              aria-label="停止生成"
+              style={{ background: 'var(--bg-content)', borderColor: tokens.colors.error, color: tokens.colors.error, width: 32, height: 32, borderRadius: tokens.radius.card }}
+            />
           ) : (
-            <Button type="primary" size="small" shape="circle" icon={<PlayCircleOutlined />} onClick={handleSubmit} disabled={!question.trim()} />
+            /* P3 修正：发送钮方形 32 / r8（规格），渐变填充保持 */
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              className="dal-send-btn"
+              onClick={handleSubmit}
+              disabled={!question.trim()}
+              aria-label="发送"
+              style={{ background: tokens.brandGradient, borderColor: 'transparent', width: 32, height: 32, borderRadius: tokens.radius.card }}
+            />
           )}
         </div>
       </div>
@@ -460,11 +921,25 @@ const FreePlanChat: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      {/* 受控 Skill 问答平台 v2：路由模拟器（预览确定性路由 + 五张业务卡） */}
+      <div style={{ maxWidth: CONTENT_WIDTH, width: '100%', margin: '0 auto', padding: '12px 24px 0' }}>
+        <RouteSimulator />
+      </div>
       {hasMessages ? (
         /* 有消息：消息列表 + 底部输入框 */
         <>
-          <div ref={chatContainerRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative' }}>
             <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '16px 24px' }}>
+              {(activeSession?.messages?.length || 0) > 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <Popconfirm title="清空当前会话所有消息？" okText="清空" cancelText="取消" onConfirm={async () => {
+                    const ok = await clearMessages(activeSessionId);
+                    if (!ok) message.warning('服务端记忆清理失败，当前会话未清空，下次问答可能仍受旧上下文影响');
+                  }}>
+                    <Button size="small" type="text" icon={<ClearOutlined />} style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>清空会话</Button>
+                  </Popconfirm>
+                </div>
+              ) : null}
               <ConversationMessageList
                 messages={activeSession?.messages || []}
                 sceneConfig={DATA_INTELLIGENCE_SCENE_CONFIG}
@@ -476,39 +951,111 @@ const FreePlanChat: React.FC = () => {
                 liveMetaInfo={activeSession?.liveMetaInfo}
                 confirmedData={confirmed}
                 onSelectRecommendation={handleRecommendationSelect}
+                onDeleteMessage={handleDeleteMessage}
               />
             </div>
           </div>
+          {/* B2 美化：滚动到底圆钮（不在底部时浮出，S2 阴影） */}
+          {showScrollDown ? (
+            <div style={{ position: 'relative', flexShrink: 0, height: 0 }}>
+              <Button
+                shape="circle"
+                icon={<ArrowDownOutlined />}
+                onClick={scrollToBottom}
+                aria-label="滚动到底部"
+                style={{
+                  position: 'absolute', right: 28, bottom: 18, zIndex: 20,
+                  boxShadow: tokens.elevation.s2, background: 'var(--bg-content)',
+                  color: tokens.colors.primary, borderColor: tokens.colors.border,
+                }}
+              />
+            </div>
+          ) : null}
           <div style={{ flexShrink: 0, maxWidth: CONTENT_WIDTH, width: '100%', margin: '0 auto', padding: '0 24px 16px' }}>
             {inputCard}
           </div>
         </>
       ) : (
-        /* 欢迎页：欢迎语 + 示例 + 输入框，整体上下居中 */
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-          <div style={{ textAlign: 'center', marginBottom: 24, maxWidth: 600 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
-            <Text strong style={{ fontSize: 20, display: 'block', marginBottom: 8 }}>
-              欢迎探索数据资产
-            </Text>
-            <Text type="secondary" style={{ fontSize: 14, lineHeight: 1.8 }}>
-              当前纳管 <b style={{ color: 'var(--text-primary)' }}>{stats.master}</b> 主数据实体、<b style={{ color: 'var(--text-primary)' }}>{stats.business}</b> 业务实体、<b style={{ color: 'var(--text-primary)' }}>{stats.relation}</b> 关系，请开始你的畅游吧
-            </Text>
+        /* 欢迎页（B2 美化）：渐变主视觉 + 统计胶囊 + 2×2 建议卡 + 悬浮 composer */
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: 24, overflowY: 'auto' }}>
+          {/* 主视觉：display 字号 + brand-gradient 渐变文字 */}
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div
+              style={{
+                fontSize: tokens.fontSize.display,
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                background: tokens.brandGradient,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                color: 'transparent',
+                lineHeight: 1.3,
+              }}
+            >
+              数据资产探查
+            </div>
+            <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-tertiary)' }}>
+              一句话问数 · 受控执行 · 全程可审计
+            </div>
           </div>
-          <Space wrap size="small" style={{ justifyContent: 'center', maxWidth: 600, marginBottom: 24 }}>
-            {FREEPLAN_EXAMPLE_QUERIES.map((item) => (
-              <Button
-                key={`example-${item}`}
-                size="small"
-                onClick={() => setQuestion(item)}
-                style={{ borderRadius: 16, fontSize: 12, color: 'var(--text-secondary)', borderColor: 'var(--color-border)' }}
+
+          {/* 统计胶囊（S1 卡：图标 + tabular-nums 数字 + 12px 说明） */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {[
+              { label: '主数据实体', value: stats.master, icon: <DatabaseOutlined />, color: tokens.colors.primary },
+              { label: '业务实体', value: stats.business, icon: <ApartmentOutlined />, color: tokens.colors.ai },
+              { label: '关系', value: stats.relation, icon: <ShareAltOutlined />, color: tokens.colors.info },
+            ].map((c) => (
+              <div
+                key={c.label}
+                className="dal-stat-capsule"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 18px', borderRadius: tokens.radius.card,
+                  background: 'var(--bg-content)',
+                  border: `1px solid ${tokens.colors.border}`,
+                  boxShadow: tokens.elevation.s1,
+                }}
               >
-                {item}
-              </Button>
+                <span style={{ color: c.color, fontSize: 16, display: 'inline-flex' }}>{c.icon}</span>
+                <div>
+                  <div className="dal-num" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{c.value}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{c.label}</div>
+                </div>
+              </div>
             ))}
-          </Space>
-          <div style={{ width: '100%', maxWidth: 800 }}>
+          </div>
+
+          {/* 悬浮 composer（S3 阴影 + 聚焦主色描边环；规格 maxWidth 720） */}
+          <div style={{ width: '100%', maxWidth: 720, marginBottom: 24 }}>
             {inputCard}
+          </div>
+
+          {/* 2×2 建议卡（带图标，hover 抬升 S2；规格 maxWidth 720） */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: 720 }}>
+            {FREEPLAN_EXAMPLE_QUERIES.map((item, i) => (
+              <div
+                key={`suggest-${i}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setQuestion(item)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuestion(item); } }}
+                className="dal-suggest-card"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px 14px', borderRadius: tokens.radius.card,
+                  background: 'var(--bg-content)',
+                  border: `1px solid ${tokens.colors.border}`,
+                  boxShadow: tokens.elevation.s1,
+                  cursor: 'pointer',
+                  transition: `box-shadow ${tokens.motion.duration.fast}ms ${tokens.motion.easing.enter}`,
+                }}
+              >
+                <span style={{ color: tokens.colors.primary, fontSize: 15, display: 'inline-flex' }}>{FREEPLAN_SUGGEST_ICONS[i]}</span>
+                <Text style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{item}</Text>
+              </div>
+            ))}
           </div>
         </div>
       )}

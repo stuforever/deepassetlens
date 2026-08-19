@@ -49,6 +49,25 @@ export type FinalAnswerStructured = {
   recommendations?: string[];
 };
 
+/** 统一最终交付协议：关键发现（指标卡） */
+export type FinalFinding = {
+  label?: string;
+  value?: string;
+  level?: 'info' | 'success' | 'warning' | 'error';
+};
+
+/** 统一最终交付协议：标题/摘要/发现/告警/推荐（表格数据仍走 sql_result） */
+export type FinalDelivery = {
+  answer_type?: 'relationship_list' | 'overload_analysis' | 'data_list' | 'aggregation' | 'knowledge' | 'empty' | 'error';
+  title?: string;
+  summary?: string[];
+  findings?: FinalFinding[];
+  warnings?: string[];
+  recommendations?: string[];
+  row_count?: number;
+  result_available_for_ui?: boolean;
+};
+
 export type ChatMessagePayload = {
   text?: string;
   live_text?: string;
@@ -62,12 +81,32 @@ export type ChatMessagePayload = {
   thinkStream?: any[];
   final_answer?: string;
   final_answer_structured?: FinalAnswerStructured | null;
+  final_delivery?: FinalDelivery | null;   // 统一最终交付协议（标题/摘要/发现/告警/推荐/row_count）
+  response_format_degraded?: boolean;  // R3: 结构化输出降级标识（GLM 不兼容时为 true）
   recommendations?: Array<{ label: string; shortcut?: string }>;
   completedTasks?: string[];
   confirmed?: Record<string, any>;
   sqlExecuted?: boolean;
-  sql_result?: { columns?: string[]; rows?: any[]; row_count?: number; sql?: string } | null;
+  sql_result?: { columns?: string[]; rows?: any[]; row_count?: number; sql?: string; returned_rows?: number; preview_row_count?: number; is_preview?: boolean; result_available_for_ui?: boolean } | null;
   traceLogs?: any[];
+  /** 意图理解卡（P0）：执行前推 intent，执行后补 filter_check，置顶让用户核对 AI 是否听懂 */
+  intent?: { task: string; entities?: string[]; filters: Array<{ desc: string; field: string; values: string[] }> } | null;
+  filter_check?: { sql_where: string; row_count: number } | null;
+  /** 受控 Skill 问答平台 v2：确定性路由结果 + 受控执行契约（五张业务卡数据源） */
+  route?: {
+    route_type: string; skill_id?: string; workflow_step?: string; matched_rules?: string[];
+    route_reason?: string; confidence?: string; fallback_level?: string;
+    candidates?: Array<{ skill_id: string; description?: string }>; priority?: number;
+  } | null;
+  contract?: {
+    run_id?: string; skill_id: string; skill_version?: string; workflow_step: string;
+    allowed_tools?: string[]; forbidden_tools?: string[]; template_ids?: string[];
+    scope?: Record<string, any>; selected_engine?: string | null; engine_reason?: string | null;
+    output_mode?: string; stop_when?: string[]; route_reason?: string; route_type?: string;
+  } | null;
+  /** 评审 P2-2：策略事件（policy.rejected）与模板事件（template.bound/drift）追加去重累积 */
+  policy_events?: Array<{ kind?: string; tool_call_id?: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean; detail?: string }>;
+  template_events?: Array<{ kind?: string; detail?: string; structure_match?: boolean; template_id?: string }>;
 };
 
 export type ChatMessage = {

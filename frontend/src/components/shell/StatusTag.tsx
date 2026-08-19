@@ -23,11 +23,13 @@ interface StatusTagProps {
   text?: React.ReactNode;
   children?: React.ReactNode;
   dot?: boolean;
+  /** B4 增强：进行中脉冲（dot 色点呼吸，配合 CSS .dal-status-pulse） */
+  pulse?: boolean;
   icon?: React.ReactNode;
   style?: React.CSSProperties;
 }
 
-const StatusTag: React.FC<StatusTagProps> = ({ preset = 'default', text, children, dot, icon, style }) => {
+const StatusTag: React.FC<StatusTagProps> = ({ preset = 'default', text, children, dot, pulse, icon, style }) => {
   const m = PRESET_MAP[preset];
   return (
     <Tag
@@ -48,7 +50,10 @@ const StatusTag: React.FC<StatusTagProps> = ({ preset = 'default', text, childre
     >
       {icon ?? null}
       {dot ? (
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: m.color, display: 'inline-block' }} />
+        <span
+          className={pulse ? 'dal-status-pulse' : undefined}
+          style={{ width: 6, height: 6, borderRadius: '50%', background: m.color, display: 'inline-block' }}
+        />
       ) : null}
       {text ?? children}
     </Tag>

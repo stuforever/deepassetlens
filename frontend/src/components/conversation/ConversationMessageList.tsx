@@ -1,11 +1,111 @@
 import React from 'react';
-import { Alert, Card, Skeleton, Space, Spin, Typography } from 'antd';
+import { Alert, Card, Skeleton, Space, Spin, Typography, Popconfirm } from 'antd';
+import { DeleteOutlined } from '@ant-design/icons';
 import ThinkStream from './ThinkStream';
 import FinalAnswer from './FinalAnswer';
 import AssistantCanvas from './AssistantCanvas';
+import ContractCardsPanel from './contractCards/ContractCardsPanel';
 import type { ChatMessage, ConversationCardAction, ConversationSceneConfig } from './types';
 
 const { Text } = Typography;
+
+/**
+ * 单条消息行：React.memo 隔离非末条消息的流式重渲染。
+ * 关键前提（由父级保证）：
+ *   - live 系列 props 只传给末条（isLast），其余行拿 stable undefined；
+ *   - 回调引用稳定（父级 useCallback），避免 memo 失效。
+ */
+const MessageRow = React.memo<{
+  msg: ChatMessage;
+  isLast: boolean;
+  canDelete: boolean;
+  liveMetaInfo?: string;
+  liveFinalAnswer?: string;
+  onSelectRecommendation?: (rec: any) => void;
+  onDeleteMessage?: (msgId: string) => void;
+}>(({ msg, isLast, canDelete, liveMetaInfo, liveFinalAnswer, onSelectRecommendation, onDeleteMessage }) => (
+  <div className="msg-row" style={{ position: 'relative', display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', width: '100%' }}>
+    {canDelete ? (
+      <Popconfirm title="删除该条消息？" okText="删除" cancelText="取消" onConfirm={() => onDeleteMessage!(msg.id)}>
+        <DeleteOutlined className="msg-del" style={{ position: 'absolute', top: 4, right: 4, zIndex: 10, fontSize: 13, color: 'var(--text-tertiary)', cursor: 'pointer', padding: 4 }} />
+      </Popconfirm>
+    ) : null}
+    <Card
+      size="small"
+      bordered={false}
+      style={{
+        width: msg.role === 'user' ? 'min(1200px, 72%)' : '100%',
+        maxWidth: '100%',
+        background: msg.role === 'user' ? 'var(--color-primary-bg)' : 'transparent',
+        boxShadow: 'none',
+      }}
+      title={undefined}
+      bodyStyle={msg.role === 'user' ? { padding: '6px 12px' } : { padding: '0' }}
+    >
+      {msg.role === 'user' ? (
+        /* B2 美化：用户问题 = 左主色竖线 + 文本 + 12px 时间戳，与回答区分 */
+        <div style={{ borderLeft: `3px solid var(--color-primary)`, paddingLeft: 10, width: '100%' }}>
+          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+            {(() => {
+              const m = /(\d{13})/.exec(msg.id || '');
+              if (!m) return '';
+              const d = new Date(Number(m[1]));
+              if (Number.isNaN(d.getTime())) return '';
+              const p = (n: number) => String(n).padStart(2, '0');
+              return `${p(d.getHours())}:${p(d.getMinutes())}`;
+            })()}
+          </div>
+        </div>
+      ) : msg.loading ? (
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          {/* 受控 Skill 问答平台 v2：流式运行中即渲染受控卡片（route/contract 事件一到即显示，默认折叠状态条） */}
+          {(msg.payload?.route || msg.payload?.contract) ? (
+            <ContractCardsPanel
+              route={msg.payload.route}
+              contract={msg.payload.contract}
+              policyEvents={msg.payload.policy_events}
+              templateEvents={msg.payload.template_events}
+            />
+          ) : null}
+          {/* 思考面板：读占位消息自身的 payload，实时渲染 */}
+          {msg.payload?.thinkStream && msg.payload.thinkStream.length > 0 ? (
+            <ThinkStream
+              items={msg.payload.thinkStream}
+              active={true}
+              liveStatus={msg.payload?.live_text}
+              metaInfo={msg.payload?.live_meta}
+            />
+          ) : (
+            <Space>
+              <Spin size="small" />
+              <Text strong>{msg.payload?.live_text || msg.text || '正在思考...'}</Text>
+            </Space>
+          )}
+          {/* 最终答案：token 逐字流式渲染（读占位消息 payload） */}
+          {msg.payload?.finalTokens && msg.payload.finalTokens.length > 0 ? (
+            <FinalAnswer answer="" tokens={msg.payload.finalTokens} isStreaming={true} />
+          ) : null}
+          {msg.payload?.final_answer && (!msg.payload?.finalTokens || msg.payload.finalTokens.length === 0) ? (
+            <FinalAnswer answer={msg.payload.final_answer} tokens={[]} isStreaming={false} />
+          ) : null}
+          {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0) && !msg.payload?.finalTokens?.length && !msg.payload?.final_answer ? (
+            <Skeleton active paragraph={{ rows: 1 }} title={false} />
+          ) : null}
+        </Space>
+      ) : (
+        <AssistantCanvas
+          payload={msg.payload}
+          isLast={isLast}
+          liveMetaInfo={liveMetaInfo}
+          liveFinalAnswer={liveFinalAnswer}
+          onSelectRecommendation={onSelectRecommendation}
+        />
+      )}
+    </Card>
+  </div>
+));
+MessageRow.displayName = 'MessageRow';
 
 const ConversationMessageList: React.FC<{
   messages: ChatMessage[];
@@ -21,20 +121,14 @@ const ConversationMessageList: React.FC<{
   onSelectRecommendation?: (rec: any) => void;
   onExecuteSql?: () => void;
   onEntityClick?: (entityCode: string, entityName?: string) => void;
+  onDeleteMessage?: (msgId: string) => void;
 }> = ({
   messages,
   sceneConfig,
-  loading = false,
-  liveStatus,
-  liveTokens,
   liveFinalAnswer,
-  liveRecommendations,
   liveMetaInfo,
-  confirmedData,
-  onCardAction,
   onSelectRecommendation,
-  onExecuteSql,
-  onEntityClick,
+  onDeleteMessage,
 }) => {
   if (messages.length === 0) {
     return (
@@ -49,63 +143,20 @@ const ConversationMessageList: React.FC<{
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
+      <style>{`.msg-row:hover .msg-del{opacity:1!important}.msg-del{opacity:0.35;transition:opacity .15s}`}</style>
       {messages.map((msg, msgIdx) => {
         const isLast = msgIdx === messages.length - 1;
-
         return (
-          <div key={msg.id} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', width: '100%' }}>
-            <Card
-              size="small"
-              bordered={false}
-              style={{
-                width: msg.role === 'user' ? 'min(1200px, 72%)' : '100%',
-                maxWidth: '100%',
-                background: msg.role === 'user' ? 'var(--color-primary-bg)' : 'transparent',
-                boxShadow: 'none',
-              }}
-              title={msg.role === 'user' ? undefined : (sceneConfig.assistantName || '统一会话助手')}
-              bodyStyle={msg.role === 'user' ? { padding: '6px 12px' } : { padding: '0' }}
-            >
-              {msg.role === 'user' ? (
-                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</div>
-              ) : msg.loading ? (
-                <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                  {/* 思考面板：读占位消息自身的 payload，实时渲染 */}
-                  {msg.payload?.thinkStream && msg.payload.thinkStream.length > 0 ? (
-                    <ThinkStream
-                      items={msg.payload.thinkStream}
-                      active={true}
-                      liveStatus={msg.payload?.live_text}
-                      metaInfo={msg.payload?.live_meta}
-                    />
-                  ) : (
-                    <Space>
-                      <Spin size="small" />
-                      <Text strong>{msg.payload?.live_text || msg.text || '正在思考...'}</Text>
-                    </Space>
-                  )}
-                  {/* 最终答案：token 逐字流式渲染（读占位消息 payload） */}
-                  {msg.payload?.finalTokens && msg.payload.finalTokens.length > 0 ? (
-                    <FinalAnswer answer="" tokens={msg.payload.finalTokens} isStreaming={true} />
-                  ) : null}
-                  {msg.payload?.final_answer && (!msg.payload?.finalTokens || msg.payload.finalTokens.length === 0) ? (
-                    <FinalAnswer answer={msg.payload.final_answer} tokens={[]} isStreaming={false} />
-                  ) : null}
-                  {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0) && !msg.payload?.finalTokens?.length && !msg.payload?.final_answer ? (
-                    <Skeleton active paragraph={{ rows: 1 }} title={false} />
-                  ) : null}
-                </Space>
-              ) : (
-                <AssistantCanvas
-                  payload={msg.payload}
-                  isLast={isLast}
-                  liveMetaInfo={liveMetaInfo}
-                  liveFinalAnswer={liveFinalAnswer}
-                  onSelectRecommendation={onSelectRecommendation}
-                />
-              )}
-            </Card>
-          </div>
+          <MessageRow
+            key={msg.id}
+            msg={msg}
+            isLast={isLast}
+            canDelete={!!(onDeleteMessage && !msg.loading)}
+            liveMetaInfo={isLast ? liveMetaInfo : undefined}
+            liveFinalAnswer={isLast ? liveFinalAnswer : undefined}
+            onSelectRecommendation={onSelectRecommendation}
+            onDeleteMessage={onDeleteMessage}
+          />
         );
       })}
     </Space>

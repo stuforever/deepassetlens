@@ -223,7 +223,7 @@ const Neo4jForceCanvas: React.FC = () => {
         </Space>
       </div>
       <Spin spinning={loading} style={{ position: 'absolute', top: '50%', left: '50%' }} />
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div ref={containerRef} style={{ width: '100%', height: '100%', backgroundColor: 'var(--bg-page)', backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(15,23,42,0.07) 1px, transparent 0)', backgroundSize: '24px 24px' }} />
     </Card>
   );
 };

@@ -32,10 +32,25 @@ export type ThinkItem = {
   process?: any;
   todos?: { content: string; status: string }[];
   detail?: string;  // 工具调用详细日志（kg_api 返回的 log 字段）
-  kind?: 'plan' | 'skill' | 'decision';  // 规划(write_todos) | 技能调用 | 判定决策(LLM推理)
+  kind?: 'plan' | 'skill' | 'decision' | 'draft' | 'answer';  // 规划(write_todos) | 技能调用 | 判定决策(LLM推理) | 答案草稿流式(不进总结) | 最终答案生成(answer_committed)
   result_summary?: string;  // 工具返回的自然语言结论
   input_summary?: string;   // 工具输入参数摘要
   raw_log?: string;         // 原始工具日志（kg_api 返回的 log 字段）
+  draft?: string;           // 最终答案草稿流式(小探思考区, 实时打字; 完成后保留作为推理记录, phase:'done' 时停光标)
+  // v3.4 实时流式字段
+  phase?: 'drafting' | 'committed' | 'running' | 'done' | 'error' | 'rejected' | 'cancelled';  // 单一阶段状态机
+  step_id?: number;         // 步骤序号(前端按 id 区分同名步骤)
+  step_no?: number;
+  tool_name?: string;
+  tool_call_id?: string;
+  round_id?: string;        // LLM 推理轮 id(草稿按 round_id 归并)
+  sql_full?: string;        // execute_sql 完整语句
+  started_at_ms?: number;   // 工具开始执行时间戳(前端算实时耗时)
+  duration_ms?: number;     // 工具完成耗时
+  reject_reason?: string;   // 闸门拒绝原因（范围校验失败等具体原因）
+  candidate_content?: string; // 闸门拒绝时 LLM 实际写的候选内容
+  retry_of_step?: number;   // R1: 补判重试关联的被拒绝步骤号（前端显示"修正#N"）
+  superseded?: boolean;     // R1: 被后续重试取代的 rejected 步骤标记
 };
 
 const STRATEGY_LABEL: Record<string, { label: string; preset: StatusPreset }> = {
@@ -75,24 +90,41 @@ const DotAnimation: React.FC = () => (
   </span>
 );
 
-/* 步骤项：二级展开看动态，完成后可折叠回一级 */
-const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isActive: boolean }> = ({ item, index, isLast, isActive }) => {
-  // 活跃步骤或有内容的已完成步骤都默认展开（reason/process/level/code 等任一非空）
-  // 这样查历史对话时推理详情可见，不需要挨个点开
-  const hasDetail = Boolean(
-    item.reason || item.live_reason || item.process || item.result_status ||
-    item.detail ||
-    (item.level && item.code) || typeof item.candidates_count === 'number'
+/* 实时耗时计时器：工具 running 期间每秒刷新已耗时, started_at_ms 为起点 */
+const LiveTimer: React.FC<{ startedAtMs?: number }> = ({ startedAtMs }) => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!startedAtMs) return;
+    const timer = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(timer);
+  }, [startedAtMs]);
+  if (!startedAtMs) return null;
+  const elapsed = Math.max(0, now - startedAtMs);
+  const secs = (elapsed / 1000).toFixed(1);
+  return (
+    <Text style={{ fontSize: 10, color: tokens.colors.primary, fontFamily: 'Consolas, monospace' }}>
+      {secs}s
+    </Text>
   );
+};
+
+/* 步骤项：一级(标题+状态) / 二级(技术日志)，点击一级展开二级。 */
+const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isActive: boolean }> = ({ item, index, isLast, isActive }) => {
   const [expanded, setExpanded] = useState(false);
   const detailRef = useRef<HTMLDivElement>(null);
 
-  // 步骤详情默认折叠，用户主动点击 ▸ 展开（任意折叠/展开，不自动展开）
-
   const strat = STRATEGY_LABEL[item.strategy || ''] || { label: item.strategy || '未知', preset: 'default' as StatusPreset };
   const isLocked = item.locked === true || item.result_status === 'locked';
+  const isErr = item.result_status === 'error';
+  const isRejected = item.phase === 'rejected' || item.result_status === 'rejected';
+  const isRunning = item.phase === 'running' || item.result_status === 'running';
+  const isDrafting = item.phase === 'drafting';
+  const isInProgress = isRunning || isDrafting;
   const hasProcess = item.process && typeof item.process === 'object' && Object.keys(item.process).length > 0;
   const stepRef = useRef<HTMLDivElement>(null);
+  const _stepNo = item.step_no;
+  const _toolName = item.tool_name;
+  const _durMs = item.duration_ms;
 
   return (
     <div ref={stepRef} style={{ position: 'relative', paddingLeft: 28, paddingBottom: isLast ? 0 : 4 }}>
@@ -106,9 +138,11 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
           plan:     { icon: <FlagOutlined style={{ color: 'var(--bg-content)', fontSize: 10 }} />,  active: '#fa8c16' /* domain color for plan step */, done: '#ffd591' },
           skill:    { icon: <ToolOutlined style={{ color: 'var(--bg-content)', fontSize: 10 }} />,  active: tokens.colors.primary, done: 'var(--border-color)' },
           decision: { icon: <BulbOutlined style={{ color: 'var(--bg-content)', fontSize: 10 }} />,  active: 'var(--color-ai)', done: '#d3adf7' /* 决策完成态浅紫，无对应 token */ },
+          answer:   { icon: <BulbOutlined style={{ color: 'var(--bg-content)', fontSize: 10 }} />,  active: 'var(--color-ai)', done: '#d3adf7' },
         };
         const ks = KIND_ICON[item.kind || 'skill'] || KIND_ICON.skill;
-        const bg = isLocked ? 'var(--color-error)' : isActive ? ks.active : ks.done;
+        // 进行中(running/drafting)用 active 色, 拒绝用 error 色, 否则按 isActive
+        const bg = isLocked ? 'var(--color-error)' : isRejected ? 'var(--color-warning, #faad14)' : (isActive || isInProgress) ? ks.active : ks.done;
         const icon = isLocked ? <CheckCircleFilled style={{ color: 'var(--bg-content)', fontSize: 12 }} /> : ks.icon;
         return (
           <div style={{ position: 'absolute', left: 0, top: 2, width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, flexShrink: 0 }}>
@@ -122,32 +156,80 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
         onClick={() => setExpanded(!expanded)}
         style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minHeight: 24, marginBottom: expanded ? 6 : 0 }}
       >
+        {_stepNo ? <Text style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', fontFamily: 'Consolas, monospace' }}>#{_stepNo}</Text> : null}
         <Text style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{item.task || ''}</Text>
+        {/* 一级摘要：running 显示"正在执行...", drafting 显示"判定中...", rejected 显示失败原因摘要; 否则 result_summary */}
+        {isRunning ? (
+          <Text style={{ fontSize: 12, color: tokens.colors.primary, flex: 1, minWidth: 0 }}>- 正在执行...<DotAnimation /></Text>
+        ) : isDrafting ? (
+          <Text style={{ fontSize: 12, color: 'var(--color-ai)', flex: 1, minWidth: 0 }}>- 判定中...<DotAnimation /></Text>
+        ) : isRejected ? (
+          <Text style={{ fontSize: 12, color: 'var(--color-warning, #faad14)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            - {(item.reject_reason || item.result_summary || '判定需补充信息·补判中').slice(0, 60)}
+          </Text>
+        ) : item.result_summary ? (
+          <Text style={{ fontSize: 12, color: isErr ? 'var(--color-error)' : 'var(--color-success)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>- {item.result_summary}</Text>
+        ) : null}
+        {/* R1: 修正后重试标记--关联到被拒绝的步骤 */}
+        {item.retry_of_step ? (
+          <Text style={{ fontSize: 10, color: 'var(--color-warning, #faad14)', fontStyle: 'italic' }}>↻ 修正#{item.retry_of_step}</Text>
+        ) : null}
         <StatusTag preset={strat.preset} style={{ margin: 0, fontSize: 11 }}>{strat.label}</StatusTag>
-        {item.action ? <Text type="secondary" style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.action}</Text> : null}
-        {isActive ? <DotAnimation /> : null}
+        {item.action ? <Text type="secondary" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.action}</Text> : null}
+        {_toolName ? <Text code style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{_toolName}</Text> : null}
+        {/* 耗时：running 显示实时计时器, 完成后显示 duration_ms */}
+        {isRunning && item.started_at_ms ? (
+          <LiveTimer startedAtMs={item.started_at_ms} />
+        ) : _durMs != null ? (
+          <Text style={{ fontSize: 10, color: 'var(--text-tertiary)', fontFamily: 'Consolas, monospace' }}>{_durMs >= 1000 ? `${(_durMs / 1000).toFixed(1)}s` : `${_durMs}ms`}</Text>
+        ) : null}
         <Text style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{expanded ? '▾' : '▸'}</Text>
       </div>
+
+      {/* v3.5: 折叠态判断文本预览 -- 无需展开就能看懂"为什么进入下一步"（2行截断） */}
+      {!expanded && item.live_reason ? (
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 2, paddingLeft: 0,
+                     overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any }}>
+          {item.live_reason.replace(/^【下一步判断】\s*\n?/, '').trim()}
+        </div>
+      ) : null}
 
       {/* 二级展开内容：看二级动态，自动滚动跟随最新 */}
       {expanded ? (
         <div ref={detailRef} style={{ paddingBottom: 8 }}>
-          {/* LLM 实时流式推理（live_reason）：逐 token 显示，光标闪烁，紫色主题 */}
+          {/* 答案草稿流式（draft）：最终答案实时打字，紫色主题，带光标（完成后停光标） */}
+          {item.draft ? (
+            <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai)' }}><BulbOutlined /> 答案生成：</Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
+                {item.draft}
+                {item.phase !== 'done' ? (
+                  <span style={{ display: 'inline-block', width: 6, height: 12, background: 'var(--color-ai)', marginLeft: 2, animation: 'ts-draft-cursor 1s step-end infinite', verticalAlign: 'middle' }} />
+                ) : null}
+              </Text>
+              <style>{`@keyframes ts-draft-cursor { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }`}</style>
+            </div>
+          ) : null}
+
+          {/* LLM 实时流式推理（live_reason）：模型同轮"下一步判断"(已知/判断/因此)，紫色主题 */}
           {item.live_reason ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
-              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai)' }}><BulbOutlined /> 思考决策：</Text>
+              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai)' }}><BulbOutlined /> 为什么执行这一步：</Text>
               <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
                 {item.live_reason}
-                <span style={{ display: 'inline-block', width: 6, height: 12, background: 'var(--color-ai)', marginLeft: 2, animation: 'ts-cursor 1s step-end infinite', verticalAlign: 'middle' }} />
+                {isInProgress ? (
+                  <span style={{ display: 'inline-block', width: 6, height: 12, background: 'var(--color-ai)', marginLeft: 2, animation: 'ts-cursor 1s step-end infinite', verticalAlign: 'middle' }} />
+                ) : null}
               </Text>
               <style>{`@keyframes ts-cursor { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }`}</style>
             </div>
           ) : null}
 
+          {/* 技术明细(思考过程/技能执行/SQL/结果)，展开即全部可见 */}
           {/* LLM 思考过程（reason），紫色主题 */}
           {item.reason ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
-              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai)' }}><BulbOutlined /> LLM 推理：</Text>
+              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai)' }}><BulbOutlined /> 思考过程：</Text>
               <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
                 {item.reason}
               </Text>
@@ -169,12 +251,75 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
             </div>
           ) : null}
 
+          {/* 完整 SQL（sql_full）：execute_sql 时后端推送的完整语句, 可复制, 等宽字体折叠 */}
+          {item.sql_full ? (
+            <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: 600, color: tokens.colors.primary }}><ToolOutlined /> 执行SQL：</Text>
+                <Text copyable={{ text: item.sql_full }} style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>复制</Text>
+              </div>
+              <pre style={{
+                margin: 0, padding: 8, fontSize: 11, lineHeight: 1.5, maxHeight: 200, overflow: 'auto',
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-primary)',
+                background: 'var(--bg-content)', borderRadius: 4,
+              }}>
+{item.sql_full}
+              </pre>
+            </div>
+          ) : null}
+
+          {/* 步骤结果表（sql_result）：该步 execute_sql 返回的数据, 前10行预览 + 行数 */}
+          {(() => {
+            const sr = (item as any).sql_result;
+            if (!sr || !sr.columns || !sr.columns.length) return null;
+            const cols = sr.columns.slice(0, 6);
+            const previewRows = (sr.rows || []).slice(0, 10);
+            return (
+              <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-success)' }}>返回 {sr.row_count || 0} 行{sr.row_count > 10 ? '（预览前10行）' : ''}：</Text>
+                <div style={{ marginTop: 4, overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
+                    <thead>
+                      <tr>{cols.map((c: string, i: number) => (<th key={i} style={{ border: '1px solid var(--border-color)', padding: '3px 6px', background: 'var(--bg-content)', textAlign: 'left', whiteSpace: 'nowrap' }}>{c}</th>))}</tr>
+                    </thead>
+                    <tbody>
+                      {previewRows.map((r: any[], i: number) => (
+                        <tr key={i}>{cols.map((c: string, j: number) => (<td key={j} style={{ border: '1px solid var(--border-color)', padding: '3px 6px', whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(r[j] ?? '')}</td>))}</tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 结果结论（result_summary）：绿色主题，自然语言结论 */}
           {item.result_summary ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
-              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-success)' }}>获取结果：</Text>
+              <Text style={{ fontSize: 11, fontWeight: 600, color: isRejected ? 'var(--color-warning, #faad14)' : 'var(--color-success)' }}>{isRejected ? '判定结果：' : '获取结果：'}</Text>
               <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
                 {item.result_summary}
+              </Text>
+            </div>
+          ) : null}
+
+          {/* 拒绝原因（reject_reason）：警告色，闸门给出的具体原因 */}
+          {isRejected && item.reject_reason ? (
+            <div style={{ marginBottom: 6, padding: '8px 10px', background: 'rgba(250, 173, 20, 0.08)', borderRadius: 6, border: '1px solid rgba(250, 173, 20, 0.2)' }}>
+              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-warning, #faad14)' }}>拒绝原因：</Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
+                {item.reject_reason}
+              </Text>
+            </div>
+          ) : null}
+
+          {/* 候选内容（candidate_content）：紫色主题，LLM 实际写的被拒内容 */}
+          {isRejected && item.candidate_content ? (
+            <div style={{ marginBottom: 6, padding: '8px 10px', background: 'rgba(114, 46, 209, 0.06)', borderRadius: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai, #722ed1)' }}>候选内容（被拒）：</Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
+                {item.candidate_content}
               </Text>
             </div>
           ) : null}
@@ -304,40 +449,30 @@ const ThinkStream: React.FC<{
   active?: boolean;
   liveStatus?: string;
   metaInfo?: string;
-}> = ({ items, active = false, liveStatus, metaInfo }) => {
-  // 折叠策略：
-  // - active=true（当前正在流式）→ 默认展开，让用户看到实时推理
-  // - active=false（历史消息）→ 默认折叠，避免历史会话信息过载
-  // 用户可手动点击展开/折叠
-  const [expanded, setExpanded] = useState(false);
+  traces?: any[];
+}> = ({ items, active = false, liveStatus, metaInfo, traces }) => {
+  // 点击步骤展开/折叠，展开即看全部详细日志（思考过程/技能执行/SQL/结果）
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastStepRef = useRef<HTMLDivElement>(null);
 
-  // 始终折叠：用户主动点击 ▾ 才展开，不因 active 自动展开
-
-  // 自动滚动到最新内容（折叠态和展开态都滚）
+  // 自动滚动到最新内容
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [items, liveStatus, expanded]);
+  }, [items, liveStatus]);
 
   if (!items || items.length === 0 && !liveStatus) return null;
 
-  const title = active ? '数据助手 正在定位数据...' : '数据助手 已准备好答案';
+  const title = active ? '小探 正在定位数据...' : '小探 已准备好答案';
   const meta = metaInfo || (active
     ? `正在推理 · 已定位 ${items.length} 步`
     : `推理完成 · 定位 ${items.length} 步`);
 
   return (
-    <div style={{
-      marginBottom: 8,
-    }}>
-      {/* 头部 */}
-      <div
-        onClick={() => setExpanded(!expanded)}
-        style={{ padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}
-      >
+    <div style={{ marginBottom: 8 }}>
+      {/* 头部(只显示标题) */}
+      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <EyeIcon spinning={active} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -346,37 +481,43 @@ const ThinkStream: React.FC<{
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>{meta}</div>
         </div>
-        <Text style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>{expanded ? '▴' : '▾'}</Text>
       </div>
 
-      {/* 内容区：固定高度 + 内部滚动 + 自动定位最新 */}
-      <div
-        ref={scrollRef}
-        style={{
-          padding: '4px 14px 12px 34px',
-        }}
-      >
-        {!expanded ? (
-          // 折叠态：只头部入口一行；内容区仅流式中显示 liveStatus
-          liveStatus ? (
-            <div ref={lastStepRef} style={{ paddingBottom: 4 }}>
+      {/* 步骤列表(始终可见, 两级: 一级标题+状态 / 二级技术日志) */}
+      <div ref={scrollRef} style={{ padding: '4px 14px 12px 34px' }}>
+        <div ref={lastStepRef}>
+          {items.map((item, idx) => (
+            <StepItem
+              key={(item.tool_call_id || (item.step_id != null ? `s${item.step_id}` : '') || item.round_id || idx) as any}
+              item={item}
+              index={idx}
+              isLast={idx === items.length - 1}
+              isActive={active && idx === items.length - 1}
+            />
+          ))}
+          {/* 执行轨迹(trace) */}
+          {traces && traces.length > 0 ? (
+            <details style={{ marginTop: 8, paddingLeft: 0 }}>
+              <summary style={{ fontSize: 11, color: 'var(--text-tertiary)', cursor: 'pointer', padding: '4px 0', fontWeight: 600 }}>🔎 执行轨迹（{traces.length} 条）</summary>
+              <div style={{ marginTop: 4 }}>
+                {traces.map((t, i) => (
+                  <div key={i} style={{ fontSize: 11, lineHeight: 1.7, padding: '2px 0 2px 8px', borderLeft: '2px solid var(--border-color)', marginBottom: 2 }}>
+                    <Text style={{ fontWeight: 600, color: tokens.colors.primary }}>{t.node || ''}</Text>
+                    {t.status ? <Text type="secondary" style={{ margin: '0 4px' }}>· {t.status}</Text> : null}
+                    {typeof t.row_count === 'number' ? <Text style={{ color: 'var(--color-success)' }}>· {t.row_count} 行</Text> : null}
+                    {t.l2_name ? <Text type="secondary" style={{ marginLeft: 4 }}>· {t.l2_name}</Text> : null}
+                    {t.detail ? <Text type="secondary" style={{ display: 'block', color: 'var(--text-tertiary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{t.detail}</Text> : null}
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          {liveStatus ? (
+            <div style={{ paddingBottom: 4, marginTop: 2 }}>
               <Text style={{ fontSize: 12, color: tokens.colors.primary }}>{liveStatus}</Text>
             </div>
-          ) : null
-        ) : (
-          // 展开态：全部步骤时间线，自动滚动到最新
-          <div ref={lastStepRef}>
-            {items.map((item, idx) => (
-              <StepItem
-                key={idx}
-                item={item}
-                index={idx}
-                isLast={idx === items.length - 1}
-                isActive={active && idx === items.length - 1}
-              />
-            ))}
-          </div>
-        )}
+          ) : null}
+        </div>
       </div>
 
       <style>{`
