@@ -24,6 +24,8 @@ GENERIC_ALLOWED_TOOLS = frozenset({
     "search_entities", "search_concepts", "get_entity_relations", "list_tables",
     # 校验类（只读）
     "validate_attributes", "fetch_join_expr", "validate_safe_sql",
+    # 取样类（只读，G3：分类/状态/类型列写 WHERE 前先取真实枚举值）
+    "sample_column_values",
     # 源模式确认
     "get_entity_source_mode", "batch_entity_source_mode",
     # 执行类（受 validate_safe_sql / ScopeChecker / 引擎锁定闸门保护）

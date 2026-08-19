@@ -130,6 +130,7 @@ _SQL_FLOW_RULES = """
    - 用户问"里程碑"→ 选 entity_en_name=Milestone
    - 用户问"状态"→ 选 entity_en_name=PsStatus
 4. 调 validate_attributes 校验属性 code
+   **枚举列取样（G3）**：拼 WHERE/GROUP BY 前，对分类/状态/类型/枚举类列先调 sample_column_values(entity_code, column) 查真实枚举值+频次，禁止凭经验猜测（如「状态」值域），按 TOP 值选择过滤口径。
 5. 如需跨表：调 fetch_join_expr 查 JOIN 字段
 6. 调 get_entity_source_mode(entity_code) 确认数据源模式，按模式选执行工具（铁律：模式锁定后不可切换）：
    - api_integration -> execute_entity_api(entity_code, filters)（多源API联邦SQL，ES等多源自动JOIN，WHERE下推，返回 columns+rows）
@@ -675,11 +676,15 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     # CompositeBackend: /skills/ 路由到只读 FilesystemBackend（virtual_mode 防目录穿越），其他走 StateBackend
     # 安全原则（P0 修复）：原生 SkillsMiddleware 自动发现 SKILL.md frontmatter，Agent 按需 read_file 子文件，
     # 不再需要 data_intelligence.py 手工枚举 + 注入；FilesystemBackend 限制只能读技能目录。
+    # M2（融合设计 §4.4）：/memory/ 路由到只读 FilesystemBackend（data/memory），供 MemoryMiddleware
+    # 常驻纪律 AGENTS.md（全局长期纪律，运营可改文件；职责边界=动态系统提示仍由 _build_dynamic_system_prompt 承担）。
     _skills_root = _Path(__file__).resolve().parent.parent.parent / "data" / "skills"
     _skills_backend = FilesystemBackend(root_dir=str(_skills_root), virtual_mode=True)
+    _memory_root = _Path(__file__).resolve().parent.parent.parent / "data" / "memory"
+    _memory_backend = FilesystemBackend(root_dir=str(_memory_root), virtual_mode=True)
     backend = CompositeBackend(
         default=StateBackend(),
-        routes={"/skills/": _skills_backend},
+        routes={"/skills/": _skills_backend, "/memory/": _memory_backend},
     )
     # 权限规则（按序匹配，首条命中生效，无命中默认允许）：
     #   1. 允许读 /skills/**（技能文件）
@@ -795,6 +800,7 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
             backend=backend,
             permissions=permissions,
             skills=["/skills/"],
+            memory=["/memory/AGENTS.md"],  # M2: 常驻纪律（MemoryMiddleware 框架自动装配）
             middleware=middleware_list,
         )
 

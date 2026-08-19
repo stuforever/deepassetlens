@@ -1,11 +1,11 @@
-"""tupu MCP Server - 把 kg_api 的 16 个业务工具暴露为标准 MCP 工具。
+"""tupu MCP Server - 把 kg_api 的 17 个业务工具暴露为标准 MCP 工具。
 
 架构：
   deepagent(MCP client) ──┐
-  外部 client(zcode/Claude)──┤── SSE /mcp/sse ── FastMCP(16 tool) ── dispatch_kg_action ── app/api/kg_api.py
+  外部 client(zcode/Claude)──┤── SSE /mcp/sse ── FastMCP(17 tool) ── dispatch_kg_action ── app/api/kg_api.py
 
   - 工具和 deepagent 解耦：deepagent 不再用 @tool，改 MCP client 加载
-  - 16 个 tool 单一职责（vs 原 kg_api 一个工具 16 个 action）
+  - 17 个 tool 单一职责（vs 原 kg_api 一个工具 16 个 action）
   - 复用 dispatch_kg_action（业务逻辑单一源）
   - 统一 SSE 传输（内外都用 http://127.0.0.1:28000/mcp/sse，端口由 __start_8000.py 启动）
 """
@@ -144,6 +144,14 @@ def execute_doris_sql(entity_code: str = "", sql: str = "", filters: dict = {}) 
     仅当对象未配 integration_sql 时才传 sql 自建，且 sql 必须用 3 段命名 catalog.db.table（否则报 No database selected）。
     """
     return dispatch_kg_action("execute_doris_sql", {"entity_code": entity_code, "sql": sql, "filters": filters or {}})
+
+
+@mcp.tool()
+def sample_column_values(entity_code: str, column: str, limit: int = 50) -> dict:
+    """取实体某列 distinct 值+频次（对分类/状态/类型列写 WHERE/GROUP BY 前必查，防枚举值猜测）。
+    返回 {values:[{value,count}], null_count, total_rows, source_mode}。结果缓存 10 分钟。"""
+    return dispatch_kg_action("sample_column_values", {
+        "entity_code": entity_code, "column": column, "limit": limit})
 
 
 # ---------------------------------------------------------------------------

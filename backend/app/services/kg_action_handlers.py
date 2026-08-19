@@ -537,6 +537,137 @@ def _kg_execute_doris_sql(body: dict, _ts: str) -> dict:
         _err["log"] = f"[{_ts}] Doris查询异常：{e}"
         return _err
 
+# ============== G3（融合设计 §4.2）：列值取样 ==============
+import re as _re_sample
+
+_SAMPLE_TTL_SECONDS = 600
+_SAMPLE_CACHE: dict = {}  # (entity_code, column) -> (ts, result)；进程内 10 分钟缓存
+
+def _kg_sample_column_values(body: dict, _ts: str) -> dict:
+    """G3: 取实体指定列 distinct 值+频次（分类/状态/类型列写 WHERE/GROUP BY 前必查，防枚举值猜测）。
+
+    路由到三引擎（复用 execute_sql 的实体解析/引擎锁定逻辑）：
+      - physical_table   -> 物理直连，GROUP BY 取样
+      - sql_integration  -> Doris 整合，对 integration_sql 子查询取样（无需猜 catalog.db.table 三段命名）
+      - api_integration  -> 不支持列取样，优雅降级（建议 execute_entity_api 直查）
+    进程内 10 分钟缓存。返回 {values:[{value,count}], null_count, total_rows, source_mode}。
+    """
+    from datetime import datetime as _dt
+    entity_code = (body.get("entity_code") or "").strip()
+    column = (body.get("column") or "").strip()
+    try:
+        limit = int(body.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(limit, 200))
+    if not entity_code or not column:
+        return {"error": "缺少 entity_code 或 column", "log": f"[{_ts}] 取样失败：缺参"}
+    # 列名安全校验：仅物理标识符（防 SQL 注入；中文列名/属性名请先用 validate_attributes 取真实 code）
+    if not _re_sample.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", column):
+        return {"error": f"列名非法（仅支持英文标识符，中文列名请先 validate_attributes 取真实 code）: {column}",
+                "log": f"[{_ts}] 取样失败：列名非法 {column}"}
+    # 进程内 10 分钟缓存
+    _now = _dt.now().timestamp()
+    _hit = _SAMPLE_CACHE.get((entity_code, column))
+    if _hit and (_now - _hit[0]) < _SAMPLE_TTL_SECONDS:
+        _cached = dict(_hit[1])
+        _cached["log"] = f"[{_ts}] 取样命中缓存（10 分钟 TTL）"
+        return _cached
+    # 解析实体 -> 物理表 / source_mode / 数据源 / catalog（三字段匹配，与 execute_sql 同构）
+    from app.models.base import Entity
+    from app.core.database import SessionLocal
+    from sqlalchemy import or_
+    _db = SessionLocal()
+    try:
+        _ent = _db.query(Entity).filter(
+            or_(Entity.entity_code == entity_code,
+                Entity.entity_en_name == entity_code,
+                Entity.entity_name == entity_code)
+        ).first()
+    finally:
+        _db.close()
+    if not _ent:
+        return {"error": f"对象不存在: {entity_code}", "log": f"[{_ts}] 取样失败：对象不存在 {entity_code}"}
+    _mode = _ent.source_mode or "physical_table"
+    _table = (_ent.entity_en_name or "").strip()
+    if not _table:
+        return {"error": f"对象无物理表名: {entity_code}", "log": f"[{_ts}] 取样失败：{entity_code} 无 entity_en_name"}
+    # 列不存在提示（G2 自愈闭环：模型据提示用 search_entities/validate_attributes 确认真实列名）
+    def _hint_col(res: dict) -> dict:
+        _msg = str(res.get("error", ""))
+        if "UndefinedColumn" in _msg or "Unknown column" in _msg or "Column not found" in _msg:
+            res["error"] = _msg + " | 提示：列不存在，请用 search_entities/validate_attributes 确认真实列名后重试"
+        return res
+    _sampled = None
+    if _mode == "physical_table":
+        from app.services.sql_executor import build_execute_query_fn
+        _exec = build_execute_query_fn(data_source_id=str(_ent.data_source_id) if _ent.data_source_id else None)
+        if not _exec:
+            return {"error": "执行函数不可用", "log": f"[{_ts}] 取样失败：执行函数不可用"}
+        _sql = (f"SELECT {column} AS value, COUNT(*) AS cnt FROM {_table} "
+                f"GROUP BY {column} ORDER BY cnt DESC, value ASC LIMIT {limit}")
+        from app.services.secure_query_executor import validate_sql
+        _chk = validate_sql(_sql)
+        if not _chk.ok:
+            return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] 取样 SQL 校验失败：{_chk.reason}"}
+        try:
+            _sampled = _exec(_chk.sql)
+        except Exception as e:
+            from app.services.engine_errors import apply_error_class
+            _err = apply_error_class({"error": f"取样执行异常: {e}"})
+            _err["log"] = f"[{_ts}] 取样执行异常：{e}"
+            return _hint_col(_err)
+    elif _mode == "sql_integration":
+        # Doris 整合：对 integration_sql 子查询取样（平台预配 SQL 为可信来源，无需猜 catalog.db.table）
+        from app.services.doris_engine import execute_sql as _doris_exec
+        _base = (_ent.integration_sql or "").strip()
+        if not _base:
+            return {"error": f"对象未配置 integration_sql: {entity_code}", "log": f"[{_ts}] 取样失败：{entity_code} 无 integration_sql"}
+        _sql = (f"SELECT {column} AS value, COUNT(*) AS cnt FROM ( {_base} ) _t "
+                f"GROUP BY {column} ORDER BY cnt DESC, value ASC LIMIT {limit}")
+        from app.services.secure_query_executor import validate_sql
+        _chk = validate_sql(_sql)
+        if not _chk.ok:
+            return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] 取样 SQL 校验失败：{_chk.reason}"}
+        try:
+            _sampled = _doris_exec(_chk.sql, catalog=_ent.doris_catalog or None)
+        except Exception as e:
+            from app.services.engine_errors import wrap_engine_exception
+            _err = wrap_engine_exception(e, prefix="取样异常: ")
+            _err["log"] = f"[{_ts}] 取样异常：{e}"
+            return _err
+    else:
+        return {"error": f"对象 {entity_code} source_mode={_mode} 不支持列取样（API 对象建议 execute_entity_api 直查）",
+                "log": f"[{_ts}] 取样跳过：{_mode} 不支持列取样"}
+    if _sampled.get("error"):
+        _err = _hint_col(dict(_sampled))
+        _err["log"] = f"[{_ts}] 取样失败：{_sampled.get('error')}"
+        return _err
+    # 归一化：values / null_count / total_rows
+    _cols = _sampled.get("columns", []) or []
+    _rows = _sampled.get("rows", []) or []
+    _values = []
+    _total = 0
+    _nulls = 0
+    if _rows and len(_cols) >= 2:
+        for _r in _rows:
+            _v = _r[0]
+            _c = int(_r[1]) if len(_r) > 1 and _r[1] is not None else 0
+            _total += _c
+            if _v is None:
+                _nulls = _c
+            else:
+                _values.append({"value": _v, "count": _c})
+    _out = {
+        "values": _values,
+        "null_count": _nulls,
+        "total_rows": _total,
+        "source_mode": _mode,
+        "log": f"[{_ts}] 取样完成：列 {column} 共 {_total} 行（null={_nulls}），Top{min(len(_values), limit)} 个值",
+    }
+    _SAMPLE_CACHE[(entity_code, column)] = (_now, _out)
+    return _out
+
 _KG_ACTION_HANDLERS = {
     "fetch_l1_l2_tree": _kg_fetch_l1_l2_tree,
     "validate_l2": _kg_validate_l2,
@@ -554,6 +685,7 @@ _KG_ACTION_HANDLERS = {
     "execute_api_sql": _kg_execute_api_sql,
     "execute_entity_api": _kg_execute_entity_api,
     "execute_doris_sql": _kg_execute_doris_sql,
+    "sample_column_values": _kg_sample_column_values,
 }
 
 def dispatch_kg_action(action: str, body: dict) -> dict:
