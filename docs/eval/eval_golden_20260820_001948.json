@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-08-20 00:19:48",
+  "total": 5,
+  "pass": 2,
+  "fail": 3,
+  "accuracy_pct": 40.0,
+  "rubric": "on",
+  "failures": [
+    {
+      "id": "27209f5698a0452dbc77d076b32136c5",
+      "question": "统计用电客户总数",
+      "expected_sql": "SELECT COUNT(*) AS total FROM pg_tupu.public.dim_cst_elec_cons_cust WHERE cust_id IS NOT NULL",
+      "expected_digest": {
+        "first_row": [
+          3
+        ],
+        "row_count": 1,
+        "first_row_hash": "f1e31df9806ce94c"
+      },
+      "got_digest": {
+        "row_count": 1,
+        "first_row_hash": "e9310b0c165be166",
+        "first_row": [
+          10
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    },
+    {
+      "id": "1957715fddfd418e968b1fd2bd6b680f",
+      "question": "列出用电客户清单",
+      "expected_sql": "SELECT cust_id, cust_name, voltage_name, ctrt_cap, run_cap, impt_lv_name, bus_srv_addr_name FROM pg_tupu.public.dim_cst_elec_cons_cust LIMIT 500",
+      "expected_digest": {
+        "first_row": [
+          "CUS0001",
+          "用电客户名称1",
+          "承压名称1",
+          6024.82,
+          8916.77,
+          "重要性等级名称1",
+          "业务服务地址名称1"
+        ],
+        "row_count": 3,
+        "first_row_hash": "7ff930b6083a958e"
+      },
+      "got_digest": null,
+      "pass": false,
+      "reason": "无 sql_result 事件（无数据/失败/未执行查询）",
+      "tool_count": 0,
+      "confidence": null
+    },
+    {
+      "id": "0dc21a21971c45ea983c66fef92904ac",
+      "question": "各电压等级的用电客户分布是怎样的",
+      "expected_sql": "SELECT voltage_name AS dim, COUNT(*) AS cnt FROM pg_tupu.public.dim_cst_elec_cons_cust GROUP BY voltage_name ORDER BY cnt DESC",
+      "expected_digest": {
+        "first_row": [
+          "承压名称1",
+          1
+        ],
+        "row_count": 3,
+        "first_row_hash": "3c55c3ecdc657d2e"
+      },
+      "got_digest": null,
+      "pass": false,
+      "reason": "无 sql_result 事件（无数据/失败/未执行查询）",
+      "tool_count": 0,
+      "confidence": null
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-08-20 00:14:05",
+  "total": 5,
+  "pass": 3,
+  "fail": 2,
+  "accuracy_pct": 60.0,
+  "rubric": "on",
+  "failures": [
+    {
+      "id": "ac3a14ddd1d34d7298d39d7663b5ea28",
+      "question": "用电客户总数是多少",
+      "expected_sql": "SELECT COUNT(*) AS total FROM pg_tupu.public.dim_cst_elec_cons_cust WHERE cust_id IS NOT NULL",
+      "expected_digest": {
+        "first_row": [
+          3
+        ],
+        "row_count": 1,
+        "first_row_hash": "f1e31df9806ce94c"
+      },
+      "got_digest": null,
+      "pass": false,
+      "reason": "stream 异常: HTTPConnectionPool(host='127.0.0.1', port=28000): Read timed out.",
+      "tool_count": 0,
+      "confidence": null
+    },
+    {
+      "id": "0dc21a21971c45ea983c66fef92904ac",
+      "question": "各电压等级的用电客户分布是怎样的",
+      "expected_sql": "SELECT voltage_name AS dim, COUNT(*) AS cnt FROM pg_tupu.public.dim_cst_elec_cons_cust GROUP BY voltage_name ORDER BY cnt DESC",
+      "expected_digest": {
+        "first_row": [
+          "承压名称1",
+          1
+        ],
+        "row_count": 3,
+        "first_row_hash": "3c55c3ecdc657d2e"
+      },
+      "got_digest": {
+        "row_count": 3,
+        "first_row_hash": "61951475e604a316",
+        "first_row": [
+          "CUS0001",
+          "用电客户名称1",
+          "承压名称1",
+          "6024.82",
+          "8916.77",
+          "重要性等级名称1",
+          "业务服务地址名称1"
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    }
+  ]
+}

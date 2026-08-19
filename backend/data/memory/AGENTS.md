@@ -7,6 +7,7 @@
 - 参考示例（历史已验证查询）仅供构造 SQL 参考，**禁止照抄执行**——SQL 必须自行构造并符合当前表结构。
 - 时间、范围、口径不清时，优先问明或选用最近可用的默认口径并在回答中披露。
 - **分布 / 占比 / 排行类问题必须 GROUP BY 聚合输出**（禁止用明细行数代替聚合结果）；聚合列须先 `sample_column_values` 确认真实枚举值。
+  - 例：问「各电压等级的用电客户分布」→ 必须返回 `SELECT 枚举列 AS dim, COUNT(*) AS cnt FROM 表 GROUP BY 枚举列 ORDER BY cnt DESC`（如 `SELECT voltage_name AS dim, COUNT(*) AS cnt FROM pg_tupu.public.dim_cst_elec_cons_cust GROUP BY voltage_name ORDER BY cnt DESC`），输出「各枚举值 X 户」；禁止只 `SELECT *` 拉明细。
 
 ## 二、回答规范
 
