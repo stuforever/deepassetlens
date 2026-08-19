@@ -707,16 +707,16 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     _registered_keys = []
     if _model_provider and _model_id and ":" not in _model_id:
         _key = f"{_model_provider}:{_model_id}"
-        register_harness_profile(_key, HarnessProfile(excluded_tools=_excluded))
+        register_harness_profile(_key, HarnessProfile(excluded_tools=_excluded, excluded_middleware={"SummarizationMiddleware"}))
         _registered_keys.append(_key)
         # 同时注册大小写变体（防 DB 存 DeepSeek-V4-Flash 但模型返回 deepseek-v4-flash）
         _key_lower = f"{_model_provider}:{_model_id.lower()}"
         if _key_lower != _key:
-            register_harness_profile(_key_lower, HarnessProfile(excluded_tools=_excluded))
+            register_harness_profile(_key_lower, HarnessProfile(excluded_tools=_excluded, excluded_middleware={"SummarizationMiddleware"}))
             _registered_keys.append(_key_lower)
     elif _model_id:
         # fallback: 只有 identifier（含冒号或无 provider）
-        register_harness_profile(_model_id, HarnessProfile(excluded_tools=_excluded))
+        register_harness_profile(_model_id, HarnessProfile(excluded_tools=_excluded, excluded_middleware={"SummarizationMiddleware"}))
         _registered_keys.append(_model_id)
     logger.info(f"[HarnessProfile] 已注册 {len(_registered_keys)} 个 key: {_registered_keys}：排除 grep/glob/write_file/edit_file/execute")
 
@@ -724,6 +724,11 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     # 工具调用前强校验同轮"下一步判断"(已知/判断/因此)+真实工具名+一轮单工具；
     # execute_sql 额外校验客户名范围。默认关(.env 已设 1，验收默认启用)。
     middleware_list = []  # v3.6: excluded_mw 已由 HarnessProfile(excluded_tools=...) 替代
+    # M1（融合设计 §三）：悬空 tool_calls 修复——会话中断后同 thread 续问时，
+    # 把历史里未应答的 tool_call 补 ToolMessage("cancelled")，避免复跑报错。
+    # 该中间件由框架 create_deep_agent 自动追加（graph.py:802，位于用户 middleware 之前，
+    # 先于 SkillPolicy 闸门）；不在此显式装配——langchain factory 对同名中间件有去重断言
+    # （len({m.name}) != len(middleware) 抛 AssertionError），显式会与自动件冲突。
     # 受控执行契约硬校验（设计 §6）：最外层闸门——先于 DecisionGate 拦截越权/禁用工
     # 具/模板外 SQL/引擎切换/结果后再查；契约由 data_intelligence 路由后经 context 注入。
     # P0-1 fail-closed：装配失败必须阻止 Agent 创建（不允许降级成只有 DecisionGate 的自由 Agent）。
@@ -741,26 +746,45 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     else:
         logger.warning("[DecisionGate] 下一步判断闸门未启用 (TUPU_DECISION_GATE 未设为 1)：工具调用前不强制「已知/判断/因此」")
 
-    # v3.5: 保守摘要阈值 -- 模型无 profile 时 compute_summarization_defaults 返回 17 万 token trigger，过晚
-    # 临时替换为 3 万 token trigger / 保留 10 条消息，让 create_deep_agent 内部的默认 SummarizationMiddleware 用我们的阈值
-    # v3.6: 包 try/finally（评审点6过渡方案B：消除异常后全局函数不恢复风险；后续单独验证公开 SummarizationMiddleware 替换）
-    import deepagents.middleware.summarization as _summ_mod
-    _orig_compute_defaults = _summ_mod.compute_summarization_defaults
-    def _conservative_defaults(_model):
-        return {
-            "trigger": ("tokens", 30000),
-            "keep": ("messages", 10),
-            "truncate_args_settings": {"trigger": ("messages", 15), "keep": ("messages", 15)},
-        }
-    _summ_mod.compute_summarization_defaults = _conservative_defaults
+    # M1（融合设计 §三）：显式保守摘要 —— 替代 v3.5 的全局摘要默认函数 monkey-patch
+    # （曾临时替换该函数为 3 万 token trigger/保留 10 条/截断 15 条）。
+    # 现改为显式构造 SummarizationMiddleware（子类化使名称区别于基类，配合 profile
+    # excluded_middleware={"SummarizationMiddleware"} 精确丢弃框架自动追加的默认阈值件）
+    # + SummarizationToolMiddleware 提供 compact_conversation 手动压缩工具。
+    from deepagents.middleware.summarization import (
+        SummarizationMiddleware,
+        SummarizationToolMiddleware,
+    )
+
+    class _TupuSummarizationMiddleware(SummarizationMiddleware):
+        """保守阈值摘要中间件（30k token trigger / 保留 10 条 / 参数截断 15 条）。
+
+        子类化：`AgentMiddleware.name` 默认取 `__class__.__name__`，故本实例名
+        `_TupuSummarizationMiddleware` 不等于基类名 `SummarizationMiddleware`，
+        profile 的 excluded_middleware={"SummarizationMiddleware"}（字符串按 name 精确匹配）
+        只会丢弃框架自动追加的默认阈值件，本实例存活。
+        """
+
+        def __init__(self, model, backend):
+            super().__init__(
+                model=model,
+                backend=backend,
+                trigger=("tokens", 30000),
+                keep=("messages", 10),
+                truncate_args_settings={"trigger": ("messages", 15), "keep": ("messages", 15)},
+            )
+
+    _summ_mw = _TupuSummarizationMiddleware(model, backend)
+    middleware_list.append(_summ_mw)
+    middleware_list.append(SummarizationToolMiddleware(_summ_mw))
+    logger.info("[Summarization] 显式保守摘要中间件已装配（30k/10/15，替代 monkey-patch）+ compact_conversation 工具")
 
     # F5: response_format（统一最终交付协议）。当前模型(GLM/DeepSeek)与嵌套结构化 schema
     # 不兼容：接入后会破坏 Agent 的最终文本生成（SQL 执行后不再产出结论），故不启用。
     # 统一最终交付由 data_intelligence 的 A-E 确定性降级策略构造（response_format_degraded=true）。
     _response_format = None
 
-    try:
-        agent = create_deep_agent(
+    agent = create_deep_agent(
             model=model,
             tools=mcp_tools,
             system_prompt=_build_dynamic_system_prompt(),
@@ -773,9 +797,6 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
             skills=["/skills/"],
             middleware=middleware_list,
         )
-    finally:
-        # 无论 create_deep_agent 是否抛异常，都恢复原始函数（不影响其他模块）
-        _summ_mod.compute_summarization_defaults = _orig_compute_defaults
 
     return agent
 
