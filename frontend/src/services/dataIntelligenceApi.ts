@@ -88,6 +88,9 @@ export type ChatResponse = {
     scope?: Record<string, any>; selected_engine?: string | null; engine_reason?: string | null;
     output_mode?: string; stop_when?: string[]; route_reason?: string; route_type?: string;
   } | null;
+  /** 融合 M3 G7：证据链 + 置信度三级（高/中/低），done 事件携带 */
+  evidence?: Record<string, any> | null;
+  confidence?: string;
 };
 
 /** SSE 流式对话内部实现（chatStream 和 freePlanChatStream 共用） */
@@ -123,6 +126,10 @@ type StreamCallbacks = {
   onPolicy?: (payload: { kind: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean }) => void;
   /** 评审 P1-3：模板绑定/漂移实时事件 */
   onTemplate?: (payload: { kind: string; detail?: string }) => void;
+  /** 融合 M3 G7：G4 验证结论（query_verified 事件） */
+  onVerified?: (v: { verification?: Record<string, any> | null; confidence?: string }) => void;
+  /** 融合 M3 G7：Rubric 自评状态（rubric 事件） */
+  onRubric?: (r: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string }) => void;
 };
 
 function _streamChat(
@@ -180,6 +187,8 @@ function _streamChat(
             else if (currentEvent === 'contract_update' && cb.onContractUpdate) cb.onContractUpdate(parsed);
             else if (currentEvent === 'policy' && cb.onPolicy) cb.onPolicy(parsed);
             else if (currentEvent === 'template' && cb.onTemplate) cb.onTemplate(parsed);
+            else if (currentEvent === 'query_verified' && cb.onVerified) cb.onVerified(parsed);
+            else if (currentEvent === 'rubric' && cb.onRubric) cb.onRubric(parsed);
             else if (currentEvent === 'done') safeDone(parsed as ChatResponse);
             else if (currentEvent === 'error') safeError(parsed.error || '未知错误');
           } catch (e) {
@@ -245,9 +254,11 @@ export const dataIntelligenceApi = {
     }) => void,
     onPolicy?: (payload: { kind: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean }) => void,
     onTemplate?: (payload: { kind: string; detail?: string }) => void,
+    onVerified?: (v: { verification?: Record<string, any> | null; confidence?: string }) => void,
+    onRubric?: (r: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string }) => void,
   ): AbortController => {
     return _streamChat('/chat/freeplan/stream', payload, {
-      onThink, onDone, onError, onStatus, onToken, onFinal, onRecommend, onThinkToken, onSqlResult, onTrace, onIntent, onFilterCheck, onRoute, onContract, onContractUpdate, onPolicy, onTemplate,
+      onThink, onDone, onError, onStatus, onToken, onFinal, onRecommend, onThinkToken, onSqlResult, onTrace, onIntent, onFilterCheck, onRoute, onContract, onContractUpdate, onPolicy, onTemplate, onVerified, onRubric,
     });
   },
 

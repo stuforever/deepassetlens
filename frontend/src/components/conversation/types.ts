@@ -107,6 +107,19 @@ export type ChatMessagePayload = {
   /** 评审 P2-2：策略事件（policy.rejected）与模板事件（template.bound/drift）追加去重累积 */
   policy_events?: Array<{ kind?: string; tool_call_id?: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean; detail?: string }>;
   template_events?: Array<{ kind?: string; detail?: string; structure_match?: boolean; template_id?: string }>;
+  /** 融合设计 M3 G7：证据链（路由/表/示例命中/验证/自评/纠错）+ 置信度三级（高/中/低） */
+  evidence?: {
+    route?: string | null;
+    tables?: string[];
+    examples_used?: Array<{ q?: string; sim?: number }>;
+    verification?: { row_count?: number; null_rates?: Record<string, number>; warnings?: string[] } | null;
+    rubric?: { status?: string; iterations?: number } | null;
+    corrections?: number;
+  } | null;
+  confidence?: string;   // 高 / 中 / 低
+  /** 融合 M3 G7 实时事件缓存（query_verified / rubric 流式中间态，终态以 evidence 快照为准） */
+  verification_live?: { row_count?: number; null_rates?: Record<string, number>; warnings?: string[] } | null;
+  rubric_live?: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string } | null;
 };
 
 export type ChatMessage = {

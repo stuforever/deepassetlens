@@ -88,6 +88,9 @@ const AssistantCanvas: React.FC<{
   const execProcess = structured?.execution_process || '';
   const route = payload?.route || null;
   const contract = payload?.contract || null;
+  // 融合 M3 G7：证据链 + 置信度三级（高/中/低）
+  const evidence = payload?.evidence || null;
+  const confidence = payload?.confidence;
   // 评审 P1-1（三轮）：完成态也要展示执行期间累积的策略/模板事件（徽标 + 展开后审计列表）
   const policyEvents = payload?.policy_events || [];
   const templateEvents = payload?.template_events || [];
@@ -102,10 +105,10 @@ const AssistantCanvas: React.FC<{
 
   return (
     <div style={{ fontSize: 14, color: tokens.colors.textPrimary }}>
-      {/* 0.1 受控 Skill 问答平台 v2：五张业务卡（路由/范围/数据访问/执行决策/终止条件），默认折叠状态条 */}
+      {/* 0.1 受控 Skill 问答平台 v2：六张业务卡（路由/范围/数据访问/执行决策/终止条件/证据），默认折叠状态条 */}
       {(route || contract) ? (
         <div style={{ marginBottom: 8 }}>
-          <ContractCardsPanel route={route} contract={contract} policyEvents={policyEvents} templateEvents={templateEvents} />
+          <ContractCardsPanel route={route} contract={contract} policyEvents={policyEvents} templateEvents={templateEvents} evidence={evidence} confidence={confidence} />
         </div>
       ) : null}
 
@@ -116,11 +119,27 @@ const AssistantCanvas: React.FC<{
         </div>
       ) : null}
 
-      {/* 1. 最终结果标题：必须明显显示 */}
+      {/* 1. 最终结果标题：必须明显显示（含融合 M3 G7 置信度三级小徽标） */}
       {(view.title || view.summary.length > 0 || view.findings.length > 0 || view.showTable) ? (
-        <h2 style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 6px', color: tokens.colors.textPrimary, letterSpacing: '-0.01em', paddingLeft: 8, borderLeft: `3px solid ${tokens.colors.primary}` }}>
-          {view.title}
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', margin: '10px 0 6px' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: tokens.colors.textPrimary, letterSpacing: '-0.01em', paddingLeft: 8, borderLeft: `3px solid ${tokens.colors.primary}` }}>
+            {view.title}
+          </h2>
+          {confidence ? (() => {
+            const confColor = confidence === '高' ? tokens.colors.success : (confidence === '低' ? tokens.colors.error : tokens.colors.warning);
+            return (
+              <Tag
+                style={{
+                  marginLeft: 10, color: confColor, border: `1px solid ${confColor}`,
+                  background: 'transparent', borderRadius: tokens.radius.pill,
+                  fontSize: 11, lineHeight: '18px', padding: '0 8px',
+                }}
+              >
+                置信度{confidence}
+              </Tag>
+            );
+          })() : null}
+        </div>
       ) : null}
 
       {/* 2. 摘要 / 关键发现 / 告警 */}

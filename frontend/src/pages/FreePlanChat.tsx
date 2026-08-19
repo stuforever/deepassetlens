@@ -595,6 +595,14 @@ const FreePlanChat: React.FC = () => {
           // 模板绑定/漂移：实时追加去重到 payload（评审 P2）
           accumulateAssistantEvent('template_events', templateEvent);
         },
+        (v) => {
+          // 融合 M3 G7：G4 验证结论（query_verified）实时写 payload
+          patchAssistant({ verification_live: v.verification || null, confidence: v.confidence || undefined });
+        },
+        (r) => {
+          // 融合 M3 G7：Rubric 自评状态（rubric 事件）实时写 payload
+          patchAssistant({ rubric_live: r || null });
+        },
       );
       abortControllerRef.current = controller;
     });
@@ -685,6 +693,16 @@ const FreePlanChat: React.FC = () => {
         // 评审 P1-1（三轮）：事件随历史消息持久化 —— 完成态继承执行期间累积的策略/模板事件
         policy_events: loadingPayload?.policy_events || [],
         template_events: loadingPayload?.template_events || [],
+        // 融合 M3 G7：证据链（done 快照，缺省回退实时继承的验证/自评）
+        evidence: (resp as any).evidence ?? {
+          route: (resp as any).route?.route_type ?? loadingPayload?.route?.route_type ?? null,
+          verification: loadingPayload?.verification_live ?? null,
+          rubric: loadingPayload?.rubric_live
+            ? { status: loadingPayload?.rubric_live.status, iterations: loadingPayload?.rubric_live.iterations }
+            : null,
+          corrections: 0,
+        } ?? null,
+        confidence: (resp as any).confidence ?? loadingPayload?.confidence ?? null,
       };
       // 统一最终交付视图：模型无文本但确有查询数据时，用交付摘要兜底主区文字
       const deliveryView = buildFinalDeliveryView(assistantPayload);

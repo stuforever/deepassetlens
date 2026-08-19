@@ -1,17 +1,17 @@
 /**
  * ContractCardsPanel - 受控执行卡片容器（B2 美化：折叠态改为「过程胶囊条」）
  *
- * 折叠态：一行 5 枚彩色胶囊（命中剧本 / 范围 / 引擎 / 决策 / 终止），
+ * 折叠态：一行 6 枚彩色胶囊（命中剧本 / 范围 / 引擎 / 决策 / 终止 / 证据），
  *         每枚 = 彩色图标 + 短摘要 + 状态色点（成功绿/降级黄/阻止红），
- *         一行读完一次运行的全貌（设计 §4.3）。
- * 点击某枚胶囊 -> 展开对应卡详情；右侧箭头 -> 展开全部五卡。
- * 展开态卡片：沿用 RouteCard/ScopeCard/DataAccessCard/ExecutionDecisionCard/StopReasonCard。
+ *         一行读完一次运行的全貌（设计 §4.3；证据胶囊为融合 M3 G7 第 6 枚）。
+ * 点击某枚胶囊 -> 展开对应卡详情；右侧箭头 -> 展开全部六卡。
+ * 展开态卡片：沿用 RouteCard/ScopeCard/DataAccessCard/ExecutionDecisionCard/StopReasonCard + EvidenceCard。
  * 同时保留 policy/template 事件徽标与列表（评审 P2：策略拒绝、模板绑定/漂移不丢失）。
  */
 import React, { useState } from 'react';
 import { Badge, Space, Tooltip, Typography } from 'antd';
 import {
-  ApiOutlined, DownOutlined, EnvironmentOutlined, ExperimentOutlined,
+  ApiOutlined, AuditOutlined, DownOutlined, EnvironmentOutlined, ExperimentOutlined,
   PartitionOutlined, RightOutlined, SafetyCertificateOutlined, StopOutlined,
 } from '@ant-design/icons';
 import RouteCard from './RouteCard';
@@ -19,6 +19,7 @@ import ScopeCard from './ScopeCard';
 import DataAccessCard from './DataAccessCard';
 import ExecutionDecisionCard from './ExecutionDecisionCard';
 import StopReasonCard from './StopReasonCard';
+import EvidenceCard from './EvidenceCard';
 import { ENGINE_META, SKILL_CN } from './types';
 import type { PolicyEventView, QueryContractView, RouteResult, TemplateEventView } from './types';
 import { tokens } from '../../../theme/tokens';
@@ -30,9 +31,12 @@ type Props = {
   contract?: QueryContractView | null;
   policyEvents?: PolicyEventView[];
   templateEvents?: TemplateEventView[];
+  /** 融合 M3 G7：证据链 + 置信度三级 */
+  evidence?: Record<string, any> | null;
+  confidence?: string;
 };
 
-type Capsule = {
+export type Capsule = {
   key: string;
   label: string;
   icon: React.ReactNode;
@@ -52,7 +56,12 @@ const DOT = {
   mute: tokens.colors.textTertiary,
 } as const;
 
-function buildCapsules(route?: RouteResult | null, contract?: QueryContractView | null): Capsule[] {
+export function buildCapsules(
+  route?: RouteResult | null,
+  contract?: QueryContractView | null,
+  evidence?: Record<string, any> | null,
+  confidence?: string,
+): Capsule[] {
   const scope = (contract?.scope as Record<string, any>) || {};
   const custCount = Array.isArray(scope.customer_names) ? scope.customer_names.length : 0;
   const rt = contract?.route_type || route?.route_type || 'generic';
@@ -125,15 +134,36 @@ function buildCapsules(route?: RouteResult | null, contract?: QueryContractView 
     dot: stopReached ? DOT.error : (stopWhenLen > 0 ? DOT.info : DOT.mute),
     running: false,
   };
+  // 证据（融合 M3 G7 第 6 胶囊）：表清单 + 自评状态 + 置信度
+  const evTablesRaw = evidence?.tables;
+  const evTables = Array.isArray(evTablesRaw) ? (evTablesRaw as string[]).length : 0;
+  const evRubricStatus = evidence?.rubric?.status as string | undefined;
+  const evCorrections = Number(evidence?.corrections || 0);
+  const confDot = confidence === '高' ? DOT.success : (confidence === '低' ? DOT.error : (confidence === '中' ? DOT.warning : DOT.mute));
+  const evCap: Capsule = {
+    key: 'evidence',
+    label: '证据',
+    icon: <AuditOutlined style={{ fontSize: 13 }} />,
+    summary: [
+      evTables > 0 ? `${evTables} 表` : '无取数',
+      evRubricStatus ? (evRubricStatus === 'satisfied' ? '自评通过' : '自评' + (evRubricStatus === 'needs_revision' ? '修订' : evRubricStatus)) : '未自评',
+      evCorrections > 0 ? `纠${evCorrections}` : '',
+      confidence ? `信${confidence}` : '',
+    ].filter(Boolean).join('·') || '—',
+    color: confidence === '高' ? tokens.colors.success : (confidence === '低' ? tokens.colors.error : tokens.colors.primary),
+    softBg: confidence === '高' ? tokens.colors.successBg : (confidence === '低' ? tokens.colors.errorBg : tokens.colors.primaryBg),
+    dot: confDot,
+    running: false,
+  };
 
   if (!contract) {
     // 仅有路由（未建立契约）：只展示命中剧本胶囊
     return [routeCap];
   }
-  return [routeCap, scopeCap, engineCap, decisionCap, stopCap];
+  return [routeCap, scopeCap, engineCap, decisionCap, stopCap, evCap];
 }
 
-const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, templateEvents }) => {
+const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, templateEvents, evidence, confidence }) => {
   const [collapsed, setCollapsed] = useState(true);
   const [activeCard, setActiveCard] = useState<string | null>(null);
 
@@ -141,7 +171,7 @@ const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, te
     return null;
   }
 
-  const capsules = buildCapsules(route, contract);
+  const capsules = buildCapsules(route, contract, evidence, confidence);
   const policyCount = (policyEvents || []).length;
   const templateCount = (templateEvents || []).length;
   const hasEvents = policyCount > 0 || templateCount > 0;
@@ -191,6 +221,7 @@ const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, te
         />
       ) : null;
       case 'stop': return contract ? <StopReasonCard stopWhen={contract.stop_when} /> : null;
+      case 'evidence': return <EvidenceCard evidence={evidence} confidence={confidence} />;
       default: return null;
     }
   };
@@ -274,7 +305,7 @@ const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, te
         )}
       </div>
 
-      {/* 展开明细：单卡（activeCard）或全部五卡 + 事件 */}
+      {/* 展开明细：单卡（activeCard）或全部六卡 + 事件 */}
       {expanded ? (
         <div style={{ marginTop: 8 }}>
           {activeCard ? (
@@ -286,7 +317,7 @@ const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, te
                   style={{ fontSize: 12, cursor: 'pointer' }}
                   onClick={() => setActiveCard(null)}
                 >
-                  展开全部五卡 ▾
+                  展开全部六卡 ▾
                 </Text>
               </div>
             </>
@@ -315,6 +346,7 @@ const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, te
                     completedEntities={contract.completed_entities}
                   />
                   <StopReasonCard stopWhen={contract.stop_when} />
+                  <EvidenceCard evidence={evidence} confidence={confidence} />
                 </>
               ) : (
                 <>
