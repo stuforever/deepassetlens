@@ -1,36 +1,11 @@
-import axios from 'axios';
-import { getStoredToken, clearToken, isTokenValid } from '../auth/oidc';
+import { v1Api as api } from './http';
+import { createApiClient } from './http';
+import type { AxiosRequestConfig } from 'axios';
+import type { DataSourceInput } from './types';
 
 const API_BASE_URL = '/api/v1';
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-});
-
-// Authentik Bearer 自动注入
-api.interceptors.request.use((config) => {
-  const t = getStoredToken();
-  if (t && isTokenValid(t)) {
-    config.headers = config.headers || {};
-    (config.headers as any)['Authorization'] = `${t.token_type} ${t.access_token}`;
-  }
-  return config;
-});
-
-// 401 → 清 token 跳登录
-api.interceptors.response.use(
-  (resp) => resp,
-  async (error) => {
-    if (error?.response?.status === 401) {
-      clearToken();
-      // 不 reload 主流程内的所有请求，让 AuthGate 重入；或硬跳一次首页
-      if (window.location.pathname !== '/auth/callback') {
-        window.location.href = '/';
-      }
-    }
-    return Promise.reject(error);
-  },
-);
+// 数据引擎观测（批3）：独立 /api/engine 实例（与 /api/v1 不同前缀）
+const engineClient = createApiClient('/api/engine');
 
 export const conceptApi = {
   getConcepts: (level?: number, includeLevel0 = false) => api.get('/concepts', { params: { level, include_level_zero: includeLevel0 } }),
@@ -267,6 +242,7 @@ export const llmAdminApi = {
   getConnections: () => api.get('/llm-connections'),
   createConnection: (data: any) => api.post('/llm-connections', data),
   updateConnection: (id: string, data: any) => api.put(`/llm-connections/${id}`, data),
+  duplicateConnection: (id: string) => api.post(`/llm-connections/${id}/duplicate`),
   deleteConnection: (id: string) => api.delete(`/llm-connections/${id}`),
   testConnection: (id: string) => api.post(`/llm-connections/${id}/test`),
   chatByConnection: (
@@ -368,12 +344,15 @@ export const integrationSqlApi = {
 
 // Doris 配置 + Catalog 管理（sql_integration 引擎配置）
 export const dorisApi = {
-  getConfig: () => api.get('/doris/config'),
-  putConfig: (cfg: Record<string, any>) => api.put('/doris/config', cfg),
-  testConnection: (cfg?: Record<string, any>) => api.post('/doris/config/test', cfg || {}),
-  listCatalogs: () => api.get('/doris/catalogs'),
-  createCatalog: (c: Record<string, any>) => api.post('/doris/catalogs', c),
-  deleteCatalog: (name: string) => api.delete(`/doris/catalogs/${encodeURIComponent(name)}`),
+  getConfig: (config?: AxiosRequestConfig) => api.get('/doris/config', config),
+  putConfig: (cfg: Record<string, any>, config?: AxiosRequestConfig) => api.put('/doris/config', cfg, config),
+  testConnection: (cfg?: Record<string, any>, config?: AxiosRequestConfig) => api.post('/doris/config/test', cfg || {}, config),
+  listCatalogs: (config?: AxiosRequestConfig) => api.get('/doris/catalogs', config),
+  createCatalog: (c: Record<string, any>, config?: AxiosRequestConfig) => api.post('/doris/catalogs', c, config),
+  deleteCatalog: (name: string, config?: AxiosRequestConfig) => api.delete(`/doris/catalogs/${encodeURIComponent(name)}`, config),
+  // P4：es/jdbc catalog 探活 + 刷新元数据
+  probeCatalog: (name: string, config?: AxiosRequestConfig) => api.post(`/doris/catalogs/${encodeURIComponent(name)}/probe`, {}, config),
+  refreshCatalog: (name: string, config?: AxiosRequestConfig) => api.post(`/doris/catalogs/${encodeURIComponent(name)}/refresh`, {}, config),
 };
 
 // 对象API映射（对象层面整合多源API，伪逻辑SQL+字段映射）
@@ -385,6 +364,59 @@ export const entityApiMappingApi = {
   delete: (id: string) => api.delete(`/entity-api-mappings/${id}`),
   verify: (id: string) => api.post(`/entity-api-mappings/${id}/verify`),
   execute: (entityCode: string, filters?: Record<string, any>) => api.post('/entity-api-mappings/execute', { entity_code: entityCode, filters }),
+};
+
+// 数据源配置（DataSourceConfig 页 + ModelTreeManager physical_table 绑定用）
+// config.silent=true 时由调用方自行展示错误（保持其原有精细报错，避免与统一层双弹）。
+export const dataSourceApi = {
+  list: (config?: AxiosRequestConfig) => api.get('/data-sources', config),
+  get: (id: string, config?: AxiosRequestConfig) => api.get(`/data-sources/${id}`, config),
+  create: (data: DataSourceInput, config?: AxiosRequestConfig) => api.post('/data-sources', data, config),
+  update: (id: string, data: Partial<DataSourceInput>, config?: AxiosRequestConfig) => api.put(`/data-sources/${id}`, data, config),
+  remove: (id: string, config?: AxiosRequestConfig) => api.delete(`/data-sources/${id}`, config),
+  test: (id: string, config?: AxiosRequestConfig) => api.post(`/data-sources/${id}/test`, {}, config),
+};
+
+// 资源级 ACL（ResourceAclDrawer）
+export const aclApi = {
+  getGrants: (resourceType: string, resourceId: string, config?: AxiosRequestConfig) =>
+    api.get('/auth/grants', { params: { resource_type: resourceType, resource_id: resourceId }, ...config }),
+  listUsers: (config?: AxiosRequestConfig) => api.get('/auth/users', config),
+  grant: (data: { resource_type: string; resource_id: string; principal_type: string; principal_id: string; actions: string[] }, config?: AxiosRequestConfig) =>
+    api.post('/auth/grant', data, config),
+  revoke: (id: number, config?: AxiosRequestConfig) => api.delete(`/auth/grant/${id}`, config),
+};
+
+// 数据引擎观测（批3：健康/缓存/查询日志/EXPLAIN；P3/P4/P5 深化）
+export const engineApi = {
+  health: (config?: AxiosRequestConfig) => engineClient.get('/health', config),
+  cacheStats: (config?: AxiosRequestConfig) => engineClient.get('/cache/stats', config),
+  cacheInvalidate: (endpointId?: string, config?: AxiosRequestConfig) =>
+    engineClient.post('/cache/invalidate', { endpoint_id: endpointId || null }, config),
+  queries: (params?: { limit?: number; offset?: number; engine?: string; status?: string }, config?: AxiosRequestConfig) =>
+    engineClient.get('/queries', { params, ...config }),
+  explain: (sql: string, catalog?: string, verbose?: boolean, config?: AxiosRequestConfig) =>
+    engineClient.post('/explain', { sql, catalog, verbose: !!verbose }, config),
+  // P3：熔断/限速状态
+  circuits: (config?: AxiosRequestConfig) => engineClient.get('/circuits', config),
+  // P3/P5：Pushdown 调试器（解析+下推树，不真实执行）
+  pushdownDebug: (sql: string, config?: AxiosRequestConfig) =>
+    engineClient.post('/pushdown/debug', { sql }, config),
+  // P4：Profile 代理（FE 18030 查询画像）
+  profile: (queryId: string, config?: AxiosRequestConfig) =>
+    engineClient.get('/profile', { params: { query_id: queryId }, ...config }),
+  // P5：预聚合加速器
+  accelerators: (config?: AxiosRequestConfig) => engineClient.get('/accelerators', config),
+  acceleratorCreate: (data: Record<string, unknown>, config?: AxiosRequestConfig) =>
+    engineClient.post('/accelerators', data, config),
+  acceleratorUpdate: (id: string, data: Record<string, unknown>, config?: AxiosRequestConfig) =>
+    engineClient.put(`/accelerators/${id}`, data, config),
+  acceleratorDelete: (id: string, config?: AxiosRequestConfig) =>
+    engineClient.delete(`/accelerators/${id}`, config),
+  acceleratorRefresh: (id: string, config?: AxiosRequestConfig) =>
+    engineClient.post(`/accelerators/${id}/refresh`, {}, config),
+  acceleratorRefreshAll: (config?: AxiosRequestConfig) =>
+    engineClient.post('/accelerators/refresh/all', {}, config),
 };
 
 export default api;

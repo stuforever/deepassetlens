@@ -1,10 +1,8 @@
-import axios from 'axios';
+import { createApiClient } from './http';
 
 const V2_BASE_URL = '/api/v2';
 
-const v2Api = axios.create({
-  baseURL: V2_BASE_URL,
-});
+const v2Api = createApiClient(V2_BASE_URL);
 
 export interface SkillDTO {
   skill_id: string;

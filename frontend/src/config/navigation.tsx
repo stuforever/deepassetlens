@@ -16,9 +16,12 @@ import {
   CloudServerOutlined,
   BranchesOutlined,
   UnorderedListOutlined,
+  DeploymentUnitOutlined,
   RocketOutlined,
   BookOutlined,
   SettingOutlined,
+  FundOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 
 export interface NavItem {
@@ -53,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { menuKey: 'graph', label: '图谱管理', path: '/graph', icon: ShareAltOutlined },
       { menuKey: 'tree_model', label: '四区建模', path: '/tree-model', icon: PartitionOutlined },
       { menuKey: 'matrix_model', label: '资产矩阵', path: '/matrix', icon: TableOutlined },
+      { menuKey: 'gallery', label: '图库', path: '/gallery', icon: DeploymentUnitOutlined },
       { menuKey: 'entity_relation_manage', label: '实体关系', path: '/entity-relation', icon: NodeIndexOutlined },
     ],
   },
@@ -82,6 +86,8 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: RocketOutlined,
     items: [
       { menuKey: 'skills', label: '技能管理', path: '/skills', icon: RocketOutlined },
+      { menuKey: 'governance', label: '运行观测', path: '/governance', icon: FundOutlined },
+      { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
       { menuKey: 'vector_manage', label: '向量管理', path: '/vector', icon: BookOutlined },
     ],
   },
@@ -127,9 +133,6 @@ export const pathToMenuKey: Record<string, string> = (() => {
 
 /** 画布类页面：需要接收 onOpenTarget 回调 */
 export const NEEDS_OPEN_TARGET = new Set([
-  'graph',
-  'tree_model',
-  'matrix_model',
   'mapping',
   'master_data',
   'activity_data',
@@ -140,5 +143,6 @@ export const CANVAS_MENU_KEYS = new Set([
   'graph',
   'tree_model',
   'matrix_model',
+  'gallery',
   'entity_relation_manage',
 ]);

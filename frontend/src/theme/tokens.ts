@@ -68,6 +68,7 @@ export const radius = {
 
 /* ---------- 字号 ---------- */
 export const fontSize = {
+  display: 28, // 落地页主视觉（仅此一处）
   pageTitle: 20, // 页面标题
   sectionTitle: 16, // 区块标题
   body: 14, // 正文
@@ -105,6 +106,29 @@ export const layout = {
   chatInputMaxHeight: 140,
 } as const;
 
+/* ---------- 阴影层级（新增，S0-S3） ---------- */
+export const elevation = {
+  s0: 'none', // 默认平铺
+  s1: '0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06)', // 卡片静置/结果表容器
+  s2: '0 4px 12px rgba(15,23,42,.08), 0 2px 4px rgba(15,23,42,.04)', // 悬浮/Popover/悬停卡片
+  s3: '0 12px 32px rgba(15,23,42,.14), 0 4px 8px rgba(15,23,42,.06)', // Modal/Drawer/输入 composer
+} as const;
+
+/* ---------- 品牌渐变（新增，克制：仅落地页主视觉 / AI 徽标 / 主发送按钮 3 处） ---------- */
+export const brandGradient = 'linear-gradient(135deg, #2563EB 0%, #7C3AED 100%)';
+
+/* ---------- 图表色板（新增，画布/图谱循环取色，禁止随机色） ---------- */
+export const chartPalette = [
+  '#2563EB', '#7C3AED', '#0891B2', '#059669',
+  '#D97706', '#DC2626', '#64748B', '#BE185D',
+] as const;
+
+/* ---------- 动效 token（新增） ---------- */
+export const motion = {
+  duration: { fast: 120, base: 200, slow: 320 },
+  easing: { enter: 'cubic-bezier(.2,.8,.2,1)', exit: 'cubic-bezier(.4,0,.6,1)' },
+} as const;
+
 /* ---------- antd 主题 token（注入 ConfigProvider） ---------- */
 export const antdThemeToken = {
   colorPrimary: colors.primary,
@@ -140,6 +164,10 @@ export const antdThemeToken = {
   colorLink: colors.primary,
   colorLinkHover: colors.primaryHover,
   colorLinkActive: colors.primaryActive,
+
+  // 阴影层级（B1 美化：S1 普通容器 / S2 悬浮）
+  boxShadow: elevation.s1,
+  boxShadowSecondary: elevation.s2,
 } as const;
 
 /* ---------- antd 组件级 token ---------- */
@@ -150,7 +178,7 @@ export const antdComponents: ThemeConfig['components'] = {
     subMenuItemBg: 'transparent',
     itemSelectedBg: colors.primaryBg,
     itemSelectedColor: colors.primary,
-    itemBorderRadius: 0,
+    itemBorderRadius: radius.default, // B1 美化：0 => 6（左导航 hover 浮起）
   },
   Layout: {
     headerBg: colors.bgContent,
@@ -195,6 +223,9 @@ export const antdComponents: ThemeConfig['components'] = {
   Drawer: {
     borderRadiusLG: radius.card,
   },
+  Modal: {
+    boxShadow: elevation.s3, // B1 美化：Modal 抬升到 S3
+  },
 };
 
 /* ---------- 聚合导出（自定义组件消费） ---------- */
@@ -206,4 +237,8 @@ export const tokens = {
   fontWeight,
   controlHeight,
   layout,
+  elevation,
+  brandGradient,
+  chartPalette,
+  motion,
 } as const;

@@ -52,7 +52,7 @@ function persistSessions(sessions: Session[]) {
 interface AppState {
   concepts: any[];
   selectedNode: any | null;
-  canvasMode: 'tree' | 'force' | 'neo4j' | 'matrix' | 'quad';
+  canvasMode: 'force' | 'neo4j' | 'matrix' | 'quad';
   /** 当前激活的页签 menuKey，供画布组件监听做 resize（隐藏暂停重绘、激活刷新尺寸） */
   activeMenuKey: string | null;
   isMappingModalVisible: boolean;
@@ -74,12 +74,14 @@ interface AppState {
   setActiveSessionId: (id: string) => void;
   updateSession: (id: string, patch: Partial<Session>) => void;
   createNewSession: () => string;
-  deleteSessionById: (id: string) => void;
+  deleteSessionById: (id: string) => Promise<boolean>;
   renameSessionById: (id: string, title: string) => void;
+  deleteMessage: (sessionId: string, msgId: string) => void;
+  clearMessages: (sessionId: string) => Promise<boolean>;
 
   fetchConcepts: () => Promise<void>;
   setSelectedNode: (node: any) => void;
-  setCanvasMode: (mode: 'tree' | 'force' | 'neo4j' | 'matrix' | 'quad') => void;
+  setCanvasMode: (mode: 'force' | 'neo4j' | 'matrix' | 'quad') => void;
   setActiveMenuKey: (key: string | null) => void;
   setMappingModalVisible: (visible: boolean) => void;
   setMappingFilterEntityId: (entityId: string | null) => void;
@@ -93,7 +95,7 @@ export const useStore = create<AppState>((set) => {
   return {
   concepts: [],
   selectedNode: null,
-  canvasMode: 'tree',
+  canvasMode: 'force',
   activeMenuKey: null,
   isMappingModalVisible: false,
   isModelingModalVisible: false,
@@ -126,22 +128,96 @@ export const useStore = create<AppState>((set) => {
     });
     return s.id;
   },
-  deleteSessionById: (id) => set((state) => {
-    const filtered = state.sessions.filter((s) => s.id !== id);
-    if (filtered.length === 0) {
-      const fresh = newSession();
-      persistSessions([fresh]);
-      return { sessions: [fresh], activeSessionId: fresh.id };
+  deleteSessionById: async (id) => {
+    // v3.6: await 后端清除（fire-and-forget 导致 checkpoint 残留无反馈）
+    // F2-fix: 与 clearMessages 同策略--后端失败时不删本地，返回 false
+    let backendOk = true;
+    try {
+      const { dataIntelligenceApi } = await import('../services/dataIntelligenceApi');
+      const resp = await dataIntelligenceApi.clearFreeplanMemory(id);
+      if (resp && resp.cleared === false) {
+        backendOk = false;
+        console.warn('[deleteSessionById] 后端返回 cleared:false，checkpoint 未清除', resp);
+      }
+    } catch (e) {
+      backendOk = false;
+      console.error('[deleteSessionById] 后端 checkpoint 清除失败:', e);
     }
-    persistSessions(filtered);
-    const newActive = id === state.activeSessionId ? filtered[0].id : state.activeSessionId;
-    return { sessions: filtered, activeSessionId: newActive };
-  }),
+    // F2-fix: 后端失败时不删本地会话（防"页面删除但后端 checkpoint 残留"）
+    if (!backendOk) {
+      return false;
+    }
+    set((state) => {
+      const filtered = state.sessions.filter((s) => s.id !== id);
+      if (filtered.length === 0) {
+        const fresh = newSession();
+        persistSessions([fresh]);
+        return { sessions: [fresh], activeSessionId: fresh.id };
+      }
+      persistSessions(filtered);
+      const newActive = id === state.activeSessionId ? filtered[0].id : state.activeSessionId;
+      return { sessions: filtered, activeSessionId: newActive };
+    });
+    return true;
+  },
   renameSessionById: (id, title) => set((state) => {
     const next = state.sessions.map((s) => (s.id === id ? { ...s, title: title.trim() || '未命名对话' } : s));
     persistSessions(next);
     return { sessions: next };
   }),
+  // 删除单条消息(对话/输出)
+  deleteMessage: (sessionId, msgId) => set((state) => {
+    const next = state.sessions.map((s) => s.id === sessionId
+      ? { ...s, messages: s.messages.filter((m) => m.id !== msgId) }
+      : s);
+    persistSessions(next);
+    return { sessions: next };
+  }),
+  // 清空当前会话消息历史(保留会话壳) + 同步删除后端 checkpoint + 重置全部业务字段
+  // v3.6: 等后端清除成功再清本地（评审：fire-and-forget 导致 checkpoint 残留无反馈）
+  clearMessages: async (sessionId) => {
+    let backendOk = true;
+    try {
+      const { dataIntelligenceApi } = await import('../services/dataIntelligenceApi');
+      const resp = await dataIntelligenceApi.clearFreeplanMemory(sessionId);
+      // P2-1: 检查 cleared 字段（后端可能返回 200 但 cleared:false）
+      if (resp && resp.cleared === false) {
+        backendOk = false;
+        console.warn('[clearMessages] 后端返回 cleared:false，checkpoint 未清除', resp);
+      }
+    } catch (e) {
+      backendOk = false;
+      console.error('[clearMessages] 后端 checkpoint 清除失败:', e);
+    }
+    // F2: 后端失败时不清本地（防"页面已清空但后端checkpoint残留"导致下一轮带旧记忆）
+    if (!backendOk) {
+      return false;
+    }
+    set((state) => {
+      const next = state.sessions.map((s) => s.id === sessionId
+        // 重置全部业务字段，不只 messages/thinkStream（防 confirmed/flags/goal 等残留）
+        ? {
+            ...s,
+            messages: [],
+            thinkStream: [],
+            lastResponse: null,
+            recommendations: [],
+            confirmed: {},
+            flags: {},
+            pendingCandidates: [],
+            finalTokens: [],
+            finalAnswer: undefined,
+            goal: undefined,
+            currentTask: undefined,
+            liveStatus: undefined,
+            liveMetaInfo: undefined,
+          }
+        : s);
+      persistSessions(next);
+      return { sessions: next };
+    });
+    return true;
+  },
 
   fetchConcepts: async () => {
     try {

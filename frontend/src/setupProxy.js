@@ -5,7 +5,7 @@
  *   - text/event-stream 路径下：buffer/cache 必须关掉
  *   - 关 X-Accel-Buffering（nginx 风格）+ 显式 selfHandleResponse=false
  *
- * 验证方式：直连 8000  ↔  走 3000 proxy 两边的 first-event 时间应一致（毫秒级）。
+ * 验证方式：直连 28000  ↔  走 23000 proxy 两边的 first-event 时间应一致（毫秒级）。
  */
 const { createProxyMiddleware } = require('http-proxy-middleware');
 

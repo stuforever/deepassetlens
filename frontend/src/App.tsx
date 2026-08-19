@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Input, AutoComplete, theme, ConfigProvider } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { Layout, Input, AutoComplete, ConfigProvider, Badge } from 'antd';
+import { SearchOutlined, ThunderboltFilled } from '@ant-design/icons';
 import zhCN from 'antd/locale/zh_CN';
 
 import { routes } from './routes';
@@ -83,6 +83,7 @@ const App: React.FC = () => {
     if (menuKey === 'graph') setCanvasMode('force');
     else if (menuKey === 'tree_model') setCanvasMode('quad');
     else if (menuKey === 'matrix_model') setCanvasMode('matrix');
+    else if (menuKey === 'gallery') setCanvasMode('neo4j');
     const label = MENU_LABELS[menuKey] || menuKey;
     setPageTabs((prev) => {
       if (prev.find((t) => t.key === menuKey)) return prev;
@@ -153,11 +154,10 @@ const App: React.FC = () => {
     [switchToMenu]
   );
 
-  const {
-    token: { colorBgContainer },
-  } = theme.useToken();
-
   const headerTitle = useMemo(() => 'DeepAssetLens', []);
+
+  // B1 美化：环境徽标（dev=warning 色点 / prod=success 色点）
+  const isProdEnv = process.env.NODE_ENV === 'production' && process.env.REACT_APP_ENV !== 'dev';
 
   return (
     <ConfigProvider
@@ -165,10 +165,12 @@ const App: React.FC = () => {
       theme={{ token: antdThemeToken, components: antdComponents, cssVar: { key: 'tupu' } }}
     >
       <Layout style={{ height: '100vh', overflow: 'hidden' }}>
-        {/* 顶部栏 48px */}
+        {/* 顶部栏 48px（B1 美化：玻璃拟态 = 半透明白 + backdrop blur） */}
         <Header
           style={{
-            background: colorBgContainer,
+            background: 'rgba(255,255,255,.8)',
+            WebkitBackdropFilter: 'blur(8px) saturate(1.5)',
+            backdropFilter: 'blur(8px) saturate(1.5)',
             borderBottom: `1px solid ${tokens.colors.border}`,
             padding: 0,
             height: tokens.layout.headerHeight,
@@ -178,14 +180,30 @@ const App: React.FC = () => {
             justifyContent: 'space-between',
             paddingInline: tokens.space.s5,
             flexShrink: 0,
+            zIndex: 100,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space.s5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space.s3 }}>
+            {/* B1 美化：24×24 渐变 logo 块（品牌渐变克制使用：此处 + AI 徽标 + 主发送按钮） */}
+            <div
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: tokens.radius.default,
+                background: tokens.brandGradient,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <ThunderboltFilled style={{ color: tokens.colors.textInverse, fontSize: 14 }} />
+            </div>
             <div
               style={{
                 fontWeight: tokens.fontWeight.bold,
                 fontSize: 16,
-                color: tokens.colors.primary,
+                color: tokens.colors.textPrimary,
                 whiteSpace: 'nowrap',
                 letterSpacing: '-0.01em',
               }}
@@ -197,6 +215,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space.s4 }}>
+            <Badge status={isProdEnv ? 'success' : 'warning'} text={isProdEnv ? '生产' : '开发'} />
             <AutoComplete
               value={searchText}
               onChange={setSearchText}
@@ -205,10 +224,11 @@ const App: React.FC = () => {
                 switchToMenu(value);
                 setSearchText('');
               }}
-              style={{ width: 220 }}
+              style={{ width: 260 }}
               placeholder="搜索页面…"
             >
               <Input
+                className="dal-global-search"
                 prefix={<SearchOutlined style={{ color: tokens.colors.textTertiary }} />}
                 allowClear
                 onClear={() => setSearchText('')}
