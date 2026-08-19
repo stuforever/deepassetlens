@@ -893,3 +893,26 @@ class EngineAccelerator(Base):
     last_error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class KgVerifiedQaExample(Base):
+    """验证过的问答示例库（融合设计 §4.1 G1）。
+
+    经用户确认/人工/金标集写入的「问题 -> 验证通过 SQL」示例；
+    向量存 Qdrant 集合 tupu_qa_examples，问答时按问题 embedding 语义检索 top-3
+    注入 SystemMessage（仅供构造 SQL 参考，禁止照抄执行）。schema 漂移联动置 disabled。
+    """
+
+    __tablename__ = "kg_verified_qa_examples"
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    question_norm = Column(String(500), nullable=False)  # 归一化问题（复用标准语义词条管线，可为原文）
+    question_raw = Column(String(500), nullable=False)   # 原始问题
+    sql = Column(Text, nullable=True)                    # 验证通过的 SQL 模板
+    entity_codes = Column(JSON, nullable=True)           # 涉及实体，供漂移失效联动
+    route_type = Column(String(20), nullable=True)       # generic | scenario
+    engine = Column(String(20), nullable=True)           # 取数引擎
+    example_type = Column(String(20), nullable=True)     # user_confirmed | manual | golden
+    status = Column(String(10), nullable=False, default="enabled")  # enabled | disabled | review
+    hit_count = Column(Integer, nullable=False, default=0)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

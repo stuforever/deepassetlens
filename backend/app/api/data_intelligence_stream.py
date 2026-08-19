@@ -120,8 +120,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             # 契约注入 runtime.context（SkillPolicyMiddleware 读取的唯一边界）
             if _contract is not None:
                 _ctx["contract"] = _contract
-                # 每次请求只向模型提供受控工作流上下文（设计 §7.1）
-                _contract_msg = _build_contract_system_message(_contract)
+                # 每次请求只向模型提供受控工作流上下文（设计 §7.1）；G1: 尾部追加 top-3 已验证示例
+                _contract_msg = _build_contract_system_message(_contract, question=req.user_input)
                 input_messages = [SystemMessage(content=_contract_msg), HumanMessage(content=req.user_input)]
                 logger.info(
                     f"[SkillRouter] route={_route.route_type if _route else 'fallback'} "

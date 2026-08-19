@@ -18,6 +18,7 @@ from .api import (
     doris_config,
     knowledge_base,
     engine_observability,
+    qa_examples,
 )
 from .models.base import Base
 # 确保模型注册到 Base.metadata（避免循环导入，在这里集中导入）
@@ -235,6 +236,7 @@ app.include_router(knowledge_base.router)  # 自带 prefix="/api/v1/knowledge-ba
 app.include_router(biz_work_order.router)  # 自带 prefix="/api/v1/biz_work_order"
 app.include_router(kg_api.router)  # 自带 prefix="/api/kg"
 app.include_router(synonym.router)  # 自带 prefix="/api/v1/synonyms"
+app.include_router(qa_examples.router, prefix="/api/v1", tags=["qa_examples"])  # G1 验证示例库
 app.include_router(api_mapping.router, prefix="/api/v1", tags=["api_mapping"])
 app.include_router(doris_config.router, prefix="/api/v1", tags=["doris_config"])
 # 数据引擎增强（批3）：观测端点（自带 prefix="/api/engine"）

@@ -68,10 +68,12 @@ class ChatResponse(BaseModel):
     message_card: Optional[Dict[str, Any]] = None
 
 
-def _build_contract_system_message(contract) -> str:
+def _build_contract_system_message(contract, question: str = "") -> str:
     """按契约构造每次请求注入的 SystemMessage（设计 §7.1：只向模型提供受控上下文）。
 
     模型只在契约允许范围内做判断；契约本身由代码路由+SkillPolicy 强制执行。
+    G1（融合设计 §4.1）：question 非空时尾部追加 top-3 已验证示例（Qdrant 不可用/无命中
+    静默跳过，不阻断问答）；命中写入 contract._runtime["example_hits"] 并累计 hit_count。
     """
     scope = contract.scope or {}
     customers = scope.get("customer_names") or []
@@ -89,7 +91,33 @@ def _build_contract_system_message(contract) -> str:
         f"- 终止条件：{'；'.join(contract.stop_when) or '拿到查询结果即停止'}",
         f"- 输出模式：{contract.output_mode} —— 完整明细由前端查询结果表唯一展示，最终回答禁止输出 Markdown 明细表，只写结论/发现/风险/建议",
     ]
-    return "\n".join(lines)
+    base = "\n".join(lines)
+    if question:
+        try:
+            from app.services.qa_example_service import build_examples_payload, bump_hit_count
+            from app.core.database import SessionLocal
+            _db = SessionLocal()
+            try:
+                _payload = build_examples_payload(_db, question)
+            finally:
+                _db.close()
+            if _payload["block"]:
+                base += _payload["block"]
+                try:
+                    contract._runtime["example_hits"] = _payload["hits"]
+                except Exception:
+                    pass
+                try:
+                    _db2 = SessionLocal()
+                    try:
+                        bump_hit_count(_db2, [str(h["id"]) for h in _payload["hits"]])
+                    finally:
+                        _db2.close()
+                except Exception:
+                    pass
+        except Exception as _e:
+            logger.warning(f"[QA示例库] 示例注入失败（静默跳过）: {_e}")
+    return base
 
 
 # ---------------------------------------------------------------------------
