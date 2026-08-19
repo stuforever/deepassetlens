@@ -22,6 +22,7 @@ import {
   SettingOutlined,
   FundOutlined,
   ThunderboltOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 
 export interface NavItem {
@@ -89,6 +90,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { menuKey: 'governance', label: '运行观测', path: '/governance', icon: FundOutlined },
       { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
       { menuKey: 'vector_manage', label: '向量管理', path: '/vector', icon: BookOutlined },
+      { menuKey: 'qa_examples', label: '示例库管理', path: '/qa-examples', icon: FileSearchOutlined },
     ],
   },
   {

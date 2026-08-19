@@ -419,4 +419,32 @@ export const engineApi = {
     engineClient.post('/accelerators/refresh/all', {}, config),
 };
 
+// G1 验证示例库（融合设计 §4.1，/api/v1/qa-examples）
+export type QaExampleItem = {
+  id: string;
+  question_raw: string;
+  question_norm?: string;
+  sql?: string;
+  entity_codes?: string[];
+  route_type?: string;
+  engine?: string | null;
+  example_type?: string;
+  status?: string;      // enabled | disabled | review
+  hit_count?: number;
+  created_at?: string | null;
+};
+
+export const qaExamplesApi = {
+  list: (params?: { status?: string; keyword?: string; page?: number; size?: number }, config?: AxiosRequestConfig) =>
+    api.get('/qa-examples', { params, ...config }),
+  create: (data: { question_raw: string; sql?: string; entity_codes?: string[]; route_type?: string; engine?: string; example_type?: string }, config?: AxiosRequestConfig) =>
+    api.post('/qa-examples', data, config),
+  seed: (items: Array<{ question_raw: string; sql?: string; entity_codes?: string[]; route_type?: string; engine?: string; example_type?: string }>, config?: AxiosRequestConfig) =>
+    api.post('/qa-examples/seed', { items }, config),
+  setStatus: (id: string, status: string, config?: AxiosRequestConfig) =>
+    api.patch(`/qa-examples/${id}/status`, { status }, config),
+  remove: (id: string, config?: AxiosRequestConfig) =>
+    api.delete(`/qa-examples/${id}`, config),
+};
+
 export default api;
