@@ -100,4 +100,4 @@ class TestM4Golden:
         p = Path(__file__).resolve().parent.parent / "scripts" / "eval_golden.py"
         assert p.exists()
         src = p.read_text(encoding="utf-8")
-        assert "accuracy_pct" in src and "expected_result_digest" in src
+        assert "first_round_accuracy_pct" in src and "stable_accuracy_pct" in src and "expected_result_digest" in src

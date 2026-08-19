@@ -119,6 +119,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 条（0=全部）")
     ap.add_argument("--stream-timeout", type=int, default=240)
+    ap.add_argument("--repeat", type=int, default=1, help="每条跑 N 次（平滑 LLM 方差），报告通过率与稳定通过率")
     ap.add_argument("--out", default="docs/eval", help="产物目录（相对 repo 根）")
     args = ap.parse_args()
 
@@ -139,38 +140,52 @@ def main():
         print("[Eval] 无启用金标。请先 POST /api/v1/golden-qa/seed 或灌入数据。")
         sys.exit(1)
 
-    print(f"== 金标评估：{len(goldens)} 条，stream-timeout={args.stream_timeout}s ==")
+    print(f"== 金标评估：{len(goldens)} 条 × {args.repeat} 次，stream-timeout={args.stream_timeout}s ==")
     results = []
-    passes = 0
+    stable_pass = 0
     for i, g in enumerate(goldens, 1):
         q = g.question
-        print(f"  [{i}/{len(goldens)}] {q[:40]} ... ", end="", flush=True)
-        res = run_golden_question(q, f"eval_{g.id}", args.stream_timeout)
         exp = g.expected_result_digest or {}
-        ok = False
-        reason = res["reason"]
-        if res["ok"] and res["digest"]:
-            ok = digest_matches(res["digest"], exp)
-        if ok:
-            passes += 1
-        mark = "PASS" if ok else "FAIL"
-        print(f"{mark}  expect={exp}  got={res.get('digest')}")
+        runs = []
+        pass_cnt = 0
+        for r in range(args.repeat):
+            print(f"  [{i}/{len(goldens)}] ({r + 1}/{args.repeat}) {q[:40]} ... ", end="", flush=True)
+            res = run_golden_question(q, f"eval_{g.id}_r{r}", args.stream_timeout)
+            ok = False
+            reason = res["reason"]
+            if res["ok"] and res["digest"]:
+                ok = digest_matches(res["digest"], exp)
+            if ok:
+                pass_cnt += 1
+            mark = "PASS" if ok else "FAIL"
+            print(f"{mark}  got={res.get('digest')}")
+            runs.append({
+                "run": r + 1, "pass": ok, "reason": reason,
+                "got_digest": res.get("digest"), "tool_count": res.get("tool_count"),
+                "confidence": res.get("confidence"),
+            })
+            time.sleep(0.5)
+        stable = pass_cnt >= max(1, (args.repeat + 1) // 2)  # 半数以上算稳定通过
+        if stable:
+            stable_pass += 1
+        print(f"      -> {pass_cnt}/{args.repeat} {'稳定PASS' if stable else 'FAIL'}")
         results.append({
             "id": g.id, "question": q, "expected_sql": g.expected_sql,
-            "expected_digest": exp, "got_digest": res.get("digest"),
-            "pass": ok, "reason": reason, "tool_count": res.get("tool_count"),
-            "confidence": res.get("confidence"),
+            "expected_digest": exp, "pass_ratio": pass_cnt,
+            "stable": stable, "runs": runs,
         })
-        time.sleep(0.5)
 
     total = len(results)
-    acc = round(passes / total * 100, 1) if total else 0.0
+    first_pass = sum(1 for r in results if r["runs"][0]["pass"])
+    acc = round(first_pass / total * 100, 1) if total else 0.0
+    stable_acc = round(stable_pass / total * 100, 1) if total else 0.0
     summary = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "total": total, "pass": passes, "fail": total - passes,
-        "accuracy_pct": acc,
+        "total": total, "repeat": args.repeat,
+        "first_round_accuracy_pct": acc,   # 单轮口径（兼容环比：同 repeat=1 即首轮）
+        "stable_accuracy_pct": stable_acc,  # 稳定通过口径（半数以上运行正确）
         "rubric": "on" if os.getenv("TUPU_RUBRIC_DISABLED") != "1" else "off",
-        "failures": [r for r in results if not r["pass"]],
+        "unstable": [r for r in results if not r["stable"]],
     }
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     out_dir = os.path.join(root, args.out)
@@ -179,9 +194,9 @@ def main():
     out_path = os.path.join(out_dir, f"eval_golden_{ts}.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
-    print(f"\n== 结果：准确率 {acc}% （{passes}/{total}），明细 -> {os.path.relpath(out_path, root)} ==")
-    for r in summary["failures"]:
-        print(f"  FAIL {r['question'][:40]} :: {r['reason']}")
+    print(f"\n== 结果：首轮准确率 {acc}% / 稳定通过率 {stable_acc}% （{stable_pass}/{total} 条稳定），明细 -> {os.path.relpath(out_path, root)} ==")
+    for r in summary["unstable"]:
+        print(f"  UNSTABLE {r['question'][:40]} :: pass_ratio={r['pass_ratio']}/{args.repeat}")
 
 
 if __name__ == "__main__":
