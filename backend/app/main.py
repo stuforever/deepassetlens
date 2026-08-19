@@ -19,7 +19,8 @@ from .api import (
     knowledge_base,
     engine_observability,
     qa_examples,
-)
+    golden_qa,
+    feedback,)
 from .models.base import Base
 # 确保模型注册到 Base.metadata（避免循环导入，在这里集中导入）
 from .models.skill import Skill, SkillVersion, SkillExecLog, SkillApiBinding, SkillType
@@ -237,6 +238,8 @@ app.include_router(biz_work_order.router)  # 自带 prefix="/api/v1/biz_work_ord
 app.include_router(kg_api.router)  # 自带 prefix="/api/kg"
 app.include_router(synonym.router)  # 自带 prefix="/api/v1/synonyms"
 app.include_router(qa_examples.router, prefix="/api/v1", tags=["qa_examples"])  # G1 验证示例库
+app.include_router(golden_qa.router, prefix="/api/v1", tags=["golden_qa"])     # M4 G6 金标评估集
+app.include_router(feedback.router, prefix="/api/v1", tags=["feedback"])       # M4 G5 反馈闭环
 app.include_router(api_mapping.router, prefix="/api/v1", tags=["api_mapping"])
 app.include_router(doris_config.router, prefix="/api/v1", tags=["doris_config"])
 # 数据引擎增强（批3）：观测端点（自带 prefix="/api/engine"）

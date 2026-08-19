@@ -197,8 +197,12 @@ def add_qa_example(
     engine: Optional[str] = None,
     example_type: str = "manual",
     question_norm: Optional[str] = None,
+    status: str = "enabled",
 ) -> Dict[str, Any]:
-    """新增示例（DB 行 + Qdrant point）。返回 {id, ok}。"""
+    """新增示例（DB 行 + Qdrant point）。返回 {id, ok}。
+
+    status: enabled | review（G5 反馈 👎+修正 SQL 进审核队列用 review）。
+    """
     question_raw = (question_raw or "").strip()
     if not question_raw:
         return {"ok": False, "error": "question_raw 必填"}
@@ -210,14 +214,14 @@ def add_qa_example(
         route_type=route_type or "generic",
         engine=engine,
         example_type=example_type or "manual",
-        status="enabled",
+        status=status or "enabled",
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     client = _safe_client()
     if client is not None:
-        _upsert_qdrant(client, str(row.id), question_raw, sql or "", route_type, "enabled")
+        _upsert_qdrant(client, str(row.id), question_raw, sql or "", route_type, status or "enabled")
     return {"ok": True, "id": str(row.id)}
 
 

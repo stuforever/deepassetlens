@@ -1,0 +1,183 @@
+{
+  "generated_at": "2026-08-19 22:42:26",
+  "total": 6,
+  "pass": 0,
+  "fail": 6,
+  "accuracy_pct": 0.0,
+  "rubric": "on",
+  "failures": [
+    {
+      "id": "4c9890be37bf44bca7f566303c6cd48e",
+      "question": "用电客户总数是多少",
+      "expected_sql": "SELECT COUNT(*) AS total FROM internal.test_db.dim_cst_elec_cons_cust",
+      "expected_digest": {
+        "first_row": [
+          10
+        ],
+        "row_count": 1,
+        "first_row_hash": "e9310b0c165be166"
+      },
+      "got_digest": {
+        "row_count": 3,
+        "first_row_hash": "61951475e604a316",
+        "first_row": [
+          "CUS0001",
+          "用电客户名称1",
+          "承压名称1",
+          "6024.82",
+          "8916.77",
+          "重要性等级名称1",
+          "业务服务地址名称1"
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    },
+    {
+      "id": "5522826b78624a1da1f592f36b73ff98",
+      "question": "列出用电客户清单",
+      "expected_sql": "SELECT cust_name, cust_type, voltage_level FROM internal.test_db.dim_cst_elec_cons_cust LIMIT 10",
+      "expected_digest": {
+        "first_row": [
+          "北京华能电力科技有限公司",
+          "大工业",
+          "10kV"
+        ],
+        "row_count": 10,
+        "first_row_hash": "05651e84d76f7e43"
+      },
+      "got_digest": {
+        "row_count": 3,
+        "first_row_hash": "61951475e604a316",
+        "first_row": [
+          "CUS0001",
+          "用电客户名称1",
+          "承压名称1",
+          "6024.82",
+          "8916.77",
+          "重要性等级名称1",
+          "业务服务地址名称1"
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    },
+    {
+      "id": "6b596f7adfc84bd5b51fc3356d4a3bef",
+      "question": "统计一下当前有多少用电客户",
+      "expected_sql": "SELECT COUNT(*) AS total FROM internal.test_db.dim_cst_elec_cons_cust",
+      "expected_digest": {
+        "first_row": [
+          10
+        ],
+        "row_count": 1,
+        "first_row_hash": "e9310b0c165be166"
+      },
+      "got_digest": {
+        "row_count": 3,
+        "first_row_hash": "61951475e604a316",
+        "first_row": [
+          "CUS0001",
+          "用电客户名称1",
+          "承压名称1",
+          "6024.82",
+          "8916.77",
+          "重要性等级名称1",
+          "业务服务地址名称1"
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    },
+    {
+      "id": "8bc41dfbd8a04dcf9fae0a6b2ea24cfa",
+      "question": "各电压等级的用电客户分布是怎样的",
+      "expected_sql": "SELECT voltage_level AS dim, COUNT(*) AS cnt FROM internal.test_db.dim_cst_elec_cons_cust GROUP BY voltage_level ORDER BY cnt DESC",
+      "expected_digest": {
+        "first_row": [
+          "10kV",
+          5
+        ],
+        "row_count": 3,
+        "first_row_hash": "b05758029a16830c"
+      },
+      "got_digest": {
+        "row_count": 3,
+        "first_row_hash": "61951475e604a316",
+        "first_row": [
+          "CUS0001",
+          "用电客户名称1",
+          "承压名称1",
+          "6024.82",
+          "8916.77",
+          "重要性等级名称1",
+          "业务服务地址名称1"
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    },
+    {
+      "id": "b754cca905b14942b23ef3db16585517",
+      "question": "统计用电客户总数",
+      "expected_sql": "SELECT COUNT(*) AS total FROM cms20_cst_cust",
+      "expected_digest": {
+        "first_row": [
+          10
+        ],
+        "row_count": 1,
+        "first_row_hash": "e9310b0c165be166"
+      },
+      "got_digest": {
+        "row_count": 3,
+        "first_row_hash": "61951475e604a316",
+        "first_row": [
+          "CUS0001",
+          "用电客户名称1",
+          "承压名称1",
+          "6024.82",
+          "8916.77",
+          "重要性等级名称1",
+          "业务服务地址名称1"
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    },
+    {
+      "id": "b818065491a34c14ba6621916f19d15c",
+      "question": "各客户类型的用电客户分布是怎样的",
+      "expected_sql": "SELECT cust_type AS dim, COUNT(*) AS cnt FROM internal.test_db.dim_cst_elec_cons_cust GROUP BY cust_type ORDER BY cnt DESC",
+      "expected_digest": {
+        "first_row": [
+          "一般工商业",
+          4
+        ],
+        "row_count": 2,
+        "first_row_hash": "8b5b02d5703b203e"
+      },
+      "got_digest": {
+        "row_count": 3,
+        "first_row_hash": "08376fe2d3977369",
+        "first_row": [
+          "用电客户分类名称1",
+          1
+        ]
+      },
+      "pass": false,
+      "reason": "ok",
+      "tool_count": 0,
+      "confidence": "中"
+    }
+  ]
+}

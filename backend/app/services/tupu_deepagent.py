@@ -830,13 +830,17 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     # M3（融合设计 §5.1）：自评闸门 RubricMiddleware —— 仅调用方传 rubric 时激活（generic 契约，
     # scenario 不传即不激活）。grader 模型缺省会话模型；TUPU_RUBRIC_CONNECTION_ID 可指轻量连接。
     # max_iterations=1（只评不改，grader 放弃时不篡改消息，前端按 SSE 展示）；on_evaluation 走治理+sink。
+    # TUPU_RUBRIC_DISABLED=1 时跳过装配（§6.2 eval 开/关对比度量净收益）。
     from deepagents.middleware.rubric import RubricMiddleware
     import os as _os3
-    _rubric_conn = _os3.getenv("TUPU_RUBRIC_CONNECTION_ID", "") or connection_id
-    _rubric_model = get_chat_model(temperature=0.0, streaming=True, connection_id=_rubric_conn)
-    middleware_list.append(RubricMiddleware(model=_rubric_model, max_iterations=1,
-                                           on_evaluation=_on_rubric_evaluation))
-    logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'）")
+    if _os3.getenv("TUPU_RUBRIC_DISABLED", "") != "1":
+        _rubric_conn = _os3.getenv("TUPU_RUBRIC_CONNECTION_ID", "") or connection_id
+        _rubric_model = get_chat_model(temperature=0.0, streaming=True, connection_id=_rubric_conn)
+        middleware_list.append(RubricMiddleware(model=_rubric_model, max_iterations=1,
+                                               on_evaluation=_on_rubric_evaluation))
+        logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'）")
+    else:
+        logger.warning("[Rubric] TUPU_RUBRIC_DISABLED=1，跳过自评闸门装配（eval 净收益对比模式）")
 
     # F5: response_format（统一最终交付协议）。当前模型(GLM/DeepSeek)与嵌套结构化 schema
     # 不兼容：接入后会破坏 Agent 的最终文本生成（SQL 执行后不再产出结论），故不启用。

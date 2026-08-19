@@ -916,3 +916,22 @@ class KgVerifiedQaExample(Base):
     hit_count = Column(Integer, nullable=False, default=0)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class KgGoldenQaSet(Base):
+    """金标评估集（融合设计 §6.2 G6）。
+
+    人工/自动种子的「问题 -> 期望 SQL -> 结果 digest（row_count + 首行 sha1）」
+    供 eval_golden.py 逐条走流式问答比对结果 digest（比结果不比 SQL 文本）；
+    金标同时以 example_type=golden 灌入示例库（G1 冷启动即有数据）。
+    """
+
+    __tablename__ = "kg_golden_qa_set"
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    question = Column(String(500), nullable=False)
+    expected_sql = Column(Text, nullable=True)                 # 期望 SQL（供参考/审计，比对以 digest 为准）
+    expected_result_digest = Column(JSON, nullable=False)      # {row_count, first_row_hash}
+    route_type = Column(String(32), nullable=False, default="generic")  # generic | scenario
+    scenario_tag = Column(String(100), nullable=True)          # 场景标签（distribution-overload 等）
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
