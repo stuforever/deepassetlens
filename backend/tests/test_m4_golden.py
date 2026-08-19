@@ -24,14 +24,11 @@ def db():
 
 @pytest.fixture(autouse=True)
 def clean_golden(db):
+    """只清理测试自建行（scenario_tag=test），严禁触碰真实种子金标
+    （statistics/distribution-overload——此前用 question.in_(模板) 误删生产金标）。"""
     yield
     from app.models.base import KgGoldenQaSet, KgVerifiedQaExample
-    from app.services import golden_qa_service as gsvc
-    _tmpl_qs = [t["question"] for t in gsvc.SEED_TEMPLATES]
-    db.query(KgGoldenQaSet).filter(
-        (KgGoldenQaSet.scenario_tag == "test")
-        | (KgGoldenQaSet.question.in_(_tmpl_qs))
-        | (KgGoldenQaSet.scenario_tag == "historical")).delete(synchronize_session=False)
+    db.query(KgGoldenQaSet).filter(KgGoldenQaSet.scenario_tag == "test").delete(synchronize_session=False)
     db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.example_type == "golden").delete(synchronize_session=False)
     db.commit()
 
@@ -74,10 +71,17 @@ class TestM4Golden:
             return {"row_count": 2, "first_row_hash": "abc123"}
 
         monkeypatch.setattr(gsvc, "_exec_for_digest", fake_exec)
+        # 用独立测试模板（scenario_tag=test，避免触碰真实种子金标），fixture 负责清理
+        monkeypatch.setattr(gsvc, "SEED_TEMPLATES", [
+            {"question": "test_seed_统计客户数", "expected_sql": "SELECT COUNT(*) FROM t",
+             "route_type": "generic", "scenario_tag": "test"},
+            {"question": "test_seed_客户类型分布", "expected_sql": "SELECT COUNT(*) FROM t",
+             "route_type": "generic", "scenario_tag": "test"},
+        ])
         res = gsvc.seed_golden(db, max_count=5)
         assert res["ok"] and res["seeded"] >= 1
         goldens = db.query(KgGoldenQaSet).filter(KgGoldenQaSet.question.in_(
-            [t["question"] for t in gsvc.SEED_TEMPLATES])).count()
+            ["test_seed_统计客户数", "test_seed_客户类型分布"])).count()
         assert goldens >= 1
         # 金标兼灌示例库（example_type=golden，G1 冷启动）
         ex = db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.example_type == "golden").count()
