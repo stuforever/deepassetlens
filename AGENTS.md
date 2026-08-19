@@ -26,15 +26,15 @@
 ## Docker 端口映射（铁律，禁止修改）
 
 > 2026-08-05 固化。端口尽量在 10000 以上，避免与 Windows Hyper-V 保留端口范围（1177-1876 等）冲突。
-> tupu ES 用标准端口 9200、MySQL 用 3306（独立栈，不复用 ragflow 的 11200/33066）。
+> MySQL 用 3306，ES 复用 docker-es01-1（11200），PG 用 25432。
 
 | 服务 | 容器名 | 宿主端口 | 容器端口 | 用途 |
 |------|--------|---------|---------|------|
 | tupu 后端 | （本地进程） | **28000** | - | FastAPI/Uvicorn |
 | 前端 dev server | （本地进程） | **23000** | - | React dev server |
 | MySQL | tupu_mysql | **3306** | 3306 | tupu 主库（root/<.env.infra>） |
-| PostgreSQL | tupu_pg | **5432** | 5432 | pg_tupu（项目域实体业务数据） |
-| Elasticsearch | tupu_es | **9200** | 9200 | ES（elastic/<.env.infra>） |
+| PostgreSQL | tupu_pg | **25432** | 5432 | pg_tupu（项目域实体业务数据） |
+| Elasticsearch | docker-es01-1 | **11200** | 9200 | ES（elastic/infini_rag_flow） |
 | Doris FE | tupu_doris_fe | **9030** | 9030 | Doris MySQL 协议查询 |
 | Doris FE HTTP | tupu_doris_fe | **18030** | 8030 | Doris Web UI |
 | Doris BE | tupu_doris_be | **18040** | 8040 | Doris BE |
@@ -46,15 +46,14 @@
 
 **连接字符串速查**：
 - MySQL: `mysql+pymysql://root:<TUPU_MYSQL_PASSWORD>@localhost:3306/tupu`
-- PostgreSQL: `postgresql://postgres:<TUPU_PG_PASSWORD>@localhost:5432/tupu`
-- ES: `http://elastic:<TUPU_ES_PASSWORD>@localhost:9200`
+- PostgreSQL: `postgresql://postgres:<TUPU_PG_PASSWORD>@localhost:25432/tupu`
+- ES: `http://elastic:infini_rag_flow@localhost:11200`
 - Doris: `mysql://root:@localhost:9030`（catalogs: es_tupu, pg_tupu, internal）
 - Neo4j: `bolt://localhost:7687`
 
 **禁止**：
 - 不要修改上述任何端口号。
 - 不要新建 Docker 容器使用与上表冲突的端口。
-- tupu ES 端口 9200、MySQL 端口 3306（独立栈，不复用 ragflow 的 11200/33066）。
 
 ## 浏览器测试（铁律）
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Divider, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography, message, Switch } from 'antd';
-import { AppstoreAddOutlined, EditOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { AppstoreAddOutlined, CopyOutlined, EditOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { llmAdminApi } from '../services/api';
 import { PageShell, StatusTag } from '../components/shell';
 
@@ -51,8 +51,10 @@ const buildModeProfile = (values: any, prefix: 'quick' | 'deep') => {
 
 const buildConnectionExtraConfig = (values: any) => {
   const base = parseJsonObject(values.extra_config, {});
+  const models = Array.isArray(values.model_list) ? values.model_list.filter(Boolean) : [];
   return {
     ...base,
+    models,
     default_mode: values.default_mode || 'quick',
     mode_profiles: {
       ...(base.mode_profiles && typeof base.mode_profiles === 'object' ? base.mode_profiles : {}),
@@ -71,6 +73,7 @@ const LLMConfigManager: React.FC = () => {
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [connForm] = Form.useForm();
   const [plannerForm] = Form.useForm();
+  const modelList = Form.useWatch('model_list', connForm);  // 监听可用模型列表，驱动当前模型下拉选项
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -111,6 +114,8 @@ const LLMConfigManager: React.FC = () => {
       timeout_seconds: 60,
       base_url: 'https://api.openai.com/v1',
       api_path: '/chat/completions',
+      model_list: [],
+      model_name: undefined,
       extra_config: '{}',
       default_mode: 'quick',
       quick_temperature: '0.2',
@@ -131,10 +136,16 @@ const LLMConfigManager: React.FC = () => {
     const extra = row.extra_config && typeof row.extra_config === 'object' ? row.extra_config : {};
     const quickProfile = extra?.mode_profiles?.quick || {};
     const deepProfile = extra?.mode_profiles?.deep || {};
+    // 可用模型列表：优先取 extra_config.models，否则用 model_name 初始化
+    const models = Array.isArray(extra?.models) && extra.models.length > 0
+      ? extra.models
+      : (row.model_name ? [row.model_name] : []);
     setEditingConn(row);
     connForm.setFieldsValue({
       ...row,
       is_default: !!row.is_default,
+      model_list: models,
+      model_name: row.model_name,
       extra_config: JSON.stringify(extra, null, 2),
       default_mode: extra.default_mode || 'quick',
       quick_temperature: quickProfile.temperature ?? row.temperature ?? '0.2',
@@ -191,6 +202,16 @@ const LLMConfigManager: React.FC = () => {
     loadData();
   };
 
+  const duplicateConn = async (id: string) => {
+    try {
+      await llmAdminApi.duplicateConnection(id);
+      message.success('连接已复制（含 API Key，已重置为非默认）');
+      loadData();
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '复制连接失败');
+    }
+  };
+
   const savePlanner = async () => {
     const v = await plannerForm.validateFields();
     setPlannerLoading(true);
@@ -227,6 +248,7 @@ const LLMConfigManager: React.FC = () => {
                   rowKey="id"
                   loading={loading}
                   dataSource={connections}
+                  scroll={{ x: 2120 }}
                   columns={[
                     { title: 'ID', dataIndex: 'id', width: 240, render: (v: string) => v ? <Text copyable>{v}</Text> : '-' },
                     { title: '名称', dataIndex: 'name', width: 140 },
@@ -238,9 +260,19 @@ const LLMConfigManager: React.FC = () => {
                     },
                     { title: 'Provider', dataIndex: 'provider', width: 150 },
                     { title: '描述', dataIndex: 'description', width: 220, ellipsis: true },
-                    { title: 'Base URL', dataIndex: 'base_url', ellipsis: true },
+                    { title: 'Base URL', dataIndex: 'base_url', width: 260, ellipsis: true },
                     { title: 'API Path', dataIndex: 'api_path', width: 160 },
-                    { title: '模型', dataIndex: 'model_name', width: 140 },
+                    {
+                      title: '模型',
+                      width: 180,
+                      render: (_: any, row: any) => {
+                        const models = row?.extra_config?.models;
+                        if (Array.isArray(models) && models.length > 1) {
+                          return <span><Text type="secondary">{models.length}个模型</Text> <Tag color="blue">{row.model_name}</Tag></span>;
+                        }
+                        return <Tag>{row.model_name || '-'}</Tag>;
+                      },
+                    },
                     {
                       title: '默认模式',
                       width: 100,
@@ -259,11 +291,15 @@ const LLMConfigManager: React.FC = () => {
                     },
                     {
                       title: '操作',
-                      width: 420,
+                      width: 460,
+                      fixed: 'right',
                       render: (_: any, row: any) => (
                         <Space>
                           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row)}>
                             编辑
+                          </Button>
+                          <Button size="small" icon={<CopyOutlined />} onClick={() => duplicateConn(row.id)}>
+                            复制
                           </Button>
                           {!row.is_default ? (
                             <Button size="small" onClick={() => llmAdminApi.updateConnection(row.id, { is_default: true }).then(() => { message.success('默认大模型已更新'); loadData(); }).catch((e: any) => message.error(e?.response?.data?.detail || '设置默认大模型失败'))}>
@@ -333,10 +369,11 @@ const LLMConfigManager: React.FC = () => {
         onOk={saveConn}
         onCancel={() => setConnOpen(false)}
         width={920}
+        bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
       >
         <Form form={connForm} layout="vertical">
           <Form.Item name="name" label="连接名称" rules={[{ required: true }]}>
-            <Input placeholder="例如：openai-prod" disabled={!!editingConn} />
+            <Input placeholder="例如：openai-prod" />
           </Form.Item>
           <Form.Item name="provider" label="Provider" rules={[{ required: true }]}>
             <Select
@@ -358,8 +395,16 @@ const LLMConfigManager: React.FC = () => {
           <Form.Item name="api_key" label="API Key">
             <Input.Password placeholder="sk-..." />
           </Form.Item>
-          <Form.Item name="model_name" label="模型名称" rules={[{ required: true }]}>
-            <Input placeholder="例如：gpt-4o-mini" />
+          <Form.Item name="model_list" label="可用模型列表" rules={[{ required: true, message: '请至少添加一个模型' }]}
+            extra="输入模型名称后按回车添加；一个连接可配置多个模型，下方选择当前使用的模型。">
+            <Select mode="tags" placeholder="输入模型名称后按回车，如 gpt-4o-mini" tokenSeparators={[',']} />
+          </Form.Item>
+          <Form.Item name="model_name" label="当前使用模型" rules={[{ required: true, message: '请选择一个模型' }]}>
+            <Select
+              placeholder="从上方列表选择"
+              notFoundContent="请先在上方添加模型"
+              options={(modelList || []).map((m: string) => ({ value: m, label: m }))}
+            />
           </Form.Item>
           <Form.Item name="is_default" label="设为默认大模型" valuePropName="checked" initialValue={false}>
             <Switch />

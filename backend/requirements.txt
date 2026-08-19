@@ -1,4 +1,4 @@
-﻿fastapi
+fastapi
 uvicorn
 sqlalchemy
 pymysql
@@ -8,20 +8,34 @@ python-dotenv
 neo4j
 python-multipart
 langgraph>=0.2.50
+langgraph-checkpoint-sqlite>=2.0.0
+aiosqlite>=0.20.0
+deepagents>=0.6.0
 langsmith>=0.1.0
 langchain-openai>=0.1.0
 langchain-community>=0.1.0
 langchain-huggingface>=0.1.0
-# Authentik OIDC 闆嗘垚
+# Authentik OIDC 集成
 PyJWT[crypto]>=2.8.0
 cryptography>=42.0.0
 requests>=2.31.0
 qdrant-client>=1.12,<1.14
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-# 璺ㄦ簮鏀归€狅細瀹炰綋涓氬姟鏁版嵁杩?PostgreSQL + Elasticsearch(API)
+pytest-timeout>=2.2.0
+# 跨源改型：实体业务数据接 PostgreSQL + Elasticsearch(API)
 psycopg2-binary>=2.9.0
 elasticsearch>=8.11.0,<9.0.0
-# DuckDB 澶氭簮鑱旈偊鏌ヨ锛坉uckdb_engine.py 渚濊禆锛屽師婕忓啓锛?duckdb>=1.0.0
+# DuckDB 多源联邦查询（duckdb_engine.py 依赖，原漏写）
+duckdb>=1.0.0
 sqlglot>=23.0.0
 langchain-mcp-adapters>=0.3.0
+# LangChain/LangSmith 要求 packaging>=23.2
+packaging>=23.2
+# deepagents 固定当前验证版本
+deepagents==0.6.12
+# 电力领域中文分词（hybrid_retrieval.py 依赖）
+jieba>=0.42.1
+# 数据处理 / 配置解析
+pandas>=2.0.0
+pyyaml>=6.0

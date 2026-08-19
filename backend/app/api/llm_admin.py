@@ -29,6 +29,7 @@ class LLMConnectionCreate(BaseModel):
 
 
 class LLMConnectionUpdate(BaseModel):
+    name: Optional[str] = None
     provider: Optional[str] = None
     capability: Optional[str] = None
     description: Optional[str] = None
@@ -155,6 +156,42 @@ def create_llm_connection(payload: LLMConnectionCreate, db: Session = Depends(ge
     return {"code": 200, "data": _serialize_conn(item)}
 
 
+@router.post("/llm-connections/{item_id}/duplicate")
+def duplicate_llm_connection(item_id: str, db: Session = Depends(get_db)):
+    """复制连接：拷贝全部配置（含 api_key），名称加" 副本"后缀并去重，is_default=False。"""
+    src = next((x for x in db.query(LLMConnectionConfig).all() if str(x.id) == str(item_id)), None)
+    if not src:
+        raise HTTPException(status_code=404, detail="连接不存在")
+    base_name = (src.name or "").rstrip()
+    new_name = f"{base_name} 副本"
+    # 名称去重：已存在则追加 (2)(3)...
+    if db.query(LLMConnectionConfig).filter(LLMConnectionConfig.name == new_name).first():
+        n = 2
+        while db.query(LLMConnectionConfig).filter(LLMConnectionConfig.name == f"{base_name} 副本({n})").first():
+            n += 1
+        new_name = f"{base_name} 副本({n})"
+    item = LLMConnectionConfig(
+        name=new_name,
+        provider=src.provider,
+        capability=src.capability,
+        description=src.description,
+        base_url=src.base_url,
+        api_path=src.api_path,
+        api_key=src.api_key,
+        model_name=src.model_name,
+        is_default=False,
+        enabled=bool(src.enabled),
+        temperature=src.temperature,
+        max_tokens=src.max_tokens,
+        timeout_seconds=src.timeout_seconds,
+        extra_config=src.extra_config,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"code": 200, "data": _serialize_conn(item)}
+
+
 @router.put("/llm-connections/{item_id}")
 def update_llm_connection(item_id: str, payload: LLMConnectionUpdate, db: Session = Depends(get_db)):
     items = db.query(LLMConnectionConfig).all()
@@ -162,6 +199,11 @@ def update_llm_connection(item_id: str, payload: LLMConnectionUpdate, db: Sessio
     if not item:
         raise HTTPException(status_code=404, detail="连接不存在")
     update_data = payload.dict(exclude_unset=True)
+    # 名称唯一性校验
+    if update_data.get("name") and update_data["name"] != item.name:
+        existing = db.query(LLMConnectionConfig).filter(LLMConnectionConfig.name == update_data["name"]).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="连接名称已存在")
     if update_data.get("is_default") is True:
         db.query(LLMConnectionConfig).update({LLMConnectionConfig.is_default: False})
     for k, v in update_data.items():

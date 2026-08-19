@@ -59,7 +59,7 @@ DeepAssetLens 由「前端 + 后端 + 7 类数据基础设施」组成。基础�
 |------|------|------|
 | MySQL 8 | `docker-compose.infra.yml` | tupu 主库（元数据），端口 3306 |
 | Elasticsearch | `docker-compose.infra.yml` | 全文检索，端口 9200 |
-| PostgreSQL 16 | `docker-compose.infra.yml` | tupu 业务库，端口 5432 |
+| PostgreSQL 16 | `docker-compose.infra.yml` | tupu 业务库，端口 25432 |
 | Neo4j 5 | `docker-compose.infra.yml` | 图数据库，端口 7474/7687 |
 | Qdrant 1.12 | `docker-compose.infra.yml` | 向量库，端口 6333/6334 |
 | Doris | `docker-compose.doris.yml` | 联邦查询，端口 9030/18030/18040 |
@@ -104,7 +104,7 @@ node --version      # 应为 v18+
 | tupu 后端 | 28000 | FastAPI / Uvicorn | ✅ 必需 |
 | 前端 dev server | 23000 | React dev server | ✅ 必需 |
 | MySQL | 3306 | tupu 主库 | ✅ 必需 |
-| PostgreSQL | 5432 | tupu 业务库 | ✅ 必需 |
+| PostgreSQL | 25432 | tupu 业务库 | ✅ 必需 |
 | Elasticsearch | 9200 | ES 全文检索 | ✅ 必需 |
 | Neo4j | 7474 / 7687 | Browser / Bolt | ✅ 必需 |
 | Qdrant | 6333 / 6334 | REST / gRPC | ✅ 必需 |
@@ -173,7 +173,7 @@ TUPU_ES_PORT=9200
 TUPU_PG_USER=postgres
 TUPU_PG_DB=tupu
 TUPU_PG_PASSWORD=<你的pg密码>
-TUPU_PG_PORT=5432
+TUPU_PG_PORT=25432
 ```
 
 ✓ **验证**：`cat .env.infra` 确认无 `<change_me>` 残留。
@@ -223,7 +223,7 @@ DEEPSEEK_API_KEY=
 | 服务 | 连接字符串 |
 |------|-----------|
 | MySQL | `mysql+pymysql://root:<密码>@localhost:3306/tupu` |
-| PostgreSQL | `postgresql://postgres:<密码>@localhost:5432/tupu` |
+| PostgreSQL | `postgresql://postgres:<密码>@localhost:25432/tupu` |
 | Elasticsearch | `http://elastic:<密码>@localhost:9200` |
 | Doris | `mysql://root:@localhost:9030` |
 | Neo4j | `bolt://localhost:7687` |
@@ -242,7 +242,7 @@ docker compose --env-file .env.infra -f docker-compose.infra.yml up -d
 ```
 
 > 启动前先按 §4.1 配好 `.env.infra`（含 `TUPU_MYSQL_PASSWORD` / `TUPU_ES_PASSWORD` 等密码）。
-> MySQL(3306) / ES(9200) / PG(5432) / Neo4j / Qdrant / Authentik 一次性全部拉起。
+> MySQL(3306) / ES(9200) / PG(25432) / Neo4j / Qdrant / Authentik 一次性全部拉起。
 
 ✓ **验证**：容器全部 Up（tupu_mysql / tupu_es / tupu_pg / qdrant / neo4j / authentik_*）：
 ```powershell

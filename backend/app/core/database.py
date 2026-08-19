@@ -1,10 +1,10 @@
-﻿from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 import os
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "mysql+pymysql://root:root@localhost:3306/tupu?charset=utf8mb4",
+    "mysql+pymysql://root:root@localhost:33066/tupu?charset=utf8mb4",
 )
 
 engine = create_engine(
@@ -540,6 +540,36 @@ def ensure_schema_compatibility():
         if "body_template" not in ep_cols:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE `kg_api_endpoints` ADD COLUMN `body_template` TEXT NULL"))
+        # 数据引擎增强（批2）：API 内存缓存 TTL + 页码型分页配置
+        if "cache_ttl_seconds" not in ep_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_api_endpoints` ADD COLUMN `cache_ttl_seconds` INT NOT NULL DEFAULT 300"))
+        if "pagination" not in ep_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_api_endpoints` ADD COLUMN `pagination` JSON NULL"))
+        # 数据引擎增强（P3）：限速/熔断 per-endpoint 运行配置
+        if "run_config" not in ep_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_api_endpoints` ADD COLUMN `run_config` JSON NULL"))
+
+    # 存量漂移修复：kg_doris_config 模型已有 database 列但旧表缺该列（Doris 配置页 GET 500）
+    if "kg_doris_config" in table_names:
+        cfg_cols = {c["name"] for c in inspector.get_columns("kg_doris_config")}
+        if "database" not in cfg_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_doris_config` ADD COLUMN `database` VARCHAR(255) NOT NULL DEFAULT 'test_db'"))
+    # 数据引擎增强（P4）：DorisCatalog 增加 es 类型字段
+    if "kg_doris_catalog" in table_names:
+        cat_cols = {c["name"] for c in inspector.get_columns("kg_doris_catalog")}
+        if "es_hosts" not in cat_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_doris_catalog` ADD COLUMN `es_hosts` TEXT NULL"))
+        if "es_user" not in cat_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_doris_catalog` ADD COLUMN `es_user` VARCHAR(255) NULL"))
+        if "es_password" not in cat_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_doris_catalog` ADD COLUMN `es_password` VARCHAR(255) NULL"))
 
 
 def get_db():

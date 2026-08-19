@@ -26,7 +26,7 @@ CREATE CATALOG pg_tupu PROPERTIES (
   "type"         = "jdbc",
   "user"         = "postgres",
   "password"     = "<your_pg_password>",
-  "jdbc_url"     = "jdbc:postgresql://host.docker.internal:5432/tupu?reWriteBatchedInserts=true",
+  "jdbc_url"     = "jdbc:postgresql://host.docker.internal:25432/tupu?reWriteBatchedInserts=true",
   "driver_url"   = "postgresql-42.7.3.jar",
   "driver_class" = "org.postgresql.Driver"
 );

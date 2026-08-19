@@ -53,9 +53,13 @@ _playwright-mcp/
 _*.py
 _*.json
 _*.png
+_*.txt
+_*.md
+_*.tsv
 
 # === 截图 / 临时图片 ===
 e2e/_screenshots/
+frontend/_screenshots/
 e2e/_shots/
 e2e/_shots2/
 e2e/_results/
@@ -136,3 +140,7 @@ frontend/_pw_browsers/
 
 # === 开发期调试/迁移 SQL（含密码/内网 IP，不入库）===
 backend/_*.sql
+
+# === 数据库快照 / 列对齐临时目录（不入库）===
+backend/_restore_snapshot/
+backend/_snapshot_colalign/

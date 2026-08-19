@@ -39,6 +39,31 @@ class SourceFieldUpdate(SourceFieldCreate):
     pass
 
 
+# 模板列名 -> SourceFieldImport 字段名 映射（基于当前 20 列标准模板）。
+# 按表头名定位列，避免按位置映射在模板列序/列数变化时错位。
+_FIELD_COLUMN_MAP = {
+    "序号": "seq_no",
+    "来源表中文名": "table_cn",
+    "来源表英文名": "table_en",
+    "来源系统编码": "sys_code",
+    "库表定义": "table_def",
+    "来源字段中文名称": "field_cn",
+    "来源字段英文名称": "field_en",
+    "字段描述": "field_desc",
+    "数据类型": "data_type",
+    "长度/精度": "length_precision",
+    "小数位": "scale",
+    "主/外键": "pk_fk",
+    "是否参考数据": "is_ref_data",
+    "参考数据引用说明": "ref_data_desc",
+    "参考数据调用说明": "ref_data_usage_desc",
+    "是否建历史表": "is_history",
+    "修改状态": "mod_status",
+    "修改时间": "mod_time",
+    "变更原因": "mod_reason",
+    "应用范围": "app_scope",
+}
+
 @router.post("/source_fields/import")
 async def upload_source_fields(
     file: UploadFile = File(...),
@@ -59,13 +84,26 @@ async def upload_source_fields(
             
         reader = csv.reader(io.StringIO(decoded_content))
         
-        # 提取表头并简单校验
+        # 提取表头并建立 列名 -> 列索引 映射
         header = next(reader, None)
         if not header or len(header) < 5:
             raise ValueError("CSV 文件的表头格式不正确，列数过少，请参考模板格式！")
+        col_index = {}
+        for idx, name in enumerate(header):
+            name = (name or "").strip()
+            if name in _FIELD_COLUMN_MAP:
+                col_index[_FIELD_COLUMN_MAP[name]] = idx
+        if "table_en" not in col_index or "field_en" not in col_index:
+            raise ValueError("CSV 缺少 来源表英文名/来源字段英文名称 列，请使用标准模板！")
         
         imported_records = []
         error_rows = []
+        
+        def _val(row_cleaned, field):
+            idx = col_index.get(field)
+            if idx is None or idx >= len(row_cleaned):
+                return None
+            return row_cleaned[idx]
         
         for i, row in enumerate(reader):
             # 过滤掉完全为空的行，或者是只有空字符串的行
@@ -79,33 +117,29 @@ async def upload_source_fields(
                     if isinstance(col, str):
                         col = col.replace('\n', ' ').replace('\r', ' ').strip()
                     cleaned_row.append(col)
-                
-                # 补齐长度以防列数不够（基于最新的 21 个字段模板）
-                while len(cleaned_row) < 21:
-                    cleaned_row.append(None)
                     
                 imported_records.append(SourceFieldImport(
-                    seq_no=cleaned_row[0],
-                    table_cn=cleaned_row[1],
-                    table_en=cleaned_row[2],
-                    sys_code=cleaned_row[3],
-                    table_def=cleaned_row[4],
-                    field_cn=cleaned_row[5],
-                    field_en=cleaned_row[6],
-                    field_desc=cleaned_row[7],
-                    data_type=cleaned_row[8],
-                    length_precision=cleaned_row[9],
-                    scale=cleaned_row[10],
-                    pk_fk=cleaned_row[11],
-                    is_ref_data=cleaned_row[12],
-                    ref_data_desc=cleaned_row[13],
-                    ref_table_en=cleaned_row[14],
-                    ref_data_usage_desc=cleaned_row[15],
-                    is_history=cleaned_row[16],
-                    mod_status=cleaned_row[17],
-                    mod_time=cleaned_row[18],
-                    mod_reason=cleaned_row[19],
-                    app_scope=cleaned_row[20]
+                    seq_no=_val(cleaned_row, "seq_no"),
+                    table_cn=_val(cleaned_row, "table_cn"),
+                    table_en=_val(cleaned_row, "table_en"),
+                    sys_code=_val(cleaned_row, "sys_code"),
+                    table_def=_val(cleaned_row, "table_def"),
+                    field_cn=_val(cleaned_row, "field_cn"),
+                    field_en=_val(cleaned_row, "field_en"),
+                    field_desc=_val(cleaned_row, "field_desc"),
+                    data_type=_val(cleaned_row, "data_type"),
+                    length_precision=_val(cleaned_row, "length_precision"),
+                    scale=_val(cleaned_row, "scale"),
+                    pk_fk=_val(cleaned_row, "pk_fk"),
+                    is_ref_data=_val(cleaned_row, "is_ref_data"),
+                    ref_data_desc=_val(cleaned_row, "ref_data_desc"),
+                    ref_table_en=_val(cleaned_row, "ref_table_en"),
+                    ref_data_usage_desc=_val(cleaned_row, "ref_data_usage_desc"),
+                    is_history=_val(cleaned_row, "is_history"),
+                    mod_status=_val(cleaned_row, "mod_status"),
+                    mod_time=_val(cleaned_row, "mod_time"),
+                    mod_reason=_val(cleaned_row, "mod_reason"),
+                    app_scope=_val(cleaned_row, "app_scope"),
                 ))
             except Exception as row_e:
                 error_rows.append(f"第 {i+2} 行解析异常: {str(row_e)}")

@@ -1,28 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Button, Space, Modal, Form, Input, InputNumber, Switch, message, Tag, Popconfirm,
+  Button, Space, Modal, Form, Input, InputNumber, Switch, Select, message, Tag, Popconfirm,
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
 import { PageShell, DataTableShell, StatusTag } from '../components/shell';
-
-const API = axios.create({ baseURL: '/api/v1' });
-
-interface DataSource {
-  id: string;
-  name: string;
-  db_type: string;
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  description?: string;
-  is_default: boolean;
-  enabled: boolean;
-  doris_catalog_name?: string;
-}
+import { dataSourceApi } from '../services/api';
+import type { DataSource } from '../services/types';
 
 const DataSourceConfigPage: React.FC = () => {
   const [items, setItems] = useState<DataSource[]>([]);
@@ -34,7 +19,7 @@ const DataSourceConfigPage: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await API.get('/data-sources');
+      const res = await dataSourceApi.list({ silent: true });
       setItems(res.data?.data || []);
     } catch (e: any) {
       const detail = e?.response?.data?.detail || e?.message || '未知错误';
@@ -61,10 +46,10 @@ const DataSourceConfigPage: React.FC = () => {
       });
 
       if (editing) {
-        await API.put(`/data-sources/${editing.id}`, clean);
+        await dataSourceApi.update(editing.id, clean, { silent: true });
         message.success('更新成功');
       } else {
-        await API.post('/data-sources', clean);
+        await dataSourceApi.create(clean, { silent: true });
         message.success('创建成功');
       }
       setModalOpen(false);
@@ -81,7 +66,7 @@ const DataSourceConfigPage: React.FC = () => {
 
   const del = async (id: string) => {
     try {
-      await API.delete(`/data-sources/${id}`);
+      await dataSourceApi.remove(id, { silent: true });
       message.success('删除成功');
       load();
     } catch (e: any) {
@@ -94,7 +79,7 @@ const DataSourceConfigPage: React.FC = () => {
 
   const test = async (id: string) => {
     try {
-      const res = await API.post(`/data-sources/${id}/test`);
+      const res = await dataSourceApi.test(id, { silent: true });
       const data = res.data?.data || {};
       if (data.connected) {
         message.success('连接测试成功');
@@ -167,7 +152,13 @@ const DataSourceConfigPage: React.FC = () => {
             <Input placeholder="例如：业务MySQL" />
           </Form.Item>
           <Form.Item name="db_type" label="数据库类型" initialValue="mysql">
-            <Input disabled />
+            <Select
+              options={[
+                { label: 'MySQL', value: 'mysql' },
+                { label: 'PostgreSQL', value: 'postgresql' },
+              ]}
+              placeholder="选择数据库类型"
+            />
           </Form.Item>
           <Form.Item name="host" label="Host" rules={[{ required: true, message: 'Host必填' }]}>
             <Input placeholder="例如：localhost 或 192.168.1.100" />

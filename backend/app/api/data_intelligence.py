@@ -15,7 +15,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -24,176 +24,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/data-intelligence", tags=["data-intelligence"])
 
 
-# kg_api action -> 中文任务名（on_tool_start 映射 task_label）
-# action -> (技能包中文名, 工具中文名)
-_ACTION_TOOL_MAP: Dict[str, tuple] = {
-    "fetch_l1_l2_tree":       ("定位",     "获取层级树"),
-    "validate_l2":            ("定位",     "校验L2"),
-    "fetch_subgraph":         ("定位",     "获取子图"),
-    "validate_attributes":    ("定位",     "校验属性"),
-    "get_entity_relations":   ("关系查询", "查实体关系"),
-    "fetch_join_expr":        ("关系查询", "查JOIN字段"),
-    "validate_safe_sql":      ("SQL执行",  "校验SQL安全"),
-    "execute_sql":            ("SQL执行",  "执行SQL"),
-    "list_tables":            ("SQL执行",  "列出表名"),
-    "get_entity_source_mode": ("API取数",  "查数据源模式"),
-    "execute_api_sql":        ("API取数",  "多源API联邦SQL"),
-    "execute_entity_api":     ("API取数",  "对象API执行"),
-    "execute_doris_sql":      ("Doris整合", "Doris跨对象SQL"),
-    "search_entities":        ("搜索探索", "搜索实体"),
-    "search_concepts":        ("搜索探索", "搜索概念"),
-}
-
-# read_file 技能目录 -> 技能中文名
-_SKILL_CODE_CN: Dict[str, str] = {
-    "locate": "定位", "relate": "关系查询", "sql-exec": "SQL执行",
-    "explore": "搜索探索", "sql-query": "SQL拼接",
-    "explain-concept": "概念解释", "explore-graph": "图谱浏览",
-    "find-entity": "字段反查", "trace-lineage": "数据血缘",
-}
-
-# task_label 仍需保留（on_tool_end 按 task 匹配 result_summary）
-_KG_ACTION_LABELS: Dict[str, str] = {
-    "fetch_l1_l2_tree": "获取层级树", "validate_l2": "校验L2",
-    "fetch_subgraph": "获取子图", "validate_attributes": "校验属性",
-    "fetch_join_expr": "查JOIN字段", "validate_safe_sql": "校验SQL",
-    "execute_sql": "SQL执行", "search_concepts": "搜索概念",
-    "search_entities": "搜索实体", "get_entity_relations": "查关系",
-    "list_tables": "列出表名", "get_entity_source_mode": "查数据源模式",
-    "execute_api_sql": "API联邦SQL",
-    "execute_entity_api": "对象API执行",
-    "execute_doris_sql": "Doris跨对象SQL",
-}
-
-
-def _build_action_detail(name: str, action: str, inp: dict) -> str:
-    """on_tool_start 时拼接自然语言 detail：调用'XX'技能包的'XX'工具。"""
-    if name == "read_file":
-        fp = inp.get("file_path", "") if isinstance(inp, dict) else ""
-        skill_cn = ""
-        if isinstance(fp, str) and "/skills/" in fp:
-            code = fp.split("/skills/")[-1].split("/")[0]
-            skill_cn = _SKILL_CODE_CN.get(code, code)
-        return f"调用{skill_cn}技能的'读取技能文件'" if skill_cn else "读取技能文件"
-    if name == "write_todos":
-        todos = inp.get("todos", []) if isinstance(inp, dict) else []
-        steps = [t.get("content", "") if isinstance(t, dict) else str(t) for t in todos][:5]
-        return "LLM规划任务步骤：" + "；".join(s for s in steps if s) if steps else "LLM规划任务步骤"
-    if name == "kg_api":
-        pkg_tool = _ACTION_TOOL_MAP.get(action)
-        if pkg_tool:
-            pkg_cn, tool_cn = pkg_tool
-            return f"调用{pkg_cn}技能的'{tool_cn}{action}'"
-        return f"调用工具'{action}'"
-    return f"调用工具 {name}"
-
-
-def _infer_decision_task(tc_name: str, tc_args) -> str:
-    """根据 LLM 决策的工具调用推断判定标题（带推理结论）。"""
-    if tc_name == "read_file":
-        fp = tc_args.get("file_path", "") if isinstance(tc_args, dict) else ""
-        code = ""
-        if "/skills/" in str(fp):
-            code = str(fp).split("/skills/")[-1].split("/")[0]
-        cn = _SKILL_CODE_CN.get(code, code)
-        return f"选择技能（判定使用'{cn}'技能）" if cn else "选择技能"
-    if tc_name == "write_todos":
-        return "LLM规划任务步骤"
-    if tc_name == "kg_api":
-        action = tc_args.get("action", "") if isinstance(tc_args, dict) else ""
-        params = tc_args.get("params", "") if isinstance(tc_args, dict) else ""
-        pkg_tool = _ACTION_TOOL_MAP.get(action)
-        tool_cn = pkg_tool[1] if pkg_tool else action
-        conclusion = ""
-        try:
-            import json as _j
-            p = _j.loads(params) if params else {}
-        except Exception:
-            p = {}
-        if action == "validate_l2" and p.get("l2_name"):
-            conclusion = f"，推理出L2={p['l2_name']}"
-        elif action == "execute_sql" and p.get("sql"):
-            conclusion = f"，SQL：{str(p['sql'])[:50]}"
-        elif action == "search_entities" and p.get("keyword"):
-            conclusion = f"，关键词：{p['keyword']}"
-        return f"判定{tool_cn}{conclusion}" if conclusion else f"判定：调用'{tool_cn}'"
-    return "LLM思考判定"
-
-
-def _build_result_summary(last_task: str, parsed: dict) -> str:
-    """on_tool_end 时根据工具返回结果拼接自然语言结论 result_summary。"""
-    if not isinstance(parsed, dict):
-        return ""
-    if last_task == "读技能":
-        # read_file 返回的是技能文件内容，无法从内容提取技能名，靠 detail 已含
-        return "判定使用该技能"
-    if last_task == "获取层级树":
-        l1_cnt = len(parsed.get("l1_list", [])) if isinstance(parsed.get("l1_list"), list) else 0
-        # 统计 L2 总数
-        l2_cnt = 0
-        for l1 in parsed.get("l1_list", []) or []:
-            if isinstance(l1, dict):
-                l2_cnt += len(l1.get("l2_list", []) or [])
-        return f"返回 {l1_cnt} 个L1、{l2_cnt} 个L2"
-    if last_task == "校验L2":
-        if parsed.get("valid"):
-            return f"锁定 L2：{parsed.get('l2_name', '')}"
-        return f"L2 校验未通过：{parsed.get('reason', '')}"
-    if last_task == "获取子图":
-        entities = parsed.get("l2x_entities", []) or []
-        cnt = len(entities)
-        main_tbl = next((e.get("entity_name", "") for e in entities if isinstance(e, dict) and e.get("is_main_table")), "")
-        return f"该 L2 下共 {cnt} 个实体" + (f"，主表：{main_tbl}" if main_tbl else "")
-    if last_task == "校验属性":
-        attrs = parsed.get("attributes", []) or []
-        names = [a.get("attribute_name", "") for a in attrs if isinstance(a, dict)][:5]
-        return f"命中 {len(attrs)} 个属性" + (f"：{', '.join(names)}" if names else "")
-    if last_task == "查关系":
-        rels = parsed.get("relations", []) or []
-        return f"找到 {len(rels)} 条关联关系"
-    if last_task == "搜索实体":
-        ents = parsed.get("entities", []) or []
-        flds = parsed.get("fields", []) or []
-        return f"命中 {len(ents)} 个实体、{len(flds)} 个字段"
-    if last_task == "查JOIN字段":
-        join_on = parsed.get("join_on", "")
-        return f"JOIN 字段：{join_on}" if join_on else "未找到 JOIN 关系"
-    if last_task == "校验SQL":
-        if parsed.get("safe"):
-            return "SQL 校验通过"
-        return f"校验失败：{parsed.get('reason', '')}"
-    if last_task == "SQL执行":
-        row_cnt = parsed.get("row_count", 0)
-        cols = parsed.get("columns", []) or []
-        col_str = ", ".join(str(c) for c in cols[:4])
-        return f"返回 {row_cnt} 行数据" + (f"，字段：{col_str}{'...' if len(cols) > 4 else ''}" if cols else "")
-    # 兜底：用 tool_log 首行
-    log = parsed.get("log", "")
-    if log:
-        return log.split("\n")[0][:80]
-    return ""
-
-
-def _build_nonjson_result_summary(last_task: str, tool_name: str, out_str: str) -> str:
-    """on_tool_end 时 parsed=None（非 JSON 返回，如 read_file 返回技能文件内容）的结果摘要。"""
-    if not out_str:
-        return "工具执行完成"
-    if last_task == "读技能" or tool_name == "read_file":
-        # 技能文件内容，提取标题行（# 开头）
-        for line in out_str.split("\n"):
-            line = line.strip()
-            if line.startswith("# ") and not line.startswith("# ---"):
-                return f"读取技能文件：{line[2:].strip()}"
-        return f"读取技能文件（{len(out_str)} 字符）"
-    if tool_name == "write_todos":
-        return "任务规划完成"
-    # 兜底：取前 80 字符
-    return out_str[:80].replace("\n", " ").strip() + ("..." if len(out_str) > 80 else "")
-
-
-# --------------------------------------------------------------------------- #
-# Pydantic 模型
-# --------------------------------------------------------------------------- #
+from .data_intelligence_support import (
+    _ACTION_TOOL_MAP, _SKILL_CODE_CN, _SESSION_LOCKS, _SESSION_LOCK_MAX, _KG_ACTION_LABELS,
+    _get_session_lock, _extract_customer_names_from_input, _extract_recommendations,
+    _safe_error_summary, _empty_result_text, _build_final_delivery,
+    _build_action_detail, _infer_decision_task, _build_result_summary,
+    _build_nonjson_result_summary,
+)
 
 
 class UserSelection(BaseModel):
@@ -231,8 +68,32 @@ class ChatResponse(BaseModel):
     message_card: Optional[Dict[str, Any]] = None
 
 
+def _build_contract_system_message(contract) -> str:
+    """按契约构造每次请求注入的 SystemMessage（设计 §7.1：只向模型提供受控上下文）。
+
+    模型只在契约允许范围内做判断；契约本身由代码路由+SkillPolicy 强制执行。
+    """
+    scope = contract.scope or {}
+    customers = scope.get("customer_names") or []
+    scope_txt = ("; ".join(customers) if customers else "无客户名限定")
+    if scope.get("commitment") == "exact_set":
+        scope_txt += f"（精确集合，{scope.get('source', 'user_input')}）"
+    lines = [
+        "你当前处于受控工作流。以下契约由代码强制执行（SkillPolicyMiddleware），你无权改写：",
+        f"- 场景/步骤：{contract.skill_id} / {contract.workflow_step}",
+        f"- 允许工具：{', '.join(contract.allowed_tools)}",
+        f"- 禁止工具：{', '.join(contract.forbidden_tools) or '无'}",
+        f"- 本次允许的 SQL 模板：{', '.join(contract.template_ids) or '未声明（仅只读查询）'}",
+        f"- 范围：客户名 {scope_txt}",
+        f"- 数据引擎：{contract.selected_engine or '尚未确认 —— 先调用 batch_entity_source_mode 确认数据源模式，再执行数据查询；引擎一经锁定只允许对应工具，禁止切换重查'}",
+        f"- 终止条件：{'；'.join(contract.stop_when) or '拿到查询结果即停止'}",
+        f"- 输出模式：{contract.output_mode} —— 完整明细由前端查询结果表唯一展示，最终回答禁止输出 Markdown 明细表，只写结论/发现/风险/建议",
+    ]
+    return "\n".join(lines)
+
+
 @router.post("/chat/freeplan/stream")
-def chat_freeplan_stream(req: ChatRequest):
+def chat_freeplan_stream(req: ChatRequest, request: Request):
     """数据资产探查（ReAct 流式对话）。
 
     - ReAct 模式（create_deep_agent），边规划边思考
@@ -241,67 +102,172 @@ def chat_freeplan_stream(req: ChatRequest):
     """
     async def event_iter():
         try:
+            aiter = None  # LangGraph 事件迭代器, finally 中 aclose 以响应客户端取消
+            _evt_sink = None  # v3.1 关键事件持久化 sink; 提前置 None 防 early-exception 时 except/finally 引用未绑定变量
+            _session_lock = None  # v3.5 会话执行锁, finally 中释放
             import asyncio as _asyncio
             from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-            from app.services.tupu_deepagent import build_skill_system_message
-            from deepagents.backends.utils import create_file_data
-            from pathlib import Path as _Path
 
-            # 全量加载 10 个 SKILL.md 到虚拟文件系统（5个能力包 + 5个意图标签）
-            skills_dir = _Path(__file__).resolve().parent.parent.parent / "data" / "skills"
-            skills_files = {}
-            _TASK_SKILLS = [
-                # 能力包（工具箱，按需挑用）
-                "locate", "relate", "sql-exec", "explore",
-                # 意图标签（场景提示词）
-                "sql-query", "explain-concept", "explore-graph", "find-entity", "trace-lineage",
-                # 场景剧本（业务分析任务，口径固化）
-                "scenarios/distribution-overload",
-                "scenarios/project-lifecycle-cost",
-            ]
-            for skill_name in _TASK_SKILLS:
-                skill_md = skills_dir / skill_name / "SKILL.md"
-                if skill_md.exists():
-                    content = skill_md.read_text("utf-8")
-                    if content.strip().startswith("---"):
-                        path = f"/skills/{skill_name}/SKILL.md"
-                        skills_files[path] = create_file_data(content)
+            # P1-1: 删除旧技能枚举+files注入（CompositeBackend+skills=["/skills/"] 已接管技能加载）
+            # Agent 通过 FilesystemBackend 自主 read_file /skills/*/SKILL.md，无需每次请求手动注入
 
-            logger.info(f"[FreePlan] 加载 {len(skills_files)} 个技能文件")
+            # v3.5: 改用全局 Agent 单例（持久化 AsyncSqliteSaver，同 thread_id 跨请求恢复记忆）
+            # 不再每请求新建 MemorySaver（旧实现无跨轮记忆）
+            from app.services.tupu_deepagent import get_tupu_agent
+            agent = await get_tupu_agent(connection_id=req.llm_connection_id or "")
 
-            # 创建 DeepAgent（不复用 Plan-Execute 单例）
-            from app.services.tupu_deepagent import create_tupu_agent
-            from langgraph.checkpoint.memory import MemorySaver
-            # 自由规划用 MemorySaver（内存检查点），不持久化，避免与 Plan-Execute 的 SQLite 检查点冲突
-            checkpointer = MemorySaver()
-            agent = await create_tupu_agent(checkpointer=checkpointer)
+            # v3.6: checkpoint 按真实用户隔离（评审 P0：固定 anonymous 前缀导致跨用户串记忆）
+            # 鉴权关闭时 user.sub="anonymous"；启用后用真实 OIDC sub，实现用户级隔离
+            from app.core.auth import get_current_user
+            _current_user = get_current_user(request)
+            _user_prefix = _current_user.sub if _current_user and _current_user.sub else "anonymous"
+            _memory_thread_id = f"{_user_prefix}:{req.thread_id}"
+            config = {"configurable": {"thread_id": _memory_thread_id, "checkpoint_ns": "freeplan"}, "recursion_limit": 80}
 
-            config = {"configurable": {"thread_id": req.thread_id}, "recursion_limit": 80}
+            # v3.5: 同一会话执行锁 -- 防止同 thread_id 并发请求导致 checkpoint 分叉覆盖
+            _session_lock = _get_session_lock(_memory_thread_id)
+            await _session_lock.acquire()
 
-            freeplan_prompt = build_skill_system_message()
-            input_messages = [
-                SystemMessage(content=freeplan_prompt),
-                HumanMessage(content=req.user_input),
-            ]
+            # F4: scope 通过原生 context= 参数传递（不进 checkpoint，不混入消息历史）
+            # P0-1: 从用户原始输入正则提取客户名，通过 context 传给中间件（source=user_input）
+            # 模型无权覆盖此来源（_update_last_scope 遇到 source=user_input 时跳过）
+            _user_scope = _extract_customer_names_from_input(req.user_input)
+            _ctx = {}
+            if _user_scope:
+                _ctx["last_scope"] = {
+                    "customer_names": _user_scope,
+                    "ordered": True,
+                    "commitment": "exact_set",
+                    "source": "user_input",
+                }
+
+            # 跨轮 scope：从 checkpoint state 读上一轮 model_declared 范围
+            # （user_input 来源不进 checkpoint，只在本轮 context 里存活）
+            if not _ctx.get("last_scope"):
+                try:
+                    _prev_state = await agent.aget_state(config)
+                    _prev_scope = (_prev_state.values or {}).get("last_scope") if _prev_state.values else None
+                    if _prev_scope and _prev_scope.get("customer_names"):
+                        _ctx["last_scope"] = _prev_scope
+                except Exception:
+                    pass
+
+            # F4: 删除 SystemMessage 注入 scope（改为 runtime.context 原生路径）
+            # 模型从 system_prompt 里知道要写"范围:"行，闸门从 context.last_scope 读可信范围
+
+            # ===== 受控 Skill 问答平台 v2：确定性路由 -> 受控契约 -> 注入 =====
+            # SkillRouter 是唯一执行裁判（不让模型猜命中什么）；SkillPolicyMiddleware
+            # 从 runtime.context.contract 读契约硬校验；模型只按契约提示在允许范围内工作。
+            from app.services.skill_router import route_user_input
+            _conversation_ctx = {"thread_id": req.thread_id}
+            if _ctx.get("last_scope"):
+                _conversation_ctx["last_scope"] = _ctx["last_scope"]
+                _conversation_ctx["last_skill"] = None  # 跨轮技能延续由 checkpoint state 提供
+            try:
+                _prev_state_skill = None
+                _prev_state = await agent.aget_state(config)
+                if _prev_state and _prev_state.values:
+                    _prev_state_skill = (_prev_state.values or {}).get("last_skill")
+                if _prev_state_skill:
+                    _conversation_ctx["last_skill"] = _prev_state_skill
+            except Exception:
+                pass
+            try:
+                _route = route_user_input(req.user_input, _conversation_ctx)
+            except Exception as _rte:
+                logger.warning(f"[SkillRouter] 路由异常，降级为低权限通用契约: {_rte}")
+                from app.services.query_contract import QueryContract
+                _route = None
+                _fallback_contract = QueryContract.generic(route_reason=f"路由异常降级: {_rte}")
+            _contract = getattr(_route, "contract", None) if _route is not None else _fallback_contract
+
+            # 契约注入 runtime.context（SkillPolicyMiddleware 读取的唯一边界）
+            if _contract is not None:
+                _ctx["contract"] = _contract
+                # 每次请求只向模型提供受控工作流上下文（设计 §7.1）
+                _contract_msg = _build_contract_system_message(_contract)
+                input_messages = [SystemMessage(content=_contract_msg), HumanMessage(content=req.user_input)]
+                logger.info(
+                    f"[SkillRouter] route={_route.route_type if _route else 'fallback'} "
+                    f"skill={_contract.skill_id} step={_contract.workflow_step} "
+                    f"allowed={len(_contract.allowed_tools)} 契约注入成功"
+                )
+            else:
+                input_messages = [HumanMessage(content=req.user_input)]
+
+            # 评审 P1-5：路由成功后确定性写回 last_skill/last_step（跨轮受控上下文；
+            # 新场景命中即覆盖；generic/降级清空以免连续上下文误延续）。
+            try:
+                if _route is not None and _route.route_type == "scenario" and _contract is not None:
+                    _state_upd = {"last_skill": _contract.skill_id, "last_step": _contract.workflow_step}
+                else:
+                    _state_upd = {"last_skill": None, "last_step": None}
+                await agent.aupdate_state(config, _state_upd)
+            except Exception as _wbe:
+                logger.warning(f"[SkillRouter] last_skill/last_step 写回 checkpoint 失败: {_wbe}")
 
             tool_results = {}
             think_stream = []
             final_sent_at = [0.0]
             llm_round = [0]  # LLM 推理轮次计数器（每轮 ReAct 循环 +1）
-            _last_decision = [""]  # 上一轮决策文本（去重用）
+            step_counter = [0]  # 工具调用步骤序号(每次 on_tool_start +1), 前端按 step_id 区分同名步骤
+            step_start_ts = {}  # step_id -> 开始时间戳, 算每步耗时
+            _run_id_to_sid = {}  # ev.run_id -> step_id; on_tool_end 按 run_id 精确归属(替代 think_stream[-1], 修复并行工具/拒绝补判导致的误归属)
+            # v3.4 候选判断实时流: round 状态隔离 + tool_call_id -> round_id 映射
+            #   _round_states: model_run_id -> {accumulated, classifier, seq}  按轮隔离，on_chat_model_end 后清理
+            #   _tcid_to_roundid: tool_call_id -> model_run_id  on_chat_model_end 设，on_custom_event 消费后删
+            _round_states: dict[str, dict] = {}
+            _tcid_to_roundid: dict[str, str] = {}
+            # v3.2 下一步判断: tool_call_id 绑定链
+            #   on_chat_model_end 设 _pending_tcid(单工具约束下唯一) -> on_tool_start 消费并记 _run_id_to_tcid
+            #   -> on_tool_end 按 run_id 取 tool_call_id。前端按 tool_call_id 关联 decision↔tool(不按中文名)。
+            _pending_tcid = [""]   # 本轮 tool_call_id(on_chat_model_end 设, on_tool_start 消费)
+            _pending_tcname = [""]  # 本轮 tool_name(同上)
+            _pending_reason = [""]  # 本轮"下一步判断"content(on_chat_model_end 设, on_tool_start 写入 think_stream.live_reason)
+            _run_id_to_tcid = {}   # ev.run_id -> tool_call_id(on_tool_start 设, on_tool_end 用)
+            _sid_to_tool_name = {}  # step_id -> tool_name(on_tool_start 设, data_result 兜底关联用)
+            _data_result_sids = set()  # 已由 DataSummaryMiddleware 派发 data_result -> sql_result 的 step_id（防止 on_tool_end 再发截断版覆盖完整数据）
+            # v3.1 步骤5: 关键事件持久化(flag-gated+容错); _consume_events 内 append, final/except 里 complete/fail, finally 里 close
+            from app.services.run_event_sink import RunEventSink
+            _evt_sink = RunEventSink(req.user_input)
+
+            # v3.6 分段计时埋点：定位首响应延迟来源（6.73s 归因，评审要求先测量再归因）
+            import time as _time
+            _t0 = _time.time()
+            _timing = {"first_event": None, "first_model_stream": None,
+                       "first_tool_start": None, "first_decision": None,
+                       "first_answer_token": None, "total": None}
+            def _mark(key):
+                if _timing[key] is None:
+                    _timing[key] = round((_time.time() - _t0) * 1000)
 
             yield f"event: status\n"
-            yield f"data: {json.dumps({'node': 'DeepAgent', 'phase': 'running', 'text': '自由规划中...', 'routed_skill': 'free_plan'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'node': 'DeepAgent', 'phase': 'running', 'text': '小探正在运行中', 'routed_skill': 'free_plan'}, ensure_ascii=False)}\n\n"
+
+            # 受控路由/契约事件（前端据此渲染 RouteCard/ScopeCard/DataAccessCard/ExecutionDecisionCard）
+            if _contract is not None:
+                yield f"event: route\n"
+                yield f"data: {json.dumps((_route.to_dict() if _route is not None else {'route_type': 'fallback', 'contract': _contract.to_dict()}), ensure_ascii=False)}\n\n"
+                yield f"event: contract\n"
+                yield f"data: {json.dumps(_contract.to_dict(), ensure_ascii=False)}\n\n"
 
             # 复用 ReAct 路径的事件消费逻辑
+            # F4: 通过原生 context= 传递 runtime.context（astream_events 的 **kwargs 会透传给底层）
+            aiter = agent.astream_events(
+                {"messages": input_messages},
+                config=config,
+                context=_ctx,
+                version="v2",
+            ).__aiter__()
             async def _consume_events():
-                import time as _time
-                aiter = agent.astream_events(
-                    {"messages": input_messages, "files": skills_files},
-                    config=config,
-                    version="v2",
-                ).__aiter__()
+                _task_deadline = _time.time() + 300  # 5分钟硬超时：超过即终止
+                # v3.4: 不再用全局 _round_content_buf，完全按 round_id 隔离（_round_states 在外层定义）
                 while True:
+                    # 5分钟硬超时：超过即终止，aclose 杀掉 agent，不再烧 token
+                    if _time.time() > _task_deadline:
+                        yield f"event: think\n"
+                        yield f"data: {json.dumps({'task': '超时终止', 'kind': 'skill', 'result_summary': '任务超过5分钟被终止', 'result_status': 'error'}, ensure_ascii=False)}\n\n"
+                        break
                     try:
                         if final_sent_at[0] > 0:
                             remaining = (final_sent_at[0] + 3.0) - _time.time()
@@ -317,76 +283,92 @@ def chat_freeplan_stream(req: ChatRequest):
                     etype = ev.get("event", "")
                     name = ev.get("name", "")
                     data = ev.get("data", {})
+                    _mark("first_event")
 
                     if etype == "on_chat_model_stream":
+                        _mark("first_model_stream")
                         chunk = data.get("chunk")
                         if chunk is None:
                             continue
+                        # v3.4 候选判断实时流：逐 token 推送，不再缓冲到 on_chat_model_end
+                        # 前缀状态机：识别【下一步判断】开头 -> decision_draft；否则 -> answer_draft
                         content = getattr(chunk, "content", "")
-                        if content and isinstance(content, str) and content.strip():
-                            yield f"event: token\n"
-                            yield f"data: {json.dumps({'text': content}, ensure_ascii=False)}\n\n"
-                        # reasoning_content 不单独推 think_token（思考决策统一在 on_chat_model_end 推送，避免一轮多工具 task 冲突）
+                        if not (isinstance(content, str) and content):
+                            continue
+                        _rid = ev.get("run_id", "")
+                        _rs = _round_states.setdefault(_rid, {"accumulated": "", "classifier": "detecting", "seq": 0})
+                        _rs["accumulated"] += content
+                        _rs["seq"] += 1
+                        _marker = "【下一步判断】"
+                        if _rs["classifier"] == "detecting":
+                            _stripped = _rs["accumulated"].lstrip()
+                            if _marker.startswith(_stripped) and len(_stripped) < len(_marker):
+                                continue  # 仍是标记前缀，等待更多 token
+                            if _stripped.startswith(_marker):
+                                _rs["classifier"] = "decision"
+                                # 首次冲刷：推完整累积内容（不丢前面的标记和文字）
+                                yield f"event: think_token\n"
+                                yield f"data: {json.dumps({'kind': 'decision_draft', 'round_id': _rid, 'delta': _rs['accumulated']}, ensure_ascii=False)}\n\n"
+                                continue
+                            else:
+                                _rs["classifier"] = "answer"
+                                _mark("first_answer_token")
+                                yield f"event: think_token\n"
+                                yield f"data: {json.dumps({'kind': 'answer_draft', 'round_id': _rid, 'delta': _rs['accumulated']}, ensure_ascii=False)}\n\n"
+                                continue
+                        # 已识别，只推增量
+                        _kind = "decision_draft" if _rs["classifier"] == "decision" else "answer_draft"
+                        yield f"event: think_token\n"
+                        yield f"data: {json.dumps({'kind': _kind, 'round_id': _rid, 'delta': content}, ensure_ascii=False)}\n\n"
                         continue
 
                     if etype == "on_chat_model_end":
                         out = data.get("output")
+                        _rid = ev.get("run_id", "")
+                        # 取并清理 round 状态（完全以 round_states 为准，不用全局缓冲）
+                        _rs = _round_states.pop(_rid, None)
+                        _accumulated = _rs["accumulated"] if _rs else ""
                         if out is not None:
                             has_tc = bool(getattr(out, "tool_calls", None))
-                            c = getattr(out, "content", "")
-                            if not has_tc and c and isinstance(c, str) and c.strip():
-                                tool_results["ai_reply"] = c
-                            # 有 tool_calls -> LLM 做了判定决策，推送推理+决策信息
-                            elif has_tc:
+                            # 优先用 AIMessage.output.content，其次 round accumulated
+                            c = getattr(out, "content", "") or _accumulated
+                            if not has_tc:
+                                # 最终答案：推 answer_committed（完整正文校准，防丢字）
+                                if c and isinstance(c, str) and c.strip():
+                                    tool_results["ai_reply"] = c
+                                    yield f"event: think_token\n"
+                                    yield f"data: {json.dumps({'kind': 'answer_committed', 'round_id': _rid, 'content': c}, ensure_ascii=False)}\n\n"
+                                    if _evt_sink is not None:
+                                        _evt_sink.append("answer.committed", {"round_id": _rid, "content_len": len(c), "content": c[:2000]})
+                            # 有 tool_calls -> 存映射 tool_call_id -> round_id，等中间件 committed/rejected
+                            if has_tc:
                                 _tcs = getattr(out, "tool_calls", None) or []
-                                # 取上一步技能执行的结果摘要（衔接上下文）
-                                _prev_summary = ""
-                                for _ts in reversed(think_stream):
-                                    if _ts.get("kind") in ("skill", "plan") and _ts.get("result_summary"):
-                                        _prev_summary = _ts["result_summary"]
-                                        break
-                                _prev_text = f"{_prev_summary}完成" if _prev_summary else ("起点" if llm_round[0] == 0 else "")
-                                _c_text = (c if (c and isinstance(c, str) and c.strip()) else "")
-                                for _tc_idx, _tc in enumerate(_tcs):
+                                for _tc in _tcs:
+                                    _tc_id = _tc.get("id", "") if isinstance(_tc, dict) else getattr(_tc, "id", "")
                                     _tc_name = _tc.get("name", "") if isinstance(_tc, dict) else getattr(_tc, "name", "")
                                     _tc_args = _tc.get("args", {}) if isinstance(_tc, dict) else getattr(_tc, "args", {})
-                                    # task 用对应工具中文名，与 on_tool_start 的 task_label 一致，
-                                    # 使思考决策合并进同一执行条目（思考决策↔技能执行严格交替，避免"第N轮(idx)"扎堆）
+                                    # task 用对应工具中文名, 与 on_tool_start task_label 一致(前端兼容 task 匹配)
                                     if _tc_name == "kg_api" and isinstance(_tc_args, dict):
                                         _rtask = _KG_ACTION_LABELS.get(_tc_args.get("action", ""), _tc_args.get("action", ""))
                                     elif _tc_name == "read_file":
                                         _rtask = "读技能"
                                     elif _tc_name == "write_todos":
                                         _rtask = "任务规划"
+                                    elif _tc_name in _KG_ACTION_LABELS:
+                                        _rtask = _KG_ACTION_LABELS[_tc_name]
                                     else:
                                         _rtask = _tc_name
-                                    _decision = ""
-                                    if _tc_name == "kg_api" and isinstance(_tc_args, dict):
-                                        _pkg_tool = _ACTION_TOOL_MAP.get(_tc_args.get("action", ""))
-                                        _pkg_cn = _pkg_tool[0] if _pkg_tool else ""
-                                        _tool_cn = _pkg_tool[1] if _pkg_tool else _tc_args.get("action", "")
-                                        _action_en = _tc_args.get("action", "")
-                                        _decision = f"，下一步准备调用{_pkg_cn}技能的'{_tool_cn}{_action_en}'"
-                                    elif _tc_name == "read_file":
-                                        _decision = "，下一步准备读取技能文件"
-                                    elif _tc_name == "write_todos":
-                                        _decision = "，下一步准备规划任务步骤"
-                                    else:
-                                        _decision = f"，下一步准备调用 {_tc_name}"
-                                    # 去重：与上一轮相同决策则不重复追加
-                                    if _decision and _decision == _last_decision[0]:
-                                        _decision = ""
-                                    _last_decision[0] = _decision
-                                    # 第一个tool_call带"上一步完成+决策+content"，后续只带决策
-                                    _reasoning = (_prev_text + _decision + _c_text) if _tc_idx == 0 else _decision
-                                    _reasoning = _reasoning.lstrip("，")  # 去掉开头多余逗号（上一步无结果时 _prev_text 为空）
-                                    if _reasoning.strip():
-                                        yield f"event: think_token\n"
-                                        yield f"data: {json.dumps({'task': _rtask, 'kind': 'decision', 'token': _reasoning}, ensure_ascii=False)}\n\n"
+                                    # 存映射：中间件 on_custom_event 时用 tool_call_id 反查 round_id
+                                    _tcid_to_roundid[_tc_id] = _rid
+                                    # 仍设 _pending（兼容 on_tool_start 的 tool_call_id 绑定）
+                                    _pending_tcid[0] = _tc_id
+                                    _pending_tcname[0] = _tc_name
+                                    _pending_reason[0] = c if (c and isinstance(c, str) and c.strip()) else ""
                                 llm_round[0] += 1
                         continue
 
                     if etype == "on_tool_start":
+                        _mark("first_tool_start")
                         task_label = name
                         inp = data.get("input", {})
                         action = inp.get("action", "") if (name == "kg_api" and isinstance(inp, dict)) else ""
@@ -400,21 +382,71 @@ def chat_freeplan_stream(req: ChatRequest):
                                 task_label = _KG_ACTION_LABELS.get(action, action)
                             elif name == "read_file":
                                 task_label = "读技能"
+                            elif name in _KG_ACTION_LABELS:
+                                # DeepAgent 直接暴露工具名(execute_sql/validate_safe_sql 等),
+                                # 映射中文任务名以匹配 on_tool_end 的 last_task 分支(SQL执行/校验SQL)
+                                task_label = _KG_ACTION_LABELS[name]
                         # 自然语言 detail（调用'XX'技能包的'XX'工具）
                         input_detail = _build_action_detail(name, action, inp if isinstance(inp, dict) else {})
                         # 中文参数摘要（不再暴露 action=xxx, params=xxx）
                         input_summary = ""
+                        raw_params = ""
                         if name == "kg_api" and isinstance(inp, dict):
                             raw_params = inp.get("params", "")
                             input_summary = f"输入参数：{str(raw_params)[:200]}" if raw_params else ""
                         elif name == "write_todos":
                             todos = inp.get("todos", []) if isinstance(inp, dict) else []
                             input_summary = f"规划 {len(todos)} 步" if todos else ""
-                        elif inp:
+                        elif isinstance(inp, dict):
+                            # DeepAgent 直接工具(execute_sql/validate_safe_sql 等), 整个输入 dict 即参数, 如 {'sql': '...'}
+                            raw_params = inp
                             input_summary = f"输入参数：{str(inp)[:200]}"
+                        # 提取完整 SQL(execute_sql/validate_safe_sql 时), 供前端展示与复制(不被200字符截断)
+                        sql_full = ""
+                        if name == "kg_api" and action == "execute_sql" and raw_params:
+                            if isinstance(raw_params, dict):
+                                sql_full = raw_params.get("sql", "")
+                            elif isinstance(raw_params, str):
+                                try:
+                                    _rpj = json.loads(raw_params)
+                                    sql_full = _rpj.get("sql", "") if isinstance(_rpj, dict) else ""
+                                except Exception:
+                                    try:
+                                        import ast as _ast
+                                        _rpj = _ast.literal_eval(raw_params)
+                                        sql_full = _rpj.get("sql", "") if isinstance(_rpj, dict) else ""
+                                    except Exception:
+                                        sql_full = ""
+                        elif name in ("execute_sql", "validate_safe_sql") and isinstance(raw_params, dict):
+                            sql_full = raw_params.get("sql", "")
+                        # 步骤序号 + 耗时起点(前端按 step_id 区分同名步骤, 防剧本多步 execute_sql 互相覆盖)
+                        step_counter[0] += 1
+                        _sid = step_counter[0]
+                        _started_at_ms = int(_time.time() * 1000)
+                        step_start_ts[_sid] = _time.time()
+                        _run_id_to_sid[ev.get("run_id", "")] = _sid  # on_tool_end 按 run_id 精确归属(同 run_id 的 start/end 是同一次工具调用)
+                        # v3.2: 绑定 tool_call_id(来自 on_chat_model_end 的 decision.committed), 前端按 id 关联 decision↔tool
+                        _tcid = _pending_tcid[0]
+                        if _tcid:
+                            _run_id_to_tcid[ev.get("run_id", "")] = _tcid
+                        _tool_name = action if (name == "kg_api" and action) else name
+                        _sid_to_tool_name[_sid] = _tool_name  # data_result 兜底关联用
+                        # R1: 检测是否为补判重试--同 tool_name 的最近 rejected 步骤，关联 step_id
+                        # 让前端能展示"#4 校验SQL(失败) -> #5 校验SQL(修正后重试)"的因果关系
+                        _retry_of_step = None
+                        for _ts in reversed(think_stream):
+                            if (_ts.get("tool_name") == _tool_name
+                                    and _ts.get("phase") == "rejected"
+                                    and not _ts.get("superseded")):
+                                _retry_of_step = _ts.get("step_id")
+                                _ts["superseded"] = True  # 标记被重试取代
+                                break
+                        print(f"[STEP] sid={_sid} counter={step_counter[0]} name={name} action={action} run_id={ev.get('run_id','')[:8]} tcid={_tcid[:8]} sql_full_len={len(sql_full)} retry_of={_retry_of_step}", flush=True)
+                        _evt_sink.append("tool.started", {"tool_name": _tool_name, "action": action, "input_summary": input_summary, "sql_full": sql_full[:500], "retry_of_step": _retry_of_step}, step_id=str(_sid))
                         yield f"event: think\n"
-                        yield f"data: {json.dumps({'task': task_label, 'kind': _kind, 'strategy': 'free_plan', 'action': input_detail, 'detail': input_detail, 'input_summary': input_summary}, ensure_ascii=False)}\n\n"
-                        think_stream.append({"task": task_label, "kind": _kind, "strategy": "free_plan", "action": input_detail, "result_status": "", "detail": input_detail, "input_summary": input_summary})
+                        yield f"data: {json.dumps({'task': task_label, 'kind': _kind, 'strategy': 'free_plan', 'action': input_detail, 'detail': input_detail, 'input_summary': input_summary, 'step_id': _sid, 'step_no': _sid, 'tool_name': _tool_name, 'tool_call_id': _tcid, 'sql_full': sql_full, 'result_status': 'running', 'phase': 'running', 'live_reason': _pending_reason[0], 'retry_of_step': _retry_of_step, 'started_at_ms': _started_at_ms}, ensure_ascii=False)}\n\n"
+                        think_stream.append({"task": task_label, "kind": _kind, "strategy": "free_plan", "action": input_detail, "result_status": "running", "phase": "running", "detail": input_detail, "input_summary": input_summary, "step_id": _sid, "step_no": _sid, "tool_name": _tool_name, "tool_call_id": _tcid, "live_reason": _pending_reason[0], "sql_full": sql_full, "retry_of_step": _retry_of_step, "started_at_ms": _started_at_ms})
+                        _pending_reason[0] = ""  # 消费, 避免串到下一轮
                         continue
 
                     if etype == "on_tool_end":
@@ -459,11 +491,51 @@ def chat_freeplan_stream(req: ChatRequest):
                                         print(f"[DEBUG ast.literal_eval failed] err={_ast_err} match_len={len(json_match.group(0))} match_tail={json_match.group(0)[-100:]}", flush=True)
                                         parsed = None
 
-                        last_task = think_stream[-1]["task"] if think_stream else ""
+                        # DeepAgent 工具返回统一为 {"type":"text","text":"<JSON字符串>"} 格式, 解析嵌套 text 字段取真实数据(columns/rows/safe 等)
+                        if isinstance(parsed, dict) and isinstance(parsed.get("text"), str):
+                            try:
+                                _inner = json.loads(parsed["text"])
+                                if isinstance(_inner, dict):
+                                    parsed = _inner
+                            except Exception:
+                                pass
+
+                        # 按 ev.run_id 精确归属(替代 think_stream[-1]): 并行工具调用/拒绝补判时,
+                        # on_tool_end 触发时 think_stream[-1] 可能已是别的工具, 会把结果挂错步骤。
+                        _sid = _run_id_to_sid.pop(ev.get("run_id", ""), None)  # pop: 一次性, 释放内存
+                        _tcid = _run_id_to_tcid.pop(ev.get("run_id", ""), "")  # v3.2: tool_call_id(前端按 id 关联)
+                        _item = None
+                        if _sid is not None:
+                            for _ts in think_stream:
+                                if _ts.get("step_id") == _sid:
+                                    _item = _ts
+                                    break
+                        last_task = (_item["task"] if _item else (think_stream[-1]["task"] if think_stream else name))
+                        # 每步耗时(ms)
+                        _duration_ms = None
+                        if _sid is not None and _sid in step_start_ts:
+                            _duration_ms = int((_time.time() - step_start_ts[_sid]) * 1000)
+
+                        # v3.2: 闸门拒绝(下一步判断不通过)-> 该步标记补判中, 推 decision_rejected; 不当正常结果
+                        _is_reject = isinstance(out_str, str) and "下一步判断闸门·拒绝" in out_str
 
                         # 调试日志：诊断 on_tool_end 解析情况
-                        print(f"[DEBUG freeplan on_tool_end] name={name} last_task={last_task} parsed_is_none={parsed is None} out_str[:200]={out_str[:200]}", flush=True)
+                        print(f"[DEBUG freeplan on_tool_end] name={name} last_task={last_task} sid={_sid} tcid={_tcid[:8]} dur={_duration_ms} reject={_is_reject} parsed_is_none={parsed is None} out_str[:200]={out_str[:200]}", flush=True)
 
+                        if _is_reject:
+                            # 闸门拒绝: 只更新 think_stream（供 done 事件），不发 think 事件
+                            # 前端可见性完全由 decision_rejected (custom event / Path B) 控制：
+                            #   空 candidate_content = 格式拒绝 -> 前端删步骤（用户不可见）
+                            #   非空 candidate_content = 范围拒绝 -> 前端显示详情
+                            if _item is None and think_stream:
+                                _item = think_stream[-1]
+                            if _item is not None:
+                                _item["result_status"] = "rejected"
+                                _item["phase"] = "rejected"
+                                _item["result_summary"] = "判定需补充信息·补判中"
+                                if _duration_ms is not None:
+                                    _item["duration_ms"] = _duration_ms
+                            continue  # 跳过下方 parsed 处理 + think 事件 yield
                         if parsed:
                             tool_log = parsed.get("log", "") if isinstance(parsed, dict) else ""
                             if last_task == "校验L2":
@@ -471,50 +543,161 @@ def chat_freeplan_stream(req: ChatRequest):
                                 tool_results["l2_id"] = parsed.get("l2_id", "")
                                 yield f"event: trace\n"
                                 yield f"data: {json.dumps({'node': '校验L2', 'status': 'locked' if parsed.get('valid') else 'needs_clarification', 'l2_name': parsed.get('l2_name', ''), 'detail': tool_log}, ensure_ascii=False)}\n\n"
-                            elif last_task == "SQL执行":
-                                tool_results["sql_executed"] = True
-                                tool_results["sql_result"] = parsed
-                                tool_results["assembled_sql"] = parsed.get("sql", "")
-                                yield f"event: trace\n"
-                                yield f"data: {json.dumps({'node': 'SQL执行', 'status': 'done', 'row_count': parsed.get('row_count', 0), 'detail': tool_log}, ensure_ascii=False)}\n\n"
-                                yield f"event: sql_result\n"
-                                yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', '')}, ensure_ascii=False, default=str)}\n\n"
+                            elif last_task in ("SQL执行", "Doris跨对象SQL", "Doris整合") or name in ("execute_sql", "execute_doris_sql", "execute_entity_api", "execute_api_sql"):
+                                # P0-fix: 所有数据查询工具（execute_sql/execute_doris_sql/execute_entity_api/execute_api_sql）
+                                # 都要捕获 sql_result，不只 execute_sql（原 last_task=="SQL执行" 只覆盖 kg_api.action=execute_sql）
+                                _sql_err = parsed.get("error") if isinstance(parsed, dict) else None
+                                if _sql_err:
+                                    tool_results["sql_executed"] = False
+                                    tool_results["sql_error"] = _sql_err
+                                    yield f"event: trace\n"
+                                    yield f"data: {json.dumps({'node': last_task or name, 'status': 'error', 'error': _sql_err, 'detail': tool_log or _sql_err, 'step_id': _sid}, ensure_ascii=False)}\n\n"
+                                else:
+                                    tool_results["sql_executed"] = True
+                                    tool_results["sql_result"] = parsed
+                                    tool_results["assembled_sql"] = parsed.get("sql", "")
+                                    yield f"event: trace\n"
+                                    yield f"data: {json.dumps({'node': last_task or name, 'status': 'done', 'row_count': parsed.get('row_count', 0), 'detail': tool_log, 'step_id': _sid}, ensure_ascii=False)}\n\n"
+                                    # 仅当 DataSummaryMiddleware 未派发 data_result（完整数据）时才在此发 sql_result。
+                                    # 若已派发（_sid in _data_result_sids），此处 parsed 已被截断为前10行，再发会覆盖前端的完整数据。
+                                    if _sid not in _data_result_sids:
+                                        yield f"event: sql_result\n"
+                                        yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', ''), 'step_id': _sid, 'step_no': _sid, 'returned_rows': len(parsed.get('rows', [])), 'is_preview': False, 'llm_is_preview': parsed.get('_truncated', False), 'llm_preview_row_count': parsed.get('llm_preview_row_count', parsed.get('preview_row_count', 0)), 'result_available_for_ui': True, 'data_snapshot_at': parsed.get('data_snapshot_at'), 'cache_sources': parsed.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
                             else:
                                 if tool_log:
                                     yield f"event: trace\n"
                                     yield f"data: {json.dumps({'node': last_task or name, 'status': 'done', 'detail': tool_log}, ensure_ascii=False)}\n\n"
 
-                        # 无论 parsed 是否为 None，都更新 think_stream 末项的结果（read_file 等非 JSON 返回也要有结果）
-                        if think_stream and think_stream[-1].get("task") == last_task:
+                        # 按 _item(step_id 精确定位)更新结果; run_id 未命中时降级用 think_stream[-1](老逻辑兜底)
+                        # 注: 拒绝步骤已在上方 continue 跳过, 不会到达此处
+                        if _item is None and think_stream:
+                            _item = think_stream[-1]
+                        if _item is not None:
                             if parsed:
-                                _rs_status = "locked" if (parsed.get("safe", parsed.get("valid", True))) else "done"
+                                if isinstance(parsed, dict) and parsed.get("error"):
+                                    _rs_status = "error"
+                                else:
+                                    _rs_status = "locked" if (parsed.get("safe", parsed.get("valid", True))) else "done"
                                 result_summary = _build_result_summary(last_task, parsed)
                             else:
                                 # 非 JSON 返回（如 read_file 返回技能文件内容）
                                 _rs_status = "done"
                                 result_summary = _build_nonjson_result_summary(last_task, name, out_str)
-                            think_stream[-1]["result_status"] = _rs_status
+                            # phase: 执行终态（done/error），与 result_status(业务结果 locked/done/error) 分离
+                            # locked 是业务结果（SQL安全校验通过），不兼任执行阶段
+                            _phase = "error" if _rs_status == "error" else "done"
+                            _item["result_status"] = _rs_status
+                            _item["phase"] = _phase
                             if result_summary:
-                                think_stream[-1]["result_summary"] = result_summary
-                            # 推送 think 更新事件：让前端实时显示结果结论（去掉 raw_log/result_status 冗余字段）
-                            _end_kind = think_stream[-1].get("kind", "skill") if think_stream else "skill"
+                                _item["result_summary"] = result_summary
+                            if _duration_ms is not None:
+                                _item["duration_ms"] = _duration_ms
+                            # 推送 think 更新事件：带 phase/result_status/step_id/tool_call_id/duration_ms
+                            _end_kind = _item.get("kind", "skill")
                             yield f"event: think\n"
-                            yield f"data: {json.dumps({'task': last_task, 'kind': _end_kind, 'result_summary': result_summary}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'task': last_task, 'kind': _end_kind, 'result_summary': result_summary, 'step_id': _sid, 'tool_call_id': _tcid, 'duration_ms': _duration_ms, 'result_status': _rs_status, 'phase': _phase}, ensure_ascii=False)}\n\n"
+                            _evt_sink.append("tool.completed", {"task": last_task, "tool_name": name, "result_summary": (result_summary or "")[:500], "result_status": _rs_status, "duration_ms": _duration_ms}, step_id=str(_sid) if _sid is not None else None)
+                            # v3.6: 推送 transition 事件（评审：每步有明确转场，前端可展示"为什么继续下一步"）
+                            _trans_text = "执行成功，继续下一步" if _phase == "done" else "执行失败，需要修正"
+                            yield f"event: transition\n"
+                            yield f"data: {json.dumps({'step_id': _sid, 'tool_call_id': _tcid, 'task': last_task, 'from_phase': 'running', 'to_phase': _phase, 'result_summary': (result_summary or '')[:200], 'transition': _trans_text}, ensure_ascii=False)}\n\n"
                         continue
 
                     if etype == "on_custom_event":
-                        cdata = data
-                        if isinstance(cdata, dict) and cdata.get("type") == "think_token":
+                        # v3.4: 中间件派发的 decision_committed / decision_rejected 事件
+                        _cname = ev.get("name", "")
+                        _cdata = data if isinstance(data, dict) else {}
+                        if _cname == "decision_committed":
+                            _mark("first_decision")
+                            _tcid = _cdata.get("tool_call_id", "")
+                            # 用后即删：反查 round_id，避免长对话内存累积
+                            _rid = _tcid_to_roundid.pop(_tcid, None)
+                            _tcn = _cdata.get("tool_name", "")
+                            _content = _cdata.get("content", "")
+                            # v3.6: last_scope 已由 DecisionGateMiddleware 同步写入 state（不再在 SSE 路由异步写）
+                            # task 中文名（与 on_tool_start 一致）
+                            _rtask = _KG_ACTION_LABELS.get(_tcn, _tcn)
                             yield f"event: think_token\n"
-                            yield f"data: {json.dumps({'task': cdata.get('task', '推理'), 'kind': 'decision', 'token': cdata.get('token', '')}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'kind': 'decision_committed', 'round_id': _rid, 'tool_call_id': _tcid, 'tool_name': _tcn, 'task': _rtask, 'content': _content}, ensure_ascii=False)}\n\n"
+                            if _evt_sink is not None:
+                                _evt_sink.append("decision.committed", {"round_id": _rid, "tool_call_id": _tcid, "tool_name": _tcn, "content_len": len(_content), "content": _content[:2000]})
+                        elif _cname == "decision_rejected":
+                            _tcid = _cdata.get("tool_call_id", "")
+                            _rid = _tcid_to_roundid.pop(_tcid, None)
+                            _tcn = _cdata.get("tool_name", "")
+                            yield f"event: think_token\n"
+                            yield f"data: {json.dumps({'kind': 'decision_rejected', 'round_id': _rid, 'tool_call_id': _tcid, 'tool_name': _tcn, 'candidate_content': _cdata.get('candidate_content', ''), 'attempt': _cdata.get('attempt', 0), 'reason': _cdata.get('reason', '')}, ensure_ascii=False)}\n\n"
+                            if _evt_sink is not None:
+                                _evt_sink.append("decision.rejected", {"round_id": _rid, "tool_call_id": _tcid, "tool_name": _tcn, "attempt": _cdata.get('attempt', 0), "reason": _cdata.get('reason', '')[:500]})
+                        elif _cname == "data_result":
+                            # 数据查询结果摘要中间件派发：完整数据推前端直出（不经 LLM 全量转手）
+                            # 关联 step_id：优先按 run_id（on_tool_start 已映射），custom_event 异步延迟导致
+                            # on_tool_end 可能已 pop，故兜底按 tool_name 找最近同名步骤（ReAct 串行无并行风险）
+                            _ev_run_id = ev.get("run_id", "")
+                            _d_sid = _run_id_to_sid.get(_ev_run_id)
+                            _d_tool = _cdata.get("tool_name", "")
+                            if _d_sid is None and _d_tool:
+                                _d_sid = max((_s for _s, _tn in _sid_to_tool_name.items() if _tn == _d_tool), default=None)
+                            if _d_sid is not None:
+                                _data_result_sids.add(_d_sid)  # 标记：此 step_id 的完整数据已推送，on_tool_end 不再发截断版覆盖
+                            _d_rows = _cdata.get("rows", [])
+                            _d_rc = _cdata.get("row_count", 0)
+                            yield f"event: sql_result\n"
+                            yield f"data: {json.dumps({'columns': _cdata.get('columns', []), 'rows': _d_rows, 'row_count': _d_rc, 'sql': _cdata.get('sql', ''), 'returned_rows': _cdata.get('returned_rows', len(_d_rows)), 'preview_row_count': _cdata.get('preview_row_count', min(10, _d_rc)), 'is_preview': _cdata.get('is_preview', False), 'llm_is_preview': _cdata.get('llm_is_preview', False), 'llm_preview_row_count': _cdata.get('llm_preview_row_count', 0), 'result_available_for_ui': _cdata.get('result_available_for_ui', True), 'step_id': _d_sid, 'tool_name': _d_tool, 'data_snapshot_at': _cdata.get('data_snapshot_at'), 'cache_sources': _cdata.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
+                        elif _cname in ("engine.selected", "stop.reached", "policy.rejected",
+                                       "template.bound", "template.drift"):
+                            # 评审 P1-3：SkillPolicy 自定义事件动态推 SSE —— 运行中引擎确认/终止/
+                            # 策略拒绝/模板绑定/漂移实时可见，前端按 run_id 合并更新当前契约（不等 done）。
+                            # engine/stop 事件 payload 携带最新 contract.to_dict()（与 _ctx 同一对象）。
+                            _cc = _cdata.get("contract") if isinstance(_cdata, dict) else None
+                            if _cname in ("engine.selected", "stop.reached"):
+                                _emit_ev = "contract_update"
+                                _payload = {
+                                    "kind": _cname,
+                                    "tool_call_id": _cdata.get("tool_call_id", ""),
+                                    "tool_name": _cdata.get("tool_name", ""),
+                                    "reason": _cdata.get("reason", ""),
+                                    "selected_engine": _cdata.get("selected_engine"),
+                                    "multi_engine": _cdata.get("multi_engine", False),
+                                    "completed_engines": _cdata.get("completed_engines"),
+                                    "entity_engine_map": _cdata.get("entity_engine_map"),
+                                    "contract": _cc,
+                                }
+                            elif _cname == "policy.rejected":
+                                _emit_ev = "policy"
+                                _payload = {
+                                    "kind": "policy.rejected",
+                                    "tool_call_id": _cdata.get("tool_call_id", ""),
+                                    "tool_name": _cdata.get("tool_name", ""),
+                                    "reason": _cdata.get("reason", ""),
+                                    "attempt": _cdata.get("attempt", 0),
+                                    "blocked": _cdata.get("blocked", False),
+                                }
+                            else:
+                                _emit_ev = "template"
+                                _payload = {
+                                    "kind": _cname,
+                                    "detail": _cdata.get("detail", "") or _cdata.get("reason", ""),
+                                }
+                            yield f"event: {_emit_ev}\n"
+                            yield f"data: {json.dumps(_payload, ensure_ascii=False, default=str)}\n\n"
+                            if _evt_sink is not None:
+                                _evt_sink.append(_cname, {k: v for k, v in _payload.items() if k != "contract"})
+                        elif isinstance(_cdata, dict) and _cdata.get("type") == "think_token":
+                            # 兼容旧版自定义事件（llm_client 内 reasoning 推送）
+                            yield f"event: think_token\n"
+                            yield f"data: {json.dumps({'task': _cdata.get('task', '推理'), 'kind': 'decision', 'token': _cdata.get('token', '')}, ensure_ascii=False)}\n\n"
                         continue
 
-                    if etype == "on_chain_start" and name in ("model", "tools"):
-                        yield f"event: status\n"
-                        yield f"data: {json.dumps({'node': name, 'phase': 'running', 'text': f'{name}执行中'}, ensure_ascii=False)}\n\n"
-                    elif etype == "on_chain_end" and name in ("model", "tools"):
-                        yield f"event: status\n"
-                        yield f"data: {json.dumps({'node': name, 'phase': 'done', 'text': f'{name}完成'}, ensure_ascii=False)}\n\n"
+                    # model/tools 节点的 on_chain_start/end 不再推送状态事件：
+                    # DecisionGate 拒绝时 model 会空转重试（model执行中->model完成 但无 step 产出），
+                    # 推送这些状态会让前端看到无意义的"空转"。进度改为只靠 skill step 事件 + decision 事件展示。
+                    # if etype == "on_chain_start" and name in ("model", "tools"):
+                    #     yield f"event: status\n"
+                    #     yield f"data: {json.dumps({'node': name, 'phase': 'running', 'text': f'{name}执行中'}, ensure_ascii=False)}\n\n"
+                    # elif etype == "on_chain_end" and name in ("model", "tools"):
+                    #     yield f"event: status\n"
+                    #     yield f"data: {json.dumps({'node': name, 'phase': 'done', 'text': f'{name}完成'}, ensure_ascii=False)}\n\n"
 
             consume_error: Optional[Exception] = None
             try:
@@ -525,10 +708,39 @@ def chat_freeplan_stream(req: ChatRequest):
                 _tb_str = _tb.format_exc()
                 logger.warning(f"[FreePlan] astream_events 消费异常: {e}\n{_tb_str}")
                 consume_error = e
+                # aiosqlite 连接断开后线程不能重启(RuntimeError: threads can only be started once)
+                # -> 重置 agent 单例，下次请求自动用新连接重建
+                if "threads can only be started once" in str(e):
+                    try:
+                        from app.services.tupu_deepagent import reset_tupu_agent
+                        await reset_tupu_agent()
+                        logger.info("[FreePlan] 检测到 aiosqlite 连接断开，已重置 agent 单例")
+                    except Exception as _re:
+                        logger.warning(f"[FreePlan] 重置 agent 失败: {_re}")
+            finally:
+                # v3.6 推送分段计时（定位首响应延迟来源）
+                _timing["total"] = round((_time.time() - _t0) * 1000)
+                try:
+                    yield f"event: timing\n"
+                    yield f"data: {json.dumps(_timing, ensure_ascii=False)}\n\n"
+                except Exception:
+                    pass
+                # 客户端断开(abort)时 GeneratorExit 在 yield sse_chunk 抛出(不被 except Exception 捕获),
+                # 走到这里 aclose 关闭底层 LangGraph agent 迭代器, 取消后续 LLM/MCP/SQL 调用, 不再烧 token。
+                # 正常结束时 aiter 已耗尽, aclose 是 no-op, 安全。
+                try:
+                    await aiter.aclose()
+                except Exception:
+                    pass
+                # v3.5: 释放会话执行锁
+                if _session_lock.locked():
+                    _session_lock.release()
 
             # 消费异常时：已推送的中间步骤可能不全，直接发 error 事件终止，避免发空 done 让前端误以为成功
             if consume_error is not None:
                 err_msg = str(consume_error) or repr(consume_error) or "DeepAgent 执行异常（LLM 调用失败或超时）"
+                if _evt_sink is not None:
+                    _evt_sink.fail(err_msg)
                 yield f"event: error\n"
                 yield f"data: {json.dumps({'error': err_msg}, ensure_ascii=False)}\n\n"
                 return
@@ -550,49 +762,68 @@ def chat_freeplan_stream(req: ChatRequest):
             if not final_answer:
                 final_answer = tool_results.get("ai_reply", "")
 
-            # 动态总结：SQL 执行成功有数据时，用 LLM 生成自然语言总结覆盖（对齐数据问答）
-            if tool_results.get("sql_executed") and tool_results.get("sql_result"):
-                sr = tool_results["sql_result"]
-                row_cnt = sr.get("row_count", 0)
-                cols = sr.get("columns", [])
-                rows_data = sr.get("rows", [])
-                if row_cnt > 0 and cols:
-                    rows_preview = rows_data[:3]
-                    data_preview = f"查询返回 {row_cnt} 行数据，字段：{', '.join(str(c) for c in cols)}\n数据预览（前3行）：\n"
-                    for row in rows_preview:
-                        data_preview += " | ".join(str(cell) for cell in row) + "\n"
-                    summary_prompt = (
-                        f"基于以下查询结果和定位信息，生成结构化最终答案。\n\n"
-                        f"用户问题：{req.user_input}\n"
-                        f"定位信息：业务域L2={tool_results.get('l2_name', '')}, 主表={tool_results.get('entity_name', '')}\n"
-                        f"{data_preview}\n"
-                        f"必须严格按以下 Markdown 结构输出（标题用 ## 开头，顺序固定）：\n\n"
-                        f"## 一、综合结论\n（2-3句自然语言总结，引用具体数据值，指出数据特征）\n\n"
-                        f"## 二、定位实体\n（说明定位到的业务域L2、主表实体）\n\n"
-                        f"## 三、返回数据\n（说明返回行数、关键字段、典型值）\n\n"
-                        f"## 四、推荐问题\n（推荐3-5个后续问题，用 1. 2. 3. 编号，每行一个）"
+            # F5: 尝试从 state 取结构化最终答案（FinalDelivery，response_format 生效时）
+            _structured = None
+            try:
+                _fs = await _asyncio.wait_for(agent.aget_state(config), timeout=5)
+                _sv = _fs.values if _fs.values else {}
+                _structured = _sv.get("structured_response") if isinstance(_sv, dict) else None
+            except Exception:
+                pass
+
+            # 统一最终交付构建（A-E 确定性降级）。
+            # 替换旧的"二次 LLM 四段式总结"兜底：不再根据 rows[:3] 让模型总结全量结果，
+            # 不再生成"定位实体"等内部过程内容作为业务答案；无模型最终文本时用纯 Python 确定性交付。
+            _delivery_result = _build_final_delivery(
+                user_input=req.user_input,
+                final_answer=final_answer,
+                structured=_structured,
+                sql_result=tool_results.get("sql_result"),
+                sql_error=tool_results.get("sql_error", ""),
+                sql_executed=tool_results.get("sql_executed", False),
+                l2_name=tool_results.get("l2_name", ""),
+                entity_name=tool_results.get("entity_name", ""),
+            )
+            final_answer = _delivery_result["final_answer"]
+            final_delivery = _delivery_result["final_delivery"]
+            _structured_degraded = _delivery_result["degraded"]  # true=GLM 未产出结构化，用文本/确定性交付
+            if _structured_degraded and final_answer:
+                logger.info("[FreePlan] response_format 降级：GLM 未产出结构化结果，使用文本/确定性交付")
+
+            # 输出契约（设计 §8/§10）：完整数据已推前端查询结果表时，最终回答不得再输出
+            # Markdown 明细表（SKILL.md 输出格式硬规则第2条）——确定性清洗 + 记录
+            _output_scrubbed = False
+            _output_check_reason = ""
+            _sr_for_check = tool_results.get("sql_result")
+            _has_ui_result = bool(_sr_for_check and isinstance(_sr_for_check, dict) and not _sr_for_check.get("error"))
+            if _has_ui_result and final_answer:
+                try:
+                    from app.services.output_contract import validate_final_output, scrub_markdown_tables
+                    # 输出契约旗标来自受控契约（skill 声明 forbid_markdown_detail_table）：
+                    # 分布过载(true)剥离答案表格；跨源汇总类技能(false)保留答案呈现的表
+                    _forbid_md = True
+                    if _contract is not None:
+                        _forbid_md = bool(_contract.forbid_markdown_detail_table)
+                    _oc = validate_final_output(
+                        final_answer, result_available_for_ui=True,
+                        row_count=(_sr_for_check or {}).get("row_count"),
+                        forbid_markdown_detail_table=_forbid_md,
                     )
-                    try:
-                        from app.services.llm_client import get_chat_model
-                        summary_model = get_chat_model(temperature=0.4, streaming=False)
-                        summary_resp = await _asyncio.wait_for(
-                            summary_model.ainvoke([HumanMessage(content=summary_prompt)]),
-                            timeout=15.0,
-                        )
-                        dynamic_summary = summary_resp.content if isinstance(summary_resp.content, str) else str(summary_resp.content)
-                        if dynamic_summary and dynamic_summary.strip():
-                            final_answer = dynamic_summary.strip()
-                    except Exception as e:
-                        _e_str = str(e) or repr(e) or "(空异常)"
-                        logger.warning(f"[FreePlan] 动态总结失败: {_e_str}")
-                        # 动态总结失败且 DeepAgent 未自生成答案时，用数据采样兜底，避免 final_answer 为空
-                        if not final_answer:
-                            final_answer = (
-                                f"查询返回 {row_cnt} 行数据，字段：{', '.join(str(c) for c in cols)}。\n"
-                                f"数据预览（前3行）：\n" + "\n".join(
-                                    " | ".join(str(cell) for cell in row) for row in rows_preview
-                                )
-                            )
+                    _output_check_reason = _oc.reason
+                    if not _oc.ok:
+                        _scrubbed = scrub_markdown_tables(final_answer)
+                        if _scrubbed != final_answer:
+                            final_answer = _scrubbed
+                            _output_scrubbed = True
+                        logger.info(f"[OutputContract] 已清洗最终回答 Markdown 明细表: {_oc.reason}")
+                        # 批4 治理：记录输出契约清洗审计
+                        try:
+                            from app.services.skill_governance import EVENT_OUTPUT_SCRUBBED, get_governance
+                            get_governance().record_output(EVENT_OUTPUT_SCRUBBED, _oc.reason or "markdown_detail_table")
+                        except Exception:
+                            pass
+                except Exception as _oce:
+                    logger.warning(f"[OutputContract] 输出校验异常: {_oce}")
 
             if final_answer and final_answer.strip():
                 import time as _t2
@@ -600,8 +831,10 @@ def chat_freeplan_stream(req: ChatRequest):
                 yield f"event: final\n"
                 yield f"data: {json.dumps({'answer': final_answer}, ensure_ascii=False)}\n\n"
 
-            # 推送推荐问题
-            recs = ["统计用电客户总数", "查客户的联系电话", "什么是变压器"]
+            # 推送推荐问题（优先 final_delivery.recommendations，其次从 final_answer 提取，再默认兜底）
+            recs = final_delivery.get("recommendations") or _extract_recommendations(final_answer)
+            if not recs:
+                recs = ["统计用电客户总数", "查客户的联系电话", "什么是变压器"]
             yield f"event: recommend\n"
             yield f"data: {json.dumps({'questions': [{'label': r, 'shortcut': r} for r in recs]}, ensure_ascii=False)}\n\n"
 
@@ -615,15 +848,23 @@ def chat_freeplan_stream(req: ChatRequest):
                 "assembled_sql": tool_results.get("assembled_sql", ""),
             }
 
-            # SQL 执行结果（供前端渲染数据表格）
+            # SQL 执行结果（供前端渲染数据表格；附带完整性契约字段，前端不把预览当不完整）
             sql_result_data = None
             _sr = tool_results.get("sql_result")
             if _sr and isinstance(_sr, dict) and not _sr.get("error"):
+                _rows = _sr.get("rows", [])
+                _rc = _sr.get("row_count", 0) or len(_rows)
                 sql_result_data = {
                     "columns": _sr.get("columns", []),
-                    "rows": _sr.get("rows", []),
-                    "row_count": _sr.get("row_count", 0),
+                    "rows": _rows,
+                    "row_count": _rc,
                     "sql": tool_results.get("assembled_sql", ""),
+                    "returned_rows": len(_rows),
+                    "preview_row_count": min(10, _rc),
+                    "is_preview": False,                    # 前端拿完整数据，一律 false
+                    "llm_is_preview": _rc > 10,             # 模型是否只看前 10 行分析样本
+                    "llm_preview_row_count": min(10, _rc),  # 模型样本行数
+                    "result_available_for_ui": True,
                 }
 
             # 推送 done
@@ -639,31 +880,198 @@ def chat_freeplan_stream(req: ChatRequest):
                     "chain_locked": bool(confirmed.get("L2")),
                     "entity_locked": bool(confirmed.get("L2X")),
                     "sql_executed": tool_results.get("sql_executed", False),
+                    "output_scrubbed": _output_scrubbed,
                 },
+                "route": (_route.to_dict() if _route is not None else None),  # 受控路由结果（前端 RouteCard）
+                "contract": _contract.to_dict() if _contract is not None else None,  # 受控契约（前端五卡）
+                "output_contract_check": {"ok": not _output_scrubbed, "reason": _output_check_reason},
                 "think_stream": think_stream,
                 "final_answer": final_answer,
-                "final_answer_structured": None,
-                "sql_result": sql_result_data,
+                "final_answer_structured": _structured,  # F5: 结构化输出（GLM 不兼容时为 None，降级手动）
+                "response_format_degraded": _structured_degraded,  # F5: 降级标识（true=GLM 未产出结构化，用文本答案）
+                "final_delivery": final_delivery,  # 统一最终交付协议（标题/摘要/发现/告警/推荐/row_count）
+                "sql_result": sql_result_data,  # P1-4: 清理后的数据（排除 error 结果），删除重复键
                 "recommendations": [{"label": r, "shortcut": r} for r in recs],
                 "next_step_recommendation": None,
                 "message_card": None,
-                "sql_result": tool_results.get("sql_result"),
             }
             yield f"event: done\n"
             yield f"data: {json.dumps(final_response, ensure_ascii=False, default=str)}\n\n"
+            _evt_sink.complete({"final_answer": (final_answer or "")[:500], "completed_tasks": final_response.get("completed_tasks", []), "sql_executed": final_response.get("flags", {}).get("sql_executed", False)})
 
         except Exception as e:
             import traceback as _tb
             logger.error(f"[FreePlan] event_iter 异常: {e}\n{_tb.format_exc()}")
+            if _evt_sink is not None:
+                _evt_sink.fail(str(e) or repr(e) or "event_iter 异常")
             yield f"event: error\n"
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            # 客户端断开(abort)或异常时, 关闭 LangGraph 事件迭代器, 取消底层 agent task
+            # (停止后续 LLM/MCP/SQL 调用, 不再烧 token; GeneratorExit 也会经此清理)
+            if _evt_sink is not None:
+                _evt_sink.close()
+            if aiter is not None:
+                try:
+                    await aiter.aclose()
+                except Exception:
+                    pass
+            # v3.5: 释放会话执行锁（兜底：inner finally 可能因 early-exception 未到达）
+            if _session_lock is not None and _session_lock.locked():
+                _session_lock.release()
 
     return StreamingResponse(event_iter(), media_type="text/event-stream")
 
 
 
 
+class RoutePreviewRequest(BaseModel):
+    """受控路由预览：输入问句 + 可选连续上下文，返回确定性路由结果+契约。"""
+    user_input: str
+    last_skill: Optional[str] = None
+    last_step: Optional[str] = None
+    customer_names: List[str] = Field(default_factory=list)
+
+
+@router.post("/route/preview")
+def route_preview(req: RoutePreviewRequest) -> Dict[str, Any]:
+    """受控 Skill 问答平台 v2：RouteSimulator 预览端点。
+
+    前端不自行猜路由/契约，统一走后端 SkillRouter（与生产对话同一裁判）。
+    """
+    ctx: Dict[str, Any] = {}
+    if req.last_skill:
+        ctx["last_skill"] = req.last_skill
+    if req.last_step:
+        ctx["last_step"] = req.last_step
+    if req.customer_names:
+        ctx["last_scope"] = {
+            "customer_names": list(req.customer_names),
+            "ordered": True,
+            "commitment": "exact_set",
+            "source": "user_input",
+        }
+    try:
+        from app.services.skill_router import route_user_input
+        result = route_user_input(req.user_input, ctx)
+        return {"ok": True, "route": result.to_dict()}
+    except Exception as e:
+        logger.error(f"[RoutePreview] 路由预览异常: {e}")
+        return {"ok": False, "error": str(e)}
+
+
 @router.get("/health")
 def health() -> Dict[str, str]:
     """健康检查"""
     return {"status": "ok", "service": "data-intelligence"}
+
+
+# ----------------------------------------------------------------------
+# 批4 生产治理端点（运行观测台数据源 / 审核入口）
+# ----------------------------------------------------------------------
+@router.get("/skills/catalog")
+def skills_catalog() -> Dict[str, Any]:
+    """Skill 目录快照：启用/禁用/版本/哈希/告警（生产治理·审核用）。
+
+    供运行观测台与上线审核查看当前 SKILL.md 唯一来源的解析状态；
+    不参与路由逻辑（路由只认 SkillRouter）。
+    """
+    try:
+        from app.services.skill_catalog import get_catalog
+        cat = get_catalog()
+        skills = []
+        for md in sorted(cat._scenarios_dir.glob("*/SKILL.md")):
+            name = md.parent.name
+            loaded = cat.load_skill(name)
+            if loaded is not None:
+                skills.append({
+                    "skill_id": loaded.name, "enabled": loaded.enabled,
+                    "version": loaded.version, "priority": loaded.priority,
+                    "sha256": loaded.sha256[:16], "steps": [s.id for s in loaded.steps],
+                    "template_count": sum(len(s.templates) for s in loaded.steps),
+                    "entity_alias_count": len(loaded.entity_aliases),
+                    "multi_engine": bool(loaded.multi_engine),
+                    "template_mode": loaded.template_mode,   # P0-2 治理可见：strict/extensible/generic
+                    "forbid_markdown_detail_table": bool(loaded.output.get("forbid_markdown_detail_table", True)),
+                })
+            else:
+                failed = cat._failed.get(name)
+                skills.append({
+                    "skill_id": name, "enabled": False, "version": None,
+                    "priority": None, "sha256": None, "steps": [],
+                    "template_count": 0, "entity_alias_count": 0,
+                    "disabled_reason": failed or "解析失败已禁用",
+                })
+        return {
+            "ok": True,
+            "catalog": skills,
+            "warnings": cat.warnings[-50:],
+            "skills_root": str(cat._scenarios_dir),
+        }
+    except Exception as e:
+        logger.error(f"[Governance] catalog 端点异常: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/skills/metrics")
+def skills_metrics() -> Dict[str, Any]:
+    """治理指标 + 审计轨迹快照（进程内；运行观测台消费）。"""
+    try:
+        from app.services.skill_governance import get_governance
+        snap = get_governance().snapshot()
+        snap["ok"] = True
+        return snap
+    except Exception as e:
+        logger.error(f"[Governance] metrics 端点异常: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/skills/simulate-route")
+def simulate_route(req: RoutePreviewRequest) -> Dict[str, Any]:
+    """Skill 工作台路由模拟（设计 §7.3 端点名）：复用与生产一致的 SkillRouter。
+
+    前端不镜像规则：模拟结果即生产判定结果。
+    """
+    return route_preview(req)
+
+
+@router.delete("/chat/freeplan/threads/{thread_id}/memory")
+async def clear_freeplan_memory(thread_id: str, request: Request):
+    """清除自由问答会话的后端 checkpoint 记忆。
+    前端清空/删除会话时调用，确保 Agent 不再记住已清空的内容。
+
+    v3.6: 加会话所有权校验（评审 P0）：用当前用户 sub 构造 thread_id，
+    确保只能清自己的会话，防跨用户清除。
+    """
+    from app.core.auth import get_current_user
+    _current_user = get_current_user(request)
+    _user_prefix = _current_user.sub if _current_user and _current_user.sub else "anonymous"
+    _memory_thread_id = f"{_user_prefix}:{thread_id}"
+    try:
+        from app.services.tupu_deepagent import _GLOBAL_CHECKPOINTER
+        # Agent 尚未初始化 -> 无 checkpoint 可清，直接返回成功
+        if _GLOBAL_CHECKPOINTER is None:
+            return {"status": "ok", "thread_id": thread_id, "cleared": False, "note": "agent not initialized, nothing to clear"}
+        try:
+            await _GLOBAL_CHECKPOINTER.adelete_thread(_memory_thread_id)
+            logger.info(f"[FreePlan] checkpoint 已清除: thread_id={_memory_thread_id}")
+            return {"status": "ok", "thread_id": thread_id, "cleared": True}
+        except Exception as e:
+            logger.warning(f"[FreePlan] adelete_thread 失败({e}), 尝试逐条删除")
+            # 降级：直接从 SQLite 删除该 thread_id 的 checkpoint 行
+            try:
+                import aiosqlite
+                from app.services.tupu_deepagent import _CHECKPOINT_DB
+                import aiosqlite as _aiosqlite
+                async with _aiosqlite.connect(_CHECKPOINT_DB) as db:
+                    await db.execute("DELETE FROM checkpoints WHERE thread_id = ?", (_memory_thread_id,))
+                    await db.execute("DELETE FROM writes WHERE thread_id = ?", (_memory_thread_id,))
+                    await db.commit()
+                logger.info(f"[FreePlan] checkpoint 降级删除成功: thread_id={_memory_thread_id}")
+                return {"status": "ok", "thread_id": thread_id, "cleared": True, "note": "deleted via raw SQL"}
+            except Exception as e2:
+                logger.error(f"[FreePlan] 降级删除也失败: {e2}")
+                raise HTTPException(status_code=500, detail=f"清除记忆失败(降级删除也失败): {e2}")
+    except Exception as e:
+        logger.error(f"[FreePlan] 清除 checkpoint 失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清除记忆失败: {e}")

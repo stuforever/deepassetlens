@@ -28,7 +28,7 @@ mysql -h 127.0.0.1 -P 3306 -u root -p tupu < mysql_init_data.sql
 ### 3. 导入 PostgreSQL 种子数据
 
 ```bash
-psql -h 127.0.0.1 -p 5432 -U postgres -d tupu -f pg_init_data.sql
+psql -h 127.0.0.1 -p 25432 -U postgres -d tupu -f pg_init_data.sql
 ```
 
 包含：`dim_ps_wbs_cost`（项目 WBS 成本表）少量演示数据。

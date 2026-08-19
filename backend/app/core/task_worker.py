@@ -32,6 +32,14 @@ class TaskWorker(threading.Thread):
         self._running = False
         self._concurrent_count = 0
         self._lock = threading.Lock()
+        # 低优先级周期任务：[(interval_seconds, fn, last_run)]
+        self.periodic_hooks: list = []
+        self._hooks_lock = threading.Lock()
+
+    def register_periodic(self, interval_seconds: float, fn) -> None:
+        """注册低优先级周期任务（如查询日志 30 天清理），在轮询循环里按间隔执行。"""
+        with self._hooks_lock:
+            self.periodic_hooks.append([float(interval_seconds), fn, 0.0])
 
     def stop(self):
         """优雅停止"""
@@ -47,10 +55,26 @@ class TaskWorker(threading.Thread):
         while not self._stop_event.is_set():
             try:
                 self._process_next_task()
+                self._run_periodic_hooks()
             except Exception as e:
                 print(f"[TaskWorker] 异常: {e}")
                 traceback.print_exc()
             time.sleep(self.poll_interval)
+
+    def _run_periodic_hooks(self):
+        """按间隔执行已注册的周期任务（异常隔离，不影响队列消费）。"""
+        now = time.time()
+        with self._hooks_lock:
+            hooks = list(self.periodic_hooks)
+        for h in hooks:
+            interval, fn, last = h
+            if now - last >= interval:
+                try:
+                    fn()
+                except Exception as e:
+                    print(f"[TaskWorker] 周期任务异常: {e}")
+                    traceback.print_exc()
+                h[2] = now
 
     def _process_next_task(self):
         """处理下一个任务"""
@@ -156,6 +180,11 @@ class TaskWorkerManager:
         self.worker = TaskWorker(poll_interval=poll_interval)
         self.worker.start()
         print(f"[TaskWorkerManager] 工作线程已启动 (轮询间隔: {poll_interval}s)")
+
+    def register_periodic(self, interval_seconds: float, fn) -> None:
+        """注册低优先级周期任务（转发给工作线程；未启动则记录到 worker 实例待启动后生效）。"""
+        self.start()
+        self.worker.register_periodic(interval_seconds, fn)
 
     def stop(self):
         """停止工作线程"""

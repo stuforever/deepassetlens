@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 from .api import (
     concept, mapping, chat, upload, source_tables,
@@ -17,6 +16,7 @@ from .api import (
     api_mapping,
     doris_config,
     knowledge_base,
+    engine_observability,
 )
 from .models.base import Base
 # 确保模型注册到 Base.metadata（避免循环导入，在这里集中导入）
@@ -31,12 +31,25 @@ from .models.knowledge_base import KnowledgeBase, KnowledgeDocument
 from .core.database import engine, SessionLocal, ensure_schema_compatibility
 from .core.init_db import init_db
 from .core.task_worker import task_worker_manager
-from .core.auth import auth_middleware, ENABLE_AUTH
+from .core.auth import AuthMiddleware, ENABLE_AUTH
 from .services.skill_manager import VersionService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # F3-fix: 生产安全检查必须 fail-fast--在任何 DB 初始化、Qdrant/Neo4j 同步、worker 启动之前
+    # 否则配置非法时已执行外部初始化/可能写数据/已启动工作线程，不是严格的启动前阻断
+    import os as _os_f3
+    if _os_f3.getenv("ENABLE_AUTH", "0") == "1":
+        _startup_errors = []
+        if not _os_f3.getenv("CORS_ORIGINS"):
+            _startup_errors.append("ENABLE_AUTH=1 但未设 CORS_ORIGINS（生产禁止通配符+凭据组合）")
+        if not _os_f3.getenv("AUTHENTIK_JWKS_URL"):
+            _startup_errors.append("ENABLE_AUTH=1 但未设 AUTHENTIK_JWKS_URL（OIDC 验签无法工作）")
+        if _startup_errors:
+            for _err in _startup_errors:
+                print(f"[startup] FATAL: {_err}")
+            raise RuntimeError("生产安全检查未通过：" + "; ".join(_startup_errors))
     # Startup
     Base.metadata.create_all(bind=engine)
     ensure_schema_compatibility()
@@ -141,24 +154,57 @@ async def lifespan(app: FastAPI):
         _threading.Thread(target=_bg_vector_sync, daemon=True).start()
     # 启动后台任务工作线程
     task_worker_manager.start(poll_interval=2.0)
+    # 数据引擎增强（批1）：查询日志 30 天自动清理挂 TaskWorker 低优先级周期任务
+    try:
+        from app.services.engine_query_log import register_purge_job
+        register_purge_job(task_worker_manager)
+    except Exception as _pg_err:
+        print(f"[startup] WARNING: 注册查询日志清理任务失败: {_pg_err}")
+    # 数据引擎增强（P5）：预聚合加速器到期刷新挂 TaskWorker（300s 检查）
+    try:
+        from app.services.engine_accelerator import register_refresh_job
+        register_refresh_job(task_worker_manager)
+    except Exception as _ac_err:
+        print(f"[startup] WARNING: 注册加速器刷新任务失败: {_ac_err}")
+    # MCP 挂载检查：确认 /mcp 路由已注册（deepagent 首次请求依赖此端点）
+    # 注意：lifespan startup 阶段 uvicorn 尚未开始监听，不能 HTTP 自请求，只检查路由注册
+    try:
+        _mcp_routes = [r for r in app.routes if getattr(r, "path", "").startswith("/mcp")]
+        if _mcp_routes:
+            print(f"[startup] MCP /mcp 路由已挂载 ({len(_mcp_routes)} routes)，SSE endpoint: http://127.0.0.1:28000/mcp/sse")
+        else:
+            print("[startup] WARNING: MCP /mcp 路由未找到，deepagent 工具加载将失败")
+    except Exception as _mcp_err:
+        print(f"[startup] WARNING: MCP 挂载检查异常: {_mcp_err}")
+    # F3-fix: 生产安全检查已移到 lifespan 最开头（fail-fast，在任何初始化之前）
     yield
     # Shutdown
     task_worker_manager.stop()
+    # 关闭全局 DeepAgent checkpointer SQLite 连接
+    try:
+        from app.services.tupu_deepagent import close_tupu_agent
+        await close_tupu_agent()
+    except Exception as _e:
+        print(f"[shutdown] close_tupu_agent error: {_e}")
 
 
 app = FastAPI(title="数据智能分析组件 API", lifespan=lifespan)
 
-# 启用 CORS
+# 启用 CORS（P3: 生产环境禁止通配符+凭据组合）
+import os as _os
+_cors_origins = _os.getenv("CORS_ORIGINS", "").split(",") if _os.getenv("CORS_ORIGINS") else ["*"]
+_cors_credentials = bool(_os.getenv("CORS_ORIGINS"))  # 指定了具体 origin 才允许凭据
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Authentik OIDC 鉴权中间件（ENABLE_AUTH=0 时短路放行）
-app.add_middleware(BaseHTTPMiddleware, dispatch=auth_middleware)
+# 纯 ASGI 中间件：透传 send，不破坏 SSE StreamingResponse（BaseHTTPMiddleware 会断流）
+app.add_middleware(AuthMiddleware)
 
 @app.get("/")
 def read_root():
@@ -188,6 +234,8 @@ app.include_router(kg_api.router)  # 自带 prefix="/api/kg"
 app.include_router(synonym.router)  # 自带 prefix="/api/v1/synonyms"
 app.include_router(api_mapping.router, prefix="/api/v1", tags=["api_mapping"])
 app.include_router(doris_config.router, prefix="/api/v1", tags=["doris_config"])
+# 数据引擎增强（批3）：观测端点（自带 prefix="/api/engine"）
+app.include_router(engine_observability.router)
 
 # MCP Server（业务工具标准化，deepagent 和外部 client 共用，SSE 传输 /mcp/sse）
 from app.mcp_server import mount_mcp

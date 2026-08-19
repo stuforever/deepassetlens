@@ -39,6 +39,7 @@
 from __future__ import annotations
 
 import os
+import json
 import time
 import threading
 from datetime import datetime
@@ -92,6 +93,11 @@ _PUBLIC_PATHS = (
 _OPTIONAL_AUTH_PATHS = (
     "/api/v1/auth/me",
 )
+# P3-a: MCP 内部服务身份路径（ENABLE_AUTH=1 时接受 X-Internal-Service header，不要求 OIDC JWT）
+_MCP_INTERNAL_PATHS = (
+    "/mcp",
+)
+_INTERNAL_SERVICE_NAME = "tupu-agent"
 
 
 # --------------------------------------------------------------------------- #
@@ -376,6 +382,117 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+def _path_matches(path: str, prefixes) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in prefixes)
+
+
+def _read_auth_header(scope) -> str:
+    for k, v in scope.get("headers") or []:
+        if k == b"authorization":
+            return v.decode("latin-1")
+    return ""
+
+
+async def _send_json_response(send, status_code: int, detail: str):
+    """纯 ASGI 方式直接写一条 JSON 响应（不走 app，不经过 body_iterator）。"""
+    body = json.dumps({"detail": detail}, ensure_ascii=False).encode("utf-8")
+    await send({
+        "type": "http.response.start",
+        "status": status_code,
+        "headers": [
+            (b"content-type", b"application/json; charset=utf-8"),
+            (b"content-length", str(len(body)).encode("latin-1")),
+        ],
+    })
+    await send({"type": "http.response.body", "body": body, "more_body": False})
+
+
+class AuthMiddleware:
+    """纯 ASGI 鉴权中间件。
+
+    为什么不用 BaseHTTPMiddleware：Starlette 的 BaseHTTPMiddleware 会把响应 body
+    经 body_iterator 二次封装，对 SSE StreamingResponse 有已知断言失败
+    (AssertionError: Unexpected message: http.response.start content-length: 0)，
+    表现为前端走 dev proxy 取流时 agent 立刻"卡住"。纯 ASGI 直接透传 send，
+    StreamingResponse 的 http.response.start + 分片 http.response.body 原样下发，
+    流不受影响。鉴权逻辑（ENABLE_AUTH=0 注入匿名 / 公共路径 / OPTIONS / JWT 验签 /
+    401）全部保留，只是换了一层壳。
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # 非 http（lifespan / websocket）直接透传
+        if scope.get("type") != "http":
+            return await self.app(scope, receive, send)
+
+        # FastAPI/Starlette 从 scope["state"] 读 request.state
+        if "state" not in scope:
+            scope["state"] = {}
+        state = scope["state"]
+
+        path = scope.get("path", "")
+        method = scope.get("method", "")
+
+        # 短路：关闭鉴权 / 公共路径 / OPTIONS 预检 -> 注入匿名，透传 send
+        if (not ENABLE_AUTH) or _path_matches(path, _PUBLIC_PATHS) or method == "OPTIONS":
+            state["user"] = _ANONYMOUS
+            return await self.app(scope, receive, send)
+
+        auth_header = _read_auth_header(scope)
+
+        # P3-a: MCP 内部服务身份校验（ENABLE_AUTH=1 时，/mcp 路径接受 X-Internal-Service header）
+        if _path_matches(path, _MCP_INTERNAL_PATHS):
+            _internal_token = os.getenv("TUPU_INTERNAL_TOKEN", "")
+            # 有内部 token 配置 -> 校验 Bearer token 匹配
+            if _internal_token and auth_header.lower().startswith("bearer "):
+                if auth_header[7:].strip() == _internal_token:
+                    state["user"] = _ANONYMOUS
+                    return await self.app(scope, receive, send)
+                else:
+                    await _send_json_response(send, 401, "内部服务 token 不匹配")
+                    return
+            # 无内部 token 配置 -> 校验 X-Internal-Service header
+            _x_internal = ""
+            for _k, _v in scope.get("headers") or []:
+                if _k == b"x-internal-service":
+                    _x_internal = _v.decode("latin-1")
+                    break
+            if _x_internal == _INTERNAL_SERVICE_NAME:
+                state["user"] = _ANONYMOUS
+                return await self.app(scope, receive, send)
+            # MCP 路径无内部身份 -> 拒绝（不允许外部直连 MCP）
+            await _send_json_response(send, 401, "MCP 端点需内部服务身份（X-Internal-Service 或 Bearer 内部 token）")
+            return
+
+        # 可选 token 路径：有就解析，无就匿名
+        is_optional = _path_matches(path, _OPTIONAL_AUTH_PATHS)
+        if is_optional and not auth_header.lower().startswith("bearer "):
+            state["user"] = _ANONYMOUS
+            return await self.app(scope, receive, send)
+
+        if not auth_header.lower().startswith("bearer "):
+            await _send_json_response(send, 401, "缺少 Authorization: Bearer <token>")
+            return
+
+        token = auth_header[7:].strip()
+        try:
+            claims = _verify_jwt(token)
+        except HTTPException as exc:
+            await _send_json_response(send, exc.status_code, str(exc.detail))
+            return
+
+        db = SessionLocal()
+        try:
+            user = _upsert_user(db, claims)
+        finally:
+            db.close()
+
+        state["user"] = user
+        return await self.app(scope, receive, send)
+
+
 # --------------------------------------------------------------------------- #
 # 依赖：get_current_user / require_permission / check_resource_permission
 # --------------------------------------------------------------------------- #
@@ -498,6 +615,7 @@ __all__ = [
     "ENABLE_AUTH",
     "AuthUser",
     "auth_middleware",
+    "AuthMiddleware",
     "get_current_user",
     "require_permission",
     "check_resource_permission",

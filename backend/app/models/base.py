@@ -609,22 +609,26 @@ class DorisConfig(Base):
     port = Column(Integer, nullable=False, default=9030)
     user = Column(String(255), nullable=False, default="root")
     password = Column(String(255), nullable=False, default="")
+    database = Column(String(255), nullable=False, default="test_db")
     charset = Column(String(50), nullable=False, default="utf8mb4")
     connect_timeout = Column(Integer, nullable=False, default=10)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class DorisCatalog(Base):
-    """Doris Catalog 定义（jdbc 联邦，便于 UI 创建/编辑/重建）"""
+    """Doris Catalog 定义（jdbc/es 联邦，便于 UI 创建/编辑/重建）"""
     __tablename__ = "kg_doris_catalog"
     id = Column(String(36), primary_key=True, default=_uuid_str)
     name = Column(String(100), unique=True, nullable=False)
-    catalog_type = Column(String(50), nullable=False, default="jdbc")
+    catalog_type = Column(String(50), nullable=False, default="jdbc")   # jdbc | es | internal
     jdbc_url = Column(Text, nullable=True)
     jdbc_user = Column(String(255), nullable=True)
     jdbc_password = Column(String(255), nullable=True)
     driver_class = Column(String(255), nullable=True)
     driver_url = Column(Text, nullable=True)
+    es_hosts = Column(Text, nullable=True)      # P4：ES catalog 地址（逗号分隔，如 http://host:9200）
+    es_user = Column(String(255), nullable=True)
+    es_password = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -825,10 +829,13 @@ class ApiEndpoint(Base):
     api_url = Column(Text, nullable=False)                           # API URL(ES _search 或外部REST)
     method = Column(String(10), default="POST")                      # GET/POST
     params = Column(JSON, nullable=True)        # [{"name":"pspid","column":"pspid","map_to":"query"}] 过滤参数
-    columns = Column(JSON, nullable=False)      # [{"name":"pspid","json_path":"pspid","type":"VARCHAR"}] 返回列
+    columns = Column(JSON, nullable=False)      # [{"name":"pspid","json_path":"pspid","type":"VARCHAR","dtype":"int64"}] 返回列
     data_path = Column(String(255), nullable=True)   # 响应JSON提取路径(如 PROJECT_DEFINITION)
     headers = Column(JSON, nullable=True)             # 请求头
     body_template = Column(Text, nullable=True)       # POST请求体模板(如ES _search的query DSL, 含match_all等)
+    cache_ttl_seconds = Column(Integer, nullable=False, default=300)  # 批2：API内存缓存TTL(0=禁用)
+    pagination = Column(JSON, nullable=True)          # 批2：{"page_param","size_param","page_size","max_pages"}
+    run_config = Column(JSON, nullable=True)          # P3：{"rate_limit_min_interval_ms","circuit_threshold","circuit_open_seconds"}
     description = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -844,3 +851,45 @@ class EntityApiMapping(Base):
     pseudo_sql = Column(Text, nullable=False)         # 伪逻辑SQL(引用虚拟表,不含WHERE,LLM调用时动态加)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class EngineQueryLog(Base):
+    """引擎查询日志（批1：两引擎 execute 出口统一落库，30 天自动清理）"""
+    __tablename__ = "kg_engine_query_logs"
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    run_id = Column(String(64), nullable=True)          # 会话/请求标识
+    engine = Column(String(32), nullable=False)         # duckdb | doris | sql
+    sql_hash = Column(String(16), nullable=True)        # sha1 前 8 位（聚合去重用）
+    sql = Column(Text, nullable=True)
+    rows_returned = Column(Integer, nullable=False, default=0)
+    duration_ms = Column(Integer, nullable=True)
+    status = Column(String(16), nullable=False, default="ok")   # ok | error
+    error_class = Column(String(32), nullable=True)     # 批1 错误分类
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class EngineAccelerator(Base):
+    """预聚合加速器（P5：高频聚合物化到 Doris internal 表，命中拦截 + 数据截至标注）
+
+    - 单值加速器（agg_expr 如 COUNT(*)/SUM(col)）：try_serve 对同形 SELECT 拦截改写
+    - 分组加速器（agg_expr 为空）：目标表直接可查，查询命中目标表时标注 data_as_of
+    """
+    __tablename__ = "kg_engine_accelerators"
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    source_tables = Column(JSON, nullable=False)        # 被覆盖源表名数组（拦截判据）
+    agg_expr = Column(String(255), nullable=True)       # 单值聚合表达式（COUNT(*)/SUM(col)…），空=仅直查
+    agg_col = Column(String(255), nullable=True)        # 目标表承载预聚合值的列（拦截改写 SELECT 该列）
+    target_catalog = Column(String(100), nullable=False, default="internal")
+    target_db = Column(String(100), nullable=False, default="test_db")
+    target_table = Column(String(100), nullable=False)
+    refresh_sql = Column(Text, nullable=False)          # 计算 SELECT（INSERT OVERWRITE / CREATE TABLE AS 用）
+    refresh_minutes = Column(Integer, nullable=False, default=60)
+    staleness_note = Column(Boolean, nullable=False, default=True)  # 结果标注「数据截至 HH:MM」
+    enabled = Column(Boolean, nullable=False, default=True)
+    last_refresh_at = Column(DateTime(timezone=True), nullable=True)
+    last_status = Column(String(30), nullable=True)     # ok | error
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

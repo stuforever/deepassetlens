@@ -94,8 +94,9 @@ def get_chat_model(
     timeout: Optional[float] = None,
     streaming: bool = False,
     extra_payload: Optional[Dict[str, Any]] = None,
+    connection_id: Optional[str] = None,
 ):
-    """统一 LLM 入口：从数据库读默认 chat 配置，构建 langchain ChatOpenAI 实例。
+    """统一 LLM 入口：从数据库读 chat 配置，构建 langchain ChatOpenAI 实例。
 
     所有需要 LLM 的地方都应走此函数，确保配置和超时统一来自后台 LLMConnectionConfig 表。
     优先级：显式参数 > 数据库字段 > 兜底默认值。
@@ -106,6 +107,7 @@ def get_chat_model(
         timeout: 覆盖超时秒数（None 则用数据库 timeout_seconds，再兜底 120）
         streaming: 是否启用流式
         extra_payload: 额外参数透传（如 thinking.type=disabled）
+        connection_id: 指定 LLM 连接 ID（v3.6：让前端选模型真正生效）；None 则用默认连接
 
     Returns:
         langchain_openai.ChatOpenAI 实例
@@ -113,7 +115,14 @@ def get_chat_model(
     Raises:
         RuntimeError: 数据库无可用 LLM 配置
     """
-    conn = get_default_llm_connection(capability)
+    # v3.6: 按 connection_id 选连接（让前端选模型生效），无则用默认
+    if connection_id:
+        conn = get_llm_connection_by_id(connection_id, capability)
+        if not conn:
+            logger.warning(f"[llm_client] connection_id={connection_id} 不可用，回退默认连接")
+            conn = get_default_llm_connection(capability)
+    else:
+        conn = get_default_llm_connection(capability)
     if not conn:
         raise RuntimeError(f"LLM 模型不可用，请检查 kg_llm_connection_configs 表（capability={capability}）")
 
@@ -128,7 +137,11 @@ def get_chat_model(
     merged_payload = dict(extra_payload or {})
     if default_mode == "deep":
         # 深度思考模式：注入 thinking 参数（模型不支持则忽略，不报错）
-        merged_payload.setdefault("thinking", {"type": "enabled"})
+        # qwen 系列用 enable_thinking=true(DashScope OpenAI兼容), 其他用 thinking:{type:enabled}
+        if 'qwen' in (conn.model_name or '').lower():
+            merged_payload.setdefault("enable_thinking", True)
+        else:
+            merged_payload.setdefault("thinking", {"type": "enabled"})
         logger.info(f"[llm_client] thinking enabled: name={conn.name} model={conn.model_name}")
 
     logger.info(
@@ -223,6 +236,28 @@ def build_chat_model(
     class _TupuChatOpenAI(ChatOpenAI):
         def bind_tools(self, tools, *, tool_choice=None, **kw):
             return super().bind_tools(tools, tool_choice=None, **kw)
+
+        def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class,
+                                                base_generation_info):
+            gen = super()._convert_chunk_to_generation_chunk(
+                chunk, default_chunk_class, base_generation_info)
+            if gen is None:
+                return gen
+            # qwen3 把思考流放在 delta.reasoning_content（非 OpenAI 标准字段），
+            # langchain_openai 不解析会丢弃。这里从原始 delta 补取, 注入 additional_kwargs，
+            # 供下游 on_chat_model_stream 推 think_token(kind=reasoning) 到执行过程区（非对话流/公屏）。
+            try:
+                choices = chunk.get("choices") or (chunk.get("chunk") or {}).get("choices") or []
+                if choices:
+                    delta = choices[0].get("delta") or {}
+                    rc = delta.get("reasoning_content")
+                    if rc:
+                        ak = dict(gen.message.additional_kwargs or {})
+                        ak["reasoning_content"] = rc
+                        gen.message.additional_kwargs = ak
+            except Exception:
+                pass
+            return gen
 
     return _TupuChatOpenAI(**kwargs)
 
