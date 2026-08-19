@@ -27,9 +27,11 @@ def run_row(db):
     db.add(row)
     db.commit()
     yield rid
-    # 清理
+    # 清理（只清本测试自建的 user_confirmed 行：sql 打点 cms20_cst_cust，不动生产示例）
     db.query(MetricQueryLog).filter(MetricQueryLog.run_id == rid).delete()
-    db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.example_type == "user_confirmed").delete()
+    db.query(KgVerifiedQaExample).filter(
+        KgVerifiedQaExample.example_type == "user_confirmed",
+        KgVerifiedQaExample.sql.like("%cms20_cst_cust%")).delete(synchronize_session=False)
     db.commit()
 
 

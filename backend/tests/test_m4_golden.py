@@ -24,12 +24,14 @@ def db():
 
 @pytest.fixture(autouse=True)
 def clean_golden(db):
-    """只清理测试自建行（scenario_tag=test），严禁触碰真实种子金标
+    """只清理测试自建行（scenario_tag=test + test_seed_ 前缀示例），严禁触碰真实种子金标
     （statistics/distribution-overload——此前用 question.in_(模板) 误删生产金标）。"""
     yield
     from app.models.base import KgGoldenQaSet, KgVerifiedQaExample
     db.query(KgGoldenQaSet).filter(KgGoldenQaSet.scenario_tag == "test").delete(synchronize_session=False)
-    db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.example_type == "golden").delete(synchronize_session=False)
+    db.query(KgVerifiedQaExample).filter(
+        KgVerifiedQaExample.example_type == "golden",
+        KgVerifiedQaExample.question_raw.like("test_seed_%")).delete(synchronize_session=False)
     db.commit()
 
 
@@ -49,7 +51,8 @@ class TestM4Golden:
     def test_CRUD(self, db):
         from app.services.golden_qa_service import add_golden, delete_golden, list_golden, set_golden_status
         res = add_golden(db, question="q_test", expected_sql="SELECT 1",
-                         expected_result_digest={"row_count": 1, "first_row_hash": "h"}, scenario_tag="test")
+                         expected_result_digest={"row_count": 1, "first_row_hash": "h"},
+                         scenario_tag="test", feed_example=False)
         assert res["ok"] and res["expected_result_digest"]["row_count"] == 1
         gid = res["id"]
         assert any(g["id"] == gid for g in list_golden(db))

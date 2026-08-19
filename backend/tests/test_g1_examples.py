@@ -26,7 +26,7 @@ from app.services.qa_example_service import (
     set_qa_example_status,
 )
 
-_QA = "统计用电客户总数"
+_QA = "test_g1_统计用电客户总数"  # 测试专属问题（不与生产种子金标同题，避免 Tier1 命中冲突）
 _SQL = "SELECT COUNT(*) FROM dim_cst_elec_cons_cust"
 
 
@@ -41,7 +41,8 @@ def clean_examples(ensure_table):
     def _clean():
         db = SessionLocal()
         try:
-            db.query(KgVerifiedQaExample).delete()
+            # 只清测试自建行（sql 打点 _SQL），严禁触碰生产示例（真实种子金标/用户确认）
+            db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.sql == _SQL).delete(synchronize_session=False)
             db.commit()
         finally:
             db.close()
@@ -76,15 +77,17 @@ class TestG1TableAndCRUD:
         try:
             eid = _seed_one(db)
             lst = list_qa_examples(db, page=1, size=10)
-            assert lst["total"] == 1
-            assert lst["items"][0]["status"] == "enabled"
+            # 生产示例共存时不依赖绝对 total：断言测试行存在且默认 enabled
+            row = next((i for i in lst["items"] if i["id"] == eid), None)
+            assert row and row["status"] == "enabled"
             r = set_qa_example_status(db, eid, "disabled")
             assert r["ok"] and r["status"] == "disabled"
             lst2 = list_qa_examples(db, status="disabled")
-            assert lst2["total"] == 1
+            assert any(i["id"] == eid for i in lst2["items"])
             r2 = delete_qa_example(db, eid)
             assert r2["ok"]
-            assert list_qa_examples(db).get("total") == 0
+            lst3 = list_qa_examples(db)
+            assert all(i["id"] != eid for i in lst3["items"])
         finally:
             db.close()
 
@@ -168,7 +171,10 @@ class TestG1AdminAPI:
             "question_raw": _QA, "sql": _SQL, "route_type": "generic", "engine": "physical", "example_type": "golden"})
         assert r.status_code == 200
         eid = r.json()["data"]["id"]
-        assert tc.get("/api/v1/qa-examples").json()["data"]["total"] == 1
+        # 只断言测试行存在/消失（生产示例共存时不依赖绝对 total）
+        lst = tc.get("/api/v1/qa-examples").json()["data"]["items"]
+        assert any(i["id"] == eid for i in lst)
         assert tc.patch(f"/api/v1/qa-examples/{eid}/status", json={"status": "disabled"}).status_code == 200
         assert tc.delete(f"/api/v1/qa-examples/{eid}").status_code == 200
-        assert tc.get("/api/v1/qa-examples").json()["data"]["total"] == 0
+        lst2 = tc.get("/api/v1/qa-examples").json()["data"]["items"]
+        assert all(i["id"] != eid for i in lst2)
