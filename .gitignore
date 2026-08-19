@@ -144,3 +144,6 @@ backend/_*.sql
 # === 数据库快照 / 列对齐临时目录（不入库）===
 backend/_restore_snapshot/
 backend/_snapshot_colalign/
+
+# === 引擎 parquet 落盘缓存（运行时产物，不入库）===
+backend/data/duckdb_cache/
