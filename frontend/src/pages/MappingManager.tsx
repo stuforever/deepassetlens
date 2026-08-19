@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Layout, TreeSelect, Table, Button, Space, Typography, Switch, Input, Row, Col, message, Empty, Upload, Divider, Tabs, Select, Collapse, Popconfirm, Modal, Form } from 'antd';
-import { DatabaseOutlined, ApartmentOutlined, CodeOutlined, SaveOutlined, AppstoreOutlined, ThunderboltOutlined, UploadOutlined, DownloadOutlined, UnorderedListOutlined, ApiOutlined } from '@ant-design/icons';
+import { Button, Space, message, Tabs, Modal } from 'antd';
+import { CodeOutlined, SaveOutlined, AppstoreOutlined, ApiOutlined } from '@ant-design/icons';
 import { conceptApi, sourceTableApi, mappingApi, uploadApi } from '../services/api';
 import ApiMappingTab from '../components/ApiMappingTab';
 import SqlIntegrationTab from '../components/SqlIntegrationTab';
-import { TERMS, MAPPING_TEMPLATE_HEADERS } from '../constants/standardTerms';
+import MappingRulesTable from '../components/MappingRulesTable';
+import MappingRuleModalContent from '../components/MappingRuleModalContent';
+import { FieldPickerModal, SqlPreviewModal } from '../components/MappingModals';
 import { useStore } from '../store/useStore';
-import { PageShell, StatusTag } from '../components/shell';
+import { PageShell } from '../components/shell';
 import { tokens } from '../theme/tokens';
-
-const { Content } = Layout;
-const { Text } = Typography;
-const { TextArea } = Input;
 
 type Props = {
   onOpenTarget?: (menuKey: string) => void;
@@ -54,16 +52,13 @@ const MappingManager: React.FC<Props> = ({ onOpenTarget, initialTab = '1', visib
   const [queryKeyword, setQueryKeyword] = useState('');
   const [queryEntityId, setQueryEntityId] = useState<string>('');
   const [querySourceTableId, setQuerySourceTableId] = useState<string>('');
-  const [detailEntityId, setDetailEntityId] = useState<string>('');
-  const [detailSourceTableId, setDetailSourceTableId] = useState<string>('');
+  const detailEntityId = '';
+  const detailSourceTableId = '';
   const [sqlPreviewOpen, setSqlPreviewOpen] = useState(false);
   const [sqlPreviewContent, setSqlPreviewContent] = useState('');
   const [sqlPreviewTitle, setSqlPreviewTitle] = useState('');
   const [mainSourceTableId, setMainSourceTableId] = useState<string>('');
   const [pkOverrides, setPkOverrides] = useState<Record<string, boolean>>({});
-  const [previewModalOpen, setPreviewModalOpen] = useState(false);
-  const [previewRows, setPreviewRows] = useState<any[]>([]);
-  const [previewTitle, setPreviewTitle] = useState('');
   const [fieldPickerOpen, setFieldPickerOpen] = useState(false);
   const [fieldPickerTitle, setFieldPickerTitle] = useState('');
   const [fieldPickerEntityId, setFieldPickerEntityId] = useState('');
@@ -94,7 +89,6 @@ const MappingManager: React.FC<Props> = ({ onOpenTarget, initialTab = '1', visib
   const getLandingTableEnName = (e: any) =>
     e?.landing_table_en_name || e?.entity_en_name || '';
 
-  const normalizeUuid = (v: any) => String(v || '').toLowerCase();
   const ruleModalReadOnly = ruleModalMode === 'view';
 
   const preloadFieldsByTableIds = async (tableIds: string[], sourceRes: any) => {
@@ -761,57 +755,6 @@ const MappingManager: React.FC<Props> = ({ onOpenTarget, initialTab = '1', visib
     message.success('已根据当前字段映射生成 SQL 模板');
   };
 
-  const handleExportTemplate = () => {
-    let csv = `${MAPPING_TEMPLATE_HEADERS.join(',')}\n`;
-    
-    // Dump current mappings
-    selectedEntities.forEach(entity => {
-      const props = entity.properties_schema || [];
-      props.forEach((prop: any) => {
-        const key = `${entity.id}_${prop.name}`;
-        let mappingVals = fieldMappings[key] || [];
-        // 兼容旧的单字符串映射值
-        if (typeof mappingVals === 'string') {
-          mappingVals = [mappingVals];
-        }
-        const desc = mappingDesc[key] || '';
-        
-        let tableEns = new Set<string>();
-        let fieldEns: string[] = [];
-        
-        mappingVals.forEach(mappingVal => {
-          if (mappingVal && mappingVal.includes('_')) {
-             const { tableId, fieldEn } = parseMappingValue(mappingVal);
-             fieldEns.push(fieldEn || '');
-             const tableInfo = [...sourceMaster, ...sourceBusiness, ...sourceReference].find(t => String(t.id) === String(tableId));
-             if (tableInfo?.enName) tableEns.add(tableInfo.enName);
-          }
-        });
-        
-        csv += `${entity.entity_code || entity.label},${getLandingTableEnName(entity) || ''},${prop.name},${Array.from(tableEns).join('|')},${fieldEns.join('|')},${desc},\n`;
-      });
-    });
-    
-    if (sqlContent) {
-       const escapedSql = `"${sqlContent.replace(/"/g, '""')}"`;
-       const lines = csv.split('\n');
-       if (lines.length > 1) {
-          lines[1] = lines[1].replace(/,$/, `,${escapedSql}`);
-       } else {
-          lines.push(`,,,,,,${escapedSql}`);
-       }
-       csv = lines.join('\n');
-    }
-
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', '映射规则导入模板.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   const handleImportCSV = (file: File) => {
     const reader = new FileReader();
@@ -1065,502 +1008,9 @@ const MappingManager: React.FC<Props> = ({ onOpenTarget, initialTab = '1', visib
     setSqlPreviewOpen(true);
   };
 
-  const allSourceTableEns = useMemo(() => {
-    return [...sourceMaster, ...sourceBusiness, ...sourceReference].map(t => ({
-      value: t.enName,
-      label: `${t.enName} (${t.cnName || ''})`
-    }));
-  }, [sourceMaster, sourceBusiness, sourceReference]);
 
-  const renderRulesTable = () => {
-    const allTables = [...sourceMaster, ...sourceBusiness, ...sourceReference];
-    const getRuleEntityId = (r: any) => String((r?.entity_ids || [])[0] || '');
-    const getRuleEntity = (r: any) => {
-      const eid = getRuleEntityId(r);
-      return (entityMetaById[eid] || dbEntities.find((e) => String(e.id) === eid)) || {};
-    };
-    const getEntityModeling = (r: any) => {
-      const eid = getRuleEntityId(r);
-      const ent = (entityMetaById[eid] || dbEntities.find((e) => String(e.id) === eid));
-      return ent ? { model_table_cn: ent.entity_en_name || '' } : undefined;
-    };
-    const formatSourceTableNames = (r: any) => {
-      const ids: string[] = r?.source_table_ids || [];
-      const names = ids
-        .map((id) => allTables.find((t) => String(t.id) === String(id)))
-        .filter(Boolean)
-        .map((t: any) => String(t.cnName || t.enName || '').trim())
-        .filter(Boolean);
-      return Array.from(new Set(names)).join('、');
-    };
 
-    const columns = [
-      { title: TERMS.graphEntityCnName, key: 'entityName', width: 180, render: (_: any, r: any) => getRuleEntity(r)?.entity_name || getRuleEntity(r)?.label || '-' },
-      { title: '实体落地中文表名', key: 'landingTableCn', width: 180, render: (_: any, r: any) => getEntityModeling(r)?.model_table_cn || '-' },
-      { title: '来源表名', key: 'sourceTables', width: 240, ellipsis: true, render: (_: any, r: any) => formatSourceTableNames(r) || '-' },
-      { title: '规则ID', dataIndex: 'id', width: 220, ellipsis: true },
-      { title: '创建时间', dataIndex: 'created_at', width: 180, ellipsis: true },
-      {
-        title: '操作',
-        key: 'actions',
-        width: 220,
-        render: (_: any, record: any) => (
-          <Space>
-            <Button size="small" onClick={() => handleViewRule(record)}>查看</Button>
-            <Button size="small" onClick={() => handlePreviewRuleSql(record)}>查看SQL</Button>
-            <Button size="small" type="link" onClick={() => handleEditRule(record)}>修改</Button>
-            <Popconfirm title="确认删除该映射规则？" onConfirm={() => handleDeleteRule(record.id)}>
-              <Button size="small" danger type="link">删除</Button>
-            </Popconfirm>
-          </Space>
-        )
-      }
-    ];
 
-    return (
-      <Card
-        size="small"
-        title={`${TERMS.mappingRule}列表`}
-        style={{ marginBottom: 16 }}
-        extra={
-          <Space>
-            <Button type="primary" onClick={handleCreateNewRule}>新建映射规则</Button>
-          </Space>
-        }
-      >
-        <Row gutter={12} style={{ marginBottom: 12 }}>
-          <Col span={8}>
-            <Input
-              allowClear
-              placeholder="按规则名/规则ID搜索"
-              value={queryKeyword}
-              onChange={(e) => setQueryKeyword(e.target.value)}
-            />
-          </Col>
-          <Col span={7}>
-            <Select
-              allowClear
-              showSearch
-              placeholder="按图谱实体筛选"
-              value={queryEntityId || undefined}
-              onChange={(v) => setQueryEntityId(v || '')}
-              options={dbEntities.map((e) => ({
-                value: String(e.id),
-                label: `${e.entity_name || e.label} (${e.entity_code})`,
-              }))}
-              optionFilterProp="label"
-              style={{ width: '100%' }}
-            />
-          </Col>
-          <Col span={7}>
-            <Select
-              allowClear
-              showSearch
-              placeholder="按来源表筛选"
-              value={querySourceTableId || undefined}
-              onChange={(v) => setQuerySourceTableId(v || '')}
-              options={[...sourceMaster, ...sourceBusiness, ...sourceReference].map((t) => ({
-                value: String(t.id),
-                label: `${t.enName} (${t.cnName || ''})`,
-              }))}
-              optionFilterProp="label"
-              style={{ width: '100%' }}
-            />
-          </Col>
-          <Col span={2}>
-            <Button style={{ width: '100%' }} onClick={resetQueryFilters}>重置</Button>
-          </Col>
-        </Row>
-        <Table
-          size="small"
-          rowKey="id"
-          dataSource={filteredMappingRules}
-          columns={columns}
-          scroll={{ x: 'max-content' }}
-          pagination={{ pageSize: 8 }}
-          rowClassName={(record: any) => String(record.id) === String(viewingRuleId || '') ? 'ant-table-row-selected' : ''}
-          expandable={{
-            expandedRowRender: (record: any) => {
-              const rows = mappingInfoRows.filter((r: any) => String(r.ruleId) === String(record.id));
-              return (
-                <Table
-                  size="small"
-                  rowKey="key"
-                  dataSource={rows}
-                  pagination={false}
-                  columns={[
-                    { title: TERMS.entityFieldEnName, dataIndex: 'propEn', width: 120 },
-                    { title: TERMS.entityFieldCnName, dataIndex: 'propCn', width: 120 },
-                    { title: '是否主键', dataIndex: 'isPk', width: 80 },
-                    { title: '字段类型', dataIndex: 'propType', width: 100 },
-                    { title: TERMS.sourceTableEnName, dataIndex: 'tableEn', width: 150 },
-                    { title: TERMS.sourceFieldEnName, dataIndex: 'fieldEn', width: 150 },
-                    { title: TERMS.extractionLogic, dataIndex: 'desc' },
-                  ]}
-                  locale={{ emptyText: '该规则暂无字段映射明细' }}
-                />
-              );
-            },
-          }}
-        />
-      </Card>
-    );
-  };
-
-  // 渲染映射信息明细管理
-  const renderMappingInfoTable = () => {
-    const columns = [
-      { title: '规则名称', dataIndex: 'ruleName', width: 180, ellipsis: true },
-      { title: '实体唯一编码', dataIndex: 'entityCode', width: 150 },
-      { title: TERMS.graphEntityCnName, dataIndex: 'entityName', width: 150 },
-      { title: TERMS.graphEntityEnName, dataIndex: 'entityLandingTableEn', width: 220, render: (v: string) => v || <StatusTag preset="error">未维护</StatusTag> },
-      { title: TERMS.entityFieldEnName, dataIndex: 'propEn', width: 120 },
-      { title: TERMS.entityFieldCnName, dataIndex: 'propCn', width: 120 },
-      { title: '是否主键', dataIndex: 'isPk', width: 80 },
-      { title: '字段类型', dataIndex: 'propType', width: 100 },
-      { title: TERMS.sourceBizSystem, dataIndex: 'sysName', width: 120 },
-      { title: TERMS.sourceTableCnName, dataIndex: 'tableCn', width: 150 },
-      { title: TERMS.sourceTableEnName, dataIndex: 'tableEn', width: 150 },
-      { title: '是否来源主表', dataIndex: 'isMainSource', width: 120 },
-      { title: TERMS.sourceFieldEnName, dataIndex: 'fieldEn', width: 150 },
-      { title: TERMS.sourceFieldCnName, dataIndex: 'fieldCn', width: 150 },
-      { title: TERMS.extractionLogic, dataIndex: 'desc', width: 150, ellipsis: true },
-      { title: '备注', dataIndex: 'remark', width: 100 },
-    ];
-
-    return (
-      <Space direction="vertical" style={{ width: '100%' }} size={16}>
-        <Card
-          size="small"
-          title="映射信息查询"
-          extra={
-            <Space>
-              <Button onClick={() => { setDetailEntityId(''); setDetailSourceTableId(''); }}>重置筛选</Button>
-              <Button icon={<DownloadOutlined />} onClick={handleExportTemplate}>导出模板</Button>
-            </Space>
-          }
-        >
-          <Row gutter={12}>
-            <Col span={10}>
-              <Select
-                allowClear
-                showSearch
-                placeholder="输入或选择实体"
-                value={detailEntityId || undefined}
-                onChange={(v) => setDetailEntityId(v || '')}
-                options={dbEntities.map((e) => ({
-                  value: String(e.id),
-                  label: `${e.entity_name || e.label} (${e.entity_code})`,
-                }))}
-                optionFilterProp="label"
-                style={{ width: '100%' }}
-              />
-            </Col>
-            <Col span={10}>
-              <Select
-                allowClear
-                showSearch
-                placeholder="输入或选择源端表"
-                value={detailSourceTableId || undefined}
-                onChange={(v) => setDetailSourceTableId(v || '')}
-                options={[...sourceMaster, ...sourceBusiness, ...sourceReference].map((t) => ({
-                  value: String(t.id),
-                  label: `${t.enName} (${t.cnName || ''})`,
-                }))}
-                optionFilterProp="label"
-                style={{ width: '100%' }}
-              />
-            </Col>
-            <Col span={4}>
-              <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                <StatusTag preset="info">命中 {mappingInfoRows.length} 条</StatusTag>
-              </div>
-            </Col>
-          </Row>
-        </Card>
-        <Card 
-          size="small" 
-          title="映射信息明细" 
-        >
-          <Table 
-            size="small"
-            dataSource={mappingInfoRows}
-            columns={columns}
-            scroll={{ x: 'max-content' }}
-            pagination={{ pageSize: 15 }}
-            locale={{ emptyText: '请选择实体或源端表后查看映射明细' }}
-          />
-        </Card>
-      </Space>
-    );
-  };
-
-  const renderEntityProperties = (entity: any, readOnly = false) => {
-    const props = entity.properties_schema || [];
-    const currentPkOverrides = readOnly ? viewPkOverrides : pkOverrides;
-    const currentRowSourceTableFilter = readOnly ? {} : rowSourceTableFilter;
-    const currentFieldMappings = readOnly ? viewFieldMappings : fieldMappings;
-    const currentMappingDesc = readOnly ? viewMappingDesc : mappingDesc;
-    const currentSelectedSourceTables = readOnly ? viewSelectedSourceTables : selectedSourceTables;
-    return (
-      <Card 
-        size="small" 
-        title={
-          <Space>
-            <AppstoreOutlined />
-            {entity.label} 
-            {entity.is_main_table ? <StatusTag preset="error">主表</StatusTag> : <StatusTag preset="default">辅表</StatusTag>}
-          </Space>
-        } 
-        style={{ marginBottom: 16 }}
-      >
-        <Table 
-          size="small"
-          pagination={false}
-          rowKey="name"
-          dataSource={props}
-          columns={[
-            { title: TERMS.entityFieldEnName, dataIndex: 'name', key: 'name', width: 100, render: (text: string) => <Text strong>{text}</Text> },
-            { title: TERMS.entityFieldCnName, dataIndex: 'cnName', key: 'cnName', width: 100, render: (text: string) => <Text type="secondary">{text}</Text> },
-            { title: '是否主键', dataIndex: 'isPrimaryKey', width: 100, render: (_: boolean, record: any) => {
-              const key = `${entity.id}_${record.name}`;
-              if (readOnly) {
-                return <StatusTag preset={currentPkOverrides[key] ? 'error' : 'default'}>{currentPkOverrides[key] ? '是' : '否'}</StatusTag>;
-              }
-              return (
-                <Switch
-                  checked={!!currentPkOverrides[key]}
-                  checkedChildren="是"
-                  unCheckedChildren="否"
-                  onChange={(checked) => handlePkChange(entity.id, record.name, checked)}
-                />
-              );
-            }},
-            { title: '字段类型', dataIndex: 'type', width: 90 },
-            { title: TERMS.sourceTableEnName, key: 'sourceTable', width: 140, render: (_: any, record: any) => {
-                const key = `${entity.id}_${record.name}`;
-                if (readOnly) {
-                  const mappingVals = currentFieldMappings[key] || [];
-                  const tableNames = (Array.isArray(mappingVals) ? mappingVals : [mappingVals]).map((mv: string) => {
-                    const { tableId } = parseMappingValue(mv);
-                    return currentSelectedSourceTables.find(t => String(t.id) === String(tableId))?.enName || '';
-                  }).filter(Boolean);
-                  return <Text>{Array.from(new Set(tableNames)).join(' | ') || '-'}</Text>;
-                }
-                return (
-                  <Select 
-                    style={{ width: '100%' }} 
-                    placeholder="选择来源表英文名" 
-                    allowClear
-                    value={currentRowSourceTableFilter[key]}
-                    onChange={(val) => handleRowSourceTableChange(entity.id, record.name, val)}
-                  >
-                    {currentSelectedSourceTables.map(t => (
-                      <Select.Option key={t.id} value={t.id}>{t.enName}</Select.Option>
-                    ))}
-                  </Select>
-                );
-            }},
-            { title: TERMS.sourceFieldEnName, key: 'mapping', width: 220, render: (_: any, record: any) => {
-              const key = `${entity.id}_${record.name}`;
-              const currentVals = currentFieldMappings[key] || [];
-              if (readOnly) {
-                return <Text>{(Array.isArray(currentVals) ? currentVals : [currentVals]).map((mv: string) => parseMappingValue(mv).fieldEn).filter(Boolean).join(' | ') || '-'}</Text>;
-              }
-              return (
-                <Space direction="vertical" style={{ width: '100%' }} size={4}>
-                  <Button size="small" onClick={() => openFieldPicker(entity, record)}>
-                    选择来源字段(多选)
-                  </Button>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    已选 {currentVals.length} 项
-                  </Text>
-                </Space>
-            )}},
-            { title: TERMS.extractionLogic, key: 'desc', width: 150, render: (_: any, record: any) => {
-              const key = `${entity.id}_${record.name}`;
-              if (readOnly) {
-                return <Text>{currentMappingDesc[key] || '-'}</Text>;
-              }
-              return (
-                <Input 
-                  placeholder={TERMS.extractionLogic}
-                  value={currentMappingDesc[key]}
-                  onChange={(e) => handleMappingDescChange(entity.id, record.name, e.target.value)}
-                />
-              );
-            }}
-          ]}
-          locale={{ emptyText: '该实体暂无属性，请先在资产管理中维护' }}
-        />
-      </Card>
-    );
-  };
-
-  const fieldPickerRows = useMemo(() => {
-    const tables = fieldPickerTableId
-      ? selectedSourceTables.filter(t => String(t.id) === String(fieldPickerTableId))
-      : selectedSourceTables;
-    const rows: any[] = [];
-    tables.forEach(t => {
-      const fields = sourceTableFields[t.id] || [];
-      fields.forEach((f: any) => {
-        rows.push({
-          key: `${t.id}_${f.field_en}`,
-          tableEn: t.enName,
-          tableCn: t.cnName,
-          fieldEn: f.field_en,
-          fieldCn: f.field_cn,
-        });
-      });
-    });
-    return rows;
-  }, [fieldPickerTableId, selectedSourceTables, sourceTableFields]);
-
-  const renderRuleModalContent = () => {
-    const modalSourceIds = ruleModalReadOnly ? viewSourceTableIds : sourceTableIds;
-    const modalEntityIds = ruleModalReadOnly ? viewEntityIds : entityIds;
-    const modalSelectedSourceTables = ruleModalReadOnly ? viewSelectedSourceTables : selectedSourceTables;
-    const modalSelectedEntities = ruleModalReadOnly ? viewSelectedEntities : selectedEntities;
-    const modalMainSourceTableId = ruleModalReadOnly ? viewMainSourceTableId : mainSourceTableId;
-    const modalSql = ruleModalReadOnly ? viewSqlContent : sqlContent;
-
-    return (
-      <Layout style={{ height: '70vh', background: 'var(--bg-content)' }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--color-border)', background: 'var(--bg-subtle)' }}>
-          <Row gutter={12} align="middle">
-            <Col span={8}>
-              <Text strong style={{ marginRight: 8 }}>规则名称：</Text>
-              <Input
-                placeholder="请输入映射规则名称"
-                value={ruleModalReadOnly ? viewingRuleName : ruleName}
-                onChange={(e) => setRuleName(e.target.value)}
-                disabled={ruleModalReadOnly}
-              />
-            </Col>
-            <Col span={8}>
-              <Text strong style={{ marginRight: 8 }}>选择{TERMS.sourceTableCatalog}：</Text>
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={sourceTreeData}
-                value={modalSourceIds}
-                onChange={handleSourceTableChange}
-                treeCheckable
-                showCheckedStrategy={TreeSelect.SHOW_CHILD}
-                placeholder={`请选择${TERMS.sourceTableCatalog}`}
-                allowClear
-                showSearch
-                disabled={ruleModalReadOnly}
-                treeNodeFilterProp="title"
-                maxTagCount={3}
-              />
-            </Col>
-            <Col span={8}>
-              <Text strong style={{ marginRight: 8 }}>选择图谱实体：</Text>
-              <TreeSelect
-                style={{ width: '100%' }}
-                treeData={entityTreeData}
-                value={modalEntityIds[0] || undefined}
-                onChange={(v) => setEntityIds(v ? [String(v)] : [])}
-                placeholder="请选择图谱实体"
-                allowClear
-                showSearch
-                disabled={ruleModalReadOnly}
-                treeNodeFilterProp="title"
-                maxTagCount={3}
-              />
-            </Col>
-          </Row>
-        </div>
-        <Content style={{ padding: '24px', overflowY: 'auto' }}>
-          {modalSourceIds.length === 0 || modalEntityIds.length === 0 ? (
-            <div style={{ textAlign: 'center', marginTop: 100 }}>
-              <Empty description={`请先选择至少一个${TERMS.sourceTableCatalog}和图谱实体`} />
-            </div>
-          ) : (
-            <div>
-              <Card
-                size="small"
-                title={<Space><DatabaseOutlined />已选来源字段目录</Space>}
-                type="inner"
-                style={{ marginBottom: 16 }}
-              >
-                <Collapse ghost>
-                  {modalSelectedSourceTables.map(t => (
-                    <Collapse.Panel
-                      key={t.id}
-                      header={
-                        <Space>
-                          <StatusTag preset="info">{t.enName}</StatusTag>
-                          <Text type="secondary">{t.cnName}</Text>
-                          {String(modalMainSourceTableId) === String(t.id) ? <StatusTag preset="error">主表</StatusTag> : null}
-                          {!ruleModalReadOnly ? (
-                            <Button
-                              size="small"
-                              type={String(modalMainSourceTableId) === String(t.id) ? 'primary' : 'default'}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMainSourceTableId(String(modalMainSourceTableId) === String(t.id) ? '' : String(t.id));
-                              }}
-                            >
-                              {String(modalMainSourceTableId) === String(t.id) ? '取消主表' : '设为主表'}
-                            </Button>
-                          ) : null}
-                        </Space>
-                      }
-                    >
-                      <Table
-                        size="small"
-                        pagination={{ pageSize: 5 }}
-                        rowKey="field_en"
-                        dataSource={sourceTableFields[t.id] || []}
-                        columns={[
-                          { title: '列英文名', dataIndex: 'field_en', key: 'field_en', render: text => <Text code>{text}</Text> },
-                          { title: '列中文名', dataIndex: 'field_cn', key: 'field_cn', render: text => <Text type="secondary" style={{ fontSize: 12 }}>{text}</Text> },
-                        ]}
-                        locale={{ emptyText: '该表暂未导入字段' }}
-                      />
-                    </Collapse.Panel>
-                  ))}
-                </Collapse>
-              </Card>
-
-              <Card
-                size="small"
-                title={<Space><AppstoreOutlined />目标实体映射配置</Space>}
-                type="inner"
-                extra={
-                  !ruleModalReadOnly ? (
-                    <Space>
-                      <Upload beforeUpload={handleImportCSV} showUploadList={false} accept=".csv">
-                        <Button icon={<UploadOutlined />}>导入映射</Button>
-                      </Upload>
-                      <Button type="dashed" icon={<ThunderboltOutlined />} onClick={autoMatchFields}>智能自动匹配</Button>
-                      <Button type="dashed" icon={<CodeOutlined />} onClick={generateSqlTemplate}>生成SQL</Button>
-                    </Space>
-                  ) : null
-                }
-              >
-                <div style={{ maxHeight: '40vh', overflowY: 'auto', marginBottom: 16 }}>
-                  {modalSelectedEntities.map((entity) => renderEntityProperties(entity, ruleModalReadOnly))}
-                </div>
-
-                <Divider orientation="left">自定义 SQL</Divider>
-                <TextArea
-                  rows={6}
-                  readOnly={ruleModalReadOnly}
-                  style={{ fontFamily: 'monospace', background: '#1e1e1e', color: '#d4d4d4' }}
-                  placeholder={`SELECT \n  A.ID AS id,\n  B.NAME AS customer_name\nFROM ${modalSelectedSourceTables[0]?.enName} A \nJOIN ... B ON A.ID = B.ID`}
-                  value={modalSql}
-                  onChange={e => setSqlContent(e.target.value)}
-                />
-              </Card>
-            </div>
-          )}
-        </Content>
-      </Layout>
-    );
-  };
 
   const tabItems = [
     {
@@ -1568,7 +1018,28 @@ const MappingManager: React.FC<Props> = ({ onOpenTarget, initialTab = '1', visib
       label: <Space><AppstoreOutlined />落地实体表映射</Space>,
       children: (
         <div style={{ padding: '24px', height: 'calc(100vh - 200px)', overflowY: 'auto' }}>
-          {renderRulesTable()}
+          <MappingRulesTable
+            filteredMappingRules={filteredMappingRules}
+            mappingInfoRows={mappingInfoRows}
+            entityMetaById={entityMetaById}
+            dbEntities={dbEntities}
+            sourceMaster={sourceMaster}
+            sourceBusiness={sourceBusiness}
+            sourceReference={sourceReference}
+            queryKeyword={queryKeyword}
+            onQueryKeywordChange={setQueryKeyword}
+            queryEntityId={queryEntityId}
+            onQueryEntityIdChange={setQueryEntityId}
+            querySourceTableId={querySourceTableId}
+            onQuerySourceTableIdChange={setQuerySourceTableId}
+            viewingRuleId={viewingRuleId}
+            onResetQuery={resetQueryFilters}
+            onCreateRule={handleCreateNewRule}
+            onViewRule={handleViewRule}
+            onEditRule={handleEditRule}
+            onDeleteRule={handleDeleteRule}
+            onPreviewSql={handlePreviewRuleSql}
+          />
         </div>
       )
     },
@@ -1615,80 +1086,65 @@ const MappingManager: React.FC<Props> = ({ onOpenTarget, initialTab = '1', visib
           ]
         }
       >
-        {renderRuleModalContent()}
+        <MappingRuleModalContent
+          readOnly={ruleModalReadOnly}
+          ruleName={ruleName}
+          viewingRuleName={viewingRuleName}
+          onRuleNameChange={setRuleName}
+          sourceTableIds={sourceTableIds}
+          viewSourceTableIds={viewSourceTableIds}
+          entityIds={entityIds}
+          viewEntityIds={viewEntityIds}
+          selectedSourceTables={selectedSourceTables}
+          viewSelectedSourceTables={viewSelectedSourceTables}
+          selectedEntities={selectedEntities}
+          viewSelectedEntities={viewSelectedEntities}
+          mainSourceTableId={mainSourceTableId}
+          viewMainSourceTableId={viewMainSourceTableId}
+          sqlContent={sqlContent}
+          viewSqlContent={viewSqlContent}
+          pkOverrides={pkOverrides}
+          viewPkOverrides={viewPkOverrides}
+          fieldMappings={fieldMappings}
+          viewFieldMappings={viewFieldMappings}
+          mappingDesc={mappingDesc}
+          viewMappingDesc={viewMappingDesc}
+          rowSourceTableFilter={rowSourceTableFilter}
+          sourceTreeData={sourceTreeData}
+          entityTreeData={entityTreeData}
+          sourceTableFields={sourceTableFields}
+          parseMappingValue={parseMappingValue}
+          onSourceTableChange={handleSourceTableChange}
+          onEntityIdsChange={(v) => setEntityIds(v ? [String(v)] : [])}
+          onMainSourceTableChange={setMainSourceTableId}
+          onSqlChange={setSqlContent}
+          onImportCsv={handleImportCSV}
+          onAutoMatch={autoMatchFields}
+          onGenerateSql={generateSqlTemplate}
+          onPkChange={handlePkChange}
+          onRowSourceTableChange={handleRowSourceTableChange}
+          onMappingDescChange={handleMappingDescChange}
+          onOpenFieldPicker={openFieldPicker}
+        />
       </Modal>
-      <Modal
-        title={fieldPickerTitle}
+      <FieldPickerModal
         open={fieldPickerOpen}
-        width={980}
+        title={fieldPickerTitle}
+        tableId={fieldPickerTableId}
+        tempValues={fieldPickerTempValues}
+        selectedSourceTables={selectedSourceTables}
+        sourceTableFields={sourceTableFields}
+        onTableIdChange={setFieldPickerTableId}
+        onTempValuesChange={(keys) => setFieldPickerTempValues(keys)}
         onOk={saveFieldPicker}
         onCancel={() => setFieldPickerOpen(false)}
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Select
-            allowClear
-            placeholder="按来源表过滤字段"
-            value={fieldPickerTableId || undefined}
-            onChange={(v) => setFieldPickerTableId(v || '')}
-            options={selectedSourceTables.map(t => ({ value: String(t.id), label: `${t.enName} (${t.cnName || ''})` }))}
-            style={{ width: 360 }}
-          />
-          <Table
-            size="small"
-            rowKey="key"
-            dataSource={fieldPickerRows}
-            pagination={{ pageSize: 10 }}
-            scroll={{ y: 360 }}
-            rowSelection={{
-              selectedRowKeys: fieldPickerTempValues,
-              onChange: (keys) => setFieldPickerTempValues(keys as string[]),
-            }}
-            columns={[
-              { title: TERMS.sourceTableEnName, dataIndex: 'tableEn', width: 180 },
-              { title: TERMS.sourceTableCnName, dataIndex: 'tableCn', width: 160 },
-              { title: TERMS.sourceFieldEnName, dataIndex: 'fieldEn', width: 200 },
-              { title: TERMS.sourceFieldCnName, dataIndex: 'fieldCn', width: 220 },
-            ]}
-          />
-        </Space>
-      </Modal>
-      <Modal
-        title={sqlPreviewTitle}
+      />
+      <SqlPreviewModal
         open={sqlPreviewOpen}
-        width={900}
+        title={sqlPreviewTitle}
+        content={sqlPreviewContent}
         onCancel={() => setSqlPreviewOpen(false)}
-        footer={null}
-      >
-        <TextArea
-          rows={18}
-          readOnly
-          value={sqlPreviewContent}
-          style={{ fontFamily: 'monospace', background: '#1e1e1e', color: '#d4d4d4' }}
-        />
-      </Modal>
-      <Modal
-        title={previewTitle}
-        open={previewModalOpen}
-        width={1000}
-        onCancel={() => setPreviewModalOpen(false)}
-        footer={null}
-      >
-        <Table
-          size="small"
-          rowKey={(_row, idx) => String(idx)}
-          dataSource={previewRows}
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 'max-content', y: 420 }}
-          columns={(previewRows[0] ? Object.keys(previewRows[0]) : []).map((k) => ({
-            title: k,
-            dataIndex: k,
-            key: k,
-            width: 180,
-            ellipsis: true,
-          }))}
-          locale={{ emptyText: '暂无记录' }}
-        />
-      </Modal>
+      />
     </PageShell>
   );
 };

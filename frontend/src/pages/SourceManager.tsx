@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Card, Tabs, Layout, Tree, Table, Input, Space, Button, Modal, Descriptions, message, Upload, Spin, Divider, Form, Popconfirm, Select } from 'antd';
-import { SearchOutlined, DatabaseOutlined, ClusterOutlined, AppstoreOutlined, UploadOutlined, DownloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
+import { Tabs, Layout, Table, Input, Space, Button, Modal, message, Upload, Form, Popconfirm, Select } from 'antd';
+import { DatabaseOutlined, ClusterOutlined, AppstoreOutlined, UploadOutlined, DownloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { uploadApi, sourceFieldApi, sourceTableApi } from '../services/api';
 import { TERMS, SOURCE_TABLE_TEMPLATE_HEADERS } from '../constants/standardTerms';
 import { PageShell, StatusTag } from '../components/shell';
 import { tokens } from '../theme/tokens';
+import SourceTreeSider from '../components/SourceTreeSider';
+import SourceRelationTables from '../components/SourceRelationTables';
+import { SourceFormModal, SourceDetailModal } from '../components/SourceModals';
 
-const { Sider, Content } = Layout;
+const { Content } = Layout;
 
 const escapeCsvCell = (value: any) => {
   const text = value == null ? '' : String(value);
@@ -987,90 +990,63 @@ const SourceManager: React.FC<Props> = ({ initialTab = '1', hideTabs = false }) 
 
       <Layout style={{ flex: 1, background: tokens.colors.bgContent }}>
         {activeTab === '1' && (
-          <Sider width={280} style={{ background: tokens.colors.bgContent, borderRight: `1px solid ${tokens.colors.border}`, padding: '16px' }}>
-            <div style={{ marginBottom: '16px' }}>
-              <Input
-                placeholder="搜索来源系统/L1/L2"
-                prefix={<SearchOutlined />}
-                value={masterTreeSearch}
-                onChange={(e) => setMasterTreeSearch(e.target.value)}
-                allowClear
-              />
-            </div>
-            <Tree
-              showIcon
-              treeData={masterTreeData}
-              selectedKeys={masterSelectedKeys}
-              expandedKeys={masterExpandedKeys}
-              onExpand={(keys) => setMasterExpandedKeys(keys)}
-              onSelect={(keys) => {
-                setMasterSelectedKeys(keys);
-                if (keys.length > 0 && String(keys[0]).startsWith('master_l2_filter_')) {
-                  setMasterFilterL2(extractFilterTreeValue('master_l2_filter_', keys[0]));
-                } else {
-                  setMasterFilterL2(null);
-                }
-              }}
-            />
-          </Sider>
+          <SourceTreeSider
+            placeholder="搜索来源系统/L1/L2"
+            search={masterTreeSearch}
+            onSearchChange={setMasterTreeSearch}
+            treeData={masterTreeData}
+            selectedKeys={masterSelectedKeys}
+            expandedKeys={masterExpandedKeys}
+            onExpand={setMasterExpandedKeys}
+            onSelect={(keys) => {
+              setMasterSelectedKeys(keys);
+              if (keys.length > 0 && String(keys[0]).startsWith('master_l2_filter_')) {
+                setMasterFilterL2(extractFilterTreeValue('master_l2_filter_', keys[0]));
+              } else {
+                setMasterFilterL2(null);
+              }
+            }}
+          />
         )}
 
         {activeTab === '2' && (
-          <Sider width={280} style={{ background: 'var(--bg-content)', borderRight: '1px solid var(--color-border)', padding: '16px' }}>
-            <div style={{ marginBottom: '16px' }}>
-              <Input
-                placeholder="搜索来源系统/L3/L4"
-                prefix={<SearchOutlined />}
-                value={businessTreeSearch}
-                onChange={(e) => setBusinessTreeSearch(e.target.value)}
-                allowClear
-              />
-            </div>
-            <Tree
-              showIcon
-              treeData={businessTreeData}
-              selectedKeys={businessSelectedKeys}
-              expandedKeys={businessExpandedKeys}
-              onExpand={(keys) => setBusinessExpandedKeys(keys)}
-              onSelect={(keys) => {
-                setBusinessSelectedKeys(keys);
-                if (keys.length > 0 && String(keys[0]).startsWith('business_l4_filter_')) {
-                  setBusinessFilterL4(extractFilterTreeValue('business_l4_filter_', keys[0]));
-                } else {
-                  setBusinessFilterL4(null);
-                }
-              }}
-            />
-          </Sider>
+          <SourceTreeSider
+            placeholder="搜索来源系统/L3/L4"
+            search={businessTreeSearch}
+            onSearchChange={setBusinessTreeSearch}
+            treeData={businessTreeData}
+            selectedKeys={businessSelectedKeys}
+            expandedKeys={businessExpandedKeys}
+            onExpand={setBusinessExpandedKeys}
+            onSelect={(keys) => {
+              setBusinessSelectedKeys(keys);
+              if (keys.length > 0 && String(keys[0]).startsWith('business_l4_filter_')) {
+                setBusinessFilterL4(extractFilterTreeValue('business_l4_filter_', keys[0]));
+              } else {
+                setBusinessFilterL4(null);
+              }
+            }}
+          />
         )}
 
         {activeTab === '3' && (
-          <Sider width={280} style={{ background: 'var(--bg-content)', borderRight: '1px solid var(--color-border)', padding: '16px' }}>
-            <div style={{ marginBottom: '16px' }}>
-              <Input
-                placeholder="搜索来源系统/分类"
-                prefix={<SearchOutlined />}
-                value={referenceTreeSearch}
-                onChange={(e) => setReferenceTreeSearch(e.target.value)}
-                allowClear
-              />
-            </div>
-            <Tree
-              showIcon
-              treeData={referenceTreeData}
-              selectedKeys={referenceSelectedKeys}
-              expandedKeys={referenceExpandedKeys}
-              onExpand={(keys) => setReferenceExpandedKeys(keys)}
-              onSelect={(keys) => {
-                setReferenceSelectedKeys(keys);
-                if (keys.length > 0 && String(keys[0]).startsWith('reference_cat_filter_')) {
-                  setRefFilterCategory(extractFilterTreeValue('reference_cat_filter_', keys[0]));
-                } else {
-                  setRefFilterCategory(null);
-                }
-              }}
-            />
-          </Sider>
+          <SourceTreeSider
+            placeholder="搜索来源系统/分类"
+            search={referenceTreeSearch}
+            onSearchChange={setReferenceTreeSearch}
+            treeData={referenceTreeData}
+            selectedKeys={referenceSelectedKeys}
+            expandedKeys={referenceExpandedKeys}
+            onExpand={setReferenceExpandedKeys}
+            onSelect={(keys) => {
+              setReferenceSelectedKeys(keys);
+              if (keys.length > 0 && String(keys[0]).startsWith('reference_cat_filter_')) {
+                setRefFilterCategory(extractFilterTreeValue('reference_cat_filter_', keys[0]));
+              } else {
+                setRefFilterCategory(null);
+              }
+            }}
+          />
         )}
         
         <Content style={{ padding: '16px' }}>
@@ -1184,249 +1160,38 @@ const SourceManager: React.FC<Props> = ({ initialTab = '1', hideTabs = false }) 
             </>
           )}
           {activeTab === '5' && (
-            <>
-              <Tabs
-                activeKey={relationSubTab}
-                onChange={(k) => setRelationSubTab(k as 'l2' | 'l4' | 'cross')}
-                items={[
-                  {
-                    key: 'l2',
-                    label: 'L2对象关系',
-                    children: (
-                      <Table
-                        rowKey="id"
-                        size="small"
-                        bordered
-                        pagination={{ pageSize: 15 }}
-                        dataSource={l2Relations}
-                        scroll={{ x: 'max-content' }}
-                        columns={[
-                          { title: 'L1名称', dataIndex: 'l1', width: 120 },
-                          { title: 'L2名称', dataIndex: 'l2', width: 140 },
-                          { title: '关联说明', dataIndex: 'relation_desc', width: 180 },
-                          { title: '主表中文名', dataIndex: 'main_table_cn', width: 140 },
-                          { title: '主表英文名', dataIndex: 'main_table_en', width: 140 },
-                          { title: '关联表中文名', dataIndex: 'related_table_cn', width: 140 },
-                          { title: '关联表英文名', dataIndex: 'related_table_en', width: 140 },
-                          { title: '关系类别', dataIndex: 'relation_category', width: 120 },
-                          { title: '关联条件说明', dataIndex: 'relation_expr', width: 260 },
-                          { title: '备注', dataIndex: 'remark', width: 160 },
-                          {
-                            title: '操作',
-                            width: 100,
-                            render: (_: any, record: any) => (
-                              <Space size="small">
-                                <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-                                <Popconfirm title="确定删除该关系吗?" onConfirm={() => handleDelete(record.id)}>
-                                  <Button type="link" danger icon={<DeleteOutlined />} />
-                                </Popconfirm>
-                              </Space>
-                            )
-                          }
-                        ]}
-                      />
-                    )
-                  },
-                  {
-                    key: 'l4',
-                    label: 'L4活动关系',
-                    children: (
-                      <Table
-                        rowKey="id"
-                        size="small"
-                        bordered
-                        pagination={{ pageSize: 15 }}
-                        dataSource={l4Relations}
-                        scroll={{ x: 'max-content' }}
-                        columns={[
-                          { title: 'L1名称', dataIndex: 'l1', width: 120 },
-                          { title: 'L2名称', dataIndex: 'l2', width: 120 },
-                          { title: 'L3名称', dataIndex: 'l3', width: 180 },
-                          { title: 'L4名称', dataIndex: 'l4', width: 160 },
-                          { title: '关联说明', dataIndex: 'relation_desc', width: 180 },
-                          { title: '主表中文名', dataIndex: 'main_table_cn', width: 140 },
-                          { title: '主表英文名', dataIndex: 'main_table_en', width: 140 },
-                          { title: '关联表中文名', dataIndex: 'related_table_cn', width: 140 },
-                          { title: '关联表英文名', dataIndex: 'related_table_en', width: 140 },
-                          { title: '关系类别', dataIndex: 'relation_category', width: 120 },
-                          { title: '关联条件说明', dataIndex: 'relation_expr', width: 260 },
-                          { title: '备注', dataIndex: 'remark', width: 160 },
-                          {
-                            title: '操作',
-                            width: 100,
-                            render: (_: any, record: any) => (
-                              <Space size="small">
-                                <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-                                <Popconfirm title="确定删除该关系吗?" onConfirm={() => handleDelete(record.id)}>
-                                  <Button type="link" danger icon={<DeleteOutlined />} />
-                                </Popconfirm>
-                              </Space>
-                            )
-                          }
-                        ]}
-                      />
-                    )
-                  },
-                  {
-                    key: 'cross',
-                    label: 'L4主表-L2主表关系',
-                    children: (
-                      <Table
-                        rowKey="id"
-                        size="small"
-                        bordered
-                        pagination={{ pageSize: 15 }}
-                        dataSource={crossRelations}
-                        scroll={{ x: 'max-content' }}
-                        columns={[
-                          { title: 'L1名称', dataIndex: 'l1', width: 120 },
-                          { title: 'L2名称', dataIndex: 'l2', width: 120 },
-                          { title: 'L3名称', dataIndex: 'l3', width: 180 },
-                          { title: 'L4名称', dataIndex: 'l4', width: 160 },
-                          { title: '关联说明', dataIndex: 'relation_desc', width: 180 },
-                          { title: '主表中文名(L4前)', dataIndex: 'main_table_cn', width: 160 },
-                          { title: '主表英文名(L4前)', dataIndex: 'main_table_en', width: 160 },
-                          { title: '关联表中文名(L2后)', dataIndex: 'related_table_cn', width: 160 },
-                          { title: '关联表英文名(L2后)', dataIndex: 'related_table_en', width: 160 },
-                          { title: '关系类别', dataIndex: 'relation_category', width: 120 },
-                          { title: '关联条件说明', dataIndex: 'relation_expr', width: 260 },
-                          { title: '备注', dataIndex: 'remark', width: 160 },
-                          {
-                            title: '操作',
-                            width: 100,
-                            render: (_: any, record: any) => (
-                              <Space size="small">
-                                <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-                                <Popconfirm title="确定删除该关系吗?" onConfirm={() => handleDelete(record.id)}>
-                                  <Button type="link" danger icon={<DeleteOutlined />} />
-                                </Popconfirm>
-                              </Space>
-                            )
-                          }
-                        ]}
-                      />
-                    )
-                  }
-                ]}
-              />
-            </>
+            <SourceRelationTables
+              relationSubTab={relationSubTab}
+              onRelationSubTabChange={setRelationSubTab}
+              l2Relations={l2Relations}
+              l4Relations={l4Relations}
+              crossRelations={crossRelations}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
           )}
         </Content>
       </Layout>
 
-      {/* 动态表单模态框 */}
-      <Modal
-        title={`${modalType === 'create' ? '新增' : '修改'}${activeTab === '4' ? '字段' : activeTab === '5' ? '关联关系' : '表'}`}
+      <SourceFormModal
         open={modalVisible}
+        modalType={modalType}
+        activeTab={activeTab}
+        relationSubTab={relationSubTab}
+        referenceData={referenceData}
+        form={form}
         onOk={handleModalOk}
         onCancel={() => setModalVisible(false)}
-        width={650}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical">
-          {['1', '2', '3'].includes(activeTab) && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-              <Form.Item name="sysName" label="来源系统名称" rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="sysCode" label="来源系统编码" rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="cnName" label={TERMS.sourceTableCnName} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="enName" label={TERMS.sourceTableEnName} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="major" label="专业"><Input /></Form.Item>
-              <Form.Item name="deploy" label="部署方式"><Input /></Form.Item>
-              <Form.Item name="type" label="表类型"><Input /></Form.Item>
-            </div>
-          )}
-          {activeTab === '1' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-              <Form.Item name="l1" label="L1-主数据"><Input /></Form.Item>
-              <Form.Item name="l2" label="L2-主数据对象"><Input /></Form.Item>
-            </div>
-          )}
-          {activeTab === '2' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-              <Form.Item name="l3" label="L3-业务模块"><Input /></Form.Item>
-              <Form.Item name="l4" label="L4-业务活动对象"><Input /></Form.Item>
-              <Form.Item name="relL1" label="关联主数据大类"><Input /></Form.Item>
-              <Form.Item name="relL2" label="关联主数据小类"><Input /></Form.Item>
-            </div>
-          )}
-          {activeTab === '3' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-              <Form.Item name="category" label="参考数据分类"><Input /></Form.Item>
-            </div>
-          )}
-          {activeTab === '4' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-              <Form.Item name="table_cn" label={TERMS.sourceTableCnName} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="table_en" label={TERMS.sourceTableEnName} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="field_cn" label={TERMS.sourceFieldCnName} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="field_en" label={TERMS.sourceFieldEnName} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="data_type" label="数据类型"><Input /></Form.Item>
-              <Form.Item name="length_precision" label="长度/精度"><Input /></Form.Item>
-              <Form.Item name="pk_fk" label="主/外键"><Input /></Form.Item>
-              <Form.Item name="is_ref_data" label="是否参考数据"><Select options={[{value: '是', label: '是'}, {value: '否', label: '否'}]} /></Form.Item>
-              <Form.Item name="ref_table_en" label="引用参考数据表英文名">
-                <Select
-                  allowClear
-                  showSearch
-                  options={referenceData.map(item => ({ value: item.enName, label: `${item.enName} (${item.cnName})` }))}
-                />
-              </Form.Item>
-              <Form.Item name="ref_data_desc" label="参考数据引用说明" style={{ gridColumn: 'span 2' }}><Input.TextArea /></Form.Item>
-              <Form.Item name="ref_data_usage_desc" label="参考数据调用说明" style={{ gridColumn: 'span 2' }}><Input.TextArea /></Form.Item>
-              <Form.Item name="field_desc" label="字段描述" style={{ gridColumn: 'span 2' }}><Input.TextArea /></Form.Item>
-            </div>
-          )}
-          {activeTab === '5' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-              <Form.Item name="l1" label="L1名称"><Input /></Form.Item>
-              <Form.Item name="l2" label="L2名称"><Input /></Form.Item>
-              {relationSubTab !== 'l2' && <Form.Item name="l3" label="L3名称"><Input /></Form.Item>}
-              {relationSubTab !== 'l2' && <Form.Item name="l4" label="L4名称"><Input /></Form.Item>}
-              <Form.Item name="relation_desc" label="关联说明"><Input /></Form.Item>
-              <Form.Item name="relation_category" label="关系类别"><Input /></Form.Item>
-              <Form.Item name="main_table_cn" label={relationSubTab === 'cross' ? '主表中文名(L4前)' : '主表中文名'}><Input /></Form.Item>
-              <Form.Item name="main_table_en" label={relationSubTab === 'cross' ? '主表英文名(L4前)' : '主表英文名'} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="related_table_cn" label={relationSubTab === 'cross' ? '关联表中文名(L2后)' : '关联表中文名'}><Input /></Form.Item>
-              <Form.Item name="related_table_en" label={relationSubTab === 'cross' ? '关联表英文名(L2后)' : '关联表英文名'} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="relation_expr" label="关联条件说明（关联表达式）" style={{ gridColumn: 'span 2' }} rules={[{ required: true }]}><Input /></Form.Item>
-              <Form.Item name="remark" label="备注" style={{ gridColumn: 'span 2' }}><Input.TextArea /></Form.Item>
-            </div>
-          )}
-        </Form>
-      </Modal>
+      />
 
-      <Modal
-        title="表详情与全量字段列表"
+      <SourceDetailModal
         open={detailVisible}
+        loading={detailLoading}
+        currentRecord={currentRecord}
+        tableInfo={tableInfo}
+        tableFields={tableFields}
         onCancel={() => setDetailVisible(false)}
-        footer={null}
-        width={1000}
-      >
-        <Spin spinning={detailLoading}>
-          {currentRecord && (
-            <Descriptions column={2} bordered size="small">
-              <Descriptions.Item label={TERMS.sourceTableEnName} span={1}><StatusTag preset="info">{currentRecord.enName}</StatusTag></Descriptions.Item>
-              <Descriptions.Item label={TERMS.sourceTableCnName} span={1}>{tableInfo.table_cn || currentRecord.cnName}</Descriptions.Item>
-              <Descriptions.Item label="系统名称">{currentRecord.sysName}</Descriptions.Item>
-              <Descriptions.Item label="表类型"><StatusTag preset="success">{currentRecord.type}</StatusTag></Descriptions.Item>
-            </Descriptions>
-          )}
-          <Divider orientation="left">表字段列表</Divider>
-          <Table 
-            size="small"
-            rowKey={(record) => `${record.seq_no || 'no_seq'}_${record.field_en || 'no_field'}`}
-            dataSource={tableFields}
-            pagination={false}
-            scroll={{ y: 400, x: 'max-content' }}
-            columns={[
-              { title: TERMS.sourceFieldEnName, dataIndex: 'field_en', width: 160 },
-              { title: TERMS.sourceFieldCnName, dataIndex: 'field_cn', width: 160 },
-              { title: '数据类型', dataIndex: 'data_type', width: 120 },
-              { title: '字段描述', dataIndex: 'field_desc', width: 250 },
-            ]}
-          />
-        </Spin>
-      </Modal>
+      />
     </PageShell>
   );
 };

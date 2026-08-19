@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Drawer, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
+import { Button, Drawer, Form, Input, Modal, Select, Space, Tabs, Typography, message } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { conceptApi, metricCenterApi } from '../services/api';
-import LineageGraph from '../components/LineageGraph';
-import { PageShell, DataTableShell, FilterBar, StatusTag } from '../components/shell';
+import { PageShell, DataTableShell, StatusTag } from '../components/shell';
+import MetricBaseInfo from '../components/MetricBaseInfo';
+import MetricAliasesEditor from '../components/MetricAliasesEditor';
+import MetricAtomConfig from '../components/MetricAtomConfig';
+import MetricDimFilterCards from '../components/MetricDimFilterCards';
+import MetricDerivedTab from '../components/MetricDerivedTab';
+import { MetricLineageTab, MetricVersionsTab } from '../components/MetricLineageVersions';
 
 const { Text } = Typography;
 
@@ -662,340 +667,34 @@ const MetricManager: React.FC = () => {
               label: '指标基础信息',
               children: (
                 <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                  <Card size="small" title="指标字典（按属性分组）">
-                    <Form form={baseForm} layout="vertical">
-                      <Card size="small" title="基础属性" style={{ marginBottom: 12 }}>
-                        <Space wrap>
-                          <Form.Item label="指标ID" style={{ width: 220 }}>
-                            <Input value={metricDetail?.metric?.metric_code || ''} disabled />
-                          </Form.Item>
-                          <Form.Item name="metric_name" label="指标中文名" style={{ width: 260 }} rules={[{ required: true }]}><Input /></Form.Item>
-                          <Form.Item name="metric_name_en" label="指标英文名" style={{ width: 220 }}><Input /></Form.Item>
-                          <Form.Item name="metric_level" label="指标等级" style={{ width: 160 }}>
-                            <Select
-                              allowClear
-                              options={[
-                                { label: 'L1', value: 'L1' },
-                                { label: 'L2', value: 'L2' },
-                                { label: 'L3', value: 'L3' },
-                                { label: 'L4', value: 'L4' },
-                              ]}
-                            />
-                          </Form.Item>
-                          <Form.Item name="metric_unit" label="计量单位" style={{ width: 160 }}><Input /></Form.Item>
-                        </Space>
-                        <Space wrap>
-                          <Form.Item label="创建时间" style={{ width: 240 }}>
-                            <Input value={metricDetail?.metric?.created_at || ''} disabled />
-                          </Form.Item>
-                          <Form.Item label="更新时间" style={{ width: 240 }}>
-                            <Input value={metricDetail?.metric?.updated_at || ''} disabled />
-                          </Form.Item>
-                          <Form.Item name="enabled" label="启用" style={{ width: 160 }}>
-                            <Select options={[{ label: 'true', value: true }, { label: 'false', value: false }]} />
-                          </Form.Item>
-                        </Space>
-                      </Card>
-
-                      <Card size="small" title="业务属性" style={{ marginBottom: 12 }}>
-                        <Form.Item name="business_caliber" label="业务口径"><Input.TextArea rows={3} /></Form.Item>
-                        <Space wrap>
-                          <Form.Item name="business_owner" label="业务负责人" style={{ width: 220 }}><Input /></Form.Item>
-                          <Form.Item name="business_dept" label="负责部门" style={{ width: 220 }}><Input /></Form.Item>
-                          <Form.Item name="requester_user" label="提需人" style={{ width: 220 }}><Input /></Form.Item>
-                        </Space>
-                      </Card>
-
-                      <Card size="small" title="技术属性" style={{ marginBottom: 12 }}>
-                        <Space wrap>
-                          <Form.Item name="metric_type" label="指标类型" style={{ width: 160 }} rules={[{ required: true }]}>
-                            <Select options={[{ label: 'atomic', value: 'atomic' }, { label: 'derived', value: 'derived' }]} />
-                          </Form.Item>
-                          <Form.Item name="metric_subject" label="指标主题" style={{ width: 220 }}><Input /></Form.Item>
-                          <Form.Item name="stat_grain" label="统计粒度" style={{ width: 160 }}>
-                            <Select
-                              allowClear
-                              options={[
-                                { label: 'day', value: 'day' },
-                                { label: 'month', value: 'month' },
-                                { label: 'year', value: 'year' },
-                              ]}
-                            />
-                          </Form.Item>
-                          <Form.Item name="domain" label="域" style={{ width: 200 }}><Input /></Form.Item>
-                        </Space>
-                        <Form.Item name="tech_caliber" label="技术口径"><Input.TextArea rows={3} /></Form.Item>
-                        <Space wrap>
-                          <Form.Item name="dev_owner" label="研发负责人" style={{ width: 220 }}><Input /></Form.Item>
-                          <Form.Item name="similarity_threshold" label="检索阈值" style={{ width: 180 }}><Input /></Form.Item>
-                        </Space>
-                      </Card>
-
-                      <Card size="small" title="管理属性">
-                        <Space wrap>
-                          <Form.Item label="版本号" style={{ width: 160 }}>
-                            <Input value={String(metricDetail?.metric?.version_current ?? '')} disabled />
-                          </Form.Item>
-                          <Form.Item name="owner_user" label="指标负责人" style={{ width: 220 }}><Input /></Form.Item>
-                          <Form.Item name="manager_owner" label="管理负责人" style={{ width: 220 }}><Input /></Form.Item>
-                          <Form.Item name="reviewer_user" label="审核人" style={{ width: 220 }}><Input /></Form.Item>
-                        </Space>
-                        <Form.Item name="description" label="补充说明"><Input.TextArea rows={2} /></Form.Item>
-                      </Card>
-
-                      <Space wrap style={{ marginTop: 12 }}>
-                        <Button type="primary" onClick={onUpdateBase} loading={loading}>保存基础信息</Button>
-                        <Tag>status: {metricDetail?.metric?.status}</Tag>
-                      </Space>
-                    </Form>
-                  </Card>
-
-                  <Card size="small" title="别名（用于指标检索）">
-                    <Table
-                      size="small"
-                      rowKey={(_, idx) => String(idx)}
-                      pagination={false}
-                      dataSource={aliases}
-                      columns={[
-                        {
-                          title: 'alias',
-                          dataIndex: 'alias',
-                          render: (_: any, r: any, idx: number) => (
-                            <Input value={r.alias} onChange={(e) => setAliases((p) => p.map((x, i) => (i === idx ? { ...x, alias: e.target.value } : x)))} />
-                          ),
-                        },
-                        {
-                          title: 'type',
-                          dataIndex: 'alias_type',
-                          width: 140,
-                          render: (_: any, r: any, idx: number) => (
-                            <Select
-                              value={r.alias_type || 'synonym'}
-                              style={{ width: '100%' }}
-                              onChange={(v) => setAliases((p) => p.map((x, i) => (i === idx ? { ...x, alias_type: v } : x)))}
-                              options={[
-                                { label: 'name', value: 'name' },
-                                { label: 'abbrev', value: 'abbrev' },
-                                { label: 'synonym', value: 'synonym' },
-                                { label: 'phrase', value: 'phrase' },
-                              ]}
-                            />
-                          ),
-                        },
-                        {
-                          title: 'weight',
-                          dataIndex: 'weight',
-                          width: 120,
-                          render: (_: any, r: any, idx: number) => (
-                            <Input value={String(r.weight ?? 1.0)} onChange={(e) => setAliases((p) => p.map((x, i) => (i === idx ? { ...x, weight: Number(e.target.value || 1.0) } : x)))} />
-                          ),
-                        },
-                        {
-                          title: '操作',
-                          width: 120,
-                          render: (_: any, __: any, idx: number) => <Button danger onClick={() => setAliases((p) => p.filter((_, i) => i !== idx))}>删除</Button>,
-                        },
-                      ]}
-                    />
-                    <Space style={{ marginTop: 12 }} wrap>
-                      <Button onClick={() => setAliases((p) => [...p, { alias: '', alias_type: 'synonym', weight: 1.0, enabled: true }])}>新增别名</Button>
-                      <Button type="primary" onClick={onSaveAliases} loading={loading}>保存别名</Button>
-                    </Space>
-                  </Card>
-
+                  <MetricBaseInfo baseForm={baseForm} metricDetail={metricDetail} onSave={onUpdateBase} loading={loading} />
+                  <MetricAliasesEditor aliases={aliases} onAliasesChange={setAliases} onSave={onSaveAliases} loading={loading} />
                   {(metricDetail?.metric?.metric_type || '') === 'atomic' ? (
-                    <Card size="small" title="原子指标定义（可选择录入）">
-                      <Form form={atomForm} layout="vertical">
-                        <Space wrap>
-                          <Form.Item name="fact_entity_id" label="事实实体" rules={[{ required: true }]} style={{ width: 420 }}>
-                            <Select
-                              showSearch
-                              optionFilterProp="label"
-                              options={entityOptions}
-                              onChange={(v) => {
-                                const ent = (dbEntities || []).find((x: any) => String(x.id) === String(v));
-                                if (ent) {
-                                  atomForm.setFieldsValue({
-                                    fact_entity_name: ent.entity_name,
-                                    fact_table_en: ent.landing_table_en || '',
-                                  });
-                                }
-                              }}
-                            />
-                          </Form.Item>
-                          <Form.Item name="fact_table_en" label="事实表（可覆盖）" style={{ width: 240 }}><Input /></Form.Item>
-                          <Form.Item name="data_source_id" label="数据源" style={{ width: 240 }}>
-                            <Select
-                              allowClear
-                              options={(dataSources || []).map((d: any) => ({
-                                label: `${d.name} (${d.host}:${d.port}/${d.database})${d.is_default ? ' [默认]' : ''}`,
-                                value: d.id,
-                                disabled: !d.enabled,
-                              }))}
-                            />
-                          </Form.Item>
-                        </Space>
-                        <Space wrap>
-                          <Form.Item name="agg_func" label="聚合方式" rules={[{ required: true }]} style={{ width: 200 }}>
-                            <Select options={[
-                              { label: 'count', value: 'count' },
-                              { label: 'distinct_count', value: 'distinct_count' },
-                              { label: 'sum', value: 'sum' },
-                              { label: 'avg', value: 'avg' },
-                              { label: 'max', value: 'max' },
-                              { label: 'min', value: 'min' },
-                            ]} />
-                          </Form.Item>
-                          <Form.Item name="measure_field_en" label="度量字段" style={{ width: 320 }}>
-                            <Select allowClear showSearch optionFilterProp="label" options={factFieldOptions} />
-                          </Form.Item>
-                          <Form.Item name="time_field_en" label="时间字段" rules={[{ required: true }]} style={{ width: 320 }}>
-                            <Select allowClear showSearch optionFilterProp="label" options={factFieldOptions} />
-                          </Form.Item>
-                          <Form.Item name="default_limit" label="limit" style={{ width: 160 }}><Input /></Form.Item>
-                        </Space>
-                        <Button type="primary" onClick={onSaveAtom} loading={loading}>保存原子定义</Button>
-                      </Form>
-
-                      <Card size="small" title="口径过滤（atom_filters）" style={{ marginTop: 12 }}>
-                        <Table
-                          size="small"
-                          rowKey={(_, idx) => String(idx)}
-                          pagination={false}
-                          dataSource={atomFilters}
-                          columns={[
-                            {
-                              title: 'field_full_name',
-                              dataIndex: 'field_full_name',
-                              render: (_: any, r: any, idx: number) => (
-                                <Input value={r.field_full_name} onChange={(e) => setAtomFilters((p) => p.map((x, i) => (i === idx ? { ...x, field_full_name: e.target.value } : x)))} />
-                              ),
-                            },
-                            {
-                              title: 'op',
-                              dataIndex: 'op',
-                              width: 140,
-                              render: (_: any, r: any, idx: number) => (
-                                <Select
-                                  value={r.op || '='}
-                                  style={{ width: '100%' }}
-                                  onChange={(v) => setAtomFilters((p) => p.map((x, i) => (i === idx ? { ...x, op: v } : x)))}
-                                  options={[
-                                    { label: '=', value: '=' },
-                                    { label: '!=', value: '!=' },
-                                    { label: 'IN', value: 'IN' },
-                                    { label: 'NOT IN', value: 'NOT IN' },
-                                    { label: 'BETWEEN', value: 'BETWEEN' },
-                                    { label: 'IS NULL', value: 'IS NULL' },
-                                    { label: 'IS NOT NULL', value: 'IS NOT NULL' },
-                                  ]}
-                                />
-                              ),
-                            },
-                            {
-                              title: 'value_json',
-                              dataIndex: 'value_json',
-                              render: (_: any, r: any, idx: number) => (
-                                <Input value={typeof r.value_json === 'string' ? r.value_json : JSON.stringify(r.value_json ?? '')} onChange={(e) => setAtomFilters((p) => p.map((x, i) => (i === idx ? { ...x, value_json: e.target.value } : x)))} />
-                              ),
-                            },
-                            { title: '操作', width: 120, render: (_: any, __: any, idx: number) => <Button danger onClick={() => setAtomFilters((p) => p.filter((_, i) => i !== idx))}>删除</Button> },
-                          ]}
-                        />
-                        <Space style={{ marginTop: 12 }} wrap>
-                          <Button onClick={() => setAtomFilters((p) => [...p, { field_full_name: '', op: '=', value_json: '' }])}>新增过滤</Button>
-                          <Button type="primary" onClick={onSaveAtomFilters} loading={loading}>保存过滤</Button>
-                        </Space>
-                      </Card>
-                    </Card>
+                    <MetricAtomConfig
+                      atomForm={atomForm}
+                      entityOptions={entityOptions}
+                      dbEntities={dbEntities}
+                      dataSources={dataSources}
+                      factFieldOptions={factFieldOptions}
+                      onSaveAtom={onSaveAtom}
+                      atomFilters={atomFilters}
+                      onAtomFiltersChange={setAtomFilters}
+                      onSaveAtomFilters={onSaveAtomFilters}
+                      loading={loading}
+                    />
                   ) : null}
-
-                  <Card size="small" title="维度白名单（可选择录入）">
-                    <Table
-                      size="small"
-                      rowKey={(_, idx) => String(idx)}
-                      pagination={false}
-                      dataSource={dimBindings}
-                      columns={[
-                        {
-                          title: '维度实体',
-                          dataIndex: 'dim_entity_id',
-                          width: 520,
-                          render: (_: any, r: any, idx: number) => (
-                            <Select
-                              showSearch
-                              optionFilterProp="label"
-                              value={r.dim_entity_id}
-                              style={{ width: '100%' }}
-                              options={entityOptions}
-                              onChange={(v) => {
-                                const ent = (dbEntities || []).find((x: any) => String(x.id) === String(v));
-                                setDimBindings((p) =>
-                                  p.map((x, i) =>
-                                    i === idx ? { ...x, dim_entity_id: v, dim_entity_name: ent?.entity_name || x.dim_entity_name } : x
-                                  )
-                                );
-                              }}
-                            />
-                          ),
-                        },
-                        { title: '路由状态', dataIndex: 'join_route_status', width: 120, render: (v: any) => <StatusTag preset={v === 'ready' ? 'success' : v === 'missing' ? 'error' : 'default'}>{v || '-'}</StatusTag> },
-                        { title: '操作', width: 120, render: (_: any, __: any, idx: number) => <Button danger onClick={() => setDimBindings((p) => p.filter((_, i) => i !== idx))}>删除</Button> },
-                      ]}
-                    />
-                    <Space style={{ marginTop: 12 }} wrap>
-                      <Button onClick={() => setDimBindings((p) => [...p, { dim_entity_id: '', dim_entity_name: '', enabled: true }])}>新增维度</Button>
-                      <Button type="primary" onClick={onSaveDimBindings} loading={loading}>保存白名单</Button>
-                    </Space>
-                  </Card>
-
-                  <Card size="small" title="过滤白名单（可选择录入）">
-                    <Table
-                      size="small"
-                      rowKey={(_, idx) => String(idx)}
-                      pagination={false}
-                      dataSource={filterWhitelist}
-                      columns={[
-                        {
-                          title: 'field_full_name',
-                          dataIndex: 'field_full_name',
-                          render: (_: any, r: any, idx: number) => (
-                            <Input value={r.field_full_name} onChange={(e) => setFilterWhitelist((p) => p.map((x, i) => (i === idx ? { ...x, field_full_name: e.target.value } : x)))} />
-                          ),
-                        },
-                        {
-                          title: 'field_cn',
-                          dataIndex: 'field_cn',
-                          width: 180,
-                          render: (_: any, r: any, idx: number) => (
-                            <Input value={r.field_cn || ''} onChange={(e) => setFilterWhitelist((p) => p.map((x, i) => (i === idx ? { ...x, field_cn: e.target.value } : x)))} />
-                          ),
-                        },
-                        {
-                          title: 'op_whitelist_json',
-                          dataIndex: 'op_whitelist_json',
-                          width: 260,
-                          render: (_: any, r: any, idx: number) => (
-                            <Input value={typeof r.op_whitelist_json === 'string' ? r.op_whitelist_json : JSON.stringify(r.op_whitelist_json ?? '')} onChange={(e) => setFilterWhitelist((p) => p.map((x, i) => (i === idx ? { ...x, op_whitelist_json: e.target.value } : x)))} />
-                          ),
-                        },
-                        { title: '操作', width: 120, render: (_: any, __: any, idx: number) => <Button danger onClick={() => setFilterWhitelist((p) => p.filter((_, i) => i !== idx))}>删除</Button> },
-                      ]}
-                    />
-                    <Space style={{ marginTop: 12 }} wrap>
-                      <Button onClick={() => setFilterWhitelist((p) => [...p, { field_full_name: '', field_cn: '', op_whitelist_json: '["=","!=","IN","BETWEEN"]', enabled: true }])}>新增字段</Button>
-                      <Button type="primary" onClick={onSaveFilterWhitelist} loading={loading}>保存白名单</Button>
-                    </Space>
-                  </Card>
-
-                  <Card size="small" title="治理流转">
-                    <Space wrap>
-                      <Button onClick={() => runWorkflowAction('submit')} disabled={loading}>提交评审</Button>
-                      <Button onClick={() => runWorkflowAction('approve')} disabled={loading}>审核通过</Button>
-                      <Button danger onClick={() => runWorkflowAction('reject')} disabled={loading}>驳回</Button>
-                      <Button type="primary" onClick={() => runWorkflowAction('publish')} disabled={loading}>发布</Button>
-                    </Space>
-                  </Card>
+                  <MetricDimFilterCards
+                    dimBindings={dimBindings}
+                    onDimBindingsChange={setDimBindings}
+                    onSaveDimBindings={onSaveDimBindings}
+                    filterWhitelist={filterWhitelist}
+                    onFilterWhitelistChange={setFilterWhitelist}
+                    onSaveFilterWhitelist={onSaveFilterWhitelist}
+                    entityOptions={entityOptions}
+                    dbEntities={dbEntities}
+                    runWorkflowAction={runWorkflowAction}
+                    loading={loading}
+                  />
                 </Space>
               ),
             },
@@ -1003,327 +702,39 @@ const MetricManager: React.FC = () => {
               key: 'derived',
               label: '派生指标管理',
               children: (
-                <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                  {(metricDetail?.metric?.metric_type || '') !== 'derived' ? (
-                    <Card size="small" title="提示">
-                      <Text type="secondary">当前指标不是 derived 类型。</Text>
-                    </Card>
-                  ) : (
-                    <>
-                      <Card size="small" title="拖拽配置（原子指标 / 统计周期 / 可用维度）">
-                        <Space align="start" style={{ width: '100%' }} size={12}>
-                          <Card size="small" title="原子指标池（可拖拽）" style={{ width: 320 }}>
-                            <div style={{ maxHeight: 320, overflow: 'auto' }}>
-                              {(atomicMetricOptions || []).map((o: any) => (
-                                <div
-                                  key={o.value}
-                                  draggable
-                                  onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'base_metric', value: o.value }))}
-                                  style={{ padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, marginBottom: 8, cursor: 'grab', background: 'var(--bg-content)' }}
-                                >
-                                  <Text>{o.label}</Text>
-                                </div>
-                              ))}
-                            </div>
-                          </Card>
-                          <Card
-                            size="small"
-                            title="派生配置区"
-                            style={{ flex: 1 }}
-                            extra={
-                              <Button
-                                onClick={() => {
-                                  derivedForm.setFieldsValue({ config_mode: 'config' });
-                                }}
-                              >
-                                切换到配置模式
-                              </Button>
-                            }
-                          >
-                            <Form form={derivedForm} layout="vertical" initialValues={{ config_mode: 'config' }}>
-                              <Space wrap>
-                                <Form.Item name="config_mode" label="配置模式" style={{ width: 200 }}>
-                                  <Select
-                                    options={[
-                                      { label: 'config（拖拽/选择）', value: 'config' },
-                                      { label: 'dsl（表达式）', value: 'dsl' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                                <Form.Item name="time_period" label="统计周期" style={{ width: 220 }}>
-                                  <Select
-                                    allowClear
-                                    disabled={watchedDerivedMode !== 'config'}
-                                    options={[
-                                      { label: 'CURRENT_MONTH(本月)', value: 'CURRENT_MONTH' },
-                                      { label: 'LAST_MONTH(上月)', value: 'LAST_MONTH' },
-                                      { label: 'YTD(年初至今)', value: 'YTD' },
-                                      { label: 'CURRENT_YEAR(今年)', value: 'CURRENT_YEAR' },
-                                      { label: 'LAST_YEAR(去年)', value: 'LAST_YEAR' },
-                                      { label: 'LAST_7_DAYS(近7天)', value: 'LAST_7_DAYS' },
-                                      { label: 'LAST_30_DAYS(近30天)', value: 'LAST_30_DAYS' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                                <Form.Item name="unit" label="单位" style={{ width: 160 }}><Input /></Form.Item>
-                                <Form.Item name="precision" label="精度" style={{ width: 160 }}><Input /></Form.Item>
-                              </Space>
-
-                              <Card
-                                size="small"
-                                title="原子指标（拖拽到此处 / 或下拉选择）"
-                                style={{ marginBottom: 12 }}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={onDropBaseMetric}
-                              >
-                                <Space wrap>
-                                  <Form.Item name="base_metric_id" label="原子指标" style={{ width: 420 }}>
-                                    <Select
-                                      showSearch
-                                      optionFilterProp="label"
-                                      disabled={watchedDerivedMode !== 'config'}
-                                      options={atomicMetricOptions}
-                                      value={derivedBaseMetricId || undefined}
-                                      onChange={(v) => {
-                                        setDerivedBaseMetricId(String(v || ''));
-                                        derivedForm.setFieldsValue({ base_metric_id: v });
-                                      }}
-                                    />
-                                  </Form.Item>
-                                  <StatusTag preset={derivedBaseMetricId ? 'success' : 'error'}>{derivedBaseMetricId ? '已选择原子指标' : '未选择'}</StatusTag>
-                                </Space>
-                              </Card>
-
-                              <Card
-                                size="small"
-                                title="可用维度（拖拽维度字段到此处 / 或多选）"
-                                style={{ marginBottom: 12 }}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={onDropDim}
-                              >
-                                <Space align="start" style={{ width: '100%' }} size={12}>
-                                  <Card size="small" title="维度字段池（来自维度白名单）" style={{ width: 360 }}>
-                                    <div style={{ maxHeight: 260, overflow: 'auto' }}>
-                                      {(dimFieldOptions || []).map((o: any) => (
-                                        <div
-                                          key={o.value}
-                                          draggable
-                                          onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'dim_field', value: o.value }))}
-                                          style={{ padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, marginBottom: 8, cursor: 'grab', background: 'var(--bg-content)' }}
-                                        >
-                                          <Text>{o.label}</Text>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </Card>
-                                  <div style={{ flex: 1 }}>
-                                    <Select
-                                      mode="multiple"
-                                      style={{ width: '100%' }}
-                                      disabled={watchedDerivedMode !== 'config'}
-                                      value={derivedAvailableDims}
-                                      onChange={(v) => {
-                                        setDerivedAvailableDims(v as string[]);
-                                        derivedForm.setFieldsValue({ available_dims_json: v });
-                                      }}
-                                      options={dimFieldOptions}
-                                      placeholder="选择可用维度字段"
-                                    />
-                                    <div style={{ marginTop: 8 }}>
-                                      {(derivedAvailableDims || []).map((x) => (
-                                        <Tag
-                                          key={x}
-                                          closable
-                                          onClose={() => {
-                                            setDerivedAvailableDims((p) => p.filter((y) => y !== x));
-                                          }}
-                                        >
-                                          {x}
-                                        </Tag>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </Space>
-                              </Card>
-
-                              <Card size="small" title="派生预置过滤（列表配置）" style={{ marginBottom: 12 }}>
-                                <Table
-                                  size="small"
-                                  rowKey={(_, idx) => String(idx)}
-                                  pagination={false}
-                                  dataSource={derivedPresetFilters}
-                                  columns={[
-                                    {
-                                      title: 'field_full_name',
-                                      dataIndex: 'field_full_name',
-                                      render: (_: any, r: any, idx: number) => (
-                                        <Select
-                                          showSearch
-                                          optionFilterProp="label"
-                                          value={r.field_full_name}
-                                          style={{ width: '100%' }}
-                                          options={filterFieldOptions}
-                                          onChange={(v) => setDerivedPresetFilters((p) => p.map((x, i) => (i === idx ? { ...x, field_full_name: v } : x)))}
-                                        />
-                                      ),
-                                    },
-                                    {
-                                      title: 'op',
-                                      dataIndex: 'op',
-                                      width: 140,
-                                      render: (_: any, r: any, idx: number) => (
-                                        <Select
-                                          value={r.op || '='}
-                                          style={{ width: '100%' }}
-                                          onChange={(v) => setDerivedPresetFilters((p) => p.map((x, i) => (i === idx ? { ...x, op: v } : x)))}
-                                          options={[
-                                            { label: '=', value: '=' },
-                                            { label: '!=', value: '!=' },
-                                            { label: 'IN', value: 'IN' },
-                                            { label: 'NOT IN', value: 'NOT IN' },
-                                            { label: 'BETWEEN', value: 'BETWEEN' },
-                                            { label: 'IS NULL', value: 'IS NULL' },
-                                            { label: 'IS NOT NULL', value: 'IS NOT NULL' },
-                                            { label: 'LIKE', value: 'LIKE' },
-                                            { label: 'NOT LIKE', value: 'NOT LIKE' },
-                                          ]}
-                                        />
-                                      ),
-                                    },
-                                    {
-                                      title: 'value',
-                                      dataIndex: 'value',
-                                      render: (_: any, r: any, idx: number) => (
-                                        <Input value={r.value ?? ''} onChange={(e) => setDerivedPresetFilters((p) => p.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))} />
-                                      ),
-                                    },
-                                    { title: '操作', width: 120, render: (_: any, __: any, idx: number) => <Button danger onClick={() => setDerivedPresetFilters((p) => p.filter((_, i) => i !== idx))}>删除</Button> },
-                                  ]}
-                                />
-                                <Space style={{ marginTop: 12 }} wrap>
-                                  <Button onClick={() => setDerivedPresetFilters((p) => [...p, { field_full_name: '', op: '=', value: '' }])}>新增过滤</Button>
-                                </Space>
-                              </Card>
-
-                              {watchedDerivedMode === 'dsl' ? (
-                                <Card size="small" title="表达式DSL（可选）" style={{ marginBottom: 12 }}>
-                                  <Form.Item name="expr_dsl" label="表达式DSL" rules={[{ required: true }]}>
-                                    <Input.TextArea rows={4} placeholder="示例：metric('m_a') / nullif(metric('m_b'),0)" />
-                                  </Form.Item>
-                                </Card>
-                              ) : null}
-
-                              <Space wrap>
-                                <Button type="primary" onClick={onSaveDerived} loading={loading}>保存派生配置</Button>
-                              </Space>
-                            </Form>
-                          </Card>
-                        </Space>
-                      </Card>
-
-                      <Card size="small" title="依赖指标（deps）">
-                        <Table
-                          size="small"
-                          rowKey={(_, idx) => String(idx)}
-                          pagination={false}
-                          dataSource={deps}
-                          columns={[
-                            {
-                              title: 'dep_metric_id',
-                              dataIndex: 'dep_metric_id',
-                              render: (_: any, r: any, idx: number) => (
-                                <Select
-                                  value={r.dep_metric_id}
-                                  style={{ width: '100%' }}
-                                  options={metricOptions}
-                                  onChange={(v) => setDeps((p) => p.map((x, i) => (i === idx ? { ...x, dep_metric_id: v } : x)))}
-                                />
-                              ),
-                            },
-                            {
-                              title: 'dep_role',
-                              dataIndex: 'dep_role',
-                              width: 160,
-                              render: (_: any, r: any, idx: number) => (
-                                <Input value={r.dep_role || ''} onChange={(e) => setDeps((p) => p.map((x, i) => (i === idx ? { ...x, dep_role: e.target.value } : x)))} />
-                              ),
-                            },
-                            { title: '操作', width: 120, render: (_: any, __: any, idx: number) => <Button danger onClick={() => setDeps((p) => p.filter((_, i) => i !== idx))}>删除</Button> },
-                          ]}
-                        />
-                        <Space style={{ marginTop: 12 }} wrap>
-                          <Button onClick={() => setDeps((p) => [...p, { dep_metric_id: '', dep_role: '' }])}>新增依赖</Button>
-                          <Button type="primary" onClick={onSaveDeps} loading={loading}>保存依赖</Button>
-                        </Space>
-                      </Card>
-                    </>
-                  )}
-                </Space>
+                <MetricDerivedTab
+                  metricType={metricDetail?.metric?.metric_type || ''}
+                  derivedForm={derivedForm}
+                  watchedDerivedMode={watchedDerivedMode}
+                  atomicMetricOptions={atomicMetricOptions}
+                  dimFieldOptions={dimFieldOptions}
+                  filterFieldOptions={filterFieldOptions}
+                  metricOptions={metricOptions}
+                  derivedBaseMetricId={derivedBaseMetricId}
+                  onDerivedBaseMetricIdChange={setDerivedBaseMetricId}
+                  derivedAvailableDims={derivedAvailableDims}
+                  onDerivedAvailableDimsChange={setDerivedAvailableDims}
+                  derivedPresetFilters={derivedPresetFilters}
+                  onDerivedPresetFiltersChange={setDerivedPresetFilters}
+                  deps={deps}
+                  onDepsChange={setDeps}
+                  onDropBaseMetric={onDropBaseMetric}
+                  onDropDim={onDropDim}
+                  onSaveDerived={onSaveDerived}
+                  onSaveDeps={onSaveDeps}
+                  loading={loading}
+                />
               ),
             },
             {
               key: 'lineage',
               label: '指标血缘',
-              children: (
-                <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                  <Card size="small" title="指标血缘图">
-                    {lineageData ? <LineageGraph mode="embed" data={lineageData} height={420} /> : <Text type="secondary">暂无血缘数据</Text>}
-                  </Card>
-                  <Card size="small" title="变更记录（MetricAuditLog）">
-                    <Table
-                      size="small"
-                      rowKey="id"
-                      pagination={{ pageSize: 8 }}
-                      dataSource={auditLogs}
-                      columns={[
-                        { title: 'action', dataIndex: 'action', width: 120 },
-                        { title: 'operator', dataIndex: 'operator', width: 160 },
-                        { title: 'created_at', dataIndex: 'created_at', width: 200 },
-                        {
-                          title: 'after_json',
-                          dataIndex: 'after_json',
-                          render: (v: any) => (
-                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflow: 'auto' }}>
-                              {JSON.stringify(v ?? {}, null, 2)}
-                            </pre>
-                          ),
-                        },
-                      ]}
-                    />
-                  </Card>
-                </Space>
-              ),
+              children: <MetricLineageTab lineageData={lineageData} auditLogs={auditLogs} />,
             },
             {
               key: 'versions',
               label: '版本快照',
-              children: (
-                <Card size="small" title="版本列表">
-                  <Table
-                    size="small"
-                    rowKey="version"
-                    pagination={false}
-                    dataSource={versions}
-                    columns={[
-                      { title: 'version', dataIndex: 'version', width: 100 },
-                      { title: 'status', dataIndex: 'status', width: 120 },
-                      { title: 'created_by', dataIndex: 'created_by', width: 160 },
-                      { title: 'created_at', dataIndex: 'created_at', width: 200 },
-                      {
-                        title: '操作',
-                        width: 180,
-                        render: (_: any, r: any) => (
-                          <Space>
-                            <Button size="small" onClick={() => previewSnapshot(Number(r.version))}>预览</Button>
-                            <Button size="small" danger onClick={() => doRollback(Number(r.version))}>回滚</Button>
-                          </Space>
-                        ),
-                      },
-                    ]}
-                  />
-                  <Text type="secondary">说明：发布/提交/审核会写入版本快照，便于稽核与回滚。</Text>
-                </Card>
-              ),
+              children: <MetricVersionsTab versions={versions} onPreview={previewSnapshot} onRollback={doRollback} />,
             },
           ]}
         />
