@@ -287,6 +287,7 @@ class SecretVaultEntry(BaseModel):
 @router.get("/secrets", summary="获取密钥列表（值脱敏）")
 def list_secrets(db: Session = Depends(get_db)):
     from app.core.database import SessionLocal
+    from app.core.skill_storage import get_skill_storage
     import json
     from pathlib import Path
 
@@ -303,6 +304,7 @@ def list_secrets(db: Session = Depends(get_db)):
 
 @router.post("/secrets", summary="创建/更新密钥")
 def upsert_secret(request: SecretVaultEntry, db: Session = Depends(get_db)):
+    from app.core.skill_storage import get_skill_storage
     import json
     from pathlib import Path
 
@@ -324,6 +326,7 @@ def upsert_secret(request: SecretVaultEntry, db: Session = Depends(get_db)):
 
 @router.delete("/secrets/{key_name}", summary="删除密钥")
 def delete_secret(key_name: str, db: Session = Depends(get_db)):
+    from app.core.skill_storage import get_skill_storage
     import json
     from pathlib import Path
 
