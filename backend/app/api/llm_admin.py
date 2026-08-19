@@ -3,10 +3,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 import uuid
+import logging
 
 from ..core.database import get_db
 from ..models.base import LLMConnectionConfig, SmartPlannerConfig
 from ..services.llm_client import call_openai_compatible_chat, call_openai_compatible_messages, resolve_connection_api_key
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -283,7 +286,7 @@ def test_llm_connection(item_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         import traceback as _tb
         err_detail = f"{type(e).__name__}: {e}"
-        print(f"[llm_test] ERROR: {err_detail}\n{_tb.format_exc()}", flush=True)
+        logger.error(f"[llm_test] ERROR: {err_detail}\n{_tb.format_exc()}")
         return {"code": 200, "data": {"ok": False, "error": err_detail, "traceback": _tb.format_exc()}}
 
 

@@ -122,7 +122,7 @@ class _Span:
                 logger.debug("LangSmith 上报失败，降级日志: %s", e)
                 logger.info("[TRACE] %s", _safe_json(record))
         else:
-            print(f"[TRACE] {_safe_json(record)}", flush=True)
+            logger.info("[TRACE] %s", _safe_json(record))
 
 
 class _TraceContext:

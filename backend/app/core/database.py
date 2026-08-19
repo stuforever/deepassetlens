@@ -1,6 +1,9 @@
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -255,7 +258,7 @@ def ensure_schema_compatibility():
             try:
                 conn.execute(text(migrate_sql))
             except Exception as e:
-                print(f"Migration failed (maybe UUID() not supported or empty table): {e}")
+                logger.warning(f"Migration failed (maybe UUID() not supported or empty table): {e}")
 
     if "kg_smart_skill_types" in table_names:
         type_cols = {c["name"] for c in inspector.get_columns("kg_smart_skill_types")}

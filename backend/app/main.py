@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 from .api import (
     concept, mapping, chat, upload, source_tables,
     llm_admin, standard_semantic,
@@ -34,6 +35,8 @@ from .core.task_worker import task_worker_manager
 from .core.auth import AuthMiddleware, ENABLE_AUTH
 from .services.skill_manager import VersionService
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,7 +51,7 @@ async def lifespan(app: FastAPI):
             _startup_errors.append("ENABLE_AUTH=1 但未设 AUTHENTIK_JWKS_URL（OIDC 验签无法工作）")
         if _startup_errors:
             for _err in _startup_errors:
-                print(f"[startup] FATAL: {_err}")
+                logger.error(f"[startup] FATAL: {_err}")
             raise RuntimeError("生产安全检查未通过：" + "; ".join(_startup_errors))
     # Startup
     Base.metadata.create_all(bind=engine)
@@ -98,9 +101,9 @@ async def lifespan(app: FastAPI):
                     _dotting_pairs.add(pair)
                     _migrated += 1
             db.commit()
-            print(f"[startup] master_activity category migrated: {_migrated}, dedup_deleted: {_dedup}")
+            logger.info(f"[startup] master_activity category migrated: {_migrated}, dedup_deleted: {_dedup}")
         except Exception as _exc:
-            print(f"[startup] master_activity migration error: {_exc}")
+            logger.warning(f"[startup] master_activity migration error: {_exc}")
         VersionService.normalize_all_versions_to_filesystem(db)
         # Qdrant 后端自动同步：如果 Qdrant 健康则自动同步标准语义词条到 Qdrant，
         # 并把全局开关 TUPU_VECTOR_BACKEND 设为 qdrant，让 step2 走 ANN 加速。
@@ -112,13 +115,13 @@ async def lifespan(app: FastAPI):
                 sync_result = sync_standard_semantic_to_qdrant(db)
                 if sync_result.get("ok"):
                     _os.environ["TUPU_VECTOR_BACKEND"] = "qdrant"
-                    print(f"[startup] qdrant_backend enabled: {sync_result}")
+                    logger.info(f"[startup] qdrant_backend enabled: {sync_result}")
                 else:
-                    print(f"[startup] qdrant_sync failed: {sync_result}")
+                    logger.warning(f"[startup] qdrant_sync failed: {sync_result}")
             else:
-                print("[startup] qdrant healthcheck failed, staying on mysql backend")
+                logger.warning("[startup] qdrant healthcheck failed, staying on mysql backend")
         except Exception as _exc:
-            print(f"[startup] qdrant_setup error (continuing with mysql): {_exc}")
+            logger.warning(f"[startup] qdrant_setup error (continuing with mysql): {_exc}")
         # Neo4j 启动钩子：全量重建单一 Category+ChainRoot 体系
         try:
             from .services.graph_query_neo4j import (
@@ -127,11 +130,11 @@ async def lifespan(app: FastAPI):
             )
             if neo4j_healthcheck():
                 neo4j_result = sync_all_to_neo4j(db, force=True)
-                print(f"[startup] neo4j_sync_all: {neo4j_result}")
+                logger.info(f"[startup] neo4j_sync_all: {neo4j_result}")
             else:
-                print("[startup] neo4j healthcheck failed")
+                logger.warning("[startup] neo4j healthcheck failed")
         except Exception as _exc:
-            print(f"[startup] neo4j_setup error (continuing without neo4j): {_exc}")
+            logger.warning(f"[startup] neo4j_setup error (continuing without neo4j): {_exc}")
         # Qdrant 实体/属性向量同步（独立 collection，后台执行不阻塞 startup）
         import threading as _threading
         def _bg_vector_sync():
@@ -145,12 +148,12 @@ async def lifespan(app: FastAPI):
                 try:
                     ent_result = sync_entity_vectors(_db, force=True)
                     attr_result = sync_attribute_vectors(_db, force=True)
-                    print(f"[startup-bg] entity_vectors: {ent_result}")
-                    print(f"[startup-bg] attribute_vectors: {attr_result}")
+                    logger.info(f"[startup-bg] entity_vectors: {ent_result}")
+                    logger.info(f"[startup-bg] attribute_vectors: {attr_result}")
                 finally:
                     _db.close()
             except Exception as _exc:
-                print(f"[startup-bg] vector_sync error: {_exc}")
+                logger.warning(f"[startup-bg] vector_sync error: {_exc}")
         _threading.Thread(target=_bg_vector_sync, daemon=True).start()
     # 启动后台任务工作线程
     task_worker_manager.start(poll_interval=2.0)
@@ -159,23 +162,23 @@ async def lifespan(app: FastAPI):
         from app.services.engine_query_log import register_purge_job
         register_purge_job(task_worker_manager)
     except Exception as _pg_err:
-        print(f"[startup] WARNING: 注册查询日志清理任务失败: {_pg_err}")
+        logger.warning(f"[startup] WARNING: 注册查询日志清理任务失败: {_pg_err}")
     # 数据引擎增强（P5）：预聚合加速器到期刷新挂 TaskWorker（300s 检查）
     try:
         from app.services.engine_accelerator import register_refresh_job
         register_refresh_job(task_worker_manager)
     except Exception as _ac_err:
-        print(f"[startup] WARNING: 注册加速器刷新任务失败: {_ac_err}")
+        logger.warning(f"[startup] WARNING: 注册加速器刷新任务失败: {_ac_err}")
     # MCP 挂载检查：确认 /mcp 路由已注册（deepagent 首次请求依赖此端点）
     # 注意：lifespan startup 阶段 uvicorn 尚未开始监听，不能 HTTP 自请求，只检查路由注册
     try:
         _mcp_routes = [r for r in app.routes if getattr(r, "path", "").startswith("/mcp")]
         if _mcp_routes:
-            print(f"[startup] MCP /mcp 路由已挂载 ({len(_mcp_routes)} routes)，SSE endpoint: http://127.0.0.1:28000/mcp/sse")
+            logger.info(f"[startup] MCP /mcp 路由已挂载 ({len(_mcp_routes)} routes)，SSE endpoint: http://127.0.0.1:28000/mcp/sse")
         else:
-            print("[startup] WARNING: MCP /mcp 路由未找到，deepagent 工具加载将失败")
+            logger.warning("[startup] WARNING: MCP /mcp 路由未找到，deepagent 工具加载将失败")
     except Exception as _mcp_err:
-        print(f"[startup] WARNING: MCP 挂载检查异常: {_mcp_err}")
+        logger.warning(f"[startup] WARNING: MCP 挂载检查异常: {_mcp_err}")
     # F3-fix: 生产安全检查已移到 lifespan 最开头（fail-fast，在任何初始化之前）
     yield
     # Shutdown
@@ -185,7 +188,7 @@ async def lifespan(app: FastAPI):
         from app.services.tupu_deepagent import close_tupu_agent
         await close_tupu_agent()
     except Exception as _e:
-        print(f"[shutdown] close_tupu_agent error: {_e}")
+        logger.warning(f"[shutdown] close_tupu_agent error: {_e}")
 
 
 app = FastAPI(title="数据智能分析组件 API", lifespan=lifespan)

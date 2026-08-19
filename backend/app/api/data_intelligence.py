@@ -441,7 +441,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                 _retry_of_step = _ts.get("step_id")
                                 _ts["superseded"] = True  # 标记被重试取代
                                 break
-                        print(f"[STEP] sid={_sid} counter={step_counter[0]} name={name} action={action} run_id={ev.get('run_id','')[:8]} tcid={_tcid[:8]} sql_full_len={len(sql_full)} retry_of={_retry_of_step}", flush=True)
+                        logger.info(f"[STEP] sid={_sid} counter={step_counter[0]} name={name} action={action} run_id={ev.get('run_id','')[:8]} tcid={_tcid[:8]} sql_full_len={len(sql_full)} retry_of={_retry_of_step}")
                         _evt_sink.append("tool.started", {"tool_name": _tool_name, "action": action, "input_summary": input_summary, "sql_full": sql_full[:500], "retry_of_step": _retry_of_step}, step_id=str(_sid))
                         yield f"event: think\n"
                         yield f"data: {json.dumps({'task': task_label, 'kind': _kind, 'strategy': 'free_plan', 'action': input_detail, 'detail': input_detail, 'input_summary': input_summary, 'step_id': _sid, 'step_no': _sid, 'tool_name': _tool_name, 'tool_call_id': _tcid, 'sql_full': sql_full, 'result_status': 'running', 'phase': 'running', 'live_reason': _pending_reason[0], 'retry_of_step': _retry_of_step, 'started_at_ms': _started_at_ms}, ensure_ascii=False)}\n\n"
@@ -488,7 +488,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                         if isinstance(parsed, dict):
                                             parsed = json.loads(json.dumps(parsed, ensure_ascii=False, default=str))
                                     except Exception as _ast_err:
-                                        print(f"[DEBUG ast.literal_eval failed] err={_ast_err} match_len={len(json_match.group(0))} match_tail={json_match.group(0)[-100:]}", flush=True)
+                                        logger.debug(f"[DEBUG ast.literal_eval failed] err={_ast_err} match_len={len(json_match.group(0))} match_tail={json_match.group(0)[-100:]}")
                                         parsed = None
 
                         # DeepAgent 工具返回统一为 {"type":"text","text":"<JSON字符串>"} 格式, 解析嵌套 text 字段取真实数据(columns/rows/safe 等)
@@ -520,7 +520,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                         _is_reject = isinstance(out_str, str) and "下一步判断闸门·拒绝" in out_str
 
                         # 调试日志：诊断 on_tool_end 解析情况
-                        print(f"[DEBUG freeplan on_tool_end] name={name} last_task={last_task} sid={_sid} tcid={_tcid[:8]} dur={_duration_ms} reject={_is_reject} parsed_is_none={parsed is None} out_str[:200]={out_str[:200]}", flush=True)
+                        logger.debug(f"[DEBUG freeplan on_tool_end] name={name} last_task={last_task} sid={_sid} tcid={_tcid[:8]} dur={_duration_ms} reject={_is_reject} parsed_is_none={parsed is None} out_str[:200]={out_str[:200]}")
 
                         if _is_reject:
                             # 闸门拒绝: 只更新 think_stream（供 done 事件），不发 think 事件

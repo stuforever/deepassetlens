@@ -9,6 +9,7 @@ import base64
 import io
 import re
 import sqlalchemy
+import logging
 from datetime import datetime
 import uuid
 
@@ -25,6 +26,8 @@ from ..models.base import (
 )
 from ..services.semantic_retrieval import embed_texts, get_or_init_retrieval_config, get_vector_model_registry
 from ..services.standard_semantic_service import query_standard_semantic_matches
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -640,7 +643,7 @@ def analyze_traceability(payload: TraceabilityRequest, db: Session = Depends(get
             if any(eid in query_eids_32 for eid in rule_eids_32):
                 matched_rules.append(rule)
         except Exception as e:
-            print(f"Error parsing rule entity_ids: {e}")
+            logger.warning(f"Error parsing rule entity_ids: {e}")
             pass
 
     # 3. 解析映射规则中的源表ID和字段映射
@@ -706,7 +709,7 @@ def analyze_traceability(payload: TraceabilityRequest, db: Session = Depends(get
                         })
                         rule_source_table_ids.add(src_table_id)
         except Exception as e:
-            print(f"Error parsing rule field_mappings: {e}")
+            logger.warning(f"Error parsing rule field_mappings: {e}")
             pass
 
     # 4. 从 SourceMasterTable/Business/Reference 加载源表基本信息用于 ID -> enName 转换

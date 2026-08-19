@@ -7,6 +7,7 @@ import threading
 import time
 import uuid
 import traceback
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -16,6 +17,8 @@ from app.core.database import SessionLocal
 from app.core.execution_engine import ExecutionEngineV2
 from app.models.scheduler import TaskQueue
 from app.services.skill_manager import SkillService
+
+logger = logging.getLogger(__name__)
 
 
 class TaskWorker(threading.Thread):
@@ -57,7 +60,7 @@ class TaskWorker(threading.Thread):
                 self._process_next_task()
                 self._run_periodic_hooks()
             except Exception as e:
-                print(f"[TaskWorker] 异常: {e}")
+                logger.error(f"[TaskWorker] 异常: {e}")
                 traceback.print_exc()
             time.sleep(self.poll_interval)
 
@@ -72,7 +75,7 @@ class TaskWorker(threading.Thread):
                 try:
                     fn()
                 except Exception as e:
-                    print(f"[TaskWorker] 周期任务异常: {e}")
+                    logger.error(f"[TaskWorker] 周期任务异常: {e}")
                     traceback.print_exc()
                 h[2] = now
 
@@ -179,7 +182,7 @@ class TaskWorkerManager:
             return
         self.worker = TaskWorker(poll_interval=poll_interval)
         self.worker.start()
-        print(f"[TaskWorkerManager] 工作线程已启动 (轮询间隔: {poll_interval}s)")
+        logger.info(f"[TaskWorkerManager] 工作线程已启动 (轮询间隔: {poll_interval}s)")
 
     def register_periodic(self, interval_seconds: float, fn) -> None:
         """注册低优先级周期任务（转发给工作线程；未启动则记录到 worker 实例待启动后生效）。"""
@@ -191,7 +194,7 @@ class TaskWorkerManager:
         if self.worker:
             self.worker.stop()
             self.worker.join(timeout=5.0)
-            print("[TaskWorkerManager] 工作线程已停止")
+            logger.info("[TaskWorkerManager] 工作线程已停止")
 
     def is_running(self) -> bool:
         return self.worker is not None and self.worker.is_alive()
