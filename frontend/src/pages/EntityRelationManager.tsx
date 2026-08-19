@@ -68,7 +68,7 @@ const EntityRelationManager: React.FC = () => {
       });
       setRows(res.data?.data?.items || []);
     } catch (error) {
-      console.error(error);
+      console.error('[EntityRelationManager] 加载实体关系失败:', error);
       message.error('加载实体关系失败');
     } finally {
       setLoading(false);

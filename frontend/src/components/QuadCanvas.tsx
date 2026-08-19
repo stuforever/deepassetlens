@@ -56,7 +56,7 @@ const QuadCanvas: React.FC = () => {
     try {
       const res = await conceptApi.getGraphMatrix();
       setData(res.data.data);
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('[QuadCanvas] 加载资产矩阵失败:', e); }
     finally { setLoading(false); }
   };
   useEffect(() => { fetchData(); }, []);

@@ -120,7 +120,7 @@ const ModelTreeManager: React.FC<Props> = ({ mode, pageTitle, readOnly = false, 
         const relRes = await entityRelationManagerApi.listItems({ entity_id: entityId });
         setRelationRows(relRes.data?.data?.items || []);
       } catch (error) {
-        console.error(error);
+        console.error('[ModelTreeManager] 加载实体详情失败:', error);
         message.error('加载实体详情失败');
       } finally {
         setLoadingDetail(false);

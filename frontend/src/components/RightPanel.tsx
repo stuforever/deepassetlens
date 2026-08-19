@@ -85,7 +85,7 @@ const RightPanel: React.FC<Props> = ({ onOpenTarget }) => {
       
       setPropertiesModalVisible(false);
     } catch (error) {
-      console.error(error);
+      console.error('[RightPanel] 属性规格保存失败:', error);
       message.error('属性规格保存失败，请检查填写内容');
     }
   };

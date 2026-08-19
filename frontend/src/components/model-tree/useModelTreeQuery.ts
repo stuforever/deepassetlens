@@ -89,7 +89,7 @@ export function useModelTreeQuery(args: { mode: Mode; config: ModelTreeQueryConf
         return nextFirstKey;
       });
     } catch (error) {
-      console.error(error);
+      console.error('[useModelTreeQuery] 加载建模数据失败:', error);
       message.error('加载建模数据失败');
     } finally {
       setLoading(false);

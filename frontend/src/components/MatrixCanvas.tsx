@@ -32,7 +32,7 @@ const MatrixCanvas: React.FC = () => {
       const res = await conceptApi.getGraphMatrix();
       setData(res.data.data);
     } catch (e) {
-      console.error(e);
+      console.error('[MatrixCanvas] 加载资产矩阵失败:', e);
     } finally {
       setLoading(false);
     }

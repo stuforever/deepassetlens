@@ -665,7 +665,7 @@ const SourceManager: React.FC<Props> = ({ initialTab = '1', hideTabs = false }) 
       }
       setModalVisible(false);
     } catch (e) {
-      console.error(e);
+      console.error('[SourceManager] 保存来源表失败:', e);
     }
   };
 

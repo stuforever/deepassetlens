@@ -90,7 +90,7 @@ const LLMConfigManager: React.FC = () => {
         query_entity_workflow_code: p?.query_entity_workflow_code || 'query_entity_main_workflow',
       });
     } catch (e) {
-      console.error(e);
+      console.error('[LLMConfigManager] 加载LLM配置失败:', e);
       message.error('加载LLM配置失败');
     } finally {
       setLoading(false);

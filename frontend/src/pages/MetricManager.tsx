@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Drawer, Form, Input, Modal, Select, Space, Tabs, Typography, message } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import { conceptApi, metricCenterApi } from '../services/api';
+import { conceptApi, metricCenterApi, dataSourceApi } from '../services/api';
 import { PageShell, DataTableShell, StatusTag } from '../components/shell';
 import MetricBaseInfo from '../components/MetricBaseInfo';
 import MetricAliasesEditor from '../components/MetricAliasesEditor';
@@ -205,12 +205,10 @@ const MetricManager: React.FC = () => {
       );
     } catch {}
 
-    fetch('/api/v1/data-sources')
-      .then((r) => r.json())
-      .then((data) => {
-        setDataSources(data?.data || []);
-      })
-      .catch(() => {});
+    try {
+      const dsRes = await dataSourceApi.list({ silent: true });
+      setDataSources(dsRes?.data?.data || []);
+    } catch {}
   };
 
   const fetchDetail = async (id: string) => {

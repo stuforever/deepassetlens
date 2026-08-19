@@ -143,7 +143,7 @@ const MixedEditor: React.FC<MixedEditorProps> = ({
       for (const dep of enabledDeps) {
         // 模拟安装每个依赖
         await new Promise(resolve => setTimeout(resolve, 500));
-        console.log(`Installing ${dep.name}${dep.version !== 'latest' ? `==${dep.version}` : ''}`);
+        console.log(`[MixedEditor] Installing ${dep.name}${dep.version !== 'latest' ? `==${dep.version}` : ''}`);
       }
       
       message.success(`成功安装 ${enabledDeps.length} 个依赖包`);
