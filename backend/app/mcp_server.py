@@ -7,7 +7,7 @@
   - 工具和 deepagent 解耦：deepagent 不再用 @tool，改 MCP client 加载
   - 16 个 tool 单一职责（vs 原 kg_api 一个工具 16 个 action）
   - 复用 dispatch_kg_action（业务逻辑单一源）
-  - 统一 SSE 传输（内外都用 http://127.0.0.1:8000/mcp/sse）
+  - 统一 SSE 传输（内外都用 http://127.0.0.1:28000/mcp/sse，端口由 __start_8000.py 启动）
 """
 from typing import Any
 from mcp.server.fastmcp import FastMCP
@@ -110,6 +110,21 @@ def get_entity_source_mode(entity_code: str) -> dict:
 
 
 @mcp.tool()
+def batch_entity_source_mode(entity_codes: list) -> dict:
+    """批量查询多实体的数据源模式 + 路由建议（取数前必调，一次查全所有涉及表，不要逐表查询）。
+    入参: entity_codes = ["vw_transformer", "cms20_dist_sta", ...]（SQL 涉及的所有表名）
+    返回:
+      - items: 每个表的 source_mode 信息
+      - recommended_tool: 按路由优先级推荐的执行工具：
+        - 任一 api_integration -> execute_entity_api（DuckDB 联邦）
+        - 有 doris_catalog 的表（无 api）-> execute_doris_sql（Doris 联邦，三段命名 pg_tupu.public.表名）
+        - 未绑 catalog 的物理表 -> execute_sql（物理直连）
+      - has_api_integration / has_catalog: 是否含对应模式
+    """
+    return dispatch_kg_action("batch_entity_source_mode", {"entity_codes": entity_codes or []})
+
+
+@mcp.tool()
 def execute_api_sql(sql: str) -> dict:
     """执行多源 API 联邦 SQL（DuckDB，WHERE/JOIN 自动下推到 API 参数）。虚拟表名从 /api-endpoints/tables 查。"""
     return dispatch_kg_action("execute_api_sql", {"sql": sql})
@@ -138,9 +153,9 @@ def execute_doris_sql(entity_code: str = "", sql: str = "", filters: dict = {}) 
 def mount_mcp(app) -> None:
     """把 MCP Server 挂载到 FastAPI app（SSE 传输）。
 
-    挂载后：
-      - SSE endpoint: http://127.0.0.1:8000/mcp/sse
-      - Messages:     http://127.0.0.1:8000/mcp/messages/
+    挂载后（端口由 uvicorn 启动参数决定，本项目固定 28000）：
+      - SSE endpoint: http://127.0.0.1:28000/mcp/sse
+      - Messages:     http://127.0.0.1:28000/mcp/messages/
 
     内部 deepagent 和外部 client 都连 /mcp/sse。
     """

@@ -2,11 +2,12 @@
 Tupu DeepAgent -- 基于 LangGraph 原生 create_react_agent 的问数流程
 
 架构:
-  create_deep_agent(model, tools=[kg_api], system_prompt, state_schema, checkpointer, backend, skills)
-    ├─ Tool: kg_api  知识图谱查询工具（10 个 action）
+  create_deep_agent(model, tools=mcp_tools, system_prompt, state_schema, checkpointer, backend, skills)
+    ├─ 业务工具：16 个单一职责 MCP 工具（app/mcp_server.py，走 SSE /mcp/sse，不再用进程内 @tool）
+    ├─ 框架工具：read_file / write_todos / ls（deepagents 中间件自动注入）
     └─ skills=["/skills/"]  虚拟文件系统挂载 SKILL.md
 
-  ReAct 模式：LLM 自主规划步骤、自主调 kg_api 工具、边推理边输出 token
+  ReAct 模式：LLM 自主规划步骤、自主调 MCP 工具、边推理边输出 token
   checkpointer: AsyncSqliteSaver (持久化，支持多轮上下文继承)
   SSE: astream_events(version="v2") 推送 think/token/trace/sql_result/final/done
 """
@@ -14,7 +15,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Annotated, Any, Dict, List, TypedDict
+import asyncio
+from typing import Annotated, Any, Dict, List, Literal, TypedDict
 
 try:
     from typing import NotRequired
@@ -51,6 +53,25 @@ class TupuAgentState(DeepAgentState):
     think_history: NotRequired[Annotated[list, operator.add]] # 推理过程(累加)
     pending_clarification: NotRequired[dict]                  # 澄清卡数据
     goal: NotRequired[str]                                    # 目标(sql_assembly / knowledge_only)
+    # v3.5 结构化会话上下文：跨轮继承客户范围，不依赖 LLM 指代消解概率
+    last_scope: NotRequired[dict]                             # {customer_names: [...], ordered: bool, commitment: str, source_turn_id: str}
+    # 评审 P1-5 受控上下文跨轮：确定性代码在路由成功后写回 checkpoint，供下轮"连续上下文优先"
+    last_skill: NotRequired[str]                              # 本轮命中场景 skill_id（generic 时为 None）
+    last_step: NotRequired[str]                               # 本轮命中步骤 id
+
+
+class TupuAgentContext(TypedDict):
+    """F4: DeepAgent 原生运行时上下文（不进 checkpoint，不混入消息历史）。
+
+    通过 config["configurable"]["last_scope"] 传递（astream_events 不支持 context 参数），
+    DecisionGateMiddleware 从 runtime.config 读取。
+    """
+    last_scope: NotRequired[dict]  # 用户指定的可信范围（source=user_input）
+    user_sub: NotRequired[str]     # 当前用户 OIDC sub
+    session_id: NotRequired[str]   # 会话 ID
+    # 评审 P2（二轮）：受控执行契约也经 runtime.context 注入（SkillPolicyMiddleware 唯一执行边界）。
+    # 用 Any 声明避免 QueryContract 循环导入；运行时 Policy 读取 runtime.context["contract"]。
+    contract: NotRequired[Any]     # QueryContract（skill_policy 依赖）
 
 
 # ---------------------------------------------------------------------------
@@ -58,15 +79,25 @@ class TupuAgentState(DeepAgentState):
 # ---------------------------------------------------------------------------
 
 from datetime import datetime
+from langchain.agents.middleware.types import AgentMiddleware
 
 _BASE_ROLE = """你是 tupu 数据智能问答平台的助手，专注于电力行业数据图谱问答。
 当前日期：__CURRENT_DATE__
 平台版本：0.17.0
 """
 
+_SOURCE_MODE_DISPATCH_RULES = """
+## 数据源模式路由（取数前必查，铁律）
+执行取数前，调一次 `batch_entity_source_mode(entity_codes)` 批量查询 SQL 涉及的**所有表**的数据源模式，按返回的 `recommended_tool` 选执行工具。**只调一次批量接口**，不要逐表查询：
+- `recommended_tool=execute_sql`（全部 physical_table）-> `execute_sql(sql, entity_code)`（传主表 entity_code）
+- `recommended_tool=execute_entity_api`（任一 api_integration）-> `execute_entity_api(entity_code, filters)`（多源API联邦，覆盖面最广）
+- `recommended_tool=execute_doris_sql`（任一 sql_integration，无 api_integration）-> `execute_doris_sql(entity_code, filters)`（Doris 联邦）
+【硬规则】recommended_tool 一经确认，只能用对应工具。返回空结果(row_count=0)=数据不存在，直接回复"未查到相关数据"，禁止降级到其他工具重试。
+"""
+
 _COMMON_RULES = """
 ## 重要规则
-1. 不要用 glob/ls 探索文件系统，直接调 kg_api 工具
+1. 不要用 glob/ls 探索文件系统，直接用只读工具定位业务域与表（fetch_l1_l2_tree / search_entities / list_tables / get_entity_relations）
 2. 不要用 write_file 写中间文件，数据在对话里传递
 3. 不要自己编造 SQL，必须先查 JOIN 关系（fetch_join_expr）
 4. 拼装 SQL 后必须调 validate_safe_sql 校验，通过后才执行
@@ -85,6 +116,7 @@ _COMMON_RULES = """
 
 _SQL_FLOW_RULES = """
 ## 问数流程（定位 → 拼 SQL → 校验 → 执行 → 输出）
+**前提：仅当未命中场景剧本时执行本流程。若已 read_file 读取 `scenarios/*` 剧本，直接按剧本步骤执行（剧本已含表结构、关联键、SQL 模板），跳过下面步骤 1-5 的定位/搜实体（fetch_l1_l2_tree/validate_l2/fetch_subgraph/validate_attributes/fetch_join_expr），仅在剧本 SQL 基础上按用户过滤条件加 WHERE。**
 1. 调 fetch_l1_l2_tree 获取层级树，对比用户问句锁定 L2
 2. 调 validate_l2 校验 L2
 3. 调 fetch_subgraph 获取子图，锁定实体
@@ -111,17 +143,20 @@ _SQL_FLOW_RULES = """
 2. data_source_id 全相同（或全空）-> execute_sql(sql, entity_code) 走该源直连
 3. data_source_id 不同 -> execute_doris_sql(sql) 走 Doris 联邦，SQL 用 3 段命名 catalog.db.table（catalog=各数据源的 doris_catalog_name）
 4. 某实体 data_source_id 非空但 doris_catalog_name 为空 -> 该源未纳管 Doris catalog，无法跨源联邦，如实说明缺哪个源，不要硬编造 catalog 名
-7. 输出结构化答案（summary + execution_process + sql + row_count + recommendations）
-   - summary：必须基于实际返回的数据内容生成差异化总结。要求：
+7. 输出最终结论（结论 + 关键发现 + 建议）
+   - 当工具返回 result_available_for_ui=true（完整数据已推前端查询结果表）时：
+     **禁止在最终回答里输出原始查询明细、前 N 行预览、或与结果表同字段的 Markdown 表格**。
+     只写：结论（2-3 句）、关键发现（具体数据特征/异常点）、风险或限制（如有）、后续建议，
+     并明确写一句”完整明细见下方查询结果表”。
+   - 结论必须基于实际返回的数据内容生成差异化总结。要求：
      a) 引用具体数据值（如具体户号、户名、数量、金额等）
      b) 指出数据特征（如最大值/最小值/分布规律/异常点）
      c) 每次总结的措辞和侧重点应有所不同，避免模板化
      d) 用自然语言表达，像分析师在汇报发现
      e) **必须涵盖所有数据分组/类型**（如 PsStatus 有 NA/NW/WBS/PD 等多种 object_type，summary 必须提到每种类型的代表记录）
-   - execution_process：定位了哪个 L2、哪个实体、查了哪些字段
-   - sql：执行的 SQL
-   - row_count：返回行数
+     f) **样本≠全量（硬规则）**：只能对 row_count 下全量结论（如”共 101 条”）；对行内字段（如”单路供电””状态正常””10kV”）只能说”样本显示”（如”样本显示均为单路供电”）。要输出”全部正常 / 全部单路供电 / 所有 X 均 Y”类全量结论，必须由 SQL 显式聚合统计（COUNT/GROUP BY）提供证据后再下。
    - recommendations：3-5 个后续问题
+   【禁止】最终回答里**不得**出现”执行过程””命中场景剧本””关联链路””判定逻辑””row_count””SQL 语句”等内部 trace，也不得复述明细数据或制作明细表格——这些已通过执行过程区与查询结果表实时展示给用户，重复输出会污染答案。
 
 ## 上下文继承
 - 对话历史中已定位同一 L2+实体：跳过步骤 1-4
@@ -129,48 +164,72 @@ _SQL_FLOW_RULES = """
 - 用户加了筛选条件但实体不变：跳过定位，在 SQL 加 WHERE
 """
 
+# v3.2 下一步判断闸门 feature flag：TUPU_DECISION_GATE=1 启用（灰度，默认关）
+# 启用后：system_prompt 注入"下一步判断"指令 + create_tupu_agent 装配 DecisionGateMiddleware
+_DECISION_GATE_ENABLED = os.getenv("TUPU_DECISION_GATE", "") == "1"
+
+# 下一步判断：模型每次调用工具前，须在同一条 AIMessage 的 content 里写明"为什么执行这一步"，
+# 再带工具调用。后端把这段 content 原样作为 decision.committed 推给前端，按 tool_call_id 绑定到该步，
+# 默认可见（不藏折叠区）。不再展示 reasoning_content、不后端拼接"准备调用 XX"假理由。
+_DECISION_GATE_RULES = """
+## 下一步判断（每次工具调用前必写，同轮 content）
+**每次调用工具前，必须在同一轮回复的 content 里先写"下一步判断"，再带工具调用。一条回复只调用一个工具。**
+格式（严格遵守，字段名不可改）：
+【下一步判断】
+已知: <列出已获得的具体信息：用户要求 + 前序步骤的真实结果（数据/结论），不要笼统说"已有信息">
+判断: <两段式：① 已知信息是否充分支撑用户问题？如不充分，具体缺什么；② 本步要补什么信息、为什么用这个工具>
+因此: 调用 <本轮工具名>。
+
+规则：
+- "下一步判断"与工具调用必须在**同一轮**（同一条 AIMessage 的 content + tool_calls）。
+- **一条回复只调用一个工具**：不得在同一轮发起多个 tool_call；需要多步时分多轮顺序调用。
+- "因此"行写的工具名必须与实际调用的工具名一致。
+- **"判断"必须评估信息充分性**：如果前序结果不足以回答用户问题，先说明缺什么，再调用工具补齐；不得在信息不足时直接给出结论。判断要有逻辑链：已知→缺什么→本步补什么→为什么用这个工具。
+- **所有工具调用**（搜索实体/校验L2/读技能/校验SQL/execute_sql 等）都被闸门校验：没写"下一步判断"、格式不全、"因此"工具名不符、或一轮多工具，都会被拒绝（原工具不执行），须按拒绝提示补判后重发（补判会生成新的工具调用）。
+- 调用 execute_sql 时，"下一步判断"后额外写一行范围：
+  范围: <客户名精确集合，逗号分隔，如 客户001,客户003；无客户限定写 无>
+  SQL 的 `cust_name IN (...)` 必须是该范围的子集，不得查声明外的客户（防"其他不要检索"越界）；无客户限定写 无（闸门跳过范围校验）。范围越界会被拒绝，补判后仍越界则阻断，不再重试 execute_sql，基于已有信息回答或说明无法完成。
+"""
+
+_DATA_COMPLETENESS_RULES = """
+## 数据完整性规则（硬规则，违反即错误）
+工具返回数据时，content 开头会有【数据已完整获取】指令，JSON 含结构化契约字段：
+- row_count：完整结果数（不是预览行数）
+- returned_rows：前端实际拿到的行数（result_available_for_ui=true 时=row_count，完整数据）
+- is_preview：**前端接收的数据是否被截断**；result_available_for_ui=true 时前端拿到完整数据，is_preview=false
+- llm_is_preview：true=你（模型）只拿到前 llm_preview_row_count 行分析样本，false=全量给了你
+- llm_preview_row_count：你的分析样本行数（默认 10）
+- result_available_for_ui：true=完整数据已推前端查询结果表展示
+
+【展示边界：明细只由前端查询结果表展示一次】
+- 前 10 行仅是你的**分析样本**，不是面向用户的展示数据：不得把该样本复述为"明细如下"，不得用该样本制作预览表格。
+- result_available_for_ui=true 时，最终回答只写结论、关键发现、风险/限制、后续建议，并明确写"完整明细见下方查询结果表"；禁止输出与结果表同字段的 Markdown 明细表。
+
+1. **llm_is_preview=true 且 result_available_for_ui=true**：数据已完整获取，只是给你的分析样本截断了。row_count 就是全部数量。禁止分页重查、禁止分段查询（如按台区 020-029、030-039 逐段查）、禁止调用 task 子代理。直接基于 row_count 和样本写结论。
+2. **row_count >= 500 且 _limit_reached=true**：可能还有更多数据。可提示用户缩小范围，但不要无限分页重查。
+3. **"所有"/"全部"类查询**（如"所有用电户与配变户变关系"）：一次查询拿到结果即完成，row_count 就是全部数量。禁止把"所有"拆成多段分别查询。
+4. **样本行数≠数据不完整**：llm_preview_row_count=10 只是你的分析样本，完整数据已推前端查询结果表。LLM 只需引用 row_count 和样本特征写结论，不需要把明细行重新搬运成表格。
+5. **禁止调用 task 子代理做分块查询**：task 子代理仅用于需要独立推理链的复杂分析，不用于简单的全量数据查询。
+6. **场景剧本第1步最小终止规则**：户变关系查询只要 SQL 返回 row_count > 0，即立即基于结果生成最终答案。除非用户明确要求"按台区分组统计""导出全量""计算负载率"，否则只执行第1步即终止，禁止为"展示完整结果"反复分页或启动子代理。
+7. **样本≠全量（分析结论边界）**：只能对 row_count 下全量结论（如"共 101 条"）。对行内字段（单路供电/状态正常/10kV 等）只能说"样本显示"，如"样本显示均为单路供电"。要输出"全部正常 / 全部单路供电 / 所有 X 均 Y"类全量结论，必须由 SQL 显式聚合统计（COUNT/GROUP BY）提供证据后再下。
+"""
+
 _KNOWLEDGE_FLOW_RULES = """
 ## 知识查询流程（不碰 SQL）
-- 直接调 kg_api 的搜索/查询 action 获取信息
+- 直接调只读元数据工具（fetch_l1_l2_tree / search_concepts / search_entities / get_entity_relations / list_tables）获取信息
 - 用自然语言组织答案，不要只输出原始 JSON
 - 结构：定义/列表 -> 详细说明 -> 相关建议
 """
 
-# 可用技能概要（自主模式时注入，让 LLM 自主 read_file 选技能）
-_SKILL_OVERVIEW = """
-## 可用技能（5能力包 + 5意图标签 + 场景剧本）
-自主判断用户意图：先看是否命中"场景剧本"（业务分析任务，口径固化），命中则按剧本步骤执行；
-否则用 read_file 读取最匹配的 /skills/{技能名}/SKILL.md 获取场景提示，按提示调能力包工具。
-
-### 能力包（工具箱，按需挑用，不要求走完）
-- locate：定位。锚定业务域L2、实体表、字段
-- relate：关系。查实体关联和JOIN字段
-- sql-exec：SQL执行。校验并执行SQL
-- api取数：多源API联邦SQL(execute_api_sql)，WHERE/JOIN自动下推
-- explore：搜索。搜实体/概念/字段
-
-### 意图标签（场景提示词，选一个最匹配的）
-- sql-query：SQL数据查询。查数量/统计/排名/趋势/对比/质检/具体字段/跨实体（含5类SQL写法提示）
-- explain-concept：概念解释。问概念含义/区别
-- explore-graph：浏览结构。问有哪些/包含什么/关系
-- find-entity：反查字段。找字段/表位置
-- trace-lineage：数据血缘。问数据来源/血缘
-
-### 场景剧本（业务分析任务，命中即按剧本执行，口径固化。优先级高于意图标签）
-- distribution-overload（配电重载过载分析）：用户问配电/变压器重载/过载/负载率/96点功率/户变关系/受影响用户时命中。模块化设计，用户可随时只查其中一段。
-  口径（硬规则）：配电层面功率=SUM(计量点负荷)GROUP BY变压器+时间点；负载率=配电层面功率/容量×100%；重载=连续≥8点≥80%；过载=连续≥8点≥100%；默认最近30天，用户指定则用用户值；只统计在运变压器。
-  关联链路：变压器.voltreg_eqp_id->调压设备.adj_volt_dev_id->dist_sta_id->台区->安装点.inst_id->计量点负荷（正式营配贯通链路，非编号近似）。
-  完整剧本：read_file("/skills/scenarios/distribution-overload/SKILL.md")
-- project-lifecycle-cost（项目预算与成本对比分析）：用户问"WBS预算/成本/超成本/超支/超预算/预算执行率/全生命周期成本/总成本/LCC"时命中。支持"所有WBS"或"指定项目"。
-  口径（硬规则）：超成本(超计划)=actual_cost>planned_cost即variance>0；超预算=actual_cost>total_budget；预算执行率=actual/total_budget×100%；预算与成本分属两数据源，必须用get_entity_source_mode分发：预算走execute_entity_api(ES联邦dim+amt JOIN)，成本走execute_doris_sql(Doris)；JOIN键=wbs_element。各自锁定模式，空结果即停，不降级不重试其他模式。
-  步骤：①get_entity_source_mode("dim_ps_wbs_budget")确认api_integration->execute_entity_api取wbs_element+total_budget+available_budget ②get_entity_source_mode("dim_ps_wbs_cost")确认sql_integration->execute_doris_sql取wbs_element+actual_cost+planned_cost+variance ③按wbs_element关联算执行率+余额+超计划标记 ④输出明细表+超成本清单+结论
-  完整剧本：read_file("/skills/scenarios/project-lifecycle-cost/SKILL.md")
-"""
+# 可用技能概要：不再维护静态 _SKILL_OVERVIEW（双维护漂移）。
+# 改由 SkillCatalog 实时扫描 SKILL.md frontmatter 生成（设计 §3.3，SKILL.md 是唯一业务来源）。
+# 完整口径、SQL 细节、关联链路留在 SKILL.md；这里只生成简短索引。
 
 def _load_skill_md(skill_name: str) -> str:
-    """读取 SKILL.md 文件内容（去掉 frontmatter）。
+    """读取 SKILL.md 文件内容（去掉 frontmatter），并解析 ⟦实体中文名⟧ -> 物理表名。
 
-    与 ReAct 模式共用同一份技能文件，避免双份维护。
+    SKILL.md 中用 ⟦中文名⟧ 引用实体（如 ⟦用电户⟧），运行时自动从元数据解析为物理表名（如 cms20_elec_cons_cust）。
+    这样 SKILL.md 不含硬编码表名，表名变更只需改元数据。
 
     Args:
         skill_name: 技能名（如 "multi-hop-query"）
@@ -199,7 +258,208 @@ def _load_skill_md(skill_name: str) -> str:
         end = content.find("---", 3)
         if end > 0:
             content = content[end + 3:].strip()
+    # 解析 ⟦实体中文名⟧ -> 物理表名（entity_en_name）
+    content = _resolve_entity_refs(content)
     return content
+
+
+# ⟦中文名⟧ 正则：匹配 ⟦ 和 ⟧ 之间的内容（不含换行）
+_ENTITY_REF_RE = __import__('re').compile(r'⟦([^⟧]+)⟧')
+
+def _resolve_entity_refs(text: str) -> str:
+    """将文本中的 ⟦实体中文名⟧ 替换为元数据中的物理表名（entity_en_name）。
+    找不到的保留原文，不阻断。"""
+    if '⟦' not in text:
+        return text
+    names = set(_ENTITY_REF_RE.findall(text))
+    if not names:
+        return text
+    # 一次批量查元数据
+    from app.core.database import SessionLocal
+    from app.models.base import Entity
+    db = SessionLocal()
+    try:
+        ents = db.query(Entity.entity_name, Entity.entity_en_name).filter(Entity.entity_name.in_(names)).all()
+        mapping = {name: en_name for name, en_name in ents if en_name}
+    finally:
+        db.close()
+    if not mapping:
+        return text
+    # 逐个替换
+    def _replacer(m):
+        cn = m.group(1)
+        return mapping.get(cn, m.group(0))  # 找不到保留原文
+    return _ENTITY_REF_RE.sub(_replacer, text)
+
+
+class SkillEntityResolverMiddleware(AgentMiddleware):
+    """技能文件 ⟦中文名⟧ -> 物理表名 解析中间件。
+
+    单一职责：read_file 成功返回技能文件内容后，对其中的 ⟦实体中文名⟧ 占位符
+    做物理表名解析（与 SKILL.md 主文件一致）。
+
+    安全说明（P0 修复）：原 SkillEntityRefMiddleware 含磁盘 fallback 职责，当 read_file
+    在 StateBackend 找不到子文件时直接从磁盘读取--这是目录穿越漏洞的根因。现已切换到
+    CompositeBackend + FilesystemBackend(virtual_mode=True)，子文件由原生 Backend 安全提供，
+    不再需要任何磁盘逃生通道。本中间件只处理已由安全 Backend 成功读取的内容，绝不自行访问磁盘。
+    """
+
+    async def awrap_tool_call(self, request, handler):
+        tool_name = request.tool_call.get("name", "")
+        tool_result = await handler(request)
+        if tool_name != "read_file":
+            return tool_result
+
+        # ⟦中文名⟧ 解析（正常路径：文件已由 CompositeBackend 安全读取）
+        try:
+            content = getattr(tool_result, "content", None)
+            if isinstance(content, str) and '⟦' in content:
+                resolved = _resolve_entity_refs(content)
+                if resolved != content:
+                    object.__setattr__(tool_result, "content", resolved)
+        except Exception:
+            pass  # 解析失败不阻断 read_file
+        return tool_result
+
+
+# 数据查询工具集合：返回 {columns, rows, row_count} 格式的工具，统一做摘要截断
+_DATA_QUERY_TOOLS = frozenset({
+    "execute_doris_sql",    # Doris 联邦
+    "execute_sql",          # 物理直连
+    "execute_entity_api",   # DuckDB API 联邦（单对象）
+    "execute_api_sql",      # DuckDB API 联邦（多源SQL）
+})
+_SUMMARY_THRESHOLD = 10  # 超过此行数则截断为摘要
+
+
+class DataSummaryMiddleware(AgentMiddleware):
+    """数据查询结果摘要中间件：明细数据不传 LLM 全量。
+
+    拦截 execute_doris_sql / execute_sql / execute_entity_api / execute_api_sql：
+    1. adispatch_custom_event("data_result", 完整数据) 推给前端（前端直出表格）
+    2. ToolMessage content 截断为摘要（前10行 + row_count + _summary），LLM 只看摘要写结论
+    row_count <= 10 时不截断（数据量小，全量给 LLM 无妨）。
+    """
+
+    async def awrap_tool_call(self, request, handler):
+        tool_name = request.tool_call.get("name", "")
+        tool_result = await handler(request)
+        if tool_name not in _DATA_QUERY_TOOLS:
+            return tool_result
+        try:
+            await self._summarize_and_dispatch(tool_result, request)
+        except Exception as e:
+            logger.warning(f"[DataSummary] 摘要截断失败({tool_name}): {e}", exc_info=True)
+        return tool_result
+
+    async def _summarize_and_dispatch(self, tool_result, request):
+        """解析工具结果 -> 推完整数据给前端 -> 截断为摘要给 LLM。"""
+        import json as _json
+
+        content = getattr(tool_result, "content", None)
+        if content is None:
+            return
+        # LangChain content blocks: [{"type":"text","text":"<JSON>"}] -> 取第一个 text block
+        if isinstance(content, list):
+            for _block in content:
+                if isinstance(_block, dict) and _block.get("type") == "text" and isinstance(_block.get("text"), str):
+                    content = _block["text"]
+                    break
+        if not isinstance(content, str):
+            content = _json.dumps(content, ensure_ascii=False, default=str)
+        if len(content) < 20:
+            return  # 错误消息等短内容不处理
+
+        # 解析 MCP 格式 {"type":"text","text":"<JSON>"} 或裸 JSON
+        parsed = None
+        try:
+            parsed = _json.loads(content)
+        except Exception:
+            return
+        # 解嵌套 text 字段（MCP tool 包装格式）
+        if isinstance(parsed, dict) and isinstance(parsed.get("text"), str):
+            try:
+                parsed = _json.loads(parsed["text"])
+            except Exception:
+                return
+        if not isinstance(parsed, dict):
+            return
+        # 必须有 rows + row_count 才处理
+        if "rows" not in parsed or "row_count" not in parsed:
+            return
+
+        columns = parsed.get("columns", [])
+        rows = parsed.get("rows", [])
+        row_count = parsed.get("row_count", len(rows))
+        logger.info(f"[DataSummary] {request.tool_call.get('name','')} row_count={row_count}, 派发 data_result + 截断摘要")
+
+        # 派发完整数据给前端：前端拿到的是完整 rows -> is_preview 必须为 false。
+        # 模型是否只看前 N 行分析样本，用 llm_is_preview / llm_preview_row_count 表达，不混用。
+        config = request.runtime.config if request.runtime else None
+        full_payload = {
+            "columns": columns, "rows": rows,
+            "row_count": row_count, "tool_name": request.tool_call.get("name", ""),
+            "sql": parsed.get("sql", ""),                               # SQL 文本（前端"复制SQL"按钮用）
+            "returned_rows": len(rows),                              # 前端实际拿到行数（=row_count，完整数据）
+            "preview_row_count": min(_SUMMARY_THRESHOLD, row_count), # 兼容旧字段（前端不再依赖）
+            "is_preview": False,                                     # 前端拿完整数据，一律 false
+            "llm_is_preview": row_count > _SUMMARY_THRESHOLD,        # 模型是否只看前 N 行分析样本
+            "llm_preview_row_count": min(_SUMMARY_THRESHOLD, row_count),  # 模型样本行数
+            "result_available_for_ui": True,                          # 完整数据已推前端表格
+            # 批3：数据快照披露（API 内存缓存命中时携带，前端对话卡标注快照时间）
+            "data_snapshot_at": parsed.get("data_snapshot_at"),
+            "cache_sources": parsed.get("cache_sources"),
+        }
+        await _dispatch_data_result(full_payload, config)
+
+        # row_count <= 阈值：不截断，全量给 LLM
+        if row_count <= _SUMMARY_THRESHOLD:
+            return
+
+        # 截断为摘要：前 N 行 + _summary
+        summary_rows = rows[:_SUMMARY_THRESHOLD]
+        # P0-B: 显著指令放在 JSON 前面，让 LLM 第一眼看到"数据已完整"
+        _limit_reached = row_count >= 500  # SQL 强制 LIMIT 500
+        _limit_hint = "（已达 LIMIT 500 上限，可能还有更多数据未取回）" if _limit_reached else "（未触发 LIMIT 截断，已是全部结果）"
+        _directive = (
+            f"【数据已完整获取】共 {row_count} 行{_limit_hint}。\n"
+            f"下方仅展示前 {_SUMMARY_THRESHOLD} 行分析样本，完整 {row_count} 行数据已推前端查询结果表展示（is_preview=false）。\n"
+            f"JSON 中 row_count={row_count}（完整结果数）、returned_rows={row_count}（前端拿到的完整行数）、"
+            f"llm_is_preview=true、llm_preview_row_count={len(summary_rows)}（你的分析样本行数）、result_available_for_ui=true。\n"
+            f"前 {_SUMMARY_THRESHOLD} 行只是你的分析样本，不是面向用户的展示数据：禁止复述为'明细如下'或制作预览表格。"
+            f"row_count 就是全部数量，样本行数≠数据不完整。"
+            f"**只能对 row_count 下全量结论；对行内字段只能说'样本显示'；'全部 X/所有 Y 均 Z'类结论必须由 SQL 聚合统计提供证据。**"
+            f"禁止分页重查、禁止分段查询、禁止调用 task 子代理。"
+            f"{'可能需要提示用户缩小范围。' if _limit_reached else '请直接基于 row_count 和样本写结论，并注明完整明细见下方查询结果表。'}\n"
+        )
+        summary = {
+            "columns": columns,
+            "rows": summary_rows,
+            "row_count": row_count,                                  # 完整结果数
+            "returned_rows": row_count,                              # 前端实际拿到的行数（完整数据）
+            "preview_row_count": len(summary_rows),                  # 兼容旧字段（=llm_preview_row_count）
+            "is_preview": False,                                     # 前端拿完整数据，一律 false
+            "llm_is_preview": True,                                  # 你（模型）只拿到分析样本
+            "llm_preview_row_count": len(summary_rows),              # 你的样本行数
+            "result_available_for_ui": True,                         # 完整数据已推前端
+            "_summary": f"共 {row_count} 行，仅展示前 {_SUMMARY_THRESHOLD} 行样例，完整数据已推前端直出",
+            "_truncated": True,
+            "_limit_reached": _limit_reached,
+        }
+        # 重新包装为 MCP 格式，指令前置
+        new_inner = _json.dumps(summary, ensure_ascii=False, default=str)
+        new_content = _json.dumps({"type": "text", "text": _directive + new_inner}, ensure_ascii=False, default=str)
+        object.__setattr__(tool_result, "content", new_content)
+        logger.info(f"[DataSummary] 已截断为前{_SUMMARY_THRESHOLD}行摘要（原{row_count}行，limit_reached={_limit_reached}）")
+
+
+async def _dispatch_data_result(payload: dict, config):
+    """派发 data_result 自定义事件给前端。"""
+    try:
+        from langchain_core.callbacks import adispatch_custom_event
+        await adispatch_custom_event("data_result", payload, config=config)
+    except Exception as e:
+        logger.warning(f"[DataSummary] dispatch data_result 失败: {e}")
 
 
 def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
@@ -223,45 +483,75 @@ def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
     if skill_hint == "execute-sql":
         parts.append("""
 ## 执行确认流程
-用户确认执行上一轮的 SQL。直接调 kg_api(action="execute_sql") 执行，不要重新定位。
+用户确认执行上一轮的 SQL。直接调 execute_sql 工具执行，不要重新定位。
 执行后输出结果总结。
 """)
     elif skill_hint:
         # 指定了技能：
         # - 场景剧本(scenarios/*)自带步骤+口径，不注入通用 SQL 流程(其 locate->validate_safe_sql->execute_sql
         #   会与剧本的 get_entity_source_mode->execute_entity_api/execute_doris_sql 冲突，导致回退到 execute_sql)
+        # - 但 source_mode 路由规则是通用的，场景剧本也必须按实体配置选工具，不跳过
         # - 其它技能(locate/sql-query 等)注入两套流程规则，LLM 按技能类型自主选用
         if not skill_hint.startswith("scenarios/"):
             parts.append(_SQL_FLOW_RULES)
             parts.append(_KNOWLEDGE_FLOW_RULES)
+        else:
+            parts.append(_SOURCE_MODE_DISPATCH_RULES)
     else:
-        # 自主模式：注入全量技能概要 + 两套流程规则，LLM 自主 read_file 选技能
-        parts.append(_SKILL_OVERVIEW)
+        # 自主模式：注入由 SkillCatalog 实时生成的技能概要 + 两套流程规则，LLM 自主 read_file 选技能
+        from app.services.skill_catalog import build_skills_overview
+        parts.append(build_skills_overview())
         parts.append(_SQL_FLOW_RULES)
         parts.append(_KNOWLEDGE_FLOW_RULES)
 
+    if _DECISION_GATE_ENABLED:
+        parts.append(_DECISION_GATE_RULES)
+    parts.append(_DATA_COMPLETENESS_RULES)
     parts.append(_COMMON_RULES)
     return "\n".join(parts)
 
 
 
 # ---------------------------------------------------------------------------
-# 3. Tools (6 个技能 + 1 个思考工具)
+# 3. Tools
 # ---------------------------------------------------------------------------
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 
-# 结构化最终答案 schema（response_format 用）
-class TupuFinalAnswer(BaseModel):
-    """tupu 数据查询的最终结构化答案。"""
-    summary: str = Field(description="一句话总结查询结果")
-    execution_process: str = Field(description="执行过程描述：定位了哪个实体、查了哪些属性、SQL 逻辑")
-    sql: str = Field(default="", description="查询用的 SQL 语句")
-    row_count: int = Field(default=0, description="查询返回的数据行数（未执行填 0）")
-    recommendations: list[str] = Field(default_factory=list, description="3-5 个推荐的后续问题")
+# 统一最终交付协议（response_format 用；GLM 不兼容时由 data_intelligence 确定性降级构造）
+class FinalFinding(BaseModel):
+    """关键发现（指标卡）：label + value + 级别。"""
+    label: str
+    value: str
+    level: Literal["info", "success", "warning", "error"] = "info"
+
+
+class FinalDelivery(BaseModel):
+    """DeepAgent 最终交付对象（替换粗糙的 TupuFinalAnswer）。
+
+    约束（最终结果交付任务书）：
+    - 不存完整 rows / SQL / 执行过程（表格数据继续走 sql_result SSE / done 字段）
+    - row_count 必须来自工具真实返回，禁止模型编造
+    - answer_type 供前端选择展示形态；后端按 A-E 优先级确定性降级构造
+    """
+    answer_type: Literal[
+        "relationship_list",
+        "overload_analysis",
+        "data_list",
+        "aggregation",
+        "knowledge",
+        "empty",
+        "error",
+    ] = "data_list"
+    title: str
+    summary: list[str] = Field(default_factory=list)
+    findings: list[FinalFinding] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    row_count: int = 0
+    result_available_for_ui: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -334,475 +624,10 @@ def _fix_aggregate_unknown_column(sql: str, bad_col: str) -> str:
     return new_sql if n > 0 else sql
 
 
-def dispatch_kg_action(action: str, body: dict) -> dict:
-    """kg_api 业务逻辑分发（@tool 和 MCP tool 共用，单一逻辑源）。action/参数见 kg_api docstring。"""
-    from datetime import datetime as _dt
-    _ts = _dt.now().strftime("%H:%M:%S")
 
-    # 同进程直接调函数（避免 HTTP 自调自死锁）
-    if action == "fetch_l1_l2_tree":
-        from app.services.skill_injections import build_fetch_l1_l2_tree
-        fn = build_fetch_l1_l2_tree()
-        if not fn:
-            return {"l1_list": [], "error": "查询函数不可用", "log": f"[{_ts}] 获取L1-L2树失败：查询函数不可用"}
-        res = fn()
-        l1_list = res.get("l1_list", []) if isinstance(res, dict) else []
-        l2_count = sum(len((l1.get("l2_list") or l1.get("children") or [])) for l1 in l1_list)
-        res["log"] = f"[{_ts}] 获取L1-L2层级树：共 {len(l1_list)} 个行业域(L1)，{l2_count} 个小类(L2)"
-        return res
-
-    elif action == "validate_l2":
-        from app.api.kg_api import validate_l2, ValidateL2Request
-        res = validate_l2(ValidateL2Request(**body))
-        l2_name = (res or {}).get("l2_name", "") or body.get("l2_name", "")
-        l2_id = (res or {}).get("l2_id", "")
-        valid = (res or {}).get("valid", False)
-        if valid:
-            res["log"] = f"[{_ts}] 校验L2「{l2_name}」成功，锁定 L2_id={str(l2_id)[:8]}..."
-        else:
-            cands = (res or {}).get("candidates", []) or []
-            cand_names = "、".join([str(c.get("name", "") if isinstance(c, dict) else c) for c in cands[:5]])
-            res["log"] = f"[{_ts}] 校验L2「{l2_name}」未精确命中，候选：{cand_names or '无'}"
-        return res
-
-    elif action == "fetch_subgraph":
-        from app.services.skill_injections import build_fetch_subgraph_by_l2
-        fn = build_fetch_subgraph_by_l2()
-        if not fn:
-            return {"l2x_entities": [], "error": "查询函数不可用", "log": f"[{_ts}] 获取子图失败：查询函数不可用"}
-        res = fn(body.get("l2_id", ""))
-        ents = (res or {}).get("l2x_entities", []) if isinstance(res, dict) else []
-        ent_names = "、".join([str(e.get("entity_name", "") if isinstance(e, dict) else e) for e in ents[:6]])
-        res["log"] = f"[{_ts}] 获取L2子图：该小类下共 {len(ents)} 个实体（{ent_names}{'...' if len(ents) > 6 else ''}）"
-        return res
-
-    elif action == "validate_attributes":
-        from app.api.kg_api import validate_attributes, ValidateAttrsRequest
-        res = validate_attributes(ValidateAttrsRequest(**body))
-        entity_code = (res or {}).get("entity_code", "") or body.get("entity_code", "")
-        attrs = (res or {}).get("attributes", []) if isinstance(res, dict) else []
-        attr_names = "、".join([str(a.get("attribute_name", "") if isinstance(a, dict) else a) for a in attrs[:8]])
-        res["log"] = f"[{_ts}] 校验实体「{entity_code}」属性成功：命中 {len(attrs)} 个属性（{attr_names}{'...' if len(attrs) > 8 else ''}）"
-        return res
-
-    elif action == "fetch_join_expr":
-        from app.services.skill_runnable import _build_fetch_join_expr_fn
-        fn = _build_fetch_join_expr_fn()
-        src = body.get("source_entity", "")
-        tgt = body.get("target_entity", "")
-        if fn:
-            join_on = fn(src, tgt)
-        else:
-            join_on = ""
-        if not join_on:
-            join_on = f"{src}.cust_id = {tgt}.cust_id"
-        return {"join_on": join_on, "source_entity": src, "target_entity": tgt,
-                "log": f"[{_ts}] 查询关联关系：{src} ⋈ {tgt}，JOIN ON {join_on}"}
-
-    elif action == "validate_safe_sql":
-        from app.api.kg_api import validate_safe_sql, ValidateSafeSqlRequest
-        res = validate_safe_sql(ValidateSafeSqlRequest(**body))
-        safe = (res or {}).get("safe", False)
-        sql_preview = (body.get("sql", "") or "")[:60].replace("\n", " ")
-        if safe:
-            res["log"] = f"[{_ts}] SQL安全校验通过：{sql_preview}..."
-        else:
-            reason = (res or {}).get("reason", "") or (res or {}).get("error", "")
-            res["log"] = f"[{_ts}] SQL安全校验未通过：{reason or '未知原因'}"
-        return res
-
-    elif action == "execute_sql":
-        # 硬守卫：若带 entity_code，校验 source_mode 必须为 physical_table；并取 per-entity 数据源
-        entity_code_exec = body.get("entity_code", "")
-        data_source_id = None
-        if entity_code_exec:
-            from app.models.base import Entity
-            from app.core.database import SessionLocal
-            _db_guard = SessionLocal()
-            try:
-                _ent = _db_guard.query(Entity).filter(Entity.entity_code == entity_code_exec).first()
-                if _ent:
-                    if _ent.source_mode and _ent.source_mode != "physical_table":
-                        _hint_tool = "execute_entity_api" if _ent.source_mode == "api_integration" else "execute_doris_sql"
-                        return {"error": f"模式锁：实体 {entity_code_exec} source_mode={_ent.source_mode}，禁止 execute_sql，请用 {_hint_tool}",
-                                "log": f"[{_ts}] 模式守卫拦截：{entity_code_exec} 非 physical_table，不降级不重试"}
-                    data_source_id = str(_ent.data_source_id) if _ent.data_source_id else None
-            finally:
-                _db_guard.close()
-        from app.services.sql_executor import build_execute_query_fn
-        import re as _re_exec
-        exec_fn = build_execute_query_fn(data_source_id=data_source_id)
-        if not exec_fn:
-            return {"error": "执行函数不可用", "log": f"[{_ts}] SQL执行失败：执行函数不可用"}
-        sql_text = body.get("sql", "")
-        if not sql_text or "{{" in sql_text:
-            return {"error": f"SQL 含未解析占位符或为空: {sql_text[:60]}",
-                    "log": f"[{_ts}] SQL执行失败：SQL 含未解析占位符或为空"}
-
-        # 自动修复 "Unknown column" 错误（从 plan_execute 合并而来）
-        # 1. 聚合函数内的坏列：COUNT(bad_col) -> COUNT(*)
-        # 2. SELECT 字段列表中的坏列：移除该字段
-        max_repair = 30
-        current_sql = sql_text
-        repair_count = 0
-        res = None
-        fallback_used = False
-        while True:
-            try:
-                res = exec_fn(current_sql)
-            except Exception as e:
-                err_msg = str(e)
-                m = _re_exec.search(r"Unknown column '([^']+)'", err_msg)
-                if m and repair_count < max_repair:
-                    bad_col = m.group(1)
-                    new_sql = _fix_aggregate_unknown_column(current_sql, bad_col)
-                    if new_sql == current_sql:
-                        new_sql = _remove_column_from_select(current_sql, bad_col)
-                    if new_sql != current_sql:
-                        current_sql = new_sql
-                        repair_count += 1
-                        continue
-                _err = str(e)
-                _hint = ""
-                if "doesn't exist" in _err or "1146" in _err:
-                    import re as _re1146
-                    _tm = _re1146.search(r"Table '[^']*?\.([^']+)'", _err)
-                    _tn = _tm.group(1) if _tm else "该表"
-                    _hint = f" | 提示：表「{_tn}」不存在于数据库，请用 kg_api(action=list_tables, params='{{}}') 查真实表名，或用 search_entities 重新定位"
-                res = {"error": f"SQL执行异常: {e}{_hint}", "log": f"[{_ts}] SQL执行异常：{e}{_hint}"}
-                break
-            if isinstance(res, dict):
-                if res.get("error"):
-                    err_msg = str(res.get("error", ""))
-                    m = _re_exec.search(r"Unknown column '([^']+)'", err_msg)
-                    if m and repair_count < max_repair:
-                        bad_col = m.group(1)
-                        new_sql = _fix_aggregate_unknown_column(current_sql, bad_col)
-                        if new_sql == current_sql:
-                            new_sql = _remove_column_from_select(current_sql, bad_col)
-                        if new_sql != current_sql:
-                            current_sql = new_sql
-                            repair_count += 1
-                            continue
-                    if not fallback_used and repair_count >= max_repair:
-                        fallback_used = True
-                        tbl_m = _re_exec.search(r'FROM\s+(\S+)', current_sql, _re_exec.IGNORECASE)
-                        lim_m = _re_exec.search(r'LIMIT\s+(\d+)', current_sql, _re_exec.IGNORECASE)
-                        if tbl_m:
-                            tbl = tbl_m.group(1).rstrip(';')
-                            lim = lim_m.group(1) if lim_m else "100"
-                            current_sql = f"SELECT * FROM {tbl} LIMIT {lim}"
-                            repair_count += 1
-                            continue
-                    _hint2 = ""
-                    if "doesn't exist" in err_msg or "1146" in err_msg:
-                        import re as _re1146b
-                        _tm2 = _re1146b.search(r"Table '[^']*?\.([^']+)'", err_msg)
-                        _tn2 = _tm2.group(1) if _tm2 else "该表"
-                        _hint2 = f" | 提示：表「{_tn2}」不存在，请用 kg_api(action=list_tables) 查真实表名"
-                    res["error"] = str(res.get("error", err_msg)) + _hint2
-                    res["log"] = f"[{_ts}] SQL执行失败：{err_msg}{_hint2}"
-                else:
-                    row_cnt = res.get("row_count", 0)
-                    cols = res.get("columns", []) or []
-                    repair_note = f"（自动修复 {repair_count} 次后成功）" if repair_count > 0 else ""
-                    res["log"] = f"[{_ts}] SQL执行成功{repair_note}：返回 {row_cnt} 行数据，字段（{', '.join(cols[:6])}{'...' if len(cols) > 6 else ''}）"
-                    res["sql"] = current_sql
-            break
-        return res
-
-    elif action == "search_concepts":
-        # 搜概念定义（explain-concept 技能用）
-        from app.core.database import SessionLocal
-        from sqlalchemy import text
-        keyword = (body.get("keyword") or "").strip()
-        db = SessionLocal()
-        try:
-            if keyword:
-                rows = db.execute(text(
-                    "SELECT id, name, level, description FROM kg_concepts "
-                    "WHERE name LIKE :kw OR description LIKE :kw ORDER BY level, sort_order LIMIT 20"
-                ), {"kw": f"%{keyword}%"}).fetchall()
-            else:
-                rows = db.execute(text(
-                    "SELECT id, name, level, description FROM kg_concepts ORDER BY level, sort_order LIMIT 20"
-                )).fetchall()
-            concepts = [
-                {"id": str(r[0]), "name": r[1] or "", "level": r[2], "description": r[3] or ""}
-                for r in rows
-            ]
-            kw = keyword or "(全部)"
-            return {"concepts": concepts,
-                    "log": f"[{_ts}] 搜概念「{kw}」：命中 {len(concepts)} 条定义"}
-        finally:
-            db.close()
-
-    elif action == "search_entities":
-        # 搜实体/字段（find-entity 技能用）
-        from app.core.database import SessionLocal
-        from sqlalchemy import text
-        import json as _json2
-        keyword = (body.get("keyword") or "").strip()
-        entity_code = (body.get("entity_code") or "").strip()
-        db = SessionLocal()
-        try:
-            if entity_code:
-                # 查指定实体的属性列表（数据字典）
-                row = db.execute(text(
-                    "SELECT entity_code, entity_name, entity_en_name, description, properties_schema "
-                    "FROM kg_entities WHERE entity_code = :code LIMIT 1"
-                ), {"code": entity_code}).fetchone()
-                if not row:
-                    return {"entity_code": entity_code, "attributes": [], "error": "实体不存在"}
-                props = row[4]
-                if isinstance(props, str):
-                    try: props = _json2.loads(props)
-                    except Exception: props = []
-                attrs = []
-                if isinstance(props, list):
-                    for p in props:
-                        if isinstance(p, dict):
-                            attrs.append({
-                                "attribute_code": str(p.get("code") or p.get("attribute_code") or ""),
-                                "attribute_name": str(p.get("name") or p.get("attribute_name") or ""),
-                            })
-                return {"entity_code": row[0], "entity_name": row[1] or "", "entity_en_name": row[2] or "",
-                        "description": row[3] or "", "attributes": attrs,
-                        "log": f"[{_ts}] 查实体「{entity_code}」数据字典：共 {len(attrs)} 个属性（物理表名: {row[2] or '未知'}）"}
-            elif keyword:
-                # 按关键词搜实体名/实体描述/属性名（含物理表名 entity_en_name）
-                rows = db.execute(text(
-                    "SELECT entity_code, entity_name, entity_en_name, description FROM kg_entities "
-                    "WHERE entity_code LIKE :kw OR entity_name LIKE :kw OR description LIKE :kw "
-                    "OR entity_en_name LIKE :kw "
-                    "ORDER BY sort_order LIMIT 20"
-                ), {"kw": f"%{keyword}%"}).fetchall()
-                # 再搜源字段表（kg_source_field_imports）
-                field_rows = db.execute(text(
-                    "SELECT DISTINCT table_en, table_cn, field_en, field_cn "
-                    "FROM kg_source_field_imports "
-                    "WHERE field_cn LIKE :kw OR field_en LIKE :kw OR table_cn LIKE :kw "
-                    "LIMIT 20"
-                ), {"kw": f"%{keyword}%"}).fetchall()
-                return {
-                    "entities": [
-                        {"entity_code": r[0], "entity_name": r[1] or "", "entity_en_name": r[2] or "", "description": r[3] or ""}
-                        for r in rows
-                    ],
-                    "fields": [
-                        {"table_en": r[0], "table_cn": r[1] or "", "field_en": r[2], "field_cn": r[3] or ""}
-                        for r in field_rows
-                    ],
-                    "log": f"[{_ts}] 搜实体/字段「{keyword}」：命中 {len(rows)} 个实体、{len(field_rows)} 个源字段",
-                }
-            else:
-                rows = db.execute(text(
-                    "SELECT entity_code, entity_name, entity_en_name FROM kg_entities ORDER BY sort_order LIMIT 50"
-                )).fetchall()
-                return {"entities": [{"entity_code": r[0], "entity_name": r[1] or "", "entity_en_name": r[2] or ""} for r in rows],
-                        "log": f"[{_ts}] 列出全部实体：共 {len(rows)} 个"}
-        finally:
-            db.close()
-
-    elif action == "get_entity_relations":
-        # 查实体关联关系（explore-graph / multi-hop 技能用，含物理表名）
-        from app.core.database import SessionLocal
-        from sqlalchemy import text
-        entity_code = (body.get("entity_code") or "").strip()
-        db = SessionLocal()
-        try:
-            if entity_code:
-                rows = db.execute(text(
-                    "SELECT e1.entity_code as src, e1.entity_en_name as src_table, "
-                    "e2.entity_code as tgt, e2.entity_en_name as tgt_table, "
-                    "r.relation_name, r.join_expr, r.source_field_name, r.target_field_name, "
-                    "r.cardinality, r.direction "
-                    "FROM kg_entity_relations r "
-                    "JOIN kg_entities e1 ON r.source_entity_id = e1.id "
-                    "JOIN kg_entities e2 ON r.target_entity_id = e2.id "
-                    "WHERE e1.entity_code = :code OR e2.entity_code = :code"
-                ), {"code": entity_code}).fetchall()
-            else:
-                rows = db.execute(text(
-                    "SELECT e1.entity_code as src, e1.entity_en_name as src_table, "
-                    "e2.entity_code as tgt, e2.entity_en_name as tgt_table, "
-                    "r.relation_name, r.join_expr, r.source_field_name, r.target_field_name, "
-                    "r.cardinality, r.direction "
-                    "FROM kg_entity_relations r "
-                    "JOIN kg_entities e1 ON r.source_entity_id = e1.id "
-                    "JOIN kg_entities e2 ON r.target_entity_id = e2.id "
-                    "LIMIT 50"
-                )).fetchall()
-            relations = [
-                {"source": r[0], "source_table": r[1] or "", "target": r[2], "target_table": r[3] or "",
-                 "relation_name": r[4] or "", "join_expr": r[5] or "", "source_field": r[6] or "",
-                 "target_field": r[7] or "", "cardinality": r[8] or "", "direction": r[9] or ""}
-                for r in rows
-            ]
-            ent_label = entity_code or "(全部)"
-            return {"relations": relations,
-                    "log": f"[{_ts}] 查实体关联「{ent_label}」：共 {len(relations)} 条关系"}
-        finally:
-            db.close()
-
-    elif action == "list_tables":
-        # 列出知识图谱实体对应的物理表名（entity_en_name），过滤掉非业务表
-        from app.core.database import SessionLocal
-        from sqlalchemy import text
-        keyword = (body.get("keyword") or "").strip()
-        db = SessionLocal()
-        try:
-            # 只返回 kg_entities 中定义的 entity_en_name（物理表名），避免 LLM 用错表
-            if keyword:
-                rows = db.execute(text(
-                    "SELECT DISTINCT entity_en_name, entity_name, entity_code FROM kg_entities "
-                    "WHERE entity_en_name IS NOT NULL AND entity_en_name != '' "
-                    "AND (entity_en_name LIKE :kw OR entity_name LIKE :kw OR entity_code LIKE :kw) "
-                    "ORDER BY entity_en_name LIMIT 50"
-                ), {"kw": f"%{keyword}%"}).fetchall()
-            else:
-                rows = db.execute(text(
-                    "SELECT DISTINCT entity_en_name, entity_name, entity_code FROM kg_entities "
-                    "WHERE entity_en_name IS NOT NULL AND entity_en_name != '' "
-                    "ORDER BY entity_en_name LIMIT 100"
-                )).fetchall()
-            tables = [{"table_name": r[0], "entity_name": r[1] or "", "entity_code": r[2] or ""} for r in rows]
-            kw_label = f"含「{keyword}」" if keyword else "(全部)"
-            return {"tables": tables, "count": len(tables),
-                    "log": f"[{_ts}] 列出知识图谱物理表{kw_label}：共 {len(tables)} 张表"}
-        finally:
-            db.close()
-
-    elif action == "get_entity_source_mode":
-        # NL2API 路由：查询实体的数据源模式（sql_integration/api_integration/physical_table）
-        from app.api.kg_api import get_entity_source_mode
-        entity_code = body.get("entity_code", "")
-        res = get_entity_source_mode(entity_code)
-        source_mode = res.get("source_mode", "physical_table")
-        res["log"] = f"[{_ts}] 实体「{entity_code}」数据源模式={source_mode}"
-        return res
-
-    elif action == "execute_api_sql":
-        # 多源API联邦SQL：DuckDB 执行，WHERE/JOIN 自动下推到 API 参数
-        from app.services.duckdb_engine import execute_sql as _exec_api_sql, load_endpoints_from_db
-        from app.core.database import SessionLocal
-        sql_text = body.get("sql", "").strip()
-        if not sql_text:
-            return {"error": "缺少 sql 参数", "log": f"[{_ts}] API联邦查询失败：缺少sql"}
-        db = SessionLocal()
-        try:
-            endpoints = load_endpoints_from_db(db)
-            if not endpoints:
-                return {"error": "尚未配置任何API端点", "log": f"[{_ts}] API联邦查询失败：无端点"}
-            result = _exec_api_sql(sql_text, endpoints)
-            pushed = result.get("pushed_down", {})
-            result["log"] = f"[{_ts}] API联邦SQL执行成功：返回 {result.get('row_count', 0)} 行，下推表 {list(pushed.keys())}"
-            return result
-        except Exception as e:
-            return {"error": f"API联邦查询异常: {e}", "log": f"[{_ts}] API联邦查询异常：{e}"}
-        finally:
-            db.close()
-
-    elif action == "execute_entity_api":
-        # 对象API执行：取EntityApiMapping，build_sql_with_filters拼接+下推，duckdb_engine执行
-        from app.models.base import Entity, EntityApiMapping
-        from app.services.duckdb_engine import execute_sql as _exec_api_sql, load_endpoints_from_db, build_sql_with_filters
-        from app.core.database import SessionLocal
-        entity_code = body.get("entity_code", "")
-        filters = body.get("filters", {}) or {}
-        if not entity_code:
-            return {"error": "缺少 entity_code", "log": f"[{_ts}] 对象API执行失败：缺少entity_code"}
-        db = SessionLocal()
-        try:
-            ent = db.query(Entity).filter(Entity.entity_code == entity_code).first()
-            if not ent:
-                return {"error": f"对象不存在: {entity_code}", "log": f"[{_ts}] 对象不存在：{entity_code}"}
-            # 硬守卫：source_mode 必须为 api_integration
-            if ent.source_mode and ent.source_mode != "api_integration":
-                _hint_tool = "execute_sql" if ent.source_mode == "physical_table" else "execute_doris_sql"
-                return {"error": f"模式锁：实体 {entity_code} source_mode={ent.source_mode}，禁止 execute_entity_api，请用 {_hint_tool}",
-                        "log": f"[{_ts}] 模式守卫拦截：{entity_code} 非 api_integration，不降级不重试"}
-            m = db.query(EntityApiMapping).filter(EntityApiMapping.entity_id == ent.id).first()
-            if not m:
-                return {"error": f"对象未配置API映射: {entity_code}", "log": f"[{_ts}] 对象未配置API映射：{entity_code}"}
-            sql = build_sql_with_filters(m.pseudo_sql, filters)
-            endpoints = load_endpoints_from_db(db)
-            if not endpoints:
-                return {"error": "尚未配置任何API端点", "log": f"[{_ts}] 无API端点"}
-            result = _exec_api_sql(sql, endpoints)
-            pushed = result.get("pushed_down", {})
-            result["log"] = f"[{_ts}] 对象「{entity_code}」API执行成功：返回 {result.get('row_count', 0)} 行，下推 {list(pushed.keys())}"
-            return result
-        except Exception as e:
-            return {"error": f"对象API执行异常: {e}", "log": f"[{_ts}] 对象API执行异常：{e}"}
-        finally:
-            db.close()
-
-    elif action == "execute_doris_sql":
-        # Doris 整合执行：sql_integration 场景。entity_code 优先（自动加载 integration_sql + filters 下推），
-        # 仅当未给 entity_code 时才用调用方自建 sql（agent 可能猜错 catalog/表路径）
-        from app.services.doris_engine import execute_sql as _doris_exec, build_sql_with_filters
-        entity_code = body.get("entity_code", "")
-        filters = body.get("filters", {}) or {}
-        sql_text = ""
-        doris_catalog = None  # entity_code 模式下取实体配置的 catalog，执行前 SWITCH（对齐 REST 路径）
-        if entity_code:
-            from app.models.base import Entity
-            from app.core.database import SessionLocal
-            db = SessionLocal()
-            try:
-                ent = db.query(Entity).filter(Entity.entity_code == entity_code).first()
-                if not ent:
-                    return {"error": f"对象不存在: {entity_code}", "log": f"[{_ts}] Doris执行失败：对象不存在 {entity_code}"}
-                # 硬守卫：entity_code 模式时 source_mode 必须为 sql_integration
-                if ent.source_mode and ent.source_mode != "sql_integration":
-                    _hint_tool = "execute_sql" if ent.source_mode == "physical_table" else "execute_entity_api"
-                    return {"error": f"模式锁：实体 {entity_code} source_mode={ent.source_mode}，禁止 execute_doris_sql，请用 {_hint_tool}",
-                            "log": f"[{_ts}] 模式守卫拦截：{entity_code} 非 sql_integration，不降级不重试"}
-                sql_text = (ent.integration_sql or "").strip()
-                if not sql_text:
-                    return {"error": f"对象未配置 integration_sql: {entity_code}", "log": f"[{_ts}] Doris执行失败：{entity_code} 无 integration_sql"}
-                doris_catalog = ent.doris_catalog or None
-            finally:
-                db.close()
-            sql_text = build_sql_with_filters(sql_text, filters)
-        else:
-            sql_text = body.get("sql", "").strip()
-        if not sql_text:
-            return {"error": "缺少 sql 或 entity_code 参数", "log": f"[{_ts}] Doris查询失败：缺少sql/entity_code"}
-        try:
-            result = _doris_exec(sql_text, catalog=doris_catalog)
-            _rc = result.get("row_count", 0)
-            if _rc == 0:
-                result["hint"] = "未查到相关数据"
-                result["log"] = f"[{_ts}] Doris「{entity_code or 'inline'}」SQL执行成功：返回 0 行，已停止，不降级不重试"
-            else:
-                result["log"] = f"[{_ts}] Doris「{entity_code or 'inline'}」SQL执行成功：返回 {_rc} 行，filters={list(filters.keys())}"
-            return result
-        except Exception as e:
-            return {"error": f"Doris查询异常: {e}", "log": f"[{_ts}] Doris查询异常：{e}"}
-
-    return {"error": f"未知 action: {action}"}
-
-
-@tool
-def kg_api(action: str, params: str) -> dict:
-    """调用知识图谱 API 查询数据。查 L1-L2 树/子图/JOIN/校验/执行 SQL/搜概念/搜实体/查关系 都用此工具。
-
-    Args:
-        action: API 动作（15个）：fetch_l1_l2_tree/validate_l2/fetch_subgraph/validate_attributes/fetch_join_expr/validate_safe_sql/execute_sql/search_concepts/search_entities/get_entity_relations/list_tables/get_entity_source_mode/execute_api_sql/execute_entity_api/execute_doris_sql
-        params: JSON 格式参数字符串，如 '{"l2_id":"xxx"}'，无参数传 '{}'
-
-    Returns:
-        dict: 查询结果 JSON
-    """
-    import json as _json
-    try:
-        body = _json.loads(params) if params and params.strip() else {}
-    except Exception:
-        body = {}
-    return dispatch_kg_action(action, body)
-
+# 业务逻辑单一源（MCP server 的 16 个工具与内部调度共用；deepagent 不再用进程内 @tool）
+# P0 整改：统一 kg_api 已拆为 16 个单一职责 MCP 工具（app/mcp_server.py），此处不再保留 kg_api 死代码。
+from .kg_action_handlers import dispatch_kg_action
 
 
 # ---------------------------------------------------------------------------
@@ -810,7 +635,7 @@ def kg_api(action: str, params: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def create_tupu_agent(checkpointer=None):
+async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     """创建 tupu DeepAgent（业务工具走 MCP，与 deepagent 解耦）
 
     业务工具（fetch_l1_l2_tree 等 16 个）通过 MCP client 从 MCP server 加载，
@@ -818,6 +643,7 @@ async def create_tupu_agent(checkpointer=None):
 
     Args:
         checkpointer: LangGraph checkpointer（AsyncSqliteSaver/PostgresSaver/MemorySaver）
+        connection_id: LLM 连接 ID（v3.6：让前端选模型真正生效）；空串用默认连接
 
     Returns:
         CompiledStateGraph (DeepAgent)
@@ -827,37 +653,129 @@ async def create_tupu_agent(checkpointer=None):
 
     from app.services.llm_client import get_chat_model
     # streaming=True 让 on_chat_model_stream 产出 token 事件，避免长时间无反馈（对齐数据问答修复）
-    model = get_chat_model(temperature=0.0, streaming=True)
+    # v3.6: 按 connection_id 选模型（让前端选模型真正生效）
+    model = get_chat_model(temperature=0.0, streaming=True, connection_id=connection_id)
 
     # MCP client 加载业务工具（16 个 tool，走 SSE，与 deepagent 解耦）
+    # P3-a: 加内部服务身份 header（ENABLE_AUTH=1 时 MCP server 端校验，防外部直连）
+    import os as _os
+    _internal_token = _os.getenv("TUPU_INTERNAL_TOKEN", "")
+    _mcp_headers = {"X-Internal-Service": "tupu-agent"}
+    if _internal_token:
+        _mcp_headers["Authorization"] = f"Bearer {_internal_token}"
     mcp_client = MultiServerMCPClient({
-        "tupu-kg": {"url": "http://127.0.0.1:28000/mcp/sse", "transport": "sse"}
+        "tupu-kg": {"url": "http://127.0.0.1:28000/mcp/sse", "transport": "sse", "headers": _mcp_headers}
     })
     mcp_tools = await mcp_client.get_tools()
 
-    from deepagents.backends import StateBackend
-    from deepagents.middleware._tool_exclusion import _ToolExclusionMiddleware
-    backend = StateBackend()
-    # 排除框架自动注入的文件系统/shell 工具，避免 LLM 绕业务链路瞎翻文件致死循环
-    # 保留 read_file（读 /skills/SKILL.md 剧本必需）、write_todos（任务规划）、ls（看剧本目录）
-    excluded_mw = _ToolExclusionMiddleware(excluded=frozenset({
+    from deepagents.backends import StateBackend, FilesystemBackend, CompositeBackend
+    from deepagents.middleware.filesystem import FilesystemPermission
+    from pathlib import Path as _Path
+
+    # CompositeBackend: /skills/ 路由到只读 FilesystemBackend（virtual_mode 防目录穿越），其他走 StateBackend
+    # 安全原则（P0 修复）：原生 SkillsMiddleware 自动发现 SKILL.md frontmatter，Agent 按需 read_file 子文件，
+    # 不再需要 data_intelligence.py 手工枚举 + 注入；FilesystemBackend 限制只能读技能目录。
+    _skills_root = _Path(__file__).resolve().parent.parent.parent / "data" / "skills"
+    _skills_backend = FilesystemBackend(root_dir=str(_skills_root), virtual_mode=True)
+    backend = CompositeBackend(
+        default=StateBackend(),
+        routes={"/skills/": _skills_backend},
+    )
+    # 权限规则（按序匹配，首条命中生效，无命中默认允许）：
+    #   1. 允许读 /skills/**（技能文件）
+    #   2. 拒绝读 /**（兜底封堵：/skills/../../、/etc/passwd、.env 等全部 deny）
+    #   3. 拒绝写 /**（业务问答不写文件）
+    permissions = [
+        FilesystemPermission(operations=["read"], paths=["/skills/**"], mode="allow"),
+        FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
+        FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
+    ]
+    # v3.6: 用公开 HarnessProfile 替换私有 _ToolExclusionMiddleware（评审点5：消除下划线私有依赖）
+    # P1-2: 从 model 对象提取真实 identifier 注册，不硬编码模型名（防大小写/变体不匹配）
+    # register 是增量合并，幂等安全；create_deep_agent 内部按 model 自动匹配此 profile。
+    from deepagents import HarnessProfile, register_harness_profile
+    from deepagents._models import get_model_identifier, get_model_provider
+    _model_id = get_model_identifier(model)
+    _model_provider = get_model_provider(model)
+    _excluded = frozenset({
         "grep",          # 搜文件内容，业务问答无用，曾导致 LLM 翻配置找库名绕死循环
         "glob",          # 列文件，同上
         "write_file",    # 写文件，业务问答无用
         "edit_file",     # 改文件，业务问答无用
         "execute",       # 执行 shell 命令，危险且无用
-    }))
+    })
+    _registered_keys = []
+    if _model_provider and _model_id and ":" not in _model_id:
+        _key = f"{_model_provider}:{_model_id}"
+        register_harness_profile(_key, HarnessProfile(excluded_tools=_excluded))
+        _registered_keys.append(_key)
+        # 同时注册大小写变体（防 DB 存 DeepSeek-V4-Flash 但模型返回 deepseek-v4-flash）
+        _key_lower = f"{_model_provider}:{_model_id.lower()}"
+        if _key_lower != _key:
+            register_harness_profile(_key_lower, HarnessProfile(excluded_tools=_excluded))
+            _registered_keys.append(_key_lower)
+    elif _model_id:
+        # fallback: 只有 identifier（含冒号或无 provider）
+        register_harness_profile(_model_id, HarnessProfile(excluded_tools=_excluded))
+        _registered_keys.append(_model_id)
+    logger.info(f"[HarnessProfile] 已注册 {len(_registered_keys)} 个 key: {_registered_keys}：排除 grep/glob/write_file/edit_file/execute")
 
-    agent = create_deep_agent(
-        model=model,
-        tools=mcp_tools,
-        system_prompt=_build_dynamic_system_prompt(),
-        state_schema=TupuAgentState,
-        checkpointer=checkpointer,
-        backend=backend,
-        skills=["/skills/"],
-        middleware=[excluded_mw],
-    )
+    # v3.2 下一步判断闸门（feature flag）：TUPU_DECISION_GATE=1 时装配，
+    # 工具调用前强校验同轮"下一步判断"(已知/判断/因此)+真实工具名+一轮单工具；
+    # execute_sql 额外校验客户名范围。默认关(.env 已设 1，验收默认启用)。
+    middleware_list = []  # v3.6: excluded_mw 已由 HarnessProfile(excluded_tools=...) 替代
+    # 受控执行契约硬校验（设计 §6）：最外层闸门——先于 DecisionGate 拦截越权/禁用工
+    # 具/模板外 SQL/引擎切换/结果后再查；契约由 data_intelligence 路由后经 context 注入。
+    # P0-1 fail-closed：装配失败必须阻止 Agent 创建（不允许降级成只有 DecisionGate 的自由 Agent）。
+    from app.services.skill_policy import SkillPolicyMiddleware
+    middleware_list.insert(0, SkillPolicyMiddleware())
+    logger.info("[SkillPolicy] 受控执行契约中间件已装配（最外层闸门，技能/步骤/模板/引擎/终止硬校验）")
+    # read_file 结果 ⟦中文名⟧ -> 物理表名 解析（技能子文件 reference/*.md templates/*.sql 受益）
+    middleware_list.append(SkillEntityResolverMiddleware())
+    # 数据查询结果摘要：明细不传 LLM 全量，推完整数据给前端 + ToolMessage 截断为前10行摘要
+    middleware_list.append(DataSummaryMiddleware())
+    if _DECISION_GATE_ENABLED:
+        from app.services.decision_gate import SCOPE_GATED_TOOLS, DecisionGateMiddleware
+        middleware_list.append(DecisionGateMiddleware(scope_gated=SCOPE_GATED_TOOLS))
+        logger.info("[DecisionGate] 下一步判断闸门已启用 (TUPU_DECISION_GATE=1)：全工具理由校验 + execute_sql 范围强校验")
+    else:
+        logger.warning("[DecisionGate] 下一步判断闸门未启用 (TUPU_DECISION_GATE 未设为 1)：工具调用前不强制「已知/判断/因此」")
+
+    # v3.5: 保守摘要阈值 -- 模型无 profile 时 compute_summarization_defaults 返回 17 万 token trigger，过晚
+    # 临时替换为 3 万 token trigger / 保留 10 条消息，让 create_deep_agent 内部的默认 SummarizationMiddleware 用我们的阈值
+    # v3.6: 包 try/finally（评审点6过渡方案B：消除异常后全局函数不恢复风险；后续单独验证公开 SummarizationMiddleware 替换）
+    import deepagents.middleware.summarization as _summ_mod
+    _orig_compute_defaults = _summ_mod.compute_summarization_defaults
+    def _conservative_defaults(_model):
+        return {
+            "trigger": ("tokens", 30000),
+            "keep": ("messages", 10),
+            "truncate_args_settings": {"trigger": ("messages", 15), "keep": ("messages", 15)},
+        }
+    _summ_mod.compute_summarization_defaults = _conservative_defaults
+
+    # F5: response_format（统一最终交付协议）。当前模型(GLM/DeepSeek)与嵌套结构化 schema
+    # 不兼容：接入后会破坏 Agent 的最终文本生成（SQL 执行后不再产出结论），故不启用。
+    # 统一最终交付由 data_intelligence 的 A-E 确定性降级策略构造（response_format_degraded=true）。
+    _response_format = None
+
+    try:
+        agent = create_deep_agent(
+            model=model,
+            tools=mcp_tools,
+            system_prompt=_build_dynamic_system_prompt(),
+            state_schema=TupuAgentState,
+            context_schema=TupuAgentContext,  # F4: 原生运行时上下文（不进 checkpoint）
+            response_format=_response_format,  # F5: 结构化最终答案（GLM 不兼容时为 None，降级手动）
+            checkpointer=checkpointer,
+            backend=backend,
+            permissions=permissions,
+            skills=["/skills/"],
+            middleware=middleware_list,
+        )
+    finally:
+        # 无论 create_deep_agent 是否抛异常，都恢复原始函数（不影响其他模块）
+        _summ_mod.compute_summarization_defaults = _orig_compute_defaults
 
     return agent
 
@@ -875,8 +793,9 @@ def build_skill_system_message(skill_name: str = "") -> str:
 # 5. 全局 Agent 实例（单例，带 checkpointer）
 # ---------------------------------------------------------------------------
 
-_GLOBAL_AGENT = None
+_GLOBAL_AGENTS: dict[str, Any] = {}  # v3.6: 按 connection_id 缓存 Agent（让前端选模型生效）
 _GLOBAL_CHECKPOINTER = None
+_AGENT_INIT_LOCK = asyncio.Lock()  # 防止多个请求并发首次初始化 Agent
 
 _CHECKPOINT_DB = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -884,14 +803,66 @@ _CHECKPOINT_DB = os.path.join(
 )
 
 
-async def get_tupu_agent():
-    """获取 tupu DeepAgent 单例（自由规划问答用，ReAct 模式）"""
-    global _GLOBAL_AGENT, _GLOBAL_CHECKPOINTER
-    if _GLOBAL_AGENT is None:
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-        import aiosqlite
-        os.makedirs(os.path.dirname(_CHECKPOINT_DB), exist_ok=True)
-        _GLOBAL_CHECKPOINTER = AsyncSqliteSaver(aiosqlite.connect(_CHECKPOINT_DB))
-        _GLOBAL_AGENT = await create_tupu_agent(checkpointer=_GLOBAL_CHECKPOINTER)
-        logger.info(f"[DeepAgent] tupu ReAct agent 已创建, checkpoint={_CHECKPOINT_DB}")
-    return _GLOBAL_AGENT
+async def get_tupu_agent(connection_id: str = ""):
+    """获取 tupu DeepAgent（按 connection_id 缓存，让前端选模型真正生效）。
+
+    v3.6: 不再用全局单例。按 connection_id 缓存不同模型的 Agent 实例。
+    空串 connection_id 用默认模型（兼容旧调用）。
+    懒加载 + 初始化锁：首次真实请求时才创建。
+    """
+    global _GLOBAL_CHECKPOINTER
+    _cache_key = connection_id or "__default__"
+    if _cache_key not in _GLOBAL_AGENTS:
+        async with _AGENT_INIT_LOCK:
+            if _cache_key not in _GLOBAL_AGENTS:
+                if _GLOBAL_CHECKPOINTER is None:
+                    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+                    import aiosqlite
+                    os.makedirs(os.path.dirname(_CHECKPOINT_DB), exist_ok=True)
+                    _GLOBAL_CHECKPOINTER = AsyncSqliteSaver(aiosqlite.connect(_CHECKPOINT_DB))
+                agent = await create_tupu_agent(
+                    checkpointer=_GLOBAL_CHECKPOINTER,
+                    connection_id=connection_id or None,
+                )
+                _GLOBAL_AGENTS[_cache_key] = agent
+                logger.info(f"[DeepAgent] tupu ReAct agent 已创建 (key={_cache_key}), checkpoint={_CHECKPOINT_DB}")
+    return _GLOBAL_AGENTS[_cache_key]
+
+
+async def close_tupu_agent():
+    """关闭全局 Agent 的 checkpointer 连接（FastAPI shutdown 阶段调用）。
+    MCP 连接无需手动关闭（langchain-mcp-adapters 每次工具调用新建 session）。
+    """
+    global _GLOBAL_CHECKPOINTER
+    if _GLOBAL_CHECKPOINTER is not None:
+        try:
+            # AsyncSqliteSaver 底层是 aiosqlite.Connection，支持 close
+            _conn = getattr(_GLOBAL_CHECKPOINTER, "conn", None)
+            if _conn is not None:
+                await _conn.close()
+            logger.info("[DeepAgent] checkpointer SQLite 连接已关闭")
+        except Exception as e:
+            logger.warning(f"[DeepAgent] 关闭 checkpointer 失败: {e}")
+        finally:
+            _GLOBAL_CHECKPOINTER = None
+
+
+async def reset_tupu_agent():
+    """重置全部缓存 Agent（aiosqlite 连接断开后重建用）。
+
+    aiosqlite 的 Connection 内部线程关闭后不能重启（RuntimeError: threads can
+    only be started once）。一旦 checkpointer 连接断开，所有后续请求都会失败。
+    调用此函数清空所有 connection_id 缓存的 Agent，下次请求时自动用新连接重建。
+    """
+    global _GLOBAL_CHECKPOINTER
+    async with _AGENT_INIT_LOCK:
+        if _GLOBAL_CHECKPOINTER is not None:
+            try:
+                _conn = getattr(_GLOBAL_CHECKPOINTER, "conn", None)
+                if _conn is not None:
+                    await _conn.close()
+            except Exception:
+                pass
+        _GLOBAL_AGENTS.clear()
+        _GLOBAL_CHECKPOINTER = None
+        logger.info("[DeepAgent] 全部缓存 agent 已重置（将在下次请求时用新连接重建）")
