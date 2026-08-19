@@ -1,0 +1,525 @@
+"""skill_policy.py - 受控执行契约硬校验中间件（受控 Skill 问答平台 v2，设计 §6）
+
+SkillPolicyMiddleware 是"牢笼"：模型只能在契约允许的边界内做判断。
+在每次工具调用前/后硬校验（设计 §6.1 的 10 项）：
+  1. 工具是否在 QueryContract.allowed_tools；
+  2. 是否调用了禁用工具（task/write_file/edit_file/execute/grep/glob）；
+  3. 是否与已确定的唯一数据引擎一致（引擎锁定后其他查询工具立即失效）；
+  4. SQL 是否来自已批准模板（template_guard，SELECT-only/表集合⊆模板/无UNION）；
+  5. 是否已命中 stop_when 却继续检索（拿到结果后的终端步骤禁止再查）；
+  6. 数据工具是否未经 batch_entity_source_mode 确认引擎（引擎优先）。
+
+违反策略：第一次拒绝该调用并返回"允许的下一步"；第二次终止本轮（不再放行）。
+永远不回退到不受控自由问答。
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any, Awaitable, Callable, Optional
+
+from langchain.agents.middleware.types import AgentMiddleware
+from langchain_core.messages import ToolMessage
+
+from app.services.query_contract import DATA_TOOLS, ENGINE_TO_TOOLS, QueryContract
+from app.services.skill_catalog import get_catalog
+from app.services.template_guard import validate_against_template, load_template, template_id_components
+
+logger = logging.getLogger(__name__)
+
+# 事件名（SSE 消费层据此推送前端"系统阻止了不合规操作"）
+EVENT_POLICY_REJECTED = "policy.rejected"
+EVENT_ENGINE_SELECTED = "engine.selected"
+EVENT_STOP_REACHED = "stop.reached"
+EVENT_TEMPLATE_BOUND = "template.bound"
+EVENT_POLICY_DEGRADED = "policy.degraded"   # 批1：error_class 触发的受控降级
+
+REJECT_MARKER = "SkillPolicy·拒绝"
+BLOCK_MARKER = "SkillPolicy·已阻断"
+MAX_VIOLATIONS = 2
+
+# 带自由 sql 参数的执行工具（需模板校验）
+_SQL_TOOLS = frozenset({"execute_sql", "execute_doris_sql", "execute_api_sql"})
+
+# 批1：受控降级只放行这两个只读定位工具（重定位真实表名）
+_DEGRADATION_TOOLS = frozenset({"search_entities", "list_tables"})
+# 触发降级的 error_class（表/catalog 不存在/语法类 -> 允许一次重定位）
+_DEGRADATION_TRIGGERS = frozenset({"TABLE_MISSING", "SYNTAX"})
+
+
+class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
+    """受控执行契约硬校验中间件。
+
+    Args:
+        catalog: SkillCatalog（可注入，默认单例）。
+        dispatcher: 事件派发函数；默认 adispatch_custom_event。
+        max_violations: 单轮最大违规次数，超过后阻断本轮。
+    """
+
+    def __init__(self, catalog=None, dispatcher: Optional[Callable[..., Awaitable[None]]] = None,
+                 max_violations: int = MAX_VIOLATIONS,
+                 allow_missing_contract: bool = False) -> None:
+        self._catalog = catalog or get_catalog()
+        self._max_violations = max_violations
+        self._dispatcher = dispatcher
+        # P0-1 fail-closed：默认契约缺失即拒绝全部工具；仅显式标识的兼容/测试模式放行
+        self._allow_missing_contract = allow_missing_contract
+
+    # ------------------------------------------------------------------
+    # 工具调用包装
+    # ------------------------------------------------------------------
+    async def awrap_tool_call(self, request, handler):
+        contract = self._get_contract(request)
+        tool_name = request.tool_call.get("name", "")
+        tc_id = request.tool_call.get("id")
+        # P0-1 fail-closed：受控路径契约缺失 -> 拒绝全部工具（只有显式兼容/测试模式放行）
+        if contract is None:
+            if self._allow_missing_contract:
+                return await handler(request)
+            return await self._reject_no_contract(request, tool_name, tc_id)
+
+        # ---- 前置校验（不调 handler 即拒绝）----
+        # P2（三轮评审）：_precheck 现为 async —— SQL 模板命中时在 handler 前 await 派发
+        # template.bound/drift，保证确定性顺序 template.bound → tool.started → tool.completed，
+        # 且不依赖后台任务（取消/竞态不丢事件）。
+        violation = await self._precheck(contract, tool_name, request)
+        if violation is not None:
+            return await self._do_reject(request, contract, tool_name, tc_id, violation)
+
+        # ---- 通过：调 handler，再后置处理结果 ----
+        result = await handler(request)
+        try:
+            self._postcheck(contract, tool_name, result, request)
+        except Exception as e:
+            logger.warning(f"[SkillPolicy] postcheck 异常: {e}")
+        return result
+    async def _reject_no_contract(self, request, tool_name: str, tc_id) -> ToolMessage:
+        """P0-1：受控契约缺失时拒绝调用（fail-closed），不执行任何工具。"""
+        msg = (f"SkillPolicy·已阻断[受控契约缺失] 工具 {tool_name} 因无受控契约被拒绝（fail-closed）。"
+               f"当前请求未建立路由契约，禁止执行任何业务工具。")
+        try:
+            await self._emit(request, EVENT_POLICY_REJECTED, {
+                "tool_call_id": tc_id, "tool_name": tool_name,
+                "attempt": 0, "reason": "受控契约缺失（fail-closed）", "blocked": True,
+            })
+        except Exception as e:
+            logger.error(f"[SkillPolicy] dispatch no-contract rejected failed: {e}")
+        try:
+            from app.services import skill_governance as _gov
+            _gov.get_governance().record_policy(
+                _gov.EVENT_POLICY_BLOCKED, "__no_contract__", "__none__",
+                f"tool={tool_name}: 受控契约缺失（fail-closed）")
+        except Exception:
+            pass
+        return ToolMessage(content=msg, tool_call_id=tc_id)
+
+    # ------------------------------------------------------------------
+    # 前置校验
+    # ------------------------------------------------------------------
+    async def _precheck(self, contract: QueryContract, tool_name: str, request) -> Optional[str]:
+        # 2) 禁用工具（绝对禁止 + 契约禁止）
+        if tool_name in contract.forbidden_tools:
+            return f"调用禁用工具 {tool_name}（契约禁止: {sorted(contract.forbidden_tools)}）"
+        # 2a) P1-2 多引擎复合终止：两源取齐后禁止继续检索任何数据工具（先于 allowed 检查，
+        #     因为 set_stop_reached 已把全部 DATA_TOOLS 移出 allowed_tools）
+        if contract.is_data_tool(tool_name) and contract.multi_engine and contract.stop_reached:
+            return "已命中多引擎复合终止条件（预算、成本两源均取到结果），禁止重复/继续检索"
+        # 批1：受控降级——数据工具返回 TABLE_MISSING/SYNTAX 后，允许一次只读定位工具
+        # （search_entities/list_tables）重定位真实表名（结构化 error_class 判据，替代字符串匹配）。
+        if (tool_name in _DEGRADATION_TOOLS
+                and contract._runtime.get("degradation_used")
+                and not contract._runtime.get("degradation_consumed")):
+            contract._runtime["degradation_consumed"] = True
+            return None
+        # 1) 不在允许集
+        if not contract.allows(tool_name):
+            allowed = sorted(set(contract.allowed_tools) - set(contract.forbidden_tools))
+            return f"工具 {tool_name} 不在本步骤允许范围（允许: {allowed}）"
+        # 3) 引擎一致性：数据工具必须匹配已确认引擎（单引擎锁定 / 多引擎逐源确认）
+        if contract.is_data_tool(tool_name):
+            if contract.multi_engine:
+                confirmed = contract.confirmed_engines()
+                # P1-2 复合终止：多引擎取齐后禁止继续检索任何源
+                if contract.stop_reached:
+                    return "已命中多引擎复合终止条件（预算、成本两源均取到结果），禁止重复/继续检索"
+                if confirmed:
+                    allowed = set()
+                    for e in confirmed:
+                        allowed |= set(ENGINE_TO_TOOLS.get(e, []))
+                    if tool_name not in allowed:
+                        return (f"数据源模式已确认（{sorted(confirmed)}），只允许 {sorted(allowed)}，"
+                                f"禁止用 {tool_name} 切换/混用引擎")
+                else:
+                    return "请先调用 batch_entity_source_mode 确认预算/成本的数据源模式，再执行数据查询"
+            else:
+                # 6) 引擎优先：终端步骤内，数据工具前必须先经源模式工具确认引擎
+                if contract.engine_locked and contract.selected_engine:
+                    engine_tools = set(ENGINE_TO_TOOLS.get(contract.selected_engine, []))
+                    if tool_name not in engine_tools:
+                        return (f"数据引擎已锁定为 {contract.selected_engine}（{contract.engine_reason}），"
+                                f"只能使用 {sorted(engine_tools)}，禁止用 {tool_name} 切换引擎重查")
+                if not contract.engine_locked and not contract.engine_reason and contract.route_type == "scenario":
+                    return "请先调用 batch_entity_source_mode 确认 SQL 涉及表的数据源模式，再执行数据查询"
+        # 5) stop_when：终端步骤已拿到结果 -> 禁止继续检索
+        if contract.is_data_tool(tool_name) and contract.result_obtained and contract._runtime.get("terminal"):
+            return "已命中终止条件（已获得查询结果），禁止重复/继续检索"
+        # 4) SQL 模板校验
+        if tool_name in _SQL_TOOLS:
+            sql = (request.tool_call.get("args") or {}).get("sql") or ""
+            if sql:
+                chk = await self._check_sql_against_templates(contract, sql, request=request)
+                if not chk.ok:
+                    return f"SQL 未通过模板校验: {chk.reason}"
+        return None
+
+    async def _check_sql_against_templates(self, contract: QueryContract, sql: str, request=None):
+        """候选 SQL 必须来自本步骤任一已批准模板（表集合 ⊆ 模板，SELECT-only，无 UNION）。
+
+        P0-2：按技能声明的 template_mode 分级 —— scenario_strict 结构指纹不一致即拒绝；
+        extensible/generic 允许同表结构变化但记漂移审计；未渲染参数任何模式都拒绝。
+        request：评审 P1-2（二轮/三轮）传入，await 派发 template.bound / template.drift 到 SSE。
+        """
+        errors = []
+        templates = self._resolve_step_templates(contract)
+        if not templates:
+            # 契约未声明模板 -> 不阻断（generic 模式），但记录
+            from app.services.template_guard import TemplateCheck
+            return TemplateCheck(ok=True, reason="契约未声明 SQL 模板，跳过模板校验（generic 模式）")
+        # 技能级模板校验模式（SKILL.md x_tupu.template_mode；缺省 extensible）
+        mode = "scenario_extensible"
+        try:
+            skill = self._catalog.load_skill(contract.skill_id)
+            if skill is not None and getattr(skill, "template_mode", ""):
+                mode = skill.template_mode
+        except Exception:
+            pass
+        for tpl_id, tpl_sql in templates:
+            chk = validate_against_template(sql, tpl_sql, tpl_id, mode=mode)
+            if chk.ok:
+                await self._record_template_bind(contract, tpl_id, chk, request=request)
+                return chk
+            errors.append(f"{tpl_id}: {chk.reason}")
+        from app.services.template_guard import TemplateCheck
+        return TemplateCheck(ok=False, reason="；".join(errors[:3]) or "无可用模板")
+
+    async def _record_template_bind(self, contract: QueryContract, tpl_id: str, chk, *, request=None) -> None:
+        """批4 指纹审计：模板绑定（结构一致）或结构漂移（同表但骨架不同）记入治理轨迹。
+
+        P1-2（二轮/三轮）：除治理审计外，**await 派发** template.bound / template.drift
+        到 SSE。三轮起不再用 create_task 后台派发（顺序/必达性不稳、取消丢事件），
+        改由 _precheck 在 handler 前 await，保证 template.bound → tool.started → tool.completed。
+        """
+        event_name = EVENT_TEMPLATE_BOUND if chk.structure_match else "template.drift"
+        detail = (f"tpl={tpl_id} fp={chk.template_fingerprint}"
+                  if chk.structure_match
+                  else f"tpl={tpl_id}: 结构漂移（同表骨架不一致）fp={chk.candidate_fingerprint}")
+        try:
+            from app.services.skill_governance import get_governance
+            get_governance().record_policy(event_name, contract.skill_id, contract.workflow_step, detail)
+        except Exception:
+            pass
+        # P1-2：SSE 实时事件 —— await 派发（与 _do_reject 同机制，运行上下文内可靠投递）
+        if request is not None:
+            try:
+                await self._emit(request, event_name, {
+                    "detail": detail,
+                    "structure_match": bool(chk.structure_match),
+                    "template_id": tpl_id,
+                })
+            except Exception as e:
+                logger.warning(f"[SkillPolicy] template 事件派发失败: {e}")
+
+    def _resolve_step_templates(self, contract: QueryContract):
+        """解析契约 template_ids -> [(template_id, 模板SQL)]（相对 SKILL.md 路径）。
+
+        模板内 ⟦实体中文名⟧ 引用在运行时解析为物理表名（与 read_file 注入同一解析器），
+        保证"候选 SQL(物理表名) 表集合 ⊆ 模板(物理表名) 表集合"可比对。
+        """
+        skill = self._catalog.load_skill(contract.skill_id)
+        if skill is None:
+            return []
+        from app.services.tupu_deepagent import _resolve_entity_refs
+        from app.services.template_guard import resolve_entity_aliases
+        out = []
+        for tpl_id in contract.template_ids:
+            _, rel = template_id_components(tpl_id)
+            if not rel:
+                continue
+            p = skill.path.parent / rel
+            try:
+                raw = load_template(p)
+                # 先按 SKILL.md x_tupu.entity_aliases 替换 ⟦业务中文名⟧ -> 物理表名，
+                # 再精确 entity_name 解析兜底（覆盖 aliases 未声明但 DB 精确命中的引用）。
+                resolved = resolve_entity_aliases(raw, skill.entity_aliases)
+                resolved = _resolve_entity_refs(resolved)
+                out.append((tpl_id, resolved))
+            except Exception as e:
+                logger.warning(f"[SkillPolicy] 模板加载失败 {p}: {e}")
+        return out
+
+    # ------------------------------------------------------------------
+    # 后置处理（引擎锁定 / 结果标记 / 事件派发）
+    # ------------------------------------------------------------------
+    def _postcheck(self, contract: QueryContract, tool_name: str, result, request) -> None:
+        out_str = _result_text(result)
+        # 批1：error_class 结构化判据 -> 表/catalog 不存在允许一次受控降级（重定位）
+        self._check_controlled_degradation(contract, tool_name, out_str, request)
+        # 数据源模式确认（batch_entity_source_mode / get_entity_source_mode）-> 锁定/确认引擎
+        if tool_name in ("batch_entity_source_mode", "get_entity_source_mode"):
+            self._confirm_engine_from_result(contract, tool_name, out_str, request)
+        # 数据工具返回 row_count >= 0 -> 标记结果（单引擎 result_obtained / 多引擎按源标记）
+        if contract.is_data_tool(tool_name) and _has_row_count(out_str):
+            if contract.multi_engine:
+                engine = contract.engine_for_tool(tool_name)
+                if engine:
+                    contract.mark_engine_result(engine)
+                # 评审 P1-1（二轮）：按实体/数据角色标记完成（工具参数 entity_code），
+                # 终止看 completed_entities 覆盖 required_entities（同引擎多实体不提前误判）
+                try:
+                    ec = (request.tool_call.get("args") or {}).get("entity_code")
+                except Exception:
+                    ec = None
+                contract.mark_entity_result(str(ec) if ec else None)
+                # P1-2 复合终止：两源均取到 -> stop.reached + 移除全部数据工具
+                if contract.multi_engine_done():
+                    contract.set_stop_reached()
+                    try:
+                        asyncio.get_running_loop().create_task(self._emit(request, EVENT_STOP_REACHED, {
+                            "tool_call_id": request.tool_call.get("id"),
+                            "tool_name": tool_name,
+                            "multi_engine": True,
+                            "completed_entities": sorted(contract._runtime.get("completed_entities") or []),
+                            "completed_engines": sorted(contract._runtime.get("result_by_engine", {})),
+                            "contract": contract.to_dict(),
+                        }))
+                    except Exception as e:
+                        logger.warning(f"[SkillPolicy] 多引擎终止事件派发失败: {e}")
+                    try:
+                        from app.services.skill_governance import EVENT_STOP_REACHED as G_EVENT
+                        from app.services.skill_governance import get_governance
+                        get_governance().record_policy(G_EVENT, contract.skill_id, contract.workflow_step,
+                                                       f"multi-engine done: {sorted(contract.confirmed_engines())}")
+                    except Exception:
+                        pass
+            else:
+                contract.mark_result()
+                if contract._runtime.get("terminal"):
+                    try:
+                        asyncio.get_running_loop().create_task(self._emit(request, EVENT_STOP_REACHED, {
+                            "tool_call_id": request.tool_call.get("id"),
+                            "tool_name": tool_name, "contract": contract.to_dict(),
+                        }))
+                    except Exception as e:
+                        logger.warning(f"[SkillPolicy] 终止事件派发失败: {e}")
+                    # 批4 治理：记录终止审计
+                    try:
+                        from app.services.skill_governance import EVENT_STOP_REACHED as G_EVENT
+                        from app.services.skill_governance import get_governance
+                        get_governance().record_policy(G_EVENT, contract.skill_id, contract.workflow_step, f"tool={tool_name}")
+                    except Exception:
+                        pass
+
+    def _check_controlled_degradation(self, contract: QueryContract, tool_name: str,
+                                      out_str: str, request) -> None:
+        """批1：数据工具结果里的 error_class -> 触发一次受控降级（仅表/catalog/语法类）。
+
+        规则：仅当执行类数据工具返回 error_class ∈ {TABLE_MISSING, SYNTAX}，且本轮尚未
+        使用过降级额度时，授予一次 search_entities/list_tables 定位工具的调用许可（
+        _precheck 消费）。治理审计 + SSE 事件可观测。
+        """
+        if tool_name not in ("execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api"):
+            return
+        if contract._runtime.get("degradation_used"):
+            return
+        import json
+        try:
+            data = json.loads(out_str) if out_str else {}
+        except Exception:
+            data = {}
+        if not isinstance(data, dict):
+            return
+        ec = data.get("error_class")
+        if ec not in _DEGRADATION_TRIGGERS:
+            return
+        contract._runtime["degradation_used"] = True
+        contract._runtime["degradation_reason"] = f"tool={tool_name} error_class={ec}"
+        # 治理审计
+        try:
+            from app.services.skill_governance import get_governance
+            get_governance().record_policy(
+                "policy.degraded", contract.skill_id, contract.workflow_step,
+                f"error_class={ec} tool={tool_name} -> 允许一次 search_entities/list_tables")
+        except Exception:
+            pass
+        # SSE 可观测事件
+        try:
+            asyncio.get_running_loop().create_task(self._emit(request, EVENT_POLICY_DEGRADED, {
+                "tool_call_id": request.tool_call.get("id"),
+                "tool_name": tool_name, "error_class": ec,
+                "contract": contract.to_dict(),
+            }))
+        except Exception as e:
+            logger.warning(f"[SkillPolicy] 降级事件派发失败: {e}")
+
+    def _confirm_engine_from_result(self, contract: QueryContract, tool_name: str,
+                                    out_str: str, request) -> None:
+        """源模式工具真实返回 -> 单引擎锁定 / 多引擎逐源确认（引擎不由模型拍板）。
+
+        评审 P1-1：逐实体确认**每次真实返回新引擎都并入集合**（不再要求 confirmed 为空），
+        重复值由 confirm_engines 集合去重；同时记录 实体->引擎 映射。
+        """
+        try:
+            import json
+            data = json.loads(out_str) if out_str else {}
+        except Exception:
+            data = {}
+        if not isinstance(data, dict):
+            return
+        if contract.multi_engine:
+            from app.services.query_engine_router import SOURCE_MODE_TO_ENGINE, resolve_engines_multi
+            engines = resolve_engines_multi(data)
+            # 实体 -> 引擎 映射（batch items 逐实体）
+            eem = {}
+            for it in (data.get("items") or []):
+                ec = str(it.get("entity_code") or "")
+                sm = str(it.get("source_mode") or "")
+                en = SOURCE_MODE_TO_ENGINE.get(sm)
+                if ec and en:
+                    eem[ec] = en
+            if not engines:
+                # 单实体 get_entity_source_mode：source_mode -> engine + 实体映射
+                sm = data.get("source_mode") or ""
+                e = SOURCE_MODE_TO_ENGINE.get(sm)
+                engines = [e] if e else None
+                ec = str(data.get("entity_code") or "")
+                if e and ec:
+                    eem[ec] = e
+            if engines:
+                contract.add_entity_engines(eem)
+                contract.confirm_engines(engines, f"{tool_name} 返回 source_mode: {sorted(engines)}")
+                # 评审 P1-1（二轮）：确认阶段记实体（required_entities 判定终止用）
+                entity_codes = list(eem.keys())
+                if eem:
+                    contract.confirm_entities(entity_codes)
+                try:
+                    asyncio.get_running_loop().create_task(self._emit(request, EVENT_ENGINE_SELECTED, {
+                        "tool_call_id": request.tool_call.get("id"),
+                        "selected_engine": ",".join(contract.confirmed_engines()),
+                        "multi_engine": True, "reason": contract.engine_reason,
+                        "entity_engine_map": dict(contract.entity_engine_map),
+                        "contract": contract.to_dict(),
+                    }))
+                except Exception as e:
+                    logger.warning(f"[SkillPolicy] 多引擎事件派发失败: {e}")
+                try:
+                    from app.services.skill_governance import EVENT_ENGINE_SELECTED as G_EVENT
+                    from app.services.skill_governance import get_governance
+                    get_governance().record_policy(G_EVENT, contract.skill_id, contract.workflow_step,
+                                                   f"multi: {sorted(engines)}")
+                except Exception:
+                    pass
+            return
+        # 单引擎：锁定唯一引擎
+        engine, reason = self._engine_from_source_mode(out_str)
+        if engine and not contract.engine_locked:
+            contract.lock_engine(engine, reason or f"{tool_name} 推荐: {engine}")
+            try:
+                asyncio.get_running_loop().create_task(self._emit(request, EVENT_ENGINE_SELECTED, {
+                    "tool_call_id": request.tool_call.get("id"),
+                    "selected_engine": engine, "reason": reason,
+                    "contract": contract.to_dict(),
+                }))
+            except Exception as e:
+                logger.warning(f"[SkillPolicy] 引擎事件派发失败: {e}")
+            # 批4 治理：记录引擎选择审计
+            try:
+                from app.services.skill_governance import EVENT_ENGINE_SELECTED as G_EVENT
+                from app.services.skill_governance import get_governance
+                get_governance().record_policy(G_EVENT, contract.skill_id, contract.workflow_step, reason or engine)
+            except Exception:
+                pass
+
+    def _engine_from_source_mode(self, out_str: str):
+        """按源模式真实返回解析唯一引擎（batch 的 recommended_tool / 单实体 source_mode）。"""
+        import json
+        try:
+            data = json.loads(out_str) if out_str else {}
+        except Exception:
+            return None, None
+        if not isinstance(data, dict):
+            return None, None
+        from app.services.query_engine_router import SOURCE_MODE_TO_ENGINE, resolve_engine
+        decision = resolve_engine(data)
+        if decision is not None:
+            return decision.engine, decision.reason
+        sm = data.get("source_mode") or ""
+        e = SOURCE_MODE_TO_ENGINE.get(sm)
+        if e:
+            return e, f"{data.get('entity_code') or '?'} source_mode={sm}"
+        return None, None
+
+    # ------------------------------------------------------------------
+    # 拒绝路径
+    # ------------------------------------------------------------------
+    async def _do_reject(self, request, contract, tool_name: str, tc_id, violation: str) -> ToolMessage:
+        n = contract.record_violation()
+        if n >= self._max_violations:  # 第2次违规即终止本轮（设计 §6.3：第一次指引，第二次终止）
+            msg = (f"{BLOCK_MARKER}[违规{n}次已阻断本轮] {violation}。"
+                   f"不要再重试该调用，请基于已有信息直接回答用户，或说明因受控策略无法完成。")
+        else:
+            msg = (f"{REJECT_MARKER}[第{n}次] {violation}。"
+                   f"原工具未执行。请按受控契约调整：只调用允许工具，使用已批准 SQL 模板，"
+                   f"满足终止条件后立即结束并基于已有结果回答。")
+        try:
+            await self._emit(request, EVENT_POLICY_REJECTED, {
+                "tool_call_id": tc_id, "tool_name": tool_name,
+                "attempt": n, "reason": violation,
+                "allowed_tools": sorted(set(contract.allowed_tools) - set(contract.forbidden_tools)),
+                "blocked": n > self._max_violations,
+            })
+        except Exception as e:
+            logger.error(f"[SkillPolicy] dispatch rejected failed: {e}")
+        # 批4 治理：记录拒绝/阻断审计（第2次起为阻断）
+        try:
+            from app.services import skill_governance as _gov
+            ev = _gov.EVENT_POLICY_BLOCKED if n >= self._max_violations else _gov.EVENT_POLICY_REJECTED
+            _gov.get_governance().record_policy(
+                ev, contract.skill_id, contract.workflow_step,
+                f"tool={tool_name}: {violation}", attempt=n,
+            )
+        except Exception:
+            pass
+        return ToolMessage(content=msg, tool_call_id=tc_id)
+
+    # ------------------------------------------------------------------
+    # 辅助
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _get_contract(request) -> Optional[QueryContract]:
+        runtime = getattr(request, "runtime", None)
+        ctx = getattr(runtime, "context", None) or {}
+        return ctx.get("contract") if isinstance(ctx, dict) else None
+
+    async def _emit(self, request, event_name: str, payload: dict) -> None:
+        if self._dispatcher is not None:
+            await self._dispatcher(event_name, payload, getattr(request.runtime, "config", None))
+            return
+        from langchain_core.callbacks import adispatch_custom_event
+        await adispatch_custom_event(event_name, payload, config=getattr(request.runtime, "config", None))
+
+
+def _result_text(result) -> str:
+    """把 handler 返回结果转字符串（兼容 str / ToolMessage / dict）。"""
+    if result is None:
+        return ""
+    if isinstance(result, dict):
+        return str(result.get("content") or result)
+    if hasattr(result, "content"):
+        return str(result.content or "")
+    return str(result)
+
+
+def _has_row_count(out_str: str) -> bool:
+    import re as _re
+    # row_count 出现在结果里即视为有数据（含 0 行：拿到查询结果即终止）
+    return bool(_re.search(r"['\"]row_count['\"]\s*:\s*\d+", out_str))

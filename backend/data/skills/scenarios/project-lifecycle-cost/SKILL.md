@@ -1,7 +1,76 @@
 ---
 name: project-lifecycle-cost
-description: 项目预算与成本对比分析。何时用：用户问"WBS预算/成本/超成本/超支/预算执行率/全生命周期成本/总成本/LCC/哪些WBS超预算"。
+description: 项目预算与成本对比分析（WBS预算->WBS成本->按 wbs_element 关联计算执行率/超支/超预算）。何时用：用户问"WBS预算/成本/超成本/超支/预算执行率/全生命周期成本/总成本/LCC/哪些WBS超预算"。
 category: scenario
+
+x_tupu:
+  version: "1.0"
+  enabled: true
+  priority: 90
+  # 预算(api_integration)->duckdb 与 成本(sql_integration)->doris 分属两个数据源：
+  # multi_engine=true 允许逐源确认后两引擎工具并存（禁跨源 JOIN，由答案按 wbs_element 关联）。
+  multi_engine: true
+  # 评审 P1-1（二轮）：多引擎**必达数据源**显式声明 —— 复合终止按实体/角色判断，
+  # 而非"当前已确认引擎"（避免"确认一个→取一个→再确认第二个"顺序下提前终止）。
+  required_sources:
+    - entity: dim_ps_wbs_budget
+      role: budget
+    - entity: dim_ps_wbs_cost
+      role: cost
+
+  triggers:
+    any:
+      - WBS预算
+      - 预算执行率
+      - 超成本
+      - 超支
+      - 超预算
+      - 全生命周期成本
+      - LCC
+      - 各阶段成本
+    all_groups:
+      - [WBS, 预算]
+      - [WBS, 成本]
+      - [项目, 预算]
+      - [项目, 成本]
+      - [预算, 超]
+      - [成本, 超]
+
+  forbidden_tools:
+    - task
+    - write_file
+    - edit_file
+    - execute
+    - grep
+    - glob
+
+  # ⟦业务中文名⟧ -> 物理表名（kg_entities 元数据 entity_en_name 核对）
+  entity_aliases:
+    预算: dim_ps_wbs_budget
+    成本: dim_ps_wbs_cost
+    项目定义: dim_ps_project_def
+
+  output:
+    mode: analysis_and_result_table
+    # 预算+成本跨源由答案汇总呈现对比表（无单一权威 sql_result），保留答案表格不剥离。
+    forbid_markdown_detail_table: false
+
+  steps:
+    - id: analysis
+      title: 预算成本对比分析
+      triggers:
+        any: [预算, 成本, 超成本, 超支, 超预算, 预算执行率, 全生命周期成本, 总成本, LCC, 各阶段成本]
+      allowed_tools:
+        - batch_entity_source_mode
+        - get_entity_source_mode
+        - execute_entity_api
+        - execute_doris_sql
+      required_slots: []
+      templates: []
+      stop_when:
+        - sql_result.row_count >= 0
+      allowed_next:
+        - final
 ---
 
 # 项目预算与成本对比分析（场景剧本）
@@ -16,11 +85,11 @@ category: scenario
 - **指定项目**（用户给项目编号 pspid 或项目名）-> 过滤到该项目下的 WBS
 
 ## 执行优先级（重要，覆盖通用问数流程）
-本剧本涉及的实体已明确（`dim_ps_wbs_budget`/`dim_ps_wbs_cost`/`dim_ps_project_def`），**直接从「计算步骤」第1步开始**，跳过 locate 定位（fetch_l1_l2_tree/validate_l2/fetch_subgraph/validate_attributes/search_entities 等一律不调）。
-预算与成本分属两个数据源，**必须用 get_entity_source_mode 分发**：预算(api_integration)->execute_entity_api，成本(sql_integration)->execute_doris_sql。**不要用 execute_sql**（多源数据查不到）。两份数据取回后按 wbs_element 关联算超成本，**不要在 SQL 里跨源 JOIN**。
+本剧本涉及的实体已明确（`dim_ps_wbs_budget`/`dim_ps_wbs_cost`/`dim_ps_project_def`），**直接从「取数步骤」开始**，跳过 locate 定位（fetch_l1_l2_tree/validate_l2/fetch_subgraph/validate_attributes/search_entities 等一律不调）。
+预算与成本分属两个数据源，**必须先确认数据源模式**：调 `batch_entity_source_mode(["dim_ps_wbs_budget", "dim_ps_wbs_cost"])` 一次确认两源（也可 `get_entity_source_mode` 逐实体）；预算(api_integration)->execute_entity_api，成本(sql_integration)->execute_doris_sql。**不要用 execute_sql**（多源数据查不到）。两份数据取回后按 wbs_element 关联算超成本，**不要在 SQL 里跨源 JOIN**。
 
 ## 涉及数据（多源，必须按数据源模式分发执行）
-预算与成本分属两个数据源，**不能混用 execute_sql**。每个实体先调 `get_entity_source_mode` 确认 source_mode，再按模式选执行工具：
+预算与成本分属两个数据源，**不能混用 execute_sql**。每个实体先确认 source_mode，再按模式选执行工具：
 
 - **WBS 预算**：实体 `dim_ps_wbs_budget`，source_mode=api_integration
   - 走 `execute_entity_api`（联邦 SQL：ES dim+amt 两表 JOIN，由映射配置自动 JOIN）
@@ -32,16 +101,17 @@ category: scenario
   - 走 `execute_entity_api`
   - 字段：pspid（项目编号）、proj_desc、budget_amount（项目级预算）
 
-## 计算步骤（按序执行）
-1. **取预算**：`get_entity_source_mode("dim_ps_wbs_budget")` 确认 api_integration -> `execute_entity_api(entity_code="dim_ps_wbs_budget", filters={})` 取所有 WBS 的 wbs_element + total_budget + available_budget。
+## 取数步骤（按序执行）
+1. **确认数据源模式**：`batch_entity_source_mode(["dim_ps_wbs_budget", "dim_ps_wbs_cost"])`（或逐实体 `get_entity_source_mode`），按返回 source_mode 分发，引擎确认后只允许对应执行工具。
+2. **取预算**：`execute_entity_api(entity_code="dim_ps_wbs_budget", filters={})` 取所有 WBS 的 wbs_element + total_budget + available_budget。
    - 指定项目时：先 `execute_entity_api("dim_ps_project_def")` 取 pspid，再用 pspid 过滤（如预算表含项目字段则加 filters）。
-2. **取成本**：`get_entity_source_mode("dim_ps_wbs_cost")` 确认 sql_integration -> `execute_doris_sql(entity_code="dim_ps_wbs_cost", filters={})` 取 wbs_element + actual_cost + planned_cost + variance。
-3. **按 wbs_element 关联**预算与成本（两份结果在回答里按 wbs_element 对齐，算每条 WBS 的）：
+3. **取成本**：`execute_doris_sql(entity_code="dim_ps_wbs_cost", filters={})` 取 wbs_element + actual_cost + planned_cost + variance。
+4. **按 wbs_element 关联**预算与成本（两份结果在回答里按 wbs_element 对齐，算每条 WBS 的）：
    - 预算执行率 = actual_cost / total_budget × 100%
    - 预算余额 = total_budget - actual_cost
    - 是否超计划成本 = variance > 0（actual_cost > planned_cost）
    - 是否超预算 = actual_cost > total_budget
-4. **输出**：每条 WBS 的 预算/成本/执行率/余额/超计划标记；汇总超计划 WBS 清单；结论。
+5. **输出**：每条 WBS 的 预算/成本/执行率/余额/超计划标记；汇总超计划 WBS 清单；结论。
 
 ## 口径定义（硬规则，不可改）
 - **超成本（超计划成本）** = actual_cost > planned_cost，即 variance > 0（variance 字段正值即超计划）
@@ -68,4 +138,4 @@ category: scenario
 - 项目编号缺失 -> 先 `execute_entity_api("dim_ps_project_def")` 反查项目编号（按项目名模糊）
 - 项目不存在 -> 如实告知"未找到项目 X"，列出已有项目供用户选择
 - 预算/成本某源数据为空 -> 如实说明"该源无记录"，不编造金额
-- 某实体 source_mode 与预期不符 -> 按 get_entity_source_mode 实际返回选工具，不臆测
+- 某实体 source_mode 与预期不符 -> 按 source_mode 实际返回选工具，不臆测
