@@ -37,9 +37,12 @@ class ApiEndpointCreate(BaseModel):
     api_url: str
     method: str = "POST"
     params: Optional[List[Dict[str, Any]]] = None    # [{"name","column","map_to"}]
-    columns: List[Dict[str, Any]]                    # [{"name","json_path","type"}]
+    columns: List[Dict[str, Any]]                    # [{"name","json_path","type","dtype"}]
     data_path: Optional[str] = None
     headers: Optional[Dict[str, str]] = None
+    cache_ttl_seconds: Optional[int] = None          # 批2：API 缓存 TTL（0=禁用，默认300）
+    pagination: Optional[Dict[str, Any]] = None      # 批2：页码型分页配置
+    run_config: Optional[Dict[str, Any]] = None      # P3：限速/熔断 {rate_limit_min_interval_ms,circuit_threshold,circuit_open_seconds}
     description: Optional[str] = None
 
 
@@ -53,6 +56,9 @@ class ApiEndpointUpdate(BaseModel):
     columns: Optional[List[Dict[str, Any]]] = None
     data_path: Optional[str] = None
     headers: Optional[Dict[str, str]] = None
+    cache_ttl_seconds: Optional[int] = None
+    pagination: Optional[Dict[str, Any]] = None
+    run_config: Optional[Dict[str, Any]] = None
     description: Optional[str] = None
 
 
@@ -70,8 +76,20 @@ def _serialize(ep: ApiEndpoint) -> Dict[str, Any]:
         "entity_id": ep.entity_id, "api_url": ep.api_url, "method": ep.method,
         "params": ep.params or [], "columns": ep.columns or [],
         "data_path": ep.data_path, "headers": ep.headers or {},
+        "cache_ttl_seconds": getattr(ep, "cache_ttl_seconds", None) or 300,
+        "pagination": getattr(ep, "pagination", None) or {},
+        "run_config": getattr(ep, "run_config", None) or {},
         "description": ep.description, "created_at": ep.created_at.isoformat() if ep.created_at else None,
     }
+
+
+def _invalidate_cache(ep: Optional[ApiEndpoint] = None):
+    """批2：endpoint 配置保存/删除后清该 endpoint 全部缓存条目（配置即失效）。"""
+    try:
+        from app.services.duckdb_engine import invalidate_endpoint_cache
+        invalidate_endpoint_cache(ep.id if ep else None)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -96,6 +114,9 @@ def create_endpoint(payload: ApiEndpointCreate, db: Session = Depends(get_db)):
         name=payload.name, table_name=payload.table_name, entity_id=payload.entity_id,
         api_url=payload.api_url, method=payload.method, params=payload.params,
         columns=payload.columns, data_path=payload.data_path, headers=payload.headers,
+        cache_ttl_seconds=payload.cache_ttl_seconds if payload.cache_ttl_seconds is not None else 300,
+        pagination=payload.pagination,
+        run_config=payload.run_config,
         description=payload.description,
     )
     db.add(ep)
@@ -154,6 +175,7 @@ def update_endpoint(ep_id: str, payload: ApiEndpointUpdate, db: Session = Depend
         setattr(ep, k, v)
     db.commit()
     db.refresh(ep)
+    _invalidate_cache(ep)   # 批2：配置保存即失效该 endpoint 缓存
     return {"code": 200, "data": _serialize(ep)}
 
 
@@ -164,6 +186,7 @@ def delete_endpoint(ep_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="端点不存在")
     db.delete(ep)
     db.commit()
+    _invalidate_cache(ep)   # 批2：删除即失效缓存
     return {"code": 200, "data": {"deleted": ep_id}}
 
 
@@ -178,9 +201,22 @@ def test_endpoint(ep_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="端点不存在")
     try:
         result = duckdb_engine.test_endpoint(_serialize(ep))
-        return {"code": 200, "data": result}
     except Exception as e:
         return {"code": 500, "data": {"error": str(e)}}
+    # 批2：采样定 dtype 写入 columns（仅对未显式设 dtype 的列；数值 SUM 从此正确）
+    sugg = result.get("dtype_suggestions") or {}
+    if sugg and isinstance(ep.columns, list):
+        changed = False
+        for col in ep.columns:
+            if isinstance(col, dict) and col.get("name") in sugg and not col.get("dtype"):
+                col["dtype"] = sugg[col["name"]]
+                changed = True
+        if changed:
+            db.commit()
+            db.refresh(ep)
+    result["dtype_suggestions"] = sugg
+    result["cache_ttl_seconds"] = getattr(ep, "cache_ttl_seconds", None) or 300
+    return {"code": 200, "data": result}
 
 
 # --------------------------------------------------------------------------- #

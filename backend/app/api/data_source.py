@@ -130,6 +130,12 @@ def create_data_source(payload: DataSourceCreateRequest, db: Session = Depends(g
     db.add(item)
     db.commit()
     db.refresh(item)
+    # 数据源变更后重置 DuckDB 连接（影响 pg. ATTACH）
+    try:
+        from app.services.duckdb_engine import reset_conn as _reset_duckdb
+        _reset_duckdb()
+    except Exception:
+        pass
     return {"code": 200, "data": {"id": _norm_uuid(str(item.id)), "name": item.name}}
 
 
@@ -148,6 +154,12 @@ def update_data_source(ds_id: str, payload: DataSourceUpdateRequest, db: Session
 
     db.commit()
     db.refresh(item)
+    # 数据源变更后重置 DuckDB 连接（影响 pg. ATTACH）
+    try:
+        from app.services.duckdb_engine import reset_conn as _reset_duckdb
+        _reset_duckdb()
+    except Exception:
+        pass
     return {"code": 200, "data": {"id": _norm_uuid(str(item.id)), "name": item.name}}
 
 
@@ -159,6 +171,12 @@ def delete_data_source(ds_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="数据源不存在")
     db.delete(item)
     db.commit()
+    # 数据源变更后重置 DuckDB 连接（影响 pg. ATTACH）
+    try:
+        from app.services.duckdb_engine import reset_conn as _reset_duckdb
+        _reset_duckdb()
+    except Exception:
+        pass
     return {"code": 200, "data": {"message": "已删除"}}
 
 

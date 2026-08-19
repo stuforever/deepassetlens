@@ -1,7 +1,10 @@
-"""后端 API 端到端测试脚本
+"""后端 API 端到端测试脚本（手工运行）
 
 直接调用后端 SSE 流式 API，测试 10 种技能的代表问句。
 不依赖前端，直接解析 SSE 事件流。
+
+注意：此脚本为手工验收脚本，不被 pytest 收集（无 test_ 函数）。
+如需自动化回归，请用 pytest tests/ 跑 164+ 项单元/集成测试。
 
 运行方式：
     cd backend
@@ -12,7 +15,8 @@ import time
 import requests
 from typing import Dict, List, Any, Optional
 
-BASE_URL = "http://localhost:8100/api/data-intelligence/chat/deepagent/stream"
+# 固定 28000 端口（项目铁律），freeplan/stream 是当前活跃接口
+BASE_URL = "http://localhost:28000/api/data-intelligence/chat/freeplan/stream"
 
 # 10 种技能的代表问句
 TEST_CASES = [
@@ -35,7 +39,7 @@ def call_sse(query: str, thread_id: str, timeout: int = 90) -> Dict[str, Any]:
         "thread_id": thread_id,
         "user_input": query,
         "format": "card",
-        "mode": "question_data",
+        "mode": "free_plan",
     }
     events: List[Dict[str, Any]] = []
     final_resp: Optional[Dict] = None

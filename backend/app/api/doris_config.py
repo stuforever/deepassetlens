@@ -28,6 +28,7 @@ class DorisConfigRequest(BaseModel):
     port: Optional[int] = None
     user: Optional[str] = None
     password: Optional[str] = None
+    database: Optional[str] = None
     charset: Optional[str] = None
     connect_timeout: Optional[int] = None
 
@@ -45,6 +46,7 @@ def _default_config() -> dict:
         "port": 9030,
         "user": "root",
         "password": "",
+        "database": "test_db",
         "charset": "utf8mb4",
         "connect_timeout": 10,
     }
@@ -63,6 +65,7 @@ def get_doris_config(db: Session = Depends(get_db)):
             "port": cfg.port,
             "user": cfg.user,
             "password": cfg.password,
+            "database": cfg.database,
             "charset": cfg.charset,
             "connect_timeout": cfg.connect_timeout,
         },
@@ -80,7 +83,7 @@ def put_doris_config(payload: DorisConfigRequest, db: Session = Depends(get_db))
                 d[k] = v
         cfg = DorisConfig(
             host=d["host"], port=d["port"], user=d["user"], password=d["password"],
-            charset=d["charset"], connect_timeout=d["connect_timeout"],
+            database=d.get("database", "test_db"), charset=d["charset"], connect_timeout=d["connect_timeout"],
         )
         db.add(cfg)
     else:
@@ -89,9 +92,20 @@ def put_doris_config(payload: DorisConfigRequest, db: Session = Depends(get_db))
                 setattr(cfg, k, v)
     db.commit()
     db.refresh(cfg)
+    # 配置变更后重置 DuckDB 连接 + Doris 连接池，下次查询自动用新配置 ATTACH / 重建池
+    try:
+        from app.services.duckdb_engine import reset_conn as _reset_duckdb
+        _reset_duckdb()
+    except Exception:
+        pass
+    try:
+        from app.services.doris_engine import reset_pool as _reset_doris_pool
+        _reset_doris_pool()
+    except Exception:
+        pass
     return {"code": 200, "data": {
         "host": cfg.host, "port": cfg.port, "user": cfg.user, "password": cfg.password,
-        "charset": cfg.charset, "connect_timeout": cfg.connect_timeout,
+        "database": cfg.database, "charset": cfg.charset, "connect_timeout": cfg.connect_timeout,
     }}
 
 
@@ -117,19 +131,23 @@ def test_doris_config(payload: DorisConfigTestRequest, db: Session = Depends(get
 
 class CatalogCreateRequest(BaseModel):
     name: str
-    catalog_type: Optional[str] = "jdbc"
+    catalog_type: Optional[str] = "jdbc"      # jdbc | es | internal
     jdbc_url: Optional[str] = None
     jdbc_user: Optional[str] = None
     jdbc_password: Optional[str] = None
     driver_class: Optional[str] = None
     driver_url: Optional[str] = None
+    es_hosts: Optional[str] = None            # P4：ES catalog 地址（逗号分隔）
+    es_user: Optional[str] = None
+    es_password: Optional[str] = None
 
 
 @router.get("/doris/catalogs")
 def list_catalogs(db: Session = Depends(get_db)):
     """Catalog 列表：SHOW CATALOGS(live) + DB 纳管记录(props) 合并
 
-    每项: {name, catalog_type, in_db, jdbc_url, jdbc_user, driver_class, driver_url, created_at}
+    每项: {name, catalog_type, in_db, jdbc_url, jdbc_user, driver_class, driver_url,
+          es_hosts, es_user, created_at}
     """
     live = doris_engine.list_catalogs()
     live_names = {c["name"] for c in live}
@@ -138,14 +156,18 @@ def list_catalogs(db: Session = Depends(get_db)):
     out = []
     for name in sorted(all_names):
         row = db_rows.get(name)
+        live_type = next((c["type"] for c in live if c["name"] == name), None)
         out.append({
             "name": name,
-            "catalog_type": row.catalog_type if row else "jdbc",
+            "catalog_type": (row.catalog_type if row else None) or live_type or "jdbc",
             "in_db": row is not None,
+            "live_type": live_type,
             "jdbc_url": row.jdbc_url if row else None,
             "jdbc_user": row.jdbc_user if row else None,
             "driver_class": row.driver_class if row else None,
             "driver_url": row.driver_url if row else None,
+            "es_hosts": row.es_hosts if row else None,
+            "es_user": row.es_user if row else None,
             "created_at": row.created_at.isoformat() if row and row.created_at else None,
         })
     return {"code": 200, "data": out}
@@ -153,7 +175,7 @@ def list_catalogs(db: Session = Depends(get_db)):
 
 @router.post("/doris/catalogs")
 def create_catalog(payload: CatalogCreateRequest, db: Session = Depends(get_db)):
-    """创建 Catalog：DB 插入 + 执行 CREATE CATALOG（失败回滚 DB）"""
+    """创建 Catalog（jdbc/es）：DB 插入 + 执行 CREATE CATALOG（失败回滚 DB）。变更联动 reset_pool。"""
     existing = db.query(DorisCatalog).filter(DorisCatalog.name == payload.name).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"Catalog {payload.name} 已纳管")
@@ -165,6 +187,10 @@ def create_catalog(payload: CatalogCreateRequest, db: Session = Depends(get_db))
         payload.jdbc_password or "",
         payload.driver_class or "",
         payload.driver_url or "",
+        payload.catalog_type or "jdbc",
+        payload.es_hosts or "",
+        payload.es_user or "",
+        payload.es_password or "",
     )
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=f"Doris 创建失败: {result.get('error')}")
@@ -177,16 +203,38 @@ def create_catalog(payload: CatalogCreateRequest, db: Session = Depends(get_db))
         jdbc_password=payload.jdbc_password,
         driver_class=payload.driver_class,
         driver_url=payload.driver_url,
+        es_hosts=payload.es_hosts,
+        es_user=payload.es_user,
+        es_password=payload.es_password,
     )
     db.add(cat)
     db.commit()
     db.refresh(cat)
+    doris_engine.reset_pool()   # P4：catalog 变更联动重置连接池
     return {"code": 200, "data": {"id": str(cat.id), "name": cat.name}}
+
+
+@router.post("/doris/catalogs/{name}/probe")
+def probe_catalog(name: str):
+    """探活 catalog：SHOW DATABASES FROM {name}（含采样库表数）。"""
+    result = doris_engine.probe_catalog(name)
+    if not result["ok"]:
+        raise HTTPException(status_code=400, detail=f"Catalog 探活失败: {result.get('error')}")
+    return {"code": 200, "data": result}
+
+
+@router.post("/doris/catalogs/{name}/refresh")
+def refresh_catalog(name: str):
+    """刷新外部 catalog 元数据：REFRESH CATALOG {name}。"""
+    result = doris_engine.refresh_catalog(name)
+    if not result["ok"]:
+        raise HTTPException(status_code=400, detail=f"Catalog 刷新失败: {result.get('error')}")
+    return {"code": 200, "data": {"ok": True}}
 
 
 @router.delete("/doris/catalogs/{name}")
 def delete_catalog(name: str, db: Session = Depends(get_db)):
-    """删除 Catalog：执行 DROP CATALOG + 删 DB 行（即使 Doris 失败也删 DB 记录）"""
+    """删除 Catalog：执行 DROP CATALOG + 删 DB 行（即使 Doris 失败也删 DB 记录）。变更联动 reset_pool。"""
     result = doris_engine.drop_catalog(name)
     row = db.query(DorisCatalog).filter(DorisCatalog.name == name).first()
     if row:
@@ -194,4 +242,5 @@ def delete_catalog(name: str, db: Session = Depends(get_db)):
         db.commit()
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=f"Doris 删除失败: {result.get('error')}")
+    doris_engine.reset_pool()   # P4：catalog 变更联动重置连接池
     return {"code": 200, "data": {"ok": True}}

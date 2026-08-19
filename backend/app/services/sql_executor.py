@@ -68,20 +68,42 @@ def _get_biz_engine(data_source_id=None):
 def build_execute_query_fn(data_source_id=None):
     """构造 SQL 执行函数（支持 per-entity 数据源绑定）"""
     src_key = f"engine:{data_source_id}:source" if data_source_id else "engine:default:source"
+    MAX_RETURN_ROWS = 500  # 应用层硬限制：不信任 SQL 是否带 LIMIT，fetchmany 强制截断
     def _execute(sql: str) -> Dict[str, Any]:
         import time as _t
         import json as _json
         from decimal import Decimal
         from datetime import datetime as _dt, date as _date
         _t0 = _t.time()
+        # P5：预聚合加速器拦截（同形单值聚合命中 -> 预聚合表服务，附数据截至标注）
+        try:
+            from app.services.engine_accelerator import try_serve
+            served = try_serve(sql)
+            if served is not None:
+                served.setdefault("exec_time_ms", int((_t.time() - _t0) * 1000))
+                return served
+        except Exception:
+            pass
         try:
             from sqlalchemy import text
             eng = _get_biz_engine(data_source_id=data_source_id)
+            _is_pg = "postgresql" in str(eng.url)
+            _is_mysql = "mysql" in str(eng.url)
             with eng.connect() as conn:
+                # P0-2: 查询超时（PG 用 statement_timeout，MySQL 用 MAX_EXECUTION_TIME hint）
+                if _is_pg:
+                    conn.execute(text("SET LOCAL statement_timeout = '30s'"))
+                elif _is_mysql:
+                    # MySQL 5.7.4+ / 8.0+ 支持 MAX_EXECUTION_TIME(ms)，注入到 SELECT 前
+                    # 仅对单条 SELECT 生效；已通过 validate_sql 确保是只读 SELECT
+                    sql = f"/*+ MAX_EXECUTION_TIME(30000) */ {sql}"
                 result = conn.execute(text(sql))
                 columns = list(result.keys()) if hasattr(result, "keys") else []
+                # fetchmany 多取1行用于判断是否截断，不信任 SQL 自带 LIMIT
+                raw_rows = result.fetchmany(MAX_RETURN_ROWS + 1)
+                truncated = len(raw_rows) > MAX_RETURN_ROWS
                 rows = []
-                for row in result.fetchall():
+                for row in (raw_rows[:MAX_RETURN_ROWS] if truncated else raw_rows):
                     clean_row = []
                     for v in row:
                         if isinstance(v, Decimal):
@@ -94,15 +116,35 @@ def build_execute_query_fn(data_source_id=None):
                             clean_row.append(v)
                     rows.append(clean_row)
                 _elapsed = int((_t.time() - _t0) * 1000)
-                return {
+                _row_count = len(rows)
+                result = {
                     "columns": columns,
                     "rows": rows,
-                    "row_count": len(rows),
+                    "row_count": _row_count,
+                    "truncated": truncated,
+                    "total_hint": f">{MAX_RETURN_ROWS}" if truncated else str(_row_count),
                     "exec_time_ms": _elapsed,
                     "data_source": _BIZ_ENGINE_CACHE.get(src_key, ""),
                 }
         except Exception as e:
-            return {"columns": [], "rows": [], "row_count": 0, "exec_time_ms": 0, "error": str(e)}
+            from app.services.engine_errors import apply_error_class
+            result = apply_error_class(
+                {"columns": [], "rows": [], "row_count": 0, "truncated": False,
+                 "exec_time_ms": 0, "error": str(e)}
+            )
+        # 批1：查询日志（异常不影响主流程）
+        try:
+            from app.services.engine_query_log import record_query_log
+            record_query_log(
+                "sql", sql,
+                rows_returned=result.get("row_count", 0),
+                duration_ms=int((_t.time() - _t0) * 1000),
+                status="error" if result.get("error") else "ok",
+                error_class=result.get("error_class"),
+            )
+        except Exception:
+            pass
+        return result
     return _execute
 
 
