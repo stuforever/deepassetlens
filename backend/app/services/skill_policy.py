@@ -45,6 +45,17 @@ _SQL_TOOLS = frozenset({"execute_sql", "execute_doris_sql", "execute_api_sql"})
 _DEGRADATION_TOOLS = frozenset({"search_entities", "list_tables"})
 # 触发降级的 error_class（表/catalog 不存在/语法类 -> 允许一次重定位）
 _DEGRADATION_TRIGGERS = frozenset({"TABLE_MISSING", "SYNTAX"})
+# G2（融合设计 §4.3）：可纠错 error_class（计数闸门计入）；上限 2 次，超限直接终止出失败卡
+_CORRECTION_LIMIT = 2
+_CORRECTABLE_CLASSES = frozenset({"TABLE_MISSING", "CATALOG_MISSING", "SYNTAX", "TIMEOUT"})
+# G2：error_class -> 结构化纠错指引（ToolMessage 附加 correction 字段，模型据此自纠）
+_CORRECTION_GUIDES = {
+    "TABLE_MISSING": "表 {t} 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
+    "CATALOG_MISSING": "表/catalog 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
+    "SYNTAX": "SQL 报错（语法/列名错误）。调用 validate_attributes 校验列名后修正重试。",
+    "TIMEOUT": "查询超时。移除 ORDER BY / 增加 LIMIT / 确认可否命中预聚合加速表。",
+}
+_CORRECTION_GUIDE_EMPTY = "结果为空。调用 sample_column_values 检查过滤值是否真实存在，复核时间范围与口径。"
 
 
 class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
@@ -262,6 +273,8 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     # ------------------------------------------------------------------
     def _postcheck(self, contract: QueryContract, tool_name: str, result, request) -> None:
         out_str = _result_text(result)
+        # G2：error_class/空结果 -> ToolMessage 附加结构化纠错指引（模型据此自纠）
+        self._inject_correction_guidance(tool_name, result, out_str)
         # 批1：error_class 结构化判据 -> 表/catalog 不存在允许一次受控降级（重定位）
         self._check_controlled_degradation(contract, tool_name, out_str, request)
         # 数据源模式确认（batch_entity_source_mode / get_entity_source_mode）-> 锁定/确认引擎
@@ -319,17 +332,53 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                     except Exception:
                         pass
 
-    def _check_controlled_degradation(self, contract: QueryContract, tool_name: str,
-                                      out_str: str, request) -> None:
-        """批1：数据工具结果里的 error_class -> 触发一次受控降级（仅表/catalog/语法类）。
+    def _inject_correction_guidance(self, tool_name: str, result, out_str: str) -> None:
+        """G2：数据工具结果 dict 附加结构化 correction 指引（随 ToolMessage 透给模型）。
 
-        规则：仅当执行类数据工具返回 error_class ∈ {TABLE_MISSING, SYNTAX}，且本轮尚未
-        使用过降级额度时，授予一次 search_entities/list_tables 定位工具的调用许可（
-        _precheck 消费）。治理审计 + SSE 事件可观测。
+        仅执行类数据工具；error_class ∈ 可纠错集 -> 按模板注入；成功但 0 行 -> 空结果指引。
+        非 dict 结果（已拒绝/框架消息）不动。
         """
         if tool_name not in ("execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api"):
             return
-        if contract._runtime.get("degradation_used"):
+        if not isinstance(result, dict):
+            return
+        if "correction" in result:  # 已带 correction（handler 已加）不重复注入
+            return
+        try:
+            import json
+            data = json.loads(out_str) if out_str else {}
+        except Exception:
+            data = {}
+        if not isinstance(data, dict):
+            return
+        ec = data.get("error_class")
+        if ec in _CORRECTION_GUIDES:
+            if ec == "TABLE_MISSING":
+                # 尝试从 error 文本提取表名
+                _tn = ""
+                try:
+                    import re as _re
+                    _m = _re.search(r"Table '[^']*?\.?([^'.]+)'", str(data.get("error", "")))
+                    if _m:
+                        _tn = _m.group(1)
+                except Exception:
+                    pass
+                result["correction"] = _CORRECTION_GUIDES[ec].format(t=_tn or "（见错误信息）")
+            else:
+                result["correction"] = _CORRECTION_GUIDES[ec]
+        elif ec is None and data.get("row_count") == 0:
+            result["correction"] = _CORRECTION_GUIDE_EMPTY
+
+    def _check_controlled_degradation(self, contract: QueryContract, tool_name: str,
+                                      out_str: str, request) -> None:
+        """G2 计数闸门 + 批1 受控降级。
+
+        数据工具返回可纠错 error_class -> contract._runtime["corrections"] +1；
+        超 _CORRECTION_LIMIT(2) -> set_stop_reached（移除全部数据工具 + terminal），
+        出失败卡（P0 死循环教训制度化）；未超限且属降级触发类 -> 授予一次
+        search_entities/list_tables 定位许可（_precheck 消费）。治理 + SSE 双落。
+        """
+        if tool_name not in ("execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api"):
             return
         import json
         try:
@@ -339,27 +388,63 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         if not isinstance(data, dict):
             return
         ec = data.get("error_class")
-        if ec not in _DEGRADATION_TRIGGERS:
+        if ec not in _CORRECTABLE_CLASSES:
             return
-        contract._runtime["degradation_used"] = True
-        contract._runtime["degradation_reason"] = f"tool={tool_name} error_class={ec}"
-        # 治理审计
+        # 计数闸门
+        corrections = int(contract._runtime.get("corrections", 0)) + 1
+        contract._runtime["corrections"] = corrections
+        _stopped = False
+        if corrections > _CORRECTION_LIMIT:
+            _stopped = True
+            contract.set_stop_reached()  # 移除数据工具 + terminal -> 后续数据工具调用被拒，出失败卡
+            try:
+                from app.services.skill_governance import get_governance
+                get_governance().record_policy(
+                    "correction.limit", contract.skill_id, contract.workflow_step,
+                    f"corrections={corrections} > {_CORRECTION_LIMIT} -> 终止（失败卡）")
+            except Exception:
+                pass
+            try:
+                asyncio.get_running_loop().create_task(self._emit(request, "correction.attempt", {
+                    "tool_call_id": request.tool_call.get("id"),
+                    "tool_name": tool_name, "error_class": ec,
+                    "attempt": corrections, "limit": _CORRECTION_LIMIT, "stopped": True,
+                    "reason": f"纠错超限（{corrections}>{_CORRECTION_LIMIT}），已终止并出失败卡",
+                    "contract": contract.to_dict(),
+                }))
+            except Exception as e:
+                logger.warning(f"[SkillPolicy] correction.limit 事件派发失败: {e}")
+            return
+        # 批1：表/catalog/语法类 -> 授予一次受控降级（重定位）
+        if ec in _DEGRADATION_TRIGGERS and not contract._runtime.get("degradation_used"):
+            contract._runtime["degradation_used"] = True
+            contract._runtime["degradation_reason"] = f"tool={tool_name} error_class={ec}"
+            # 治理审计
+            try:
+                from app.services.skill_governance import get_governance
+                get_governance().record_policy(
+                    "policy.degraded", contract.skill_id, contract.workflow_step,
+                    f"error_class={ec} tool={tool_name} -> 允许一次 search_entities/list_tables")
+            except Exception:
+                pass
+        # 每次纠错记 correction.attempt 事件（治理 + SSE 双落）
         try:
             from app.services.skill_governance import get_governance
             get_governance().record_policy(
-                "policy.degraded", contract.skill_id, contract.workflow_step,
-                f"error_class={ec} tool={tool_name} -> 允许一次 search_entities/list_tables")
+                "correction.attempt", contract.skill_id, contract.workflow_step,
+                f"error_class={ec} tool={tool_name} attempt={corrections}")
         except Exception:
             pass
-        # SSE 可观测事件
         try:
-            asyncio.get_running_loop().create_task(self._emit(request, EVENT_POLICY_DEGRADED, {
+            asyncio.get_running_loop().create_task(self._emit(request, "correction.attempt", {
                 "tool_call_id": request.tool_call.get("id"),
                 "tool_name": tool_name, "error_class": ec,
+                "attempt": corrections, "limit": _CORRECTION_LIMIT, "stopped": False,
+                "reason": f"纠错第 {corrections} 次（上限 {_CORRECTION_LIMIT}）",
                 "contract": contract.to_dict(),
             }))
         except Exception as e:
-            logger.warning(f"[SkillPolicy] 降级事件派发失败: {e}")
+            logger.warning(f"[SkillPolicy] correction.attempt 事件派发失败: {e}")
 
     def _confirm_engine_from_result(self, contract: QueryContract, tool_name: str,
                                     out_str: str, request) -> None:

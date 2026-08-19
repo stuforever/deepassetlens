@@ -581,7 +581,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                             yield f"event: sql_result\n"
                             yield f"data: {json.dumps({'columns': _cdata.get('columns', []), 'rows': _d_rows, 'row_count': _d_rc, 'sql': _cdata.get('sql', ''), 'returned_rows': _cdata.get('returned_rows', len(_d_rows)), 'preview_row_count': _cdata.get('preview_row_count', min(10, _d_rc)), 'is_preview': _cdata.get('is_preview', False), 'llm_is_preview': _cdata.get('llm_is_preview', False), 'llm_preview_row_count': _cdata.get('llm_preview_row_count', 0), 'result_available_for_ui': _cdata.get('result_available_for_ui', True), 'step_id': _d_sid, 'tool_name': _d_tool, 'data_snapshot_at': _cdata.get('data_snapshot_at'), 'cache_sources': _cdata.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
                         elif _cname in ("engine.selected", "stop.reached", "policy.rejected",
-                                       "template.bound", "template.drift"):
+                                       "template.bound", "template.drift", "correction.attempt"):
                             # 评审 P1-3：SkillPolicy 自定义事件动态推 SSE —— 运行中引擎确认/终止/
                             # 策略拒绝/模板绑定/漂移实时可见，前端按 run_id 合并更新当前契约（不等 done）。
                             # engine/stop 事件 payload 携带最新 contract.to_dict()（与 _ctx 同一对象）。
@@ -608,6 +608,20 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                     "reason": _cdata.get("reason", ""),
                                     "attempt": _cdata.get("attempt", 0),
                                     "blocked": _cdata.get("blocked", False),
+                                }
+                            elif _cname == "correction.attempt":
+                                # G2（融合设计 §4.3）：自纠错计数闸门实时可见（attempt/limit/stopped）
+                                _emit_ev = "correction"
+                                _payload = {
+                                    "kind": "correction.attempt",
+                                    "tool_call_id": _cdata.get("tool_call_id", ""),
+                                    "tool_name": _cdata.get("tool_name", ""),
+                                    "error_class": _cdata.get("error_class", ""),
+                                    "attempt": _cdata.get("attempt", 0),
+                                    "limit": _cdata.get("limit", 2),
+                                    "stopped": _cdata.get("stopped", False),
+                                    "reason": _cdata.get("reason", ""),
+                                    "contract": _cc,
                                 }
                             else:
                                 _emit_ev = "template"

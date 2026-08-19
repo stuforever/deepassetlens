@@ -3,6 +3,7 @@ kg_api 动作处理器 —— dispatch_kg_action 16 分支从 tupu_deepagent.py 
 
 路由仍在 tupu_deepagent.py 的 kg_api @tool 与 MCP tool 共用此分发器。
 """
+from __future__ import annotations
 
 # v3.5: 无 entity_code 时，从 SQL FROM 子句提取主表名（反查实体配置的 source_mode/data_source_id）
 # 支持 WITH CTE -> ... FROM main_table 和直接 FROM main_table
@@ -14,6 +15,32 @@ def _extract_main_table(sql: str) -> str:
         return ""
     m = _MAIN_TABLE_RE.search(sql)
     return m.group(1) if m else ""
+
+
+def _explain_precheck(exec_fn, sql: str, _ts: str) -> Optional[dict]:
+    """G2（融合设计 §4.3）：EXPLAIN 预检——SYNTAX/TABLE_MISSING 提前返回，省一轮完整执行。
+
+    返回错误 dict（含 error_class）或 None（预检通过 / 非预检类异常放行，交完整执行处理）。
+    仅 physical 引擎适用（Doris 执行器包装层不接受 EXPLAIN、DuckDB 联邦无 EXPLAIN 语义，均跳过）。
+    """
+    if not exec_fn or not sql:
+        return None
+    from app.services.engine_errors import classify_by_message
+    try:
+        res = exec_fn(f"EXPLAIN {sql}")
+    except Exception as e:
+        from app.services.engine_errors import classify_pymysql_error
+        ec = classify_pymysql_error(e)
+        if ec in ("SYNTAX", "TABLE_MISSING"):
+            return {"error": f"EXPLAIN 预检拦截: {e}", "error_class": ec,
+                    "log": f"[{_ts}] EXPLAIN 预检拦截（{ec}），未执行完整查询"}
+        return None  # 非预检类异常（连接/超时等）放行
+    if isinstance(res, dict) and res.get("error"):
+        ec = classify_by_message(str(res["error"]))
+        if ec in ("SYNTAX", "TABLE_MISSING"):
+            return {"error": f"EXPLAIN 预检拦截: {res['error']}", "error_class": ec,
+                    "log": f"[{_ts}] EXPLAIN 预检拦截（{ec}），未执行完整查询"}
+    return None
 
 # ============== 16 个 action 处理器（原 dispatch_kg_action 分支） ==============
 
@@ -137,6 +164,10 @@ def _kg_execute_sql(body: dict, _ts: str) -> dict:
     sql_text = _chk.sql
     current_sql = sql_text
     current_sql = sql_text
+    # G2（融合设计 §4.3）：EXPLAIN 预检（physical 引擎，毫秒级）——SYNTAX/TABLE_MISSING 提前返回
+    _pre = _explain_precheck(exec_fn, current_sql, _ts)
+    if _pre is not None:
+        return _pre
     from app.services.engine_errors import apply_error_class
     try:
         res = exec_fn(current_sql)
