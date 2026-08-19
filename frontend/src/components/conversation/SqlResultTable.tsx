@@ -246,4 +246,4 @@ const SqlResultTable: React.FC<SqlResultTableProps> = ({ data }) => {
   );
 };
 
-export default SqlResultTable;
+export default React.memo(SqlResultTable);

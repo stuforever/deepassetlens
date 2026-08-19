@@ -14,4 +14,4 @@ const DrawerFooter: React.FC<{ children: React.ReactNode; extra?: React.ReactNod
   </div>
 );
 
-export default DrawerFooter;
+export default React.memo(DrawerFooter);

@@ -85,4 +85,4 @@ const ErrorState: React.FC<ErrorStateProps> = ({
   );
 };
 
-export default ErrorState;
+export default React.memo(ErrorState);

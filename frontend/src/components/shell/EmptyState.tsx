@@ -58,4 +58,4 @@ const EmptyState: React.FC<EmptyStateProps> = ({
   );
 };
 
-export default EmptyState;
+export default React.memo(EmptyState);

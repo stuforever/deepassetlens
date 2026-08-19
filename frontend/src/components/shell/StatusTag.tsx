@@ -60,4 +60,5 @@ const StatusTag: React.FC<StatusTagProps> = ({ preset = 'default', text, childre
   );
 };
 
-export default StatusTag;
+// R1③：纯展示组件高频复用，memo 防父级重渲染连带
+export default React.memo(StatusTag);

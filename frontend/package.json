@@ -27,7 +27,8 @@
     "start": "react-scripts start",
     "build": "node --max-old-space-size=4096 node_modules/react-scripts/scripts/build.js",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "typecheck": "tsc --noEmit --skipLibCheck -p tsconfig.typecheck.json"
   },
   "eslintConfig": {
     "extends": [
