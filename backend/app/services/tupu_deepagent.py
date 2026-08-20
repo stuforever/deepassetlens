@@ -698,7 +698,9 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     from app.services.llm_client import get_chat_model
     # streaming=True 让 on_chat_model_stream 产出 token 事件，避免长时间无反馈（对齐数据问答修复）
     # v3.6: 按 connection_id 选模型（让前端选模型真正生效）
-    model = get_chat_model(temperature=0.0, streaming=True, connection_id=connection_id)
+    # S1d: 问数场景温度固化 0.1（要稳不要浪；rubric 判定模型保持 0.0 不变）
+    # 注：batch 路由修复（sql_integration->execute_doris_sql）后 0.1 不再引发计数题回归（早前 0/3 为引擎锁死锁所致）
+    model = get_chat_model(temperature=0.1, streaming=True, connection_id=connection_id)
 
     # MCP client 加载业务工具（16 个 tool，走 SSE，与 deepagent 解耦）
     # P3-a: 加内部服务身份 header（ENABLE_AUTH=1 时 MCP server 端校验，防外部直连）

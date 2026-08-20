@@ -92,6 +92,14 @@ def _build_contract_system_message(contract, question: str = "") -> str:
         f"- 输出模式：{contract.output_mode} —— 完整明细由前端查询结果表唯一展示，最终回答禁止输出 Markdown 明细表，只写结论/发现/风险/建议",
     ]
     base = "\n".join(lines)
+    # S1（L1）：聚合分布意图 -> 追加受控指令（路由层标记，结构层要求聚合视图）
+    agg = getattr(contract, "aggregate_intent", None)
+    if agg:
+        _dim = f"（维度列提示：{agg.get('dimension_hint')}）" if agg.get("dimension_hint") else ""
+        base += (
+            f"\n- 本问题要求聚合分布/占比视图{_dim}：必须返回 GROUP BY 维度列 + COUNT/SUM 的聚合结果，"
+            "禁止返回明细全表；如需维度枚举值先 sample_column_values。"
+        )
     if question:
         try:
             from app.services.qa_example_service import build_examples_payload, bump_hit_count

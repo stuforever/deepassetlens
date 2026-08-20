@@ -101,3 +101,37 @@ class TestRoutePriority:
         r = router.route("给我讲讲电力的历史")
         assert r.route_type in ("generic", "fallback")
         assert r.contract.route_type in ("generic", "fallback")
+
+
+class TestAggregateIntent:
+    """S1 稳定性攻坚（L1）：聚合分布意图标记 -> 契约注入受控指令。"""
+
+    def test_分布触发词_标记意图(self, router):
+        r = router.route("各电压等级的用电客户分布是怎样的")
+        assert r.route_type == "generic"
+        assert r.contract.aggregate_intent is not None
+        assert r.contract.aggregate_intent["trigger"] == "分布"
+        assert "GROUP BY" in r.contract.aggregate_intent["required_shape"]
+
+    def test_占比触发词_标记意图(self, router):
+        r = router.route("按重要性等级统计占比")
+        assert r.contract.aggregate_intent is not None
+        assert r.contract.aggregate_intent["trigger"] in ("占比", "统计")
+
+    def test_普通计数_不标记意图(self, router):
+        r = router.route("统计一下当前有多少用电客户")
+        assert r.route_type == "generic"
+        assert r.contract.aggregate_intent is None
+
+    def test_契约消息_含聚合指令(self):
+        """L1：契约 SystemMessage 追加「禁止返回明细全表」受控指令。"""
+        from app.api.data_intelligence import _build_contract_system_message
+        from app.services.skill_router import route_user_input
+        rr = route_user_input("各电压等级的用电客户分布是怎样的")
+        assert rr.contract.aggregate_intent is not None
+        msg = _build_contract_system_message(rr.contract, question="各电压等级的用电客户分布是怎样的")
+        assert "聚合分布" in msg and "禁止返回明细全表" in msg
+        # 普通问题无聚合指令
+        rr2 = route_user_input("统计一下当前有多少用电客户")
+        msg2 = _build_contract_system_message(rr2.contract, question="统计一下当前有多少用电客户")
+        assert "禁止返回明细全表" not in msg2

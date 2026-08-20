@@ -222,8 +222,29 @@ class SkillRouter:
     # ------------------------------------------------------------------
     # 优先级 4/5：低权限只读通用 / fallback
     # ------------------------------------------------------------------
+    # S1 稳定性攻坚（L1）：聚合分布意图触发词——命中即要求 GROUP BY 聚合视图，禁止返回明细全表
+    _AGGREGATE_TRIGGERS = ("分布", "占比", "构成", "比例", "合计", "汇总", "分组", "分别")
+
+    @staticmethod
+    def detect_aggregate_intent(text: str) -> Optional[Dict[str, Any]]:
+        """识别聚合分布/占比/构成类意图。命中 -> aggregate_intent；否则 None。"""
+        if not text:
+            return None
+        hit = [t for t in SkillRouter._AGGREGATE_TRIGGERS if t in text]
+        if not hit:
+            return None
+        return {
+            "trigger": hit[0],
+            "dimension_hint": None,  # 维度列提示可选：命中已知维度列名（voltage_name 等）时给出
+            "required_shape": "GROUP BY 维度列 + COUNT/SUM",
+        }
+
     def _route_generic(self, text: str) -> RouteResult:
-        contract = QueryContract.generic(route_reason="未命中场景剧本，进入低权限只读通用模式（禁止写/SQL执行外的工具）")
+        agg_intent = self.detect_aggregate_intent(text)
+        route_reason = "未命中场景剧本，进入低权限只读通用模式（禁止写/SQL执行外的工具）"
+        if agg_intent:
+            route_reason += f"；检测到聚合意图（触发词={agg_intent['trigger']}）"
+        contract = QueryContract.generic(route_reason=route_reason, aggregate_intent=agg_intent)
         return RouteResult(
             route_type="generic", skill_id="__generic__", workflow_step="__generic__",
             matched_rules=["fallback: 无场景命中"],

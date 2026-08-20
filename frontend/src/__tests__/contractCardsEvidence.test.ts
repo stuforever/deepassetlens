@@ -51,4 +51,12 @@ describe('证据胶囊（融合 M3 G7）', () => {
     expect(ev.summary).toContain('纠2');
     expect(ev.summary).toContain('信中');
   });
+
+  test('无数据支撑告警进摘要（S1 零执行含数字）', () => {
+    const evidence = { tables: [], rubric: null, corrections: 0, missing_data_support: true };
+    const caps = buildCapsules(route, contract, evidence, '低');
+    const ev = caps.find((c) => c.key === 'evidence')!;
+    expect(ev.summary).toContain('无数据支撑');
+    expect(ev.summary).toContain('信低');
+  });
 });

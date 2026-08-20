@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-08-20 17:30:42",
+  "total": 5,
+  "repeat": 1,
+  "first_round_accuracy_pct": 100.0,
+  "stable_accuracy_pct": 100.0,
+  "rubric": "on",
+  "reason_distribution": {
+    "ok": 5
+  },
+  "observations": [
+    {
+      "id": "dea96a1cfe21462b9c8e7a63751e27c0",
+      "question": "统计一下当前有多少用电客户",
+      "pass_ratio": 1,
+      "stable": true,
+      "tool_count_min": 3,
+      "tool_count_max": 3,
+      "examples_injected_any": true,
+      "corrections_max": 0
+    },
+    {
+      "id": "ac3a14ddd1d34d7298d39d7663b5ea28",
+      "question": "用电客户总数是多少",
+      "pass_ratio": 1,
+      "stable": true,
+      "tool_count_min": 3,
+      "tool_count_max": 3,
+      "examples_injected_any": true,
+      "corrections_max": 0
+    },
+    {
+      "id": "27209f5698a0452dbc77d076b32136c5",
+      "question": "统计用电客户总数",
+      "pass_ratio": 1,
+      "stable": true,
+      "tool_count_min": 3,
+      "tool_count_max": 3,
+      "examples_injected_any": true,
+      "corrections_max": 0
+    },
+    {
+      "id": "1957715fddfd418e968b1fd2bd6b680f",
+      "question": "列出用电客户清单",
+      "pass_ratio": 1,
+      "stable": true,
+      "tool_count_min": 5,
+      "tool_count_max": 5,
+      "examples_injected_any": true,
+      "corrections_max": 0
+    },
+    {
+      "id": "0dc21a21971c45ea983c66fef92904ac",
+      "question": "各电压等级的用电客户分布是怎样的",
+      "pass_ratio": 1,
+      "stable": true,
+      "tool_count_min": 7,
+      "tool_count_max": 7,
+      "examples_injected_any": true,
+      "corrections_max": 2
+    }
+  ],
+  "unstable": []
+}

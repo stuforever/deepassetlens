@@ -861,9 +861,16 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 _ev_confidence = "低"
             elif _rs == "satisfied" and not _ev_verification.get("warnings"):
                 _ev_confidence = "高"
+            # S1（b）：零执行但回答含数字 -> 无数据支撑告警（前端置信度判低 + 黄条提示）
+            _ev_missing_data = False
+            if not tool_results.get("sql_executed", False) and (final_answer or ""):
+                if any(_ch.isdigit() for _ch in final_answer):
+                    _ev_missing_data = True
+                    _ev_confidence = "低"
             _evidence = {
                 "route": _ev_route, "tables": _ev_tables, "examples_used": _ev_examples,
                 "verification": _ev_verification, "rubric": _ev_rubric, "corrections": _ev_corrections,
+                "missing_data_support": _ev_missing_data,  # S1（b）：未执行数据查询却在回答中给出数字
             }
             # SSE：query_verified（G4 验证结论） + rubric（DA-2 自评状态），均带置信度
             if _ev_verification:

@@ -56,6 +56,7 @@ const EvidenceCard: React.FC<Props> = ({ evidence, confidence }) => {
   const corrections = Number(ev.corrections || 0);
   const routeLabel = ev.route || '—';
   const warnings: string[] = (verification?.warnings || []).map(String);
+  const missingData = !!ev.missing_data_support;
 
   return (
     <ContractCardShell
@@ -75,6 +76,16 @@ const EvidenceCard: React.FC<Props> = ({ evidence, confidence }) => {
         ) : null
       }
     >
+      {missingData ? (
+        <div
+          style={{
+            fontSize: 12, lineHeight: 1.8, padding: '6px 10px', marginBottom: 8,
+            borderRadius: tokens.radius.default, color: tokens.colors.warning, background: tokens.colors.warningBg,
+          }}
+        >
+          ⚠ 本回答未执行数据查询，回答中的数字无数据支撑（置信度已判低）
+        </div>
+      ) : null}
       <Row label="路由">{routeLabel}</Row>
       <Row label="数据表">
         {tables.length > 0

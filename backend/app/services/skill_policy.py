@@ -15,6 +15,7 @@ SkillPolicyMiddleware 是"牢笼"：模型只能在契约允许的边界内做�
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any, Awaitable, Callable, Optional
 
@@ -47,13 +48,17 @@ _DEGRADATION_TOOLS = frozenset({"search_entities", "list_tables"})
 _DEGRADATION_TRIGGERS = frozenset({"TABLE_MISSING", "SYNTAX"})
 # G2（融合设计 §4.3）：可纠错 error_class（计数闸门计入）；上限 2 次，超限直接终止出失败卡
 _CORRECTION_LIMIT = 2
-_CORRECTABLE_CLASSES = frozenset({"TABLE_MISSING", "CATALOG_MISSING", "SYNTAX", "TIMEOUT"})
+_CORRECTABLE_CLASSES = frozenset({"TABLE_MISSING", "CATALOG_MISSING", "SYNTAX", "TIMEOUT", "AGGREGATE_DEGRADED"})
 # G2：error_class -> 结构化纠错指引（ToolMessage 附加 correction 字段，模型据此自纠）
 _CORRECTION_GUIDES = {
     "TABLE_MISSING": "表 {t} 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
     "CATALOG_MISSING": "表/catalog 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
     "SYNTAX": "SQL 报错（语法/列名错误）。调用 validate_attributes 校验列名后修正重试。",
     "TIMEOUT": "查询超时。移除 ORDER BY / 增加 LIMIT / 确认可否命中预聚合加速表。",
+    # S1（L2）：聚合退化（结果层硬校验）——聚合分布类问题返回了明细全表
+    "AGGREGATE_DEGRADED": "聚合分布类问题必须返回 GROUP BY 维度列 + COUNT/SUM 的聚合视图，当前返回了明细全表。"
+                          "请改为 SELECT 维度列, COUNT(*) AS cnt FROM 同一表 GROUP BY 维度列 ORDER BY cnt DESC，"
+                          "维度列先 sample_column_values 确认真实枚举值。",
 }
 _CORRECTION_GUIDE_EMPTY = "结果为空。调用 sample_column_values 检查过滤值是否真实存在，复核时间范围与口径。"
 
@@ -273,10 +278,16 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     # ------------------------------------------------------------------
     def _postcheck(self, contract: QueryContract, tool_name: str, result, request) -> None:
         out_str = _result_text(result)
+        # S1（L2）：执行类工具从 tool_call 参数取 SQL 兜底（结果文本不可解析时仍能判定聚合退化）
+        _sql_hint = ""
+        try:
+            _sql_hint = str((request.tool_call.get("args") or {}).get("sql", ""))
+        except Exception:
+            _sql_hint = ""
         # G2：error_class/空结果 -> ToolMessage 附加结构化纠错指引（模型据此自纠）
-        self._inject_correction_guidance(tool_name, result, out_str)
+        self._inject_correction_guidance(contract, tool_name, result, out_str, _sql_hint)
         # 批1：error_class 结构化判据 -> 表/catalog 不存在允许一次受控降级（重定位）
-        self._check_controlled_degradation(contract, tool_name, out_str, request)
+        self._check_controlled_degradation(contract, tool_name, out_str, request, _sql_hint)
         # 数据源模式确认（batch_entity_source_mode / get_entity_source_mode）-> 锁定/确认引擎
         if tool_name in ("batch_entity_source_mode", "get_entity_source_mode"):
             self._confirm_engine_from_result(contract, tool_name, out_str, request)
@@ -332,25 +343,22 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                     except Exception:
                         pass
 
-    def _inject_correction_guidance(self, tool_name: str, result, out_str: str) -> None:
+    def _inject_correction_guidance(self, contract, tool_name: str, result, out_str: str,
+                                    sql_hint: str = "") -> None:
         """G2：数据工具结果 dict 附加结构化 correction 指引（随 ToolMessage 透给模型）。
 
-        仅执行类数据工具；error_class ∈ 可纠错集 -> 按模板注入；成功但 0 行 -> 空结果指引。
-        非 dict 结果（已拒绝/框架消息）不动。
+        仅执行类数据工具；error_class ∈ 可纠错集 -> 按模板注入；成功但 0 行 -> 空结果指引；
+        S1（L2）：聚合意图下成功但未聚合 -> 注入聚合退化改写指引。
+        dict 结果写 correction 字段；ToolMessage 结果 content 前置 [纠错指引]（S1 修复）。
         """
         if tool_name not in ("execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api"):
             return
-        if not isinstance(result, dict):
+        # 已带 correction（dict 字段 / ToolMessage 已前置指引）不重复注入
+        if isinstance(result, dict) and "correction" in result:
             return
-        if "correction" in result:  # 已带 correction（handler 已加）不重复注入
+        if hasattr(result, "content") and "[纠错指引]" in str(result.content):
             return
-        try:
-            import json
-            data = json.loads(out_str) if out_str else {}
-        except Exception:
-            data = {}
-        if not isinstance(data, dict):
-            return
+        data = _parse_tool_json(out_str)
         ec = data.get("error_class")
         if ec in _CORRECTION_GUIDES:
             if ec == "TABLE_MISSING":
@@ -363,14 +371,18 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                         _tn = _m.group(1)
                 except Exception:
                     pass
-                result["correction"] = _CORRECTION_GUIDES[ec].format(t=_tn or "（见错误信息）")
+                _set_correction(result, _CORRECTION_GUIDES[ec].format(t=_tn or "（见错误信息）"))
             else:
-                result["correction"] = _CORRECTION_GUIDES[ec]
+                _set_correction(result, _CORRECTION_GUIDES[ec])
         elif ec is None and data.get("row_count") == 0:
-            result["correction"] = _CORRECTION_GUIDE_EMPTY
+            _set_correction(result, _CORRECTION_GUIDE_EMPTY)
+        elif _is_aggregate_degraded(contract, data, sql_hint):
+            _dim = contract.aggregate_intent.get("dimension_hint")
+            _set_correction(result, _CORRECTION_GUIDES["AGGREGATE_DEGRADED"] + (
+                f"（维度列提示：{_dim}）" if _dim else ""))
 
     def _check_controlled_degradation(self, contract: QueryContract, tool_name: str,
-                                      out_str: str, request) -> None:
+                                      out_str: str, request, sql_hint: str = "") -> None:
         """G2 计数闸门 + 批1 受控降级。
 
         数据工具返回可纠错 error_class -> contract._runtime["corrections"] +1；
@@ -380,14 +392,11 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         """
         if tool_name not in ("execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api"):
             return
-        import json
-        try:
-            data = json.loads(out_str) if out_str else {}
-        except Exception:
-            data = {}
-        if not isinstance(data, dict):
-            return
+        data = _parse_tool_json(out_str)
         ec = data.get("error_class")
+        # S1（L2）：聚合退化（成功但未聚合）-> 计入纠错闭环（上限 2 次、超限失败卡）
+        if ec is None and _is_aggregate_degraded(contract, data, sql_hint):
+            ec = "AGGREGATE_DEGRADED"
         if ec not in _CORRECTABLE_CLASSES:
             return
         # 计数闸门
@@ -594,14 +603,114 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
 
 
 def _result_text(result) -> str:
-    """把 handler 返回结果转字符串（兼容 str / ToolMessage / dict）。"""
+    """把 handler 返回结果转字符串（兼容 str / ToolMessage / dict）。
+
+    dict -> json.dumps；ToolMessage.content 为 langchain 块列表时提取首个 text 块。
+    S1（L2）修复：原 str(dict)/str(块列表) 为 Python repr，json.loads 失败，
+    导致 G2 error_class 计数与聚合退化判定同时失效。
+    """
     if result is None:
         return ""
     if isinstance(result, dict):
-        return str(result.get("content") or result)
+        try:
+            return json.dumps(result, ensure_ascii=False, default=str)
+        except Exception:
+            return str(result)
     if hasattr(result, "content"):
-        return str(result.content or "")
+        _c = result.content
+        if isinstance(_c, list):
+            for _b in _c:
+                if isinstance(_b, dict) and _b.get("type") == "text" and isinstance(_b.get("text"), str):
+                    return _b["text"]
+            return str(_c)
+        return str(_c or "")
     return str(result)
+
+
+def _parse_tool_json(out_str: str) -> dict:
+    """解析数据工具结果文本为 dict（S1 L2 修复）。
+
+    MCP 工具输出为 `{"type":"text","text":"<内层JSON>"}` 双层包装：先 json.loads 外层，
+    若为 text 包装则再解析内层（与 DataSummary 解嵌套逻辑一致），返回内层结果 dict。
+    """
+    if not out_str:
+        return {}
+    try:
+        data = json.loads(out_str)
+    except Exception:
+        return {}
+    if isinstance(data, dict) and data.get("type") == "text" and isinstance(data.get("text"), str):
+        try:
+            inner = json.loads(data["text"])
+            if isinstance(inner, dict):
+                return inner
+        except Exception:
+            pass
+    return data if isinstance(data, dict) else {}
+
+
+def _is_aggregate_degraded(contract, data, sql_hint: str = "") -> bool:
+    """S1（L2）：聚合意图 + 成功数据结果未做聚合 -> True。
+
+    判定（结果文本不可解析时以 tool 参数 sql 兜底）：aggregate_intent 在契约
+    && 结果成功（无 error_class/error——被拒/报错结果不算聚合退化）
+    && 实际执行 SQL 无 GROUP BY/DISTINCT。
+    聚合分布类问题的正确形态必须是 GROUP BY 维度列 + COUNT/SUM；任何无聚合的
+    明细/标量查询都视为聚合退化（明细全表或纯 COUNT 总数都不构成分布视图）。
+    """
+    if not getattr(contract, "aggregate_intent", None):
+        return False
+    if not isinstance(data, dict):
+        return False
+    if data.get("error_class") or data.get("error"):
+        return False  # 失败/被拒结果不算聚合退化
+    # 仅当确认是数据结果（有 row_count/columns）才判定——不可解析/拒绝文本不误判
+    has_result = data.get("row_count") is not None or data.get("columns") is not None
+    if not has_result:
+        return False
+    sql = str(data.get("sql") or sql_hint or "")
+    if not sql:
+        return False
+    import re as _re
+    if _re.search(r"\bGROUP\s*BY\b|\bDISTINCT\b", sql, _re.IGNORECASE):
+        return False
+    return True
+
+
+def _set_correction(result, text: str) -> None:
+    """把结构化纠错指引写到结果上（dict -> correction 字段；ToolMessage -> content 前置 [纠错指引]）。
+
+    S1（L2）修复：生产环境数据工具结果为 ToolMessage（content 为 langchain 块列表），
+    原 `result["correction"]` 仅对 dict 生效（单测外从未抵达模型）；此处与 DataSummary
+    同款 object.__setattr__ 前置指引，让模型实际看到纠错内容。
+    """
+    if not text:
+        return
+    if isinstance(result, dict):
+        result["correction"] = text
+        return
+    if hasattr(result, "content"):
+        _prefix = f"[纠错指引] {text}"
+        _c = result.content
+        if isinstance(_c, list):
+            _blocks = list(_c)
+            for _i, _b in enumerate(_blocks):
+                if isinstance(_b, dict) and _b.get("type") == "text" and isinstance(_b.get("text"), str):
+                    _nb = dict(_b)
+                    _nb["text"] = _prefix + "\n\n" + _b["text"]
+                    _blocks[_i] = _nb
+                    break
+            else:
+                _blocks.insert(0, {"type": "text", "text": _prefix})
+            try:
+                object.__setattr__(result, "content", _blocks)
+            except Exception:
+                pass
+        else:
+            try:
+                object.__setattr__(result, "content", _prefix + "\n\n" + str(_c or ""))
+            except Exception:
+                pass
 
 
 def _has_row_count(out_str: str) -> bool:

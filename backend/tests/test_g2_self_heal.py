@@ -11,6 +11,8 @@
 运行方式：
     cd backend && python -m pytest tests/test_g2_self_heal.py -v
 """
+import json
+
 import pytest
 
 from app.services.query_contract import QueryContract
@@ -37,32 +39,118 @@ def qc():
 
 
 class TestG2CorrectionGuidance:
-    def test_syntax_指引(self, mw):
+    def test_syntax_指引(self, mw, qc):
         res = {"error": "syntax err", "error_class": "SYNTAX"}
-        mw._inject_correction_guidance("execute_sql", res, '{"error":"syntax err","error_class":"SYNTAX"}')
+        mw._inject_correction_guidance(qc, "execute_sql", res, '{"error":"syntax err","error_class":"SYNTAX"}')
         assert "validate_attributes" in res.get("correction", "")
 
-    def test_table_missing_指引(self, mw):
+    def test_table_missing_指引(self, mw, qc):
         res = {"error": "Table 'db.no_such' doesn't exist", "error_class": "TABLE_MISSING"}
-        mw._inject_correction_guidance("execute_sql", res,
+        mw._inject_correction_guidance(qc, "execute_sql", res,
                                        '{"error":"Table \'db.no_such\' doesn\'t exist","error_class":"TABLE_MISSING"}')
         assert "search_entities" in res.get("correction", "")
         assert "no_such" in res.get("correction", "")  # 提取表名
 
-    def test_空结果_指引(self, mw):
+    def test_空结果_指引(self, mw, qc):
         res = {"columns": ["a"], "rows": [], "row_count": 0}
-        mw._inject_correction_guidance("execute_sql", res, '{"columns":["a"],"rows":[],"row_count":0}')
+        mw._inject_correction_guidance(qc, "execute_sql", res, '{"columns":["a"],"rows":[],"row_count":0}')
         assert "sample_column_values" in res.get("correction", "")
 
-    def test_非数据工具不注入(self, mw):
+    def test_非数据工具不注入(self, mw, qc):
         res = {"error": "x", "error_class": "SYNTAX"}
-        mw._inject_correction_guidance("search_entities", res, '{"error":"x","error_class":"SYNTAX"}')
+        mw._inject_correction_guidance(qc, "search_entities", res, '{"error":"x","error_class":"SYNTAX"}')
         assert "correction" not in res
 
-    def test_已带correction不重复(self, mw):
+    def test_已带correction不重复(self, mw, qc):
         res = {"error": "x", "error_class": "SYNTAX", "correction": "已有指引"}
-        mw._inject_correction_guidance("execute_sql", res, '{"error":"x","error_class":"SYNTAX"}')
+        mw._inject_correction_guidance(qc, "execute_sql", res, '{"error":"x","error_class":"SYNTAX"}')
         assert res["correction"] == "已有指引"
+
+    def test_聚合退化_注入改写指引(self, mw):
+        """S1（L2）：聚合意图下成功但明细全表 -> 注入聚合改写指引。"""
+        qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
+        res = {"columns": ["cust_id", "cust_name", "voltage_name", "ctrt_cap", "run_cap", "impt_lv_name", "bus_srv_addr_name"],
+               "rows": [[1] * 7, [2] * 7, [3] * 7], "row_count": 3,
+               "sql": "SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust"}
+        out = '{"columns":["cust_id","cust_name","voltage_name","ctrt_cap","run_cap","impt_lv_name","bus_srv_addr_name"],"rows":[[1,1,1,1,1,1,1],[2,2,2,2,2,2,2],[3,3,3,3,3,3,3]],"row_count":3,"sql":"SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust"}'
+        mw._inject_correction_guidance(qc, "execute_doris_sql", res, out)
+        assert "GROUP BY" in res.get("correction", "")
+
+    def test_聚合意图_已聚合不触发(self, mw):
+        """S1（L2）：SQL 含 GROUP BY -> 不误判聚合退化。"""
+        qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
+        res = {"columns": ["voltage_name", "cnt"], "rows": [["承压名称1", 1]], "row_count": 1,
+               "sql": "SELECT voltage_name, COUNT(*) AS cnt FROM pg_tupu.public.dim_cst_elec_cons_cust GROUP BY voltage_name"}
+        out = '{"columns":["voltage_name","cnt"],"rows":[["承压名称1",1]],"row_count":1,"sql":"SELECT voltage_name, COUNT(*) AS cnt FROM pg_tupu.public.dim_cst_elec_cons_cust GROUP BY voltage_name"}'
+        mw._inject_correction_guidance(qc, "execute_doris_sql", res, out)
+        assert "correction" not in res
+
+    def test_无聚合意图_明细不触发(self, mw, qc):
+        """S1（L2）：无 aggregate_intent（如清单类问题）-> 明细全表不误判。"""
+        res = {"columns": ["cust_id", "cust_name", "voltage_name", "ctrt_cap", "run_cap", "impt_lv_name", "bus_srv_addr_name"],
+               "rows": [[1] * 7, [2] * 7, [3] * 7], "row_count": 3,
+               "sql": "SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust"}
+        out = '{"columns":["cust_id","cust_name","voltage_name","ctrt_cap","run_cap","impt_lv_name","bus_srv_addr_name"],"rows":[[1,1,1,1,1,1,1],[2,2,2,2,2,2,2],[3,3,3,3,3,3,3]],"row_count":3,"sql":"SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust"}'
+        mw._inject_correction_guidance(qc, "execute_doris_sql", res, out)
+        assert "correction" not in res
+
+    def test_结果文本_无sql字段_sql参数兜底(self, mw):
+        """S1（L2）：结果 dict 有 row_count 但无 sql 字段 -> 用 tool 参数 sql 兜底判聚合退化。"""
+        qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
+        res = {"columns": ["cust_id", "cust_name", "voltage_name", "ctrt_cap", "run_cap", "impt_lv_name", "bus_srv_addr_name"],
+               "rows": [[1] * 7, [2] * 7, [3] * 7], "row_count": 3}
+        out = '{"columns":["cust_id","cust_name","voltage_name","ctrt_cap","run_cap","impt_lv_name","bus_srv_addr_name"],"rows":[[1,1,1,1,1,1,1],[2,2,2,2,2,2,2],[3,3,3,3,3,3,3]],"row_count":3}'
+        mw._inject_correction_guidance(
+            qc, "execute_doris_sql", res, out,
+            sql_hint="SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust")
+        assert "GROUP BY" in res.get("correction", "")
+
+    def test_结果不可解析_已聚合不误判(self, mw):
+        """S1（L2）：sql 参数含 GROUP BY -> 不判聚合退化（即使结果文本不可解析）。"""
+        qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
+        res = {"row_count": 3}
+        out = "{'row_count': 3}"
+        mw._inject_correction_guidance(
+            qc, "execute_doris_sql", res, out,
+            sql_hint="SELECT voltage_name, COUNT(*) AS cnt FROM pg_tupu.public.dim_cst_elec_cons_cust GROUP BY voltage_name")
+        assert "correction" not in res
+
+    def test_result_text_dict_序列化为JSON(self):
+        """S1（L2）修复：_result_text 对 dict 输出合法 JSON（G2 计数与 L2 判定依赖解析）。"""
+        from app.services.skill_policy import _result_text
+        import json
+        s = _result_text({"row_count": 3, "sql": "SELECT 1"})
+        d = json.loads(s)
+        assert d["row_count"] == 3 and "SELECT 1" in d["sql"]
+
+    def test_ToolMessage_聚合退化_前置纠错指引(self, mw):
+        """S1（L2）修复：生产环境 result 为 ToolMessage（content 块列表），纠错指引前置到 content。"""
+        from langchain_core.messages import ToolMessage
+        qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
+        inner = json.dumps({"columns": ["cust_id", "cust_name", "voltage_name", "ctrt_cap", "run_cap", "impt_lv_name", "bus_srv_addr_name"],
+                            "rows": [[1] * 7, [2] * 7, [3] * 7], "row_count": 3,
+                            "sql": "SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust"}, ensure_ascii=False)
+        wrapped = json.dumps({"type": "text", "text": inner}, ensure_ascii=False)
+        res = ToolMessage(content=[{"type": "text", "text": wrapped}], tool_call_id="tc1")
+        mw._inject_correction_guidance(qc, "execute_doris_sql", res, wrapped)
+        assert "[纠错指引]" in str(res.content)
+        assert "GROUP BY" in str(res.content)
+        # 已前置指引不重复注入
+        mw._inject_correction_guidance(qc, "execute_doris_sql", res, wrapped)
+        assert str(res.content).count("[纠错指引]") == 1
+
+    def test_被拒结果_不算聚合退化(self, mw):
+        """S1（L2）：模式守卫等被拒结果（含 error 键、无 error_class）不判聚合退化。"""
+        qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
+        res = {"error": "模式守卫拒绝: 请用 execute_doris_sql", "log": "blocked"}
+        out = '{"error":"模式守卫拒绝: 请用 execute_doris_sql","log":"blocked"}'
+        mw._inject_correction_guidance(
+            qc, "execute_sql", res, out,
+            sql_hint="SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust")
+        assert "correction" not in res
+        mw._check_controlled_degradation(qc, "execute_sql", out, _Req(),
+                                         sql_hint="SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust")
+        assert qc._runtime.get("corrections", 0) == 0
 
 
 class TestG2CorrectionGate:
@@ -88,6 +176,22 @@ class TestG2CorrectionGate:
     def test_非数据工具不计(self, mw, qc):
         mw._check_controlled_degradation(qc, "search_entities", '{"error":"x","error_class":"SYNTAX"}', _Req())
         assert qc._runtime.get("corrections", 0) == 0
+
+    def test_聚合退化_计入纠错闭环(self, mw):
+        """S1（L2）：聚合退化计入 corrections 上限（同 SYNTAX 等可纠错类）。"""
+        qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
+        agg_out = ('{"columns":["cust_id","cust_name","voltage_name","ctrt_cap","run_cap","impt_lv_name","bus_srv_addr_name"],'
+                   '"rows":[[1,1,1,1,1,1,1],[2,2,2,2,2,2,2],[3,3,3,3,3,3,3]],"row_count":3,'
+                   '"sql":"SELECT * FROM pg_tupu.public.dim_cst_elec_cons_cust"}')
+        mw._check_controlled_degradation(qc, "execute_doris_sql", agg_out, _Req())
+        assert qc._runtime["corrections"] == 1
+        assert not qc.stop_reached
+        # 二次触发仍计数，未超限
+        mw._check_controlled_degradation(qc, "execute_doris_sql", agg_out, _Req())
+        assert qc._runtime["corrections"] == 2
+        # 三次 -> 超限终止（失败卡）
+        mw._check_controlled_degradation(qc, "execute_doris_sql", agg_out, _Req())
+        assert qc.stop_reached and "execute_doris_sql" not in qc.allowed_tools
 
 
 class TestG2ExplainPrecheck:

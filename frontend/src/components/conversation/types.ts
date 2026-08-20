@@ -115,6 +115,8 @@ export type ChatMessagePayload = {
     verification?: { row_count?: number; null_rates?: Record<string, number>; warnings?: string[] } | null;
     rubric?: { status?: string; iterations?: number } | null;
     corrections?: number;
+    /** S1（b）：零执行但回答含数字 -> 无数据支撑告警 */
+    missing_data_support?: boolean;
   } | null;
   confidence?: string;   // 高 / 中 / 低
   /** 融合 M3 G7 实时事件缓存（query_verified / rubric 流式中间态，终态以 evidence 快照为准） */

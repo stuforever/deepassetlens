@@ -53,12 +53,14 @@ ENGINE_TO_TOOLS: Dict[str, List[str]] = {
 DATA_TOOLS = frozenset({"execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api"})
 
 # M3（融合设计 §5.1）：generic 模式自评 rubric（RubricMiddleware 激活文案；scenario 模板已保证结构，rubric=None）
+# S1（L3）：第 5 条补分布/统计类结果必须聚合视图，禁止明细全表。
 GENERIC_RUBRIC = (
     "本回答必须满足：\n"
     "1. 数字必须来自工具返回结果，禁止编造或心算；\n"
     "2. 注明统计口径：实体表、时间范围、过滤条件；\n"
     "3. 结果为空或验证失败时明示原因，不得给猜测值；\n"
-    "4. 直接回答用户问题本身的量词与维度（总数/ TopN/占比…）。"
+    "4. 直接回答用户问题本身的量词与维度（总数/ TopN/占比…）；\n"
+    "5. 分布/统计类问题的结果必须是聚合视图（GROUP BY 维度列），不得返回明细全表。"
 )
 
 
@@ -81,6 +83,7 @@ class QueryContract:
     route_reason: str = ""
     route_type: str = "scenario"                                   # scenario | generic | ...
     rubric: Optional[str] = None                                   # M3 DA-2：自评闸门 rubric（generic 默认文案；scenario 为 None）
+    aggregate_intent: Optional[Dict[str, Any]] = None              # S1（稳定性攻坚 L1）：聚合分布意图标记 {dimension_hint, required_shape}
     multi_engine: bool = False                                     # 批4/场景迁移：多数据源逐源分发（引擎不唯一）
     forbid_markdown_detail_table: bool = True                      # 输出契约：结果已推前端时禁 Markdown 明细表
     entity_engine_map: Dict[str, str] = field(default_factory=dict)  # 实体 -> 引擎 真实映射（源模式工具返回）
@@ -136,8 +139,12 @@ class QueryContract:
 
     @classmethod
     def generic(cls, *, scope: Optional[Dict[str, Any]] = None,
-                route_reason: str = "") -> "QueryContract":
-        """未命中场景时的低权限只读通用契约（禁止写入/task/Shell）。"""
+                route_reason: str = "", aggregate_intent: Optional[Dict[str, Any]] = None) -> "QueryContract":
+        """未命中场景时的低权限只读通用契约（禁止写入/task/Shell）。
+
+        aggregate_intent（S1 稳定性攻坚 L1）：路由层识别分布/占比/构成类触发词后注入，
+        契约追加受控指令（禁止返回明细全表）+ 结果层硬校验钩子。
+        """
         c = cls(
             run_id=f"run_{uuid.uuid4().hex[:12]}",
             skill_id="__generic__",
@@ -150,6 +157,7 @@ class QueryContract:
             route_reason=route_reason or "未命中场景剧本，进入低权限只读通用模式",
             route_type="generic",
             rubric=GENERIC_RUBRIC,
+            aggregate_intent=aggregate_intent,
             _runtime={"engine_locked": False, "result_obtained": False, "violations": 0},
         )
         return c
@@ -309,6 +317,7 @@ class QueryContract:
             "route_reason": self.route_reason,
             "route_type": self.route_type,
             "rubric": self.rubric,
+            "aggregate_intent": self.aggregate_intent,  # S1（L1）：聚合分布意图（前端证据/契约卡观测）
             "multi_engine": self.multi_engine,
             "forbid_markdown_detail_table": self.forbid_markdown_detail_table,
             "confirmed_engines": list(self._runtime.get("confirmed_engines") or []),

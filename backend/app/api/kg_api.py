@@ -322,6 +322,7 @@ def batch_entity_source_mode(payload: dict):
     items = []
     has_api = False
     has_catalog = False  # 有 doris_catalog 的表（physical_table + sql_integration 绑了 catalog）
+    has_sql_integration = False  # 有 SQL 集成（sql_integration + integration_sql）的表 -> Doris 联邦
     for code in codes:
         ent = ent_map.get(code)
         if not ent:
@@ -335,6 +336,12 @@ def batch_entity_source_mode(payload: dict):
             has_api = True
         if ent.doris_catalog:
             has_catalog = True
+        # S1 修复：sql_integration（有 integration_sql）即使未显式绑 doris_catalog，
+        # 其 integration_sql 用三段命名（catalog.db.table）走 Doris 联邦 -> 必须 execute_doris_sql。
+        # 与模式守卫（execute_sql 对非 physical_table 一律拦截并提示 execute_doris_sql）保持一致，
+        # 避免「路由推荐 execute_sql -> 引擎锁 physical -> execute_doris_sql 被策略拒」死锁。
+        if sm == "sql_integration":
+            has_sql_integration = True
         ds = ds_map.get(str(ent.data_source_id)) if ent.data_source_id else None
         items.append({
             "entity_code": code,
@@ -352,17 +359,9 @@ def batch_entity_source_mode(payload: dict):
     # 路由决策：
     # - 多表含 api_integration -> execute_api_sql（DuckDB 跨源联邦，API 虚拟表 + 物理表 JOIN）
     # - 单表 api_integration -> execute_entity_api（DuckDB 单对象 API）
-    # - 有 doris_catalog 的表 -> execute_doris_sql（Doris 联邦三段命名）
+    # - 有 doris_catalog 或有 SQL 集成（sql_integration）的表 -> execute_doris_sql（Doris 联邦三段命名）
     # - 未绑 catalog 的物理表 -> execute_sql（物理直连）
-    if has_api:
-        if len(codes) > 1:
-            recommended = ("api_federated", "execute_api_sql")
-        else:
-            recommended = ("api_integration", "execute_entity_api")
-    elif has_catalog:
-        recommended = ("doris_federated", "execute_doris_sql")
-    else:
-        recommended = ("physical_table", "execute_sql")
+    recommended = _recommend_source_mode(has_api, has_catalog, has_sql_integration, codes)
 
     return {
         "items": items,
@@ -370,9 +369,27 @@ def batch_entity_source_mode(payload: dict):
         "recommended_tool": recommended[1],
         "has_api_integration": has_api,
         "has_catalog": has_catalog,
+        "has_sql_integration": has_sql_integration,
         # 批3：附加引擎健康快照（懒探测+60s缓存，供前端健康徽标/故障提示）
         "engine_health": _engine_health_snapshot(),
     }
+
+
+def _recommend_source_mode(has_api: bool, has_catalog: bool, has_sql_integration: bool, codes) -> tuple:
+    """batch_entity_source_mode 路由决策（纯函数，可单测）。
+
+    S1 修复：sql_integration（有 integration_sql）即使未显式绑 doris_catalog，
+    也应走 execute_doris_sql（Doris 联邦）——与模式守卫对非 physical_table 一律
+    拦截 execute_sql 的约束一致，避免「路由推荐 execute_sql -> 引擎锁 physical ->
+    execute_doris_sql 被策略拒」死锁。
+    """
+    if has_api:
+        if len(codes) > 1:
+            return ("api_federated", "execute_api_sql")
+        return ("api_integration", "execute_entity_api")
+    if has_catalog or has_sql_integration:
+        return ("doris_federated", "execute_doris_sql")
+    return ("physical_table", "execute_sql")
 
 
 def _engine_health_snapshot() -> dict:

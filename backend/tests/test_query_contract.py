@@ -202,6 +202,19 @@ class TestEngineRouter:
         assert resolve_engine({}) is None
         assert resolve_engine(None) is None
 
+    def test_batch_routing_sql_integration_without_catalog_doris(self):
+        """S1 回归修复：sql_integration 无 doris_catalog 也路由 execute_doris_sql（与模式守卫一致）。"""
+        from app.api.kg_api import _recommend_source_mode
+        rec = _recommend_source_mode(False, False, True, ["dim_cst_elec_cons_cust"])
+        assert rec == ("doris_federated", "execute_doris_sql")
+        # 有 doris_catalog 的 physical_table 同样走 doris
+        assert _recommend_source_mode(False, True, False, ["a"]) == ("doris_federated", "execute_doris_sql")
+        # 纯物理表 -> execute_sql
+        assert _recommend_source_mode(False, False, False, ["a"]) == ("physical_table", "execute_sql")
+        # api 优先级最高
+        assert _recommend_source_mode(True, True, True, ["a", "b"]) == ("api_federated", "execute_api_sql")
+        assert _recommend_source_mode(True, False, False, ["a"]) == ("api_integration", "execute_entity_api")
+
     def test_lock_engine_matches_router(self, relationship_contract):
         d = resolve_engine({"recommended_tool": "execute_doris_sql"})
         relationship_contract.lock_engine(d.engine, d.reason)

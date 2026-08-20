@@ -139,6 +139,7 @@ export function buildCapsules(
   const evTables = Array.isArray(evTablesRaw) ? (evTablesRaw as string[]).length : 0;
   const evRubricStatus = evidence?.rubric?.status as string | undefined;
   const evCorrections = Number(evidence?.corrections || 0);
+  const evMissingData = !!evidence?.missing_data_support;  // S1（b）：零执行但回答含数字
   const confDot = confidence === '高' ? DOT.success : (confidence === '低' ? DOT.error : (confidence === '中' ? DOT.warning : DOT.mute));
   const evCap: Capsule = {
     key: 'evidence',
@@ -149,6 +150,7 @@ export function buildCapsules(
       evRubricStatus ? (evRubricStatus === 'satisfied' ? '自评通过' : '自评' + (evRubricStatus === 'needs_revision' ? '修订' : evRubricStatus)) : '未自评',
       evCorrections > 0 ? `纠${evCorrections}` : '',
       confidence ? `信${confidence}` : '',
+      evMissingData ? '无数据支撑' : '',
     ].filter(Boolean).join('·') || '—',
     color: confidence === '高' ? tokens.colors.success : (confidence === '低' ? tokens.colors.error : tokens.colors.primary),
     softBg: confidence === '高' ? tokens.colors.successBg : (confidence === '低' ? tokens.colors.errorBg : tokens.colors.primaryBg),

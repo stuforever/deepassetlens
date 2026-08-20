@@ -79,7 +79,12 @@ def digest_matches(got, exp):
 
 
 def run_golden_question(question: str, thread_id: str, timeout: int) -> dict:
-    """走流式问答，返回 {ok, digest?, reason, tool_count, confidence}。"""
+    """走流式问答，返回 {ok, digest?, reason, tool_count, examples_injected, corrections, confidence}。
+
+    S1（b/c）：reason 四分类（no_sql_result / stream_timeout / stream_error / rubric_blocked）；
+    观测采集修正——tool_count 按 `event: think` 带 tool_name 的条目计数，examples_injected/corrections
+    取自 `event: done`（examples_used / corrections）。
+    """
     url = f"{BASE}/api/data-intelligence/chat/freeplan/stream"
     events = {}
     buf = ""
@@ -98,26 +103,59 @@ def run_golden_question(question: str, thread_id: str, timeout: int) -> dict:
                     except Exception:
                         data = {"raw": raw[:120]}
                     events.setdefault(buf, []).append(data)
+    except requests.exceptions.Timeout:
+        return {"ok": False, "reason": "stream_timeout", "digest": None, "tool_count": 0,
+                "examples_injected": 0, "corrections": 0, "confidence": None}
     except Exception as e:
-        return {"ok": False, "reason": f"stream 异常: {e}", "digest": None, "tool_count": 0, "confidence": None}
+        return {"ok": False, "reason": f"stream_error: {e}", "digest": None, "tool_count": 0,
+                "examples_injected": 0, "corrections": 0, "confidence": None}
+    # 观测采集（S1c）：tool_count 按 think 事件带 tool_name（工具启动）计数
+    tool_count = len([e for e in events.get("think", []) if e.get("tool_name")])
+    done = events.get("done")
+    conf = None
+    examples = []
+    corrections = 0
+    if done:
+        _d = done[-1]
+        conf = _d.get("confidence")
+        _ev = _d.get("evidence") or {}
+        examples = _ev.get("examples_used") or []
+        corrections = int(_d.get("corrections") or _ev.get("corrections") or 0)
+    examples_injected = len(examples)
+    max_sim = None
+    for _h in examples:
+        _s = _h.get("sim")
+        if _s is not None:
+            try:
+                _s = float(_s)
+                max_sim = _s if max_sim is None else max(max_sim, _s)
+            except Exception:
+                pass
     sq = events.get("sql_result")
     if not sq:
-        return {"ok": False, "reason": "无 sql_result 事件（无数据/失败/未执行查询）", "digest": None,
-                "tool_count": len(events.get("tool_start", [])), "confidence": None}
+        # S1b：有 rubric 且未 satisfied（有回答但未执行数据查询）-> rubric_blocked；否则 no_sql_result
+        _rs = ""
+        for _r in events.get("rubric", []):
+            _rs = _r.get("status") or _rs
+        if _rs and _rs not in ("satisfied",):
+            reason = "rubric_blocked"
+        else:
+            reason = "no_sql_result"
+        return {"ok": False, "reason": reason, "digest": None, "tool_count": tool_count,
+                "examples_injected": examples_injected, "corrections": corrections, "confidence": conf}
     last = sq[-1]
     rows = last.get("rows") or []
     rc = last.get("row_count") or len(rows)
     digest = compute_digest(rows, rc)
-    conf = None
-    for d in events.get("done", []):
-        conf = d.get("confidence")
     return {"ok": True, "digest": digest, "reason": "ok",
-            "tool_count": len(events.get("tool_start", [])), "confidence": conf}
+            "tool_count": tool_count, "examples_injected": examples_injected,
+            "corrections": corrections, "confidence": conf}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 条（0=全部）")
+    ap.add_argument("--only", default="", help="只跑 id 含该前缀的金标（如 --only 0dc21a21）")
     ap.add_argument("--stream-timeout", type=int, default=240)
     ap.add_argument("--repeat", type=int, default=1, help="每条跑 N 次（平滑 LLM 方差），报告通过率与稳定通过率")
     ap.add_argument("--out", default="docs/eval", help="产物目录（相对 repo 根）")
@@ -136,6 +174,8 @@ def main():
         db.close()
     if args.limit:
         goldens = goldens[: args.limit]
+    if args.only:
+        goldens = [g for g in goldens if args.only in str(g.id)]
     if not goldens:
         print("[Eval] 无启用金标。请先 POST /api/v1/golden-qa/seed 或灌入数据。")
         sys.exit(1)
@@ -164,6 +204,8 @@ def main():
             runs.append({
                 "run": r + 1, "pass": ok, "reason": reason,
                 "got_digest": res.get("digest"), "tool_count": res.get("tool_count"),
+                "examples_injected": res.get("examples_injected"),
+                "corrections": res.get("corrections"),
                 "confidence": res.get("confidence"),
             })
             time.sleep(0.5)
@@ -181,12 +223,30 @@ def main():
     first_pass = sum(1 for r in results if r["runs"][0]["pass"])
     acc = round(first_pass / total * 100, 1) if total else 0.0
     stable_acc = round(stable_pass / total * 100, 1) if total else 0.0
+    # S1（b）：reason 四分类分布（no_sql_result / stream_timeout / stream_error / rubric_blocked / ok）
+    from collections import Counter as _Counter
+    _reason_dist = _Counter(str(_rc.get("reason")) for _r in results for _rc in _r["runs"])
+    # S1（c）：逐题观测（tool_count / examples_injected / corrections / confidence）落盘可验
+    _obs = []
+    for _r in results:
+        _tc = [_rc.get("tool_count") for _rc in _r["runs"]]
+        _ex = [_rc.get("examples_injected") for _rc in _r["runs"]]
+        _co = [_rc.get("corrections") for _rc in _r["runs"]]
+        _obs.append({
+            "id": _r["id"], "question": _r["question"][:60],
+            "pass_ratio": _r["pass_ratio"], "stable": _r["stable"],
+            "tool_count_min": min(_tc), "tool_count_max": max(_tc),
+            "examples_injected_any": any(v and v > 0 for v in _ex),
+            "corrections_max": max(_co),
+        })
     summary = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "total": total, "repeat": args.repeat,
         "first_round_accuracy_pct": acc,   # 单轮口径（兼容环比：同 repeat=1 即首轮）
         "stable_accuracy_pct": stable_acc,  # 稳定通过口径（半数以上运行正确）
         "rubric": "on" if os.getenv("TUPU_RUBRIC_DISABLED") != "1" else "off",
+        "reason_distribution": dict(_reason_dist),  # S1（b）：四分类观测
+        "observations": _obs,  # S1（c）：tool_count/examples_injected/corrections 观测
         "unstable": [r for r in results if not r["stable"]],
     }
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
