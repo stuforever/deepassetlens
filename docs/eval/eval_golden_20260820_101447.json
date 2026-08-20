@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-08-20 10:14:47",
+  "total": 5,
+  "repeat": 3,
+  "first_round_accuracy_pct": 100.0,
+  "stable_accuracy_pct": 80.0,
+  "rubric": "on",
+  "unstable": [
+    {
+      "id": "0dc21a21971c45ea983c66fef92904ac",
+      "question": "各电压等级的用电客户分布是怎样的",
+      "expected_sql": "SELECT voltage_name AS dim, COUNT(*) AS cnt FROM pg_tupu.public.dim_cst_elec_cons_cust GROUP BY voltage_name ORDER BY cnt DESC",
+      "expected_digest": {
+        "first_row": [
+          "承压名称1",
+          1
+        ],
+        "row_count": 3,
+        "first_row_hash": "3c55c3ecdc657d2e"
+      },
+      "pass_ratio": 1,
+      "stable": false,
+      "runs": [
+        {
+          "run": 1,
+          "pass": true,
+          "reason": "ok",
+          "got_digest": {
+            "row_count": 3,
+            "first_row_hash": "3c55c3ecdc657d2e",
+            "first_row": [
+              "承压名称1",
+              1
+            ]
+          },
+          "tool_count": 0,
+          "confidence": "中"
+        },
+        {
+          "run": 2,
+          "pass": false,
+          "reason": "ok",
+          "got_digest": {
+            "row_count": 3,
+            "first_row_hash": "61951475e604a316",
+            "first_row": [
+              "CUS0001",
+              "用电客户名称1",
+              "承压名称1",
+              "6024.82",
+              "8916.77",
+              "重要性等级名称1",
+              "业务服务地址名称1"
+            ]
+          },
+          "tool_count": 0,
+          "confidence": "中"
+        },
+        {
+          "run": 3,
+          "pass": false,
+          "reason": "无 sql_result 事件（无数据/失败/未执行查询）",
+          "got_digest": null,
+          "tool_count": 0,
+          "confidence": null
+        }
+      ]
+    }
+  ]
+}

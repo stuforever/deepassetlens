@@ -31,8 +31,8 @@ SEED_MAX = 60
 # 规范表一致，否则 eval 必然错（比结果不比 SQL，但表不一致 = 不同答案）。
 SEED_TEMPLATES: List[Dict[str, str]] = [
     # 用电客户统计类（agent 规范表 pg_tupu.public.dim_cst_elec_cons_cust，源表 COUNT=3；
-    # 注意：裸 COUNT(*) 会被预聚合加速器拦截返回陈旧值 10，故期望 SQL 用 WHERE cust_id IS NOT NULL
-    # 绕过加速器取源真实值 3——加速器陈旧问题已记发布清单）
+    # 加速器跨 catalog 防护（engine_accelerator.try_serve）已生效：pg_tupu 显式 catalog 的裸 COUNT 不再被
+    # internal 预聚合值 10 顶替；WHERE 版保底取源真实值 3，两路均正确）
     {"question": "统计一下当前有多少用电客户", "expected_sql": "SELECT COUNT(*) AS total FROM pg_tupu.public.dim_cst_elec_cons_cust WHERE cust_id IS NOT NULL",
      "route_type": "generic", "scenario_tag": "statistics"},
     {"question": "用电客户总数是多少", "expected_sql": "SELECT COUNT(*) AS total FROM pg_tupu.public.dim_cst_elec_cons_cust WHERE cust_id IS NOT NULL",
