@@ -141,6 +141,8 @@ def main():
         sys.exit(1)
 
     print(f"== 金标评估：{len(goldens)} 条 × {args.repeat} 次，stream-timeout={args.stream_timeout}s ==")
+    # 唯一运行前缀：每次调用全新会话（thread 复用会让 agent 从旧会话恢复而不执行，污染结果）
+    run_uid = f"{time.strftime('%H%M%S')}_{os.getpid()}"
     results = []
     stable_pass = 0
     for i, g in enumerate(goldens, 1):
@@ -150,7 +152,7 @@ def main():
         pass_cnt = 0
         for r in range(args.repeat):
             print(f"  [{i}/{len(goldens)}] ({r + 1}/{args.repeat}) {q[:40]} ... ", end="", flush=True)
-            res = run_golden_question(q, f"eval_{g.id}_r{r}", args.stream_timeout)
+            res = run_golden_question(q, f"eval_{run_uid}_{g.id}_r{r}", args.stream_timeout)
             ok = False
             reason = res["reason"]
             if res["ok"] and res["digest"]:

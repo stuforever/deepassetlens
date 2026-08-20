@@ -178,6 +178,7 @@ def try_serve(sql: str) -> Optional[Dict[str, Any]]:
     if not isinstance(src, exp.Table):
         return None
     src_name = src.name
+    src_catalog = src.catalog or ""  # 显式 catalog（''=默认 internal 目录）；跨 catalog 同名表是不同实体
     exprs = list(ast.expressions)
     if len(exprs) != 1:
         return None
@@ -202,6 +203,10 @@ def try_serve(sql: str) -> Optional[Dict[str, Any]]:
                 hit = a
                 break
         if not hit or not _is_fresh(hit):
+            return None
+        # 跨 catalog 防护：查询显式带 catalog 且与加速器目标 catalog 不一致 -> 不拦截
+        # （基表同名跨 catalog 是不同实体，拦截会用错误目录的预聚合值，如 pg_tupu 的 COUNT 被 internal 的 10 顶替）
+        if src_catalog and hit.target_catalog and src_catalog != hit.target_catalog:
             return None
         if not hit.agg_col:
             return None
