@@ -918,6 +918,20 @@ class KgVerifiedQaExample(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class KgExampleHitLog(Base):
+    """G1 示例命中事件（S4：examples.injected 命中落库，供「30 天命中」统计与运营回顾）。
+
+    每次问答把示例注入 SystemMessage 时写一行（bump_hit_count 内批量插入）；
+    「30 天命中」= 近 30 天（now - interval 30 day）的行数。表由 create_all 自动建，
+    命中为高频打点，只保留示例 id + 时间戳（最小列集，便于按时间聚合与清理）。
+    """
+
+    __tablename__ = "kg_example_hit_logs"
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    example_id = Column(String(36), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class KgGoldenQaSet(Base):
     """金标评估集（融合设计 §6.2 G6）。
 

@@ -90,6 +90,12 @@ def update_qa_example_status(example_id: str, body: QaExampleStatusUpdate, db: S
     return {"code": 200, "data": r}
 
 
+@router.get("/qa-examples/{example_id}/similar")
+def similar_qa_examples(example_id: str, top: int = 5, db: Session = Depends(get_db)):
+    """S4a：Drawer 内 top-N 相似问题预览（带相似度）。"""
+    return {"code": 200, "data": {"items": qa_example_service.find_similar_examples(db, example_id, top=min(top, 10))}}
+
+
 @router.delete("/qa-examples/{example_id}")
 def delete_qa_example(example_id: str, db: Session = Depends(get_db)):
     r = qa_example_service.delete_qa_example(db, example_id)

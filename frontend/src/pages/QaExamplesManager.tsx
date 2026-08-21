@@ -8,11 +8,13 @@
  *   · 审核（status=review 的反馈修正示例 -> enabled，走同一条 PATCH）
  *   · 删除（Popconfirm + DELETE，DB 行 + Qdrant 点同步）
  *   · 类型/状态徽标走 StatusTag token 语义色，零硬编码
+ *   · S4a：30 天命中列（近 30 天 examples.injected 命中事件数）+ 行操作「相似预览」
+ *     （Drawer 内 top-5 相似问题 + 相似度，走 GET /qa-examples/{id}/similar）
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Drawer, Form, Input, message, Popconfirm, Select, Space, Tag } from 'antd';
-import { PlusOutlined, DeleteOutlined, PoweroffOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
-import { qaExamplesApi, type QaExampleItem } from '../services/api';
+import { Button, Drawer, Form, Input, message, Popconfirm, Select, Space, Spin, Tag } from 'antd';
+import { PlusOutlined, DeleteOutlined, PoweroffOutlined, CheckCircleOutlined, ReloadOutlined, LinkOutlined } from '@ant-design/icons';
+import { qaExamplesApi, type QaExampleItem, type QaExampleSimilarItem } from '../services/api';
 import { PageShell, StatusTag, DataTableShell, DrawerFooter } from '../components/shell';
 import { tokens } from '../theme/tokens';
 
@@ -65,6 +67,10 @@ const QaExamplesManager: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
+  const [simOpen, setSimOpen] = useState(false);
+  const [simLoading, setSimLoading] = useState(false);
+  const [simTarget, setSimTarget] = useState<QaExampleItem | null>(null);
+  const [simItems, setSimItems] = useState<QaExampleSimilarItem[]>([]);
   const size = 20;
 
   const fetchList = useCallback(async () => {
@@ -135,6 +141,24 @@ const QaExamplesManager: React.FC = () => {
     setDrawerOpen(true);
   };
 
+  const handleShowSimilar = useCallback(async (row: QaExampleItem) => {
+    setSimTarget(row);
+    setSimItems([]);
+    setSimOpen(true);
+    setSimLoading(true);
+    try {
+      const res = await qaExamplesApi.similar(row.id);
+      const data = res.data?.data || {};
+      setSimItems(Array.isArray(data.items) ? data.items : []);
+    } catch (e) {
+      console.error('[QaExamples] 相似检索失败', e);
+      message.error('相似问题检索失败（向量库不可用时为空）');
+      setSimItems([]);
+    } finally {
+      setSimLoading(false);
+    }
+  }, []);
+
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
@@ -171,12 +195,18 @@ const QaExamplesManager: React.FC = () => {
       const m = STATUS_META[v] || { label: v || '—', preset: 'default' as const };
       return <StatusTag preset={m.preset} dot>{m.label}</StatusTag>;
     }},
-    { title: '命中', dataIndex: 'hit_count', key: 'hits', width: 70, render: (v: number) => <span style={{ color: tokens.colors.textSecondary }}>{v || 0}</span> },
+    { title: '累计命中', dataIndex: 'hit_count', key: 'hits', width: 80, render: (v: number) => <span style={{ color: tokens.colors.textSecondary }}>{v || 0}</span> },
+    { title: '30天命中', dataIndex: 'hit_count_30d', key: 'hits30', width: 80, render: (v: number, row: QaExampleItem) => (
+      <span style={{ color: (row.hit_count_30d || 0) > 0 ? tokens.colors.success : tokens.colors.textTertiary }}>
+        {v || 0}
+      </span>
+    )},
     { title: '创建时间', dataIndex: 'created_at', key: 'created', width: 170, render: (v: string) => <span style={{ color: tokens.colors.textTertiary, fontSize: 12 }}>{v ? v.replace('T', ' ').slice(0, 19) : '—'}</span> },
     {
-      title: '操作', key: 'action', width: 170, fixed: 'right' as const,
+      title: '操作', key: 'action', width: 210, fixed: 'right' as const,
       render: (_: unknown, row: QaExampleItem) => (
         <Space size={2}>
+          <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => handleShowSimilar(row)}>相似</Button>
           {row.status === 'review' ? (
             <Button type="link" size="small" icon={<CheckCircleOutlined />} style={{ color: tokens.colors.success }} onClick={() => handleApprove(row)}>通过</Button>
           ) : (
@@ -256,6 +286,44 @@ const QaExamplesManager: React.FC = () => {
             <Select options={TYPE_OPTIONS} />
           </Form.Item>
         </Form>
+      </Drawer>
+
+      <Drawer
+        title="相似问题预览（top-5，带相似度）"
+        open={simOpen}
+        onClose={() => setSimOpen(false)}
+        width={520}
+      >
+        {simTarget ? (
+          <div style={{ marginBottom: 12, padding: '8px 12px', background: tokens.colors.bgSubtle, borderRadius: 6 }}>
+            <div style={{ fontSize: 12, color: tokens.colors.textTertiary, marginBottom: 4 }}>当前示例</div>
+            <div style={{ color: tokens.colors.textPrimary }}>{simTarget.question_raw}</div>
+          </div>
+        ) : null}
+        <Spin spinning={simLoading}>
+          {simItems.length === 0 ? (
+            <div style={{ color: tokens.colors.textTertiary, padding: '24px 0', textAlign: 'center' }}>
+              {simLoading ? '检索中…' : '无相似示例（向量库不可用或未达相似度阈值 0.75）'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {simItems.map((s) => {
+                const pct = s.score != null ? Math.round(Number(s.score) * 100) : null;
+                return (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', border: `1px solid ${tokens.colors.border}`, borderRadius: 6 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: tokens.colors.textPrimary, wordBreak: 'break-all' }}>{s.question_raw}</div>
+                      <div style={{ fontSize: 12, color: tokens.colors.textTertiary, marginTop: 2 }}>{s.id}</div>
+                    </div>
+                    <Tag style={{ margin: 0, flexShrink: 0 }} color={pct != null && pct >= 75 ? 'green' : undefined}>
+                      {pct != null ? `${pct}%` : '—'}
+                    </Tag>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Spin>
       </Drawer>
     </PageShell>
   );

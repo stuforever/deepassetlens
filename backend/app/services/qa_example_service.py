@@ -8,19 +8,37 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.base import KgVerifiedQaExample
+from app.models.base import KgExampleHitLog, KgVerifiedQaExample
 from app.services.tupu_qdrant_client import TupuQdrantClient
 
 logger = logging.getLogger(__name__)
 
 QDRANT_COLLECTION_QA_EXAMPLES = "tupu_qa_examples"
-_SCORE_THRESHOLD = 0.75
+_SCORE_THRESHOLD_DEFAULT = 0.75
 _MAX_TOP = 3
+
+
+def _score_threshold() -> float:
+    """相似度阈值（S4：TUPU_EXAMPLE_SIM_THRESHOLD 环境变量化，默认 0.75；每次读取支持运行时调整）。"""
+    try:
+        return float(os.getenv("TUPU_EXAMPLE_SIM_THRESHOLD", str(_SCORE_THRESHOLD_DEFAULT)))
+    except Exception:
+        return _SCORE_THRESHOLD_DEFAULT
+
+
+def _norm_question(text: Any) -> str:
+    """规范化问题（复用标准语义词条管线的 normalize_text）：NFKC + 去空白/标点 + 小写。"""
+    try:
+        from app.services.query_entity_utils import normalize_text
+        return normalize_text(text)
+    except Exception:
+        return str(text or "").strip()
 
 
 def _safe_client() -> Optional[TupuQdrantClient]:
@@ -54,7 +72,7 @@ def search_qa_examples(
     db: Session,
     question: str,
     top: int = _MAX_TOP,
-    score_threshold: float = _SCORE_THRESHOLD,
+    score_threshold: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """检索 top-N 已验证示例（status=enabled）。两级检索：
 
@@ -69,8 +87,11 @@ def search_qa_examples(
         return []
     results: List[Dict[str, Any]] = []
     seen: set = set()
-    # Tier1：DB 精确/归一化匹配（弱 embedding 环境保底）
+    # Tier1：DB 精确/归一化匹配（sim=1.0 优先，防向量抖动——S4b 直通增强）
+    #   匹配面：question_raw == 原文 | question_norm == 原文/规范化输入 | 规范化(question_raw) == 规范化输入
+    #   （normalize_text 去空白/标点/大小写后比较，容忍「统计用电客户总数。」vs「统计用电客户总数」这类抖动）
     try:
+        _norm_q = _norm_question(question)
         exact = db.query(KgVerifiedQaExample).filter(
             KgVerifiedQaExample.status == "enabled",
             KgVerifiedQaExample.question_raw == question,
@@ -80,6 +101,16 @@ def search_qa_examples(
                 KgVerifiedQaExample.status == "enabled",
                 KgVerifiedQaExample.question_norm == question,
             ).all()
+        if not exact:
+            exact = db.query(KgVerifiedQaExample).filter(
+                KgVerifiedQaExample.status == "enabled",
+                KgVerifiedQaExample.question_norm == _norm_q,
+            ).all()
+        if not exact:
+            exact = db.query(KgVerifiedQaExample).filter(
+                KgVerifiedQaExample.status == "enabled",
+            ).all()
+            exact = [r for r in exact if _norm_question(r.question_raw) == _norm_q]
         for r in exact[:top]:
             results.append({
                 "id": str(r.id), "score": 1.0,
@@ -91,7 +122,7 @@ def search_qa_examples(
         logger.warning(f"[QA示例库] Tier1 检索失败: {_e}")
     if len(results) >= top:
         return results[:top]
-    # Tier2：语义检索补充
+    # Tier2：语义检索补充（阈值环境变量化：TUPU_EXAMPLE_SIM_THRESHOLD，默认 0.75）
     vec = _embed_question(db, question)
     if not vec:
         return results
@@ -101,7 +132,7 @@ def search_qa_examples(
     try:
         hits = client.search_points(
             QDRANT_COLLECTION_QA_EXAMPLES, vec,
-            top=max(top * 3, 10), score_threshold=score_threshold,
+            top=max(top * 3, 10), score_threshold=score_threshold if score_threshold is not None else _score_threshold(),
         )
     except Exception as _e:
         logger.warning(f"[QA示例库] Qdrant 检索失败（降级为仅 Tier1）: {_e}")
@@ -240,6 +271,22 @@ def list_qa_examples(
     total = q.count()
     rows = q.order_by(KgVerifiedQaExample.created_at.desc()) \
             .offset(max(page - 1, 0) * size).limit(size).all()
+    # S4a：30 天命中 = 近 30 天命中事件行数（一次分组聚合，按当前页示例 id）
+    _cutoff = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    _page_ids = [str(r.id) for r in rows]
+    _hit30: Dict[str, int] = {}
+    if _page_ids:
+        try:
+            from sqlalchemy import func
+            for _eid, _cnt in db.query(
+                KgExampleHitLog.example_id, func.count(KgExampleHitLog.id),
+            ).filter(
+                KgExampleHitLog.example_id.in_(_page_ids),
+                KgExampleHitLog.created_at >= _cutoff,
+            ).group_by(KgExampleHitLog.example_id).all():
+                _hit30[_eid] = int(_cnt)
+        except Exception as _e:
+            logger.warning(f"[QA示例库] 30 天命中统计失败（忽略）: {_e}")
     return {
         "total": total,
         "items": [{
@@ -253,9 +300,49 @@ def list_qa_examples(
             "example_type": r.example_type,
             "status": r.status,
             "hit_count": r.hit_count,
+            "hit_count_30d": _hit30.get(str(r.id), 0),
             "created_at": r.created_at.isoformat() if r.created_at else None,
         } for r in rows],
     }
+
+
+def find_similar_examples(db: Session, example_id: str, top: int = 5) -> List[Dict[str, Any]]:
+    """S4a：Drawer 内 top-N 相似问题预览（带相似度）。
+
+    以该示例的 question_raw 为查询向量检索 tupu_qa_examples（排除自身），
+    返回 [{id, question_raw, score}]；Qdrant/向量不可用或示例不存在时返回 []（不抛）。
+    """
+    row = db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.id == example_id).first()
+    if not row:
+        return []
+    vec = _embed_question(db, row.question_raw)
+    if not vec:
+        return []
+    client = _safe_client()
+    if client is None:
+        return []
+    try:
+        hits = client.search_points(
+            QDRANT_COLLECTION_QA_EXAMPLES, vec,
+            top=max(top * 2, 10), score_threshold=_score_threshold(),
+        )
+    except Exception as _e:
+        logger.warning(f"[QA示例库] 相似检索失败（忽略）: {_e}")
+        return []
+    out: List[Dict[str, Any]] = []
+    for h in hits:
+        pid = str(h.get("id"))
+        if pid == str(example_id):
+            continue  # 排除自身
+        payload = h.get("payload") or {}
+        out.append({
+            "id": pid,
+            "question_raw": payload.get("question_raw", ""),
+            "score": h.get("score"),
+        })
+        if len(out) >= top:
+            break
+    return out
 
 
 def set_qa_example_status(db: Session, example_id: str, status: str) -> Dict[str, Any]:
@@ -274,11 +361,12 @@ def set_qa_example_status(db: Session, example_id: str, status: str) -> Dict[str
 
 
 def delete_qa_example(db: Session, example_id: str) -> Dict[str, Any]:
-    """删除示例（DB 行 + Qdrant point）。"""
+    """删除示例（DB 行 + Qdrant point + 命中事件行）。"""
     row = db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.id == example_id).first()
     if not row:
         return {"ok": False, "error": f"示例不存在: {example_id}"}
     db.delete(row)
+    db.query(KgExampleHitLog).filter(KgExampleHitLog.example_id == example_id).delete()
     db.commit()
     client = _safe_client()
     if client is not None:
@@ -290,16 +378,24 @@ def delete_qa_example(db: Session, example_id: str) -> Dict[str, Any]:
 
 
 def bump_hit_count(db: Session, example_ids: List[str]) -> None:
-    """命中计数（示例被注入后调用，容错）。"""
-    if not example_ids:
+    """命中计数（示例被注入后调用，容错）。
+
+    S4a：除累计 hit_count + last_used_at 外，同步写 KgExampleHitLog 命中事件行
+    （「30 天命中」统计源）。批量一次提交；失败静默不阻断问答。
+    入参去重后处理（命中事件与累计计数保持一致；生产 hits 本已去重）。
+    """
+    _ids = list(dict.fromkeys(example_ids))
+    if not _ids:
         return
     try:
         now = datetime.now(timezone.utc)
         rows = db.query(KgVerifiedQaExample).filter(
-            KgVerifiedQaExample.id.in_(example_ids)).all()
+            KgVerifiedQaExample.id.in_(_ids)).all()
         for r in rows:
             r.hit_count = (r.hit_count or 0) + 1
             r.last_used_at = now
+        for _eid in _ids:
+            db.add(KgExampleHitLog(example_id=_eid))
         db.commit()
     except Exception as _e:
         logger.warning(f"[QA示例库] hit_count 更新失败（忽略）: {_e}")

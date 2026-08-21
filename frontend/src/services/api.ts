@@ -431,7 +431,14 @@ export type QaExampleItem = {
   example_type?: string;
   status?: string;      // enabled | disabled | review
   hit_count?: number;
+  hit_count_30d?: number;   // S4a：近 30 天命中
   created_at?: string | null;
+};
+
+export type QaExampleSimilarItem = {
+  id: string;
+  question_raw: string;
+  score?: number;
 };
 
 export const qaExamplesApi = {
@@ -445,6 +452,8 @@ export const qaExamplesApi = {
     api.patch(`/qa-examples/${id}/status`, { status }, config),
   remove: (id: string, config?: AxiosRequestConfig) =>
     api.delete(`/qa-examples/${id}`, config),
+  similar: (id: string, config?: AxiosRequestConfig) =>
+    api.get(`/qa-examples/${id}/similar`, config),
 };
 
 export default api;
