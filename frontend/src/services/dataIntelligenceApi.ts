@@ -130,6 +130,8 @@ type StreamCallbacks = {
   onVerified?: (v: { verification?: Record<string, any> | null; confidence?: string }) => void;
   /** 融合 M3 G7：Rubric 自评状态（rubric 事件） */
   onRubric?: (r: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string }) => void;
+  /** S3b（G9）：追问改写透明性（followup.rewrite 事件）——最终答案上方渲染「理解为：xxx」 */
+  onFollowupRewrite?: (fr: { original: string; rewritten: string }) => void;
 };
 
 function _streamChat(
@@ -189,6 +191,7 @@ function _streamChat(
             else if (currentEvent === 'template' && cb.onTemplate) cb.onTemplate(parsed);
             else if (currentEvent === 'query_verified' && cb.onVerified) cb.onVerified(parsed);
             else if (currentEvent === 'rubric' && cb.onRubric) cb.onRubric(parsed);
+            else if (currentEvent === 'followup.rewrite' && cb.onFollowupRewrite) cb.onFollowupRewrite(parsed);
             else if (currentEvent === 'done') safeDone(parsed as ChatResponse);
             else if (currentEvent === 'error') safeError(parsed.error || '未知错误');
           } catch (e) {
@@ -256,9 +259,10 @@ export const dataIntelligenceApi = {
     onTemplate?: (payload: { kind: string; detail?: string }) => void,
     onVerified?: (v: { verification?: Record<string, any> | null; confidence?: string }) => void,
     onRubric?: (r: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string }) => void,
+    onFollowupRewrite?: (fr: { original: string; rewritten: string }) => void,
   ): AbortController => {
     return _streamChat('/chat/freeplan/stream', payload, {
-      onThink, onDone, onError, onStatus, onToken, onFinal, onRecommend, onThinkToken, onSqlResult, onTrace, onIntent, onFilterCheck, onRoute, onContract, onContractUpdate, onPolicy, onTemplate, onVerified, onRubric,
+      onThink, onDone, onError, onStatus, onToken, onFinal, onRecommend, onThinkToken, onSqlResult, onTrace, onIntent, onFilterCheck, onRoute, onContract, onContractUpdate, onPolicy, onTemplate, onVerified, onRubric, onFollowupRewrite,
     });
   },
 

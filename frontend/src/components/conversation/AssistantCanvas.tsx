@@ -13,7 +13,7 @@
  * 降级提示只说明"结果已基于实际查询数据生成"，不放在业务用户主视图造成"答案不可靠"感受。
  * 配色全部走 token，零硬编码。
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Collapse, Tag, Typography } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -25,6 +25,31 @@ import { buildFinalDeliveryView } from '../../utils/finalDelivery';
 import { tokens } from '../../theme/tokens';
 
 const { Text } = Typography;
+
+/** S3b（G9）：追问改写透明性 —— 「理解为：xxx」小字 + 点击展开原文对照 */
+const FollowupRewriteNote: React.FC<{ note: { original: string; rewritten: string } }> = ({ note }) => {
+  const [showOriginal, setShowOriginal] = useState(false);
+  return (
+    <div
+      style={{
+        fontSize: 12, color: tokens.colors.textTertiary, lineHeight: '20px',
+        padding: '2px 8px', marginBottom: 6, background: tokens.colors.bgSubtle,
+        borderRadius: tokens.radius.default,
+      }}
+    >
+      理解为：{note.rewritten}
+      <Text
+        style={{ marginLeft: 8, fontSize: 12, color: tokens.colors.textTertiary, cursor: 'pointer', textDecoration: 'underline dotted' }}
+        onClick={() => setShowOriginal(!showOriginal)}
+      >
+        {showOriginal ? '收起原文' : '原文对照'}
+      </Text>
+      {showOriginal ? (
+        <div style={{ marginTop: 2, color: tokens.colors.textTertiary, wordBreak: 'break-all' }}>原文：{note.original}</div>
+      ) : null}
+    </div>
+  );
+};
 
 /* Markdown 元素样式：连续流，无卡片包裹，仅标题加左竖线区分 */
 const mdComponents = {
@@ -164,6 +189,10 @@ const AssistantCanvas: React.FC<{
       {/* 3. 答案正文：连续 Markdown（存在权威查询结果表时屏蔽其中的 Markdown 表格） */}
       {finalAnswer ? (
         <div style={{ padding: '0 4px' }}>
+          {/* S3b（G9）：追问改写透明性 —— 最终答案上方「理解为：xxx」（可点击展开原文对照） */}
+          {payload?.followup_rewritten && payload.followup_rewritten.rewritten ? (
+            <FollowupRewriteNote note={payload.followup_rewritten} />
+          ) : null}
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={renderComponents}>
             {finalAnswer}
           </ReactMarkdown>

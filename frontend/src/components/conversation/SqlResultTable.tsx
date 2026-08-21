@@ -9,10 +9,12 @@
  * - 空结果 EmptyState + 建议改写提示
  */
 import React, { useMemo, useState } from 'react';
-import { Table, Typography, Empty, Button, Space, Tooltip, message } from 'antd';
-import { TableOutlined, DownloadOutlined, CopyOutlined, FullscreenOutlined, FullscreenExitOutlined, ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { Table, Typography, Empty, Button, Space, Tooltip, message, Segmented } from 'antd';
+import { TableOutlined, BarChartOutlined, DownloadOutlined, CopyOutlined, FullscreenOutlined, FullscreenExitOutlined, ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { StatusTag } from '../shell';
 import { tokens } from '../../theme/tokens';
+import { detectChartShape } from '../../utils/chartShape';
+import ChartView from './ChartView';
 
 const { Text } = Typography;
 
@@ -59,6 +61,9 @@ const SqlResultTable: React.FC<SqlResultTableProps> = ({ data }) => {
   const [copied, setCopied] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [pager, setPager] = useState<{ current: number; pageSize: number }>({ current: 1, pageSize: 20 });
+  // S3a（G8）：图表形态识别——仅形态可识别时显示「表格|图表」切换，否则不渲染切换（避免空态）
+  const chartShape = useMemo(() => detectChartShape(data?.columns, data?.rows), [data?.columns, data?.rows]);
+  const [view, setView] = useState<'table' | 'chart'>('table');
 
   const columns = useMemo(() => {
     if (!data?.columns || data.columns.length === 0) return [];
@@ -204,6 +209,17 @@ const SqlResultTable: React.FC<SqlResultTableProps> = ({ data }) => {
           ) : null}
         </Space>
         <Space size={4}>
+          {chartShape && dataSource.length > 0 ? (
+            <Segmented
+              size="small"
+              value={view}
+              onChange={(v) => setView(v as 'table' | 'chart')}
+              options={[
+                { value: 'table', icon: <TableOutlined />, label: '表格' },
+                { value: 'chart', icon: <BarChartOutlined />, label: '图表' },
+              ]}
+            />
+          ) : null}
           {data.sql ? (
             <Tooltip title={copied ? '已复制' : '复制 SQL'}>
               <Button type="text" size="small" icon={<CopyOutlined />} onClick={handleCopySql} />
@@ -224,7 +240,7 @@ const SqlResultTable: React.FC<SqlResultTableProps> = ({ data }) => {
           </Tooltip>
         </Space>
       </div>
-      {tableNode}
+      {view === 'chart' && chartShape ? <ChartView data={data} shape={chartShape} /> : tableNode}
     </div>
   );
 

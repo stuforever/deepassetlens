@@ -603,6 +603,12 @@ const FreePlanChat: React.FC = () => {
           // 融合 M3 G7：Rubric 自评状态（rubric 事件）实时写 payload
           patchAssistant({ rubric_live: r || null });
         },
+        (fr) => {
+          // S3b（G9）：追问改写透明性 —— 最终答案上方渲染「理解为：xxx」
+          if (fr && fr.original && fr.rewritten && fr.rewritten !== fr.original) {
+            patchAssistant({ followup_rewritten: { original: fr.original, rewritten: fr.rewritten } });
+          }
+        },
       );
       abortControllerRef.current = controller;
     });

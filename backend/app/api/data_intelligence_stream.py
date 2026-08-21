@@ -108,6 +108,44 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                     _conversation_ctx["last_skill"] = _prev_state_skill
             except Exception:
                 pass
+
+            # ===== S3b（G9）追问改写：纯规则触发（thread 有历史 && 短问题/指代词）-> 单轮 LLM 改写 =====
+            # 兜底：8s 硬封顶超时/异常 -> 回退原问题（不阻塞主链路）；scenario 模式不改写（见下，路由后丢弃）
+            _followup_rewritten = None
+            import time as _fut
+            _fu_t0 = _fut.time()
+            try:
+                from app.services.followup_rewrite import (
+                    is_followup_question, history_text_from_state, rewrite_followup_question,
+                )
+                # 会话历史：config 的 checkpoint_ns="freeplan" 会触发既有 "Subgraph freeplan not found"
+                # 异常（被上层静默吞掉），故追问历史用「无 checkpoint_ns」的 config 读取——
+                # checkpoint 实际以 ns='' 存储，仅 thread_id 即可取到同线程消息。
+                _state_config = {"configurable": {"thread_id": _memory_thread_id}, "recursion_limit": 80}
+                _hist_state = await agent.aget_state(_state_config)
+                logger.debug(f"[FU-TIMING] aget_state={(_fut.time()-_fu_t0)*1000:.0f}ms")
+                _hist_messages = (_hist_state.values or {}).get("messages") if _hist_state and _hist_state.values else []
+                _has_history = bool(_hist_messages)
+                if _has_history and is_followup_question(req.user_input, _has_history):
+                    from app.services.followup_rewrite import (
+                        _REWRITE_HISTORY_TAIL, _REWRITE_HISTORY_PER_LINE, _REWRITE_TIMEOUT,
+                    )
+                    _history_text = history_text_from_state(_hist_state, tail=_REWRITE_HISTORY_TAIL, per_line=_REWRITE_HISTORY_PER_LINE)
+                    # 硬性封顶（_REWRITE_TIMEOUT=8s）：httpx timeout 在 OpenAI client 重试下不可靠
+                    # （实测可拖到 69s），用 wait_for 保证改写绝不无限阻塞主链路；超时后 to_thread
+                    # 的孤儿线程自行结束、结果丢弃
+                    _followup_rewritten = await _asyncio.wait_for(
+                        _asyncio.to_thread(
+                            rewrite_followup_question, req.user_input, _history_text, req.llm_connection_id or ""
+                        ),
+                        timeout=_REWRITE_TIMEOUT,
+                    ) or None
+                    if _followup_rewritten:
+                        logger.info(f"[FollowupRewrite] {req.user_input!r} -> {_followup_rewritten!r}")
+            except Exception as _frw:
+                logger.warning(f"[FollowupRewrite] 追问改写流程异常，回退原问题: {_frw}")
+                _followup_rewritten = None
+
             try:
                 _route = route_user_input(req.user_input, _conversation_ctx)
             except Exception as _rte:
@@ -117,19 +155,35 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 _fallback_contract = QueryContract.generic(route_reason=f"路由异常降级: {_rte}")
             _contract = getattr(_route, "contract", None) if _route is not None else _fallback_contract
 
+            # S3b 边界：scenario 模式不改写（问题结构化强）——改写只在 generic 路径生效
+            _effective_question = req.user_input
+            if (_followup_rewritten and _route is not None and _route.route_type == "generic"
+                    and _contract is not None):
+                _effective_question = _followup_rewritten
+                # 改写后的完整问题可能带聚合触发词（如「分布」）——补挂 aggregate_intent 使 L2 结果层硬校验生效
+                try:
+                    from app.services.skill_router import SkillRouter
+                    _agg2 = SkillRouter.detect_aggregate_intent(_effective_question)
+                    if _agg2 and not getattr(_contract, "aggregate_intent", None):
+                        _contract.aggregate_intent = _agg2
+                except Exception:
+                    pass
+            elif _followup_rewritten:
+                logger.info(f"[FollowupRewrite] 非 generic 路径（{_route.route_type if _route else 'fallback'}）丢弃改写，用原问题")
+
             # 契约注入 runtime.context（SkillPolicyMiddleware 读取的唯一边界）
             if _contract is not None:
                 _ctx["contract"] = _contract
                 # 每次请求只向模型提供受控工作流上下文（设计 §7.1）；G1: 尾部追加 top-3 已验证示例
-                _contract_msg = _build_contract_system_message(_contract, question=req.user_input)
-                input_messages = [SystemMessage(content=_contract_msg), HumanMessage(content=req.user_input)]
+                _contract_msg = _build_contract_system_message(_contract, question=_effective_question)
+                input_messages = [SystemMessage(content=_contract_msg), HumanMessage(content=_effective_question)]
                 logger.info(
                     f"[SkillRouter] route={_route.route_type if _route else 'fallback'} "
                     f"skill={_contract.skill_id} step={_contract.workflow_step} "
                     f"allowed={len(_contract.allowed_tools)} 契约注入成功"
                 )
             else:
-                input_messages = [HumanMessage(content=req.user_input)]
+                input_messages = [HumanMessage(content=_effective_question)]
 
             # 评审 P1-5：路由成功后确定性写回 last_skill/last_step（跨轮受控上下文；
             # 新场景命中即覆盖；generic/降级清空以免连续上下文误延续）。
@@ -179,6 +233,11 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
 
             yield f"event: status\n"
             yield f"data: {json.dumps({'node': 'DeepAgent', 'phase': 'running', 'text': '小探正在运行中', 'routed_skill': 'free_plan'}, ensure_ascii=False)}\n\n"
+
+            # S3b（G9）：追问改写透明性 —— 前端最终答案上方渲染「理解为：xxx」（可点击展开原文对照）
+            if _followup_rewritten and _effective_question == _followup_rewritten:
+                yield f"event: followup.rewrite\n"
+                yield f"data: {json.dumps({'original': req.user_input, 'rewritten': _followup_rewritten}, ensure_ascii=False)}\n\n"
 
             # 受控路由/契约事件（前端据此渲染 RouteCard/ScopeCard/DataAccessCard/ExecutionDecisionCard）
             if _contract is not None:

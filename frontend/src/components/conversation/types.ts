@@ -122,6 +122,8 @@ export type ChatMessagePayload = {
   /** 融合 M3 G7 实时事件缓存（query_verified / rubric 流式中间态，终态以 evidence 快照为准） */
   verification_live?: { row_count?: number; null_rates?: Record<string, number>; warnings?: string[] } | null;
   rubric_live?: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string } | null;
+  /** S3b（G9）：追问改写透明性 —— 最终答案上方渲染「理解为：xxx」（可点击展开原文对照） */
+  followup_rewritten?: { original: string; rewritten: string } | null;
 };
 
 export type ChatMessage = {
