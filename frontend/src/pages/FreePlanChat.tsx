@@ -590,6 +590,19 @@ const FreePlanChat: React.FC = () => {
         (policyEvent) => {
           // 策略拒绝/阻断：实时追加去重到 payload（评审 P2：不再覆盖前一条）
           accumulateAssistantEvent('policy_events', policyEvent);
+          // S5（HITL v2）：policy.interrupt -> 置 hitl_interrupt，loading 分支渲染「批准/拒绝」横条
+          if (policyEvent && policyEvent.kind === 'policy.interrupt' && policyEvent.interrupt_id) {
+            patchAssistant({
+              hitl_interrupt: {
+                interrupt_id: policyEvent.interrupt_id,
+                reason: policyEvent.reason || '',
+                proposal: policyEvent.proposal || '',
+                tool_name: policyEvent.tool_name || '',
+                error_class: policyEvent.error_class || '',
+                thread_id: sid,
+              },
+            });
+          }
         },
         (templateEvent) => {
           // 模板绑定/漂移：实时追加去重到 payload（评审 P2）
@@ -871,6 +884,22 @@ const FreePlanChat: React.FC = () => {
     [activeSessionId, deleteMessage],
   );
 
+  // S5（HITL v2）：批准/拒绝人审中断 -> POST /chat/freeplan/resume（服务端据此恢复同 thread 续跑）
+  // 稳定引用（useCallback + 仅依赖状态 setter），保证消息行 memo 不失效；线程 id 由调用方（消息 payload）携带。
+  const handleHITLDecision = useCallback(async (interruptId: string, approve: boolean) => {
+    try {
+      const res = await dataIntelligenceApi.resumeInterrupt({ interrupt_id: interruptId, approve, thread_id: activeSessionId });
+      if (res && res.code === 200) {
+        message.success(approve ? '已批准，正在继续查询…' : '已拒绝，按原流程继续');
+      } else {
+        message.warning((res && res.message) || '恢复请求未命中（可能已超时/已处理）');
+      }
+    } catch (e) {
+      console.error('[HITL] resume 失败', e);
+      message.error('恢复请求发送失败');
+    }
+  }, [activeSessionId]);
+
   const CONTENT_WIDTH = 1200;
 
   // 输入卡片（两种状态共用；B2 美化：S3 阴影 + 聚焦主色描边环 + 渐变发送钮）
@@ -976,6 +1005,7 @@ const FreePlanChat: React.FC = () => {
                 confirmedData={confirmed}
                 onSelectRecommendation={handleRecommendationSelect}
                 onDeleteMessage={handleDeleteMessage}
+                onHITLDecision={handleHITLDecision}
               />
             </div>
           </div>

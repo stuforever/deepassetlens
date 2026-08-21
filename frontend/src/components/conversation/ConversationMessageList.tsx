@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Card, Skeleton, Space, Spin, Typography, Popconfirm } from 'antd';
+import { Alert, Button, Card, Skeleton, Space, Spin, Typography, Popconfirm } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ThinkStream from './ThinkStream';
 import FinalAnswer from './FinalAnswer';
@@ -23,7 +23,8 @@ const MessageRow = React.memo<{
   liveFinalAnswer?: string;
   onSelectRecommendation?: (rec: any) => void;
   onDeleteMessage?: (msgId: string) => void;
-}>(({ msg, isLast, canDelete, liveMetaInfo, liveFinalAnswer, onSelectRecommendation, onDeleteMessage }) => (
+  onHITLDecision?: (interruptId: string, approve: boolean) => void;
+}>(({ msg, isLast, canDelete, liveMetaInfo, liveFinalAnswer, onSelectRecommendation, onDeleteMessage, onHITLDecision }) => (
   <div className="msg-row" style={{ position: 'relative', display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', width: '100%' }}>
     {canDelete ? (
       <Popconfirm title="删除该条消息？" okText="删除" cancelText="取消" onConfirm={() => onDeleteMessage!(msg.id)}>
@@ -59,6 +60,26 @@ const MessageRow = React.memo<{
         </div>
       ) : msg.loading ? (
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          {/* S5（HITL v2）：表/catalog 不存在 -> 人审横条（流式暂停等待批准/拒绝；批准后恢复同 thread 续跑） */}
+          {msg.payload?.hitl_interrupt && msg.payload.hitl_interrupt.interrupt_id && onHITLDecision ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="需要你确认：查询的表/catalog 不存在"
+              description={
+                <div style={{ fontSize: 12 }}>
+                  <div style={{ marginBottom: 4 }}>
+                    {msg.payload.hitl_interrupt.reason} {msg.payload.hitl_interrupt.proposal}
+                  </div>
+                  <Space size={8}>
+                    <Button size="small" type="primary" onClick={() => onHITLDecision(msg.payload!.hitl_interrupt!.interrupt_id, true)}>批准重试</Button>
+                    <Button size="small" onClick={() => onHITLDecision(msg.payload!.hitl_interrupt!.interrupt_id, false)}>拒绝</Button>
+                  </Space>
+                </div>
+              }
+              style={{ maxWidth: 640 }}
+            />
+          ) : null}
           {/* 受控 Skill 问答平台 v2：流式运行中即渲染受控卡片（route/contract 事件一到即显示，默认折叠状态条） */}
           {(msg.payload?.route || msg.payload?.contract) ? (
             <ContractCardsPanel
@@ -122,6 +143,8 @@ const ConversationMessageList: React.FC<{
   onExecuteSql?: () => void;
   onEntityClick?: (entityCode: string, entityName?: string) => void;
   onDeleteMessage?: (msgId: string) => void;
+  /** S5（HITL v2）：批准/拒绝人审中断（interrupt_id, approve） */
+  onHITLDecision?: (interruptId: string, approve: boolean) => void;
 }> = ({
   messages,
   sceneConfig,
@@ -129,6 +152,7 @@ const ConversationMessageList: React.FC<{
   liveMetaInfo,
   onSelectRecommendation,
   onDeleteMessage,
+  onHITLDecision,
 }) => {
   if (messages.length === 0) {
     return (
@@ -156,6 +180,7 @@ const ConversationMessageList: React.FC<{
             liveFinalAnswer={isLast ? liveFinalAnswer : undefined}
             onSelectRecommendation={onSelectRecommendation}
             onDeleteMessage={onDeleteMessage}
+            onHITLDecision={onHITLDecision}
           />
         );
       })}

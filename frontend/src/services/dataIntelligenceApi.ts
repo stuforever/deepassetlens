@@ -122,8 +122,11 @@ type StreamCallbacks = {
     selected_engine?: string | null; multi_engine?: boolean; completed_engines?: string[];
     entity_engine_map?: Record<string, string>; reason?: string;
   }) => void;
-  /** 评审 P1-3：策略拒绝/阻断实时事件 */
-  onPolicy?: (payload: { kind: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean }) => void;
+  /** 评审 P1-3：策略拒绝/阻断实时事件；S5：policy.interrupt（kind='policy.interrupt' 人审请求） */
+  onPolicy?: (payload: {
+    kind: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean;
+    interrupt_id?: string; error_class?: string; proposal?: string;
+  }) => void;
   /** 评审 P1-3：模板绑定/漂移实时事件 */
   onTemplate?: (payload: { kind: string; detail?: string }) => void;
   /** 融合 M3 G7：G4 验证结论（query_verified 事件） */
@@ -255,7 +258,7 @@ export const dataIntelligenceApi = {
       selected_engine?: string | null; multi_engine?: boolean; completed_engines?: string[];
       entity_engine_map?: Record<string, string>; reason?: string;
     }) => void,
-    onPolicy?: (payload: { kind: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean }) => void,
+    onPolicy?: (payload: { kind: string; tool_name?: string; reason?: string; attempt?: number; blocked?: boolean; interrupt_id?: string; error_class?: string; proposal?: string }) => void,
     onTemplate?: (payload: { kind: string; detail?: string }) => void,
     onVerified?: (v: { verification?: Record<string, any> | null; confidence?: string }) => void,
     onRubric?: (r: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string }) => void,
@@ -299,6 +302,12 @@ export const dataIntelligenceApi = {
   /** 清除自由问答会话的后端 checkpoint 记忆 */
   clearFreeplanMemory: async (threadId: string): Promise<{ status: string; cleared: boolean }> => {
     const resp = await diApi.delete(`/chat/freeplan/threads/${encodeURIComponent(threadId)}/memory`);
+    return resp.data;
+  },
+
+  /** S5（HITL v2）：批准/拒绝人审中断，恢复同 thread 的 agent 续跑（/chat/freeplan/resume） */
+  resumeInterrupt: async (payload: { interrupt_id: string; approve: boolean; thread_id?: string }): Promise<{ code?: number; message?: string }> => {
+    const resp = await diApi.post('/chat/freeplan/resume', payload);
     return resp.data;
   },
 };

@@ -155,6 +155,15 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 _fallback_contract = QueryContract.generic(route_reason=f"路由异常降级: {_rte}")
             _contract = getattr(_route, "contract", None) if _route is not None else _fallback_contract
 
+            # S5（HITL v2）：free_plan generic 路径开启人审 —— 首个 TABLE_MISSING/CATALOG_MISSING
+            # 由「自动降级一次」升级为「interrupt 请求人审」（SkillPolicy._check_hitl_interrupt）。
+            # scenario（结构化剧本）保持自动降级，不打断流程。
+            if (_contract is not None and _route is not None and _route.route_type == "generic"):
+                try:
+                    _contract.hitl_enabled = True
+                except Exception:
+                    pass
+
             # S3b 边界：scenario 模式不改写（问题结构化强）——改写只在 generic 路径生效
             _effective_question = req.user_input
             if (_followup_rewritten and _route is not None and _route.route_type == "generic"
@@ -651,7 +660,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                             yield f"event: sql_result\n"
                             yield f"data: {json.dumps({'columns': _cdata.get('columns', []), 'rows': _d_rows, 'row_count': _d_rc, 'sql': _cdata.get('sql', ''), 'returned_rows': _cdata.get('returned_rows', len(_d_rows)), 'preview_row_count': _cdata.get('preview_row_count', min(10, _d_rc)), 'is_preview': _cdata.get('is_preview', False), 'llm_is_preview': _cdata.get('llm_is_preview', False), 'llm_preview_row_count': _cdata.get('llm_preview_row_count', 0), 'result_available_for_ui': _cdata.get('result_available_for_ui', True), 'step_id': _d_sid, 'tool_name': _d_tool, 'data_snapshot_at': _cdata.get('data_snapshot_at'), 'cache_sources': _cdata.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
                         elif _cname in ("engine.selected", "stop.reached", "policy.rejected",
-                                       "template.bound", "template.drift", "correction.attempt"):
+                                       "template.bound", "template.drift", "correction.attempt",
+                                       "policy.interrupt"):
                             # 评审 P1-3：SkillPolicy 自定义事件动态推 SSE —— 运行中引擎确认/终止/
                             # 策略拒绝/模板绑定/漂移实时可见，前端按 run_id 合并更新当前契约（不等 done）。
                             # engine/stop 事件 payload 携带最新 contract.to_dict()（与 _ctx 同一对象）。
@@ -692,6 +702,18 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                     "stopped": _cdata.get("stopped", False),
                                     "reason": _cdata.get("reason", ""),
                                     "contract": _cc,
+                                }
+                            elif _cname == "policy.interrupt":
+                                # S5（HITL v2）：人审请求实时透出（interrupt_id/reason/proposal）——
+                                # 前端据此渲染「批准/拒绝」横条，批准/拒绝后调 resume 端点恢复同 thread。
+                                _emit_ev = "policy"
+                                _payload = {
+                                    "kind": "policy.interrupt",
+                                    "interrupt_id": _cdata.get("interrupt_id", ""),
+                                    "tool_name": _cdata.get("tool_name", ""),
+                                    "error_class": _cdata.get("error_class", ""),
+                                    "reason": _cdata.get("reason", ""),
+                                    "proposal": _cdata.get("proposal", ""),
                                 }
                             else:
                                 _emit_ev = "template"
@@ -1006,3 +1028,32 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 _session_lock.release()
 
     return StreamingResponse(event_iter(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# S5（HITL v2）：人审恢复端点
+# ---------------------------------------------------------------------------
+from pydantic import BaseModel as _PydanticBaseModel
+
+
+class HITLResumeRequest(_PydanticBaseModel):
+    """人审恢复请求：interrupt_id（SSE policy.interrupt 事件携带）+ approve 决定。"""
+    interrupt_id: str
+    approve: bool
+    thread_id: str = ""  # 仅日志/观测用；解析按 interrupt_id
+
+
+@router.post("/chat/freeplan/resume")
+async def resume_hitl(body: HITLResumeRequest):
+    """批准/拒绝待审中断，恢复同 thread 的 agent 续跑。
+
+    会话锁注：**不得**获取会话锁——被中断的流仍持有该锁（agent 在 policy 中断处 await），
+    此处再获取即死锁（S5 验收③）。仅按 interrupt_id 解析 Future，天然幂等。
+    """
+    from app.services.skill_policy import resolve_hitl_interrupt
+    ok = resolve_hitl_interrupt(body.interrupt_id, body.approve)
+    if not ok:
+        logger.info(f"[HITL] resume 未命中（可能已超时/已处理）: interrupt={body.interrupt_id} approve={body.approve} thread={body.thread_id}")
+        return {"code": 404, "message": "中断不存在或已处理（可能已超时）"}
+    logger.info(f"[HITL] resume 命中: interrupt={body.interrupt_id} approve={body.approve} thread={body.thread_id}")
+    return {"code": 200, "data": {"interrupt_id": body.interrupt_id, "approved": body.approve}}

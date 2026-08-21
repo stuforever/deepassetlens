@@ -124,6 +124,15 @@ export type ChatMessagePayload = {
   rubric_live?: { status?: string; iterations?: number; feedback_summary?: string; confidence?: string } | null;
   /** S3b（G9）：追问改写透明性 —— 最终答案上方渲染「理解为：xxx」（可点击展开原文对照） */
   followup_rewritten?: { original: string; rewritten: string } | null;
+  /** S5（HITL v2）：表/catalog 不存在 -> 人审请求（流式暂停时前端渲染批准/拒绝横条） */
+  hitl_interrupt?: {
+    interrupt_id: string;
+    reason: string;
+    proposal: string;
+    tool_name?: string;
+    error_class?: string;
+    thread_id?: string;
+  } | null;
 };
 
 export type ChatMessage = {

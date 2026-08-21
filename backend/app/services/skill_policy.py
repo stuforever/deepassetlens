@@ -17,7 +17,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable, Optional
+import os
+import uuid
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import ToolMessage
@@ -52,6 +54,14 @@ _DEGRADATION_TRIGGERS = frozenset({"TABLE_MISSING", "SYNTAX"})
 _CORRECTION_LIMIT = 2
 _AGGREGATE_CORRECTION_LIMIT = 3
 _CORRECTABLE_CLASSES = frozenset({"TABLE_MISSING", "CATALOG_MISSING", "SYNTAX", "TIMEOUT", "AGGREGATE_DEGRADED"})
+# S5（HITL v2）：表/catalog 不存在 -> 由「自动降级一次」升级为「interrupt 请求人审」；
+# 仅这两类（唯一许可降级）走人审；SYNTAX 仍走自动纠错（无定位语义）。
+_HITL_TRIGGERS = frozenset({"TABLE_MISSING", "CATALOG_MISSING"})
+# 人审等待超时（秒）：超时视为拒绝（不授予定位许可，继续自动纠错/失败卡）
+_HITL_TIMEOUT = float(os.getenv("TUPU_HITL_TIMEOUT", "180"))
+# S5 待审中断注册表：interrupt_id -> asyncio.Future（await 值 {approve: bool}）
+# 由 SkillPolicy 在 agent 循环内注册并 await，恢复端点按 interrupt_id 解析（跨 HTTP 请求共享）。
+_HITL_INTERRUPTS: Dict[str, asyncio.Future] = {}
 # G2：error_class -> 结构化纠错指引（ToolMessage 附加 correction 字段，模型据此自纠）
 _CORRECTION_GUIDES = {
     "TABLE_MISSING": "表 {t} 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
@@ -109,6 +119,9 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         result = await handler(request)
         try:
             self._postcheck(contract, tool_name, result, request)
+            # S5（HITL v2）：表/catalog 不存在 -> 由「自动降级一次」升级为「interrupt 请求人审」
+            # await 在 agent 循环内进行（yield 给事件循环，恢复端点可跨请求解析），不阻塞其他会话。
+            await self._check_hitl_interrupt(contract, tool_name, result, request)
         except Exception as e:
             logger.warning(f"[SkillPolicy] postcheck 异常: {e}")
         return result
@@ -434,7 +447,10 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                 logger.warning(f"[SkillPolicy] correction.limit 事件派发失败: {e}")
             return
         # 批1：表/catalog/语法类 -> 授予一次受控降级（重定位）
-        if ec in _DEGRADATION_TRIGGERS and not contract._runtime.get("degradation_used"):
+        # S5（HITL v2）：契约开启人审且属表/catalog 不存在类 -> 不自动降级，
+        # 由 _check_hitl_interrupt await 人审决定是否授予（批准才置 degradation_used）。
+        if ec in _DEGRADATION_TRIGGERS and not contract._runtime.get("degradation_used") \
+                and not (getattr(contract, "hitl_enabled", False) and ec in _HITL_TRIGGERS):
             contract._runtime["degradation_used"] = True
             contract._runtime["degradation_reason"] = f"tool={tool_name} error_class={ec}"
             # 治理审计
@@ -463,6 +479,72 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             }))
         except Exception as e:
             logger.warning(f"[SkillPolicy] correction.attempt 事件派发失败: {e}")
+
+    async def _check_hitl_interrupt(self, contract: QueryContract, tool_name: str,
+                                    result, request) -> None:
+        """S5（HITL v2）：表/catalog 不存在 -> interrupt 请求人审（升级「自动降级一次」）。
+
+        契约 `hitl_enabled=True`（free_plan generic 路径开启）且首个 TABLE_MISSING/CATALOG_MISSING：
+          1. 派发 `policy.interrupt` 事件 {interrupt_id, reason, proposal}（SSE 给前端横条）；
+          2. 注册 asyncio.Future 并 `await`（yield 给事件循环，恢复端点可跨 HTTP 请求解析）；
+          3. 批准 -> 授予一次 search_entities/list_tables 定位许可（degradation_used=True）；
+             拒绝/超时 -> 不授予（agent 按纠错指引继续，可能重试后出失败卡）。
+
+        会话锁注：本方法在 agent 循环内 await，恢复端点**不得**获取会话锁（锁被本流持有，
+        再获取即死锁——S5 验收③「会话锁无死锁」的落点）。
+        """
+        try:
+            if not getattr(contract, "hitl_enabled", False):
+                return
+            if contract._runtime.get("degradation_used") or contract._runtime.get("hitl_pending"):
+                return  # 已批准过定位许可 / 已有待审中断 -> 不重复打断
+            if tool_name not in _SQL_TOOLS and tool_name != "execute_entity_api":
+                return
+            data = _parse_tool_json(_result_text(result))
+            ec = data.get("error_class")
+            if ec not in _HITL_TRIGGERS:
+                return
+            _fut = asyncio.get_running_loop().create_future()
+            _interrupt_id = str(uuid.uuid4())
+            contract._runtime["hitl_pending"] = True
+            _HITL_INTERRUPTS[_interrupt_id] = _fut
+            _reason = f"工具 {tool_name} 返回 {ec}：查询的表/catalog 不存在。"
+            _proposal = "允许调用 search_entities / list_tables 重定位真实表名后重试（仅一次）。"
+            try:
+                await self._emit(request, "policy.interrupt", {
+                    "interrupt_id": _interrupt_id,
+                    "reason": _reason,
+                    "proposal": _proposal,
+                    "tool_name": tool_name,
+                    "error_class": ec,
+                })
+            except Exception as _e:
+                logger.warning(f"[SkillPolicy] policy.interrupt 事件派发失败: {_e}")
+            try:
+                _decision = await asyncio.wait_for(_fut, timeout=_HITL_TIMEOUT)
+            except asyncio.TimeoutError:
+                _decision = None
+            finally:
+                _HITL_INTERRUPTS.pop(_interrupt_id, None)
+                contract._runtime["hitl_pending"] = False
+            _approve = bool(_decision.get("approve")) if isinstance(_decision, dict) else False
+            if _approve:
+                contract._runtime["degradation_used"] = True
+                contract._runtime["degradation_reason"] = f"HITL 批准: tool={tool_name} error_class={ec}"
+                logger.info(f"[SkillPolicy] HITL 批准 {_interrupt_id}: {tool_name} {ec} -> 授予定位许可")
+            else:
+                logger.info(f"[SkillPolicy] HITL 拒绝/超时 {_interrupt_id}: {tool_name} {ec} -> 不授予定位许可")
+            try:
+                from app.services.skill_governance import get_governance
+                get_governance().record_policy(
+                    "policy.interrupt", contract.skill_id, contract.workflow_step,
+                    f"error_class={ec} tool={tool_name} interrupt={_interrupt_id} approved={_approve}")
+            except Exception:
+                pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as _e:
+            logger.warning(f"[SkillPolicy] HITL interrupt 流程异常（不阻塞主链路）: {_e}")
 
     def _confirm_engine_from_result(self, contract: QueryContract, tool_name: str,
                                     out_str: str, request) -> None:
@@ -726,3 +808,23 @@ def _has_row_count(out_str: str) -> bool:
     import re as _re
     # row_count 出现在结果里即视为有数据（含 0 行：拿到查询结果即终止）
     return bool(_re.search(r"['\"]row_count['\"]\s*:\s*\d+", out_str))
+
+
+# ---------------------------------------------------------------------------
+# S5（HITL v2）人审恢复 —— 模块级函数（必须置于类之后，否则会被 Python 视为类内嵌套）
+# ---------------------------------------------------------------------------
+def resolve_hitl_interrupt(interrupt_id: str, approve: bool) -> bool:
+    """恢复端点调用：按 interrupt_id 解析待审 Future（approve: bool）。
+
+    返回 False 表示中断不存在/已处理（如已超时或已由其他请求恢复）。不抛异常。
+    """
+    _fut = _HITL_INTERRUPTS.get(interrupt_id)
+    if _fut is None or _fut.done():
+        return False
+    _fut.set_result({"approve": bool(approve)})
+    return True
+
+
+def pending_hitl_interrupts_count() -> int:
+    """待审中断数（观测/测试用）。"""
+    return len(_HITL_INTERRUPTS)
