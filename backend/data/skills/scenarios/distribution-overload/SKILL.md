@@ -38,16 +38,18 @@ x_tupu:
     - glob
 
   # SQL 模板/参考文件中 ⟦业务中文名⟧ -> 物理表名（模板表集合校验的唯一依据）。
-  # 与 kg_entities 元数据 entity_en_name 核对一致（三方核对：技能↔元数据↔PG）。
+  # 值带 Doris catalog 前缀（pg_tupu.public.<表名>）：execute_doris_sql 必须用 3 段命名，
+  # 裸表名在默认 catalog（internal/test_db）下解析失败（2026-08-21 前端实测暴露，Fix1 复核）。
+  # 表集合校验经 extract_tables 去前缀归一化，候选写裸名/3段名均匹配；执行必须 3 段名。
   entity_aliases:
-    用电户: dim_cst_elec_cons_cust
-    发电户: dim_cst_gpc
-    台区: dim_cst_dist_sta
-    计量点: dim_cst_inst_elec_cons
-    调压设备: cms20_adj_volt_dev
-    调压设备资产: cms20_adj_volt_dev_asset
-    配电变压器: dim_grid_pub_dist_trans_resrc_standbk_e
-    能源客户: cms20_cst_cust
+    用电户: pg_tupu.public.dim_cst_elec_cons_cust
+    发电户: pg_tupu.public.dim_cst_gpc
+    台区: pg_tupu.public.dim_cst_dist_sta
+    计量点: pg_tupu.public.dim_cst_inst_elec_cons
+    调压设备: pg_tupu.public.cms20_adj_volt_dev
+    调压设备资产: pg_tupu.public.cms20_adj_volt_dev_asset
+    配电变压器: pg_tupu.public.dim_grid_pub_dist_trans_resrc_standbk_e
+    能源客户: pg_tupu.public.cms20_cst_cust
 
   output:
     mode: single_result_table
@@ -119,6 +121,7 @@ x_tupu:
 
 > **执行流程（场景剧本优先，跳过通用定位流程）**：本剧本已含完整 SQL 模板（表名、列名、JOIN 关系、码值字典均已核对一致）。
 > **执行前必查数据源模式**：本剧本涉及的表名即为 entity_code。调一次 `batch_entity_source_mode(entity_codes)` 批量查询 SQL 涉及的**所有表**模式，按返回的 `recommended_tool` 选工具（铁律，不可切换）。**只调一次批量接口**，不要逐表查询：
+> - **表名 3 段命名铁律**：模板中 `⟦别名⟧` 一律翻译为 `x_tupu.entity_aliases` 给出的**完整表名（含 `pg_tupu.public.` 前缀）**，`FROM pg_tupu.public.cms20_adj_volt_dev`；**禁止写裸表名**（裸表名在默认 catalog 下 Unknown table，前端实测 2026-08-21）。
 > - `recommended_tool=execute_doris_sql`（表已绑 doris_catalog）-> `execute_doris_sql(sql=三段命名SQL)`，**不传 entity_code**，传完整 SQL。表名前缀按 batch 返回的 `doris_catalog` 拼：`pg_tupu` -> `pg_tupu.public.表名`，`es_tupu` -> `es_tupu.default_db.表名`，跨 catalog JOIN 直接拼接。例：`SELECT ... FROM pg_tupu.public.cms20_cst_cust a JOIN es_tupu.default_db.vw_cust_power_ts b ON ...`
 > - `recommended_tool=execute_api_sql`（多表含 api_integration 跨源 JOIN）-> `execute_api_sql(sql=SQL)`，DuckDB 联邦，API 虚拟表 + pg 物理表自动 JOIN，表名用裸表名（后端自动加 pg. 前缀 + API 虚拟表替换）
 > - `recommended_tool=execute_entity_api`（单表 api_integration）-> `execute_entity_api(entity_code, filters)`

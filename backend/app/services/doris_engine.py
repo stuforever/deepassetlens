@@ -79,6 +79,7 @@ def _load_config() -> dict:
 
 _ENGINE = None
 _ENGINE_LOCK = threading.Lock()
+_DEFAULT_DB_CACHE: Optional[str] = None
 
 # Doris 查询超时（秒）：Doris 原生 query_timeout 会话级 hint，超时由 Doris 侧 kill 查询
 _DORIS_QUERY_TIMEOUT = 60
@@ -102,7 +103,7 @@ def _pool():
 
 def reset_pool():
     """关闭连接池并清空（DorisConfig 保存后调用，下次查询用新配置重建）。"""
-    global _ENGINE
+    global _ENGINE, _DEFAULT_DB_CACHE
     with _ENGINE_LOCK:
         if _ENGINE is not None:
             try:
@@ -110,6 +111,32 @@ def reset_pool():
             except Exception as e:
                 logger.warning(f"[Doris] dispose 连接池失败: {e}")
             _ENGINE = None
+        _DEFAULT_DB_CACHE = None
+
+
+def _default_database() -> str:
+    """连接配置的默认 database（Doris 默认上下文 = internal catalog + 该 database）。"""
+    global _DEFAULT_DB_CACHE
+    if _DEFAULT_DB_CACHE is None:
+        try:
+            _DEFAULT_DB_CACHE = _load_config().get("database") or "test_db"
+        except Exception:
+            _DEFAULT_DB_CACHE = "test_db"
+    return _DEFAULT_DB_CACHE
+
+
+def _reset_connection_catalog(cur) -> None:
+    """复位连接到默认上下文（SWITCH internal + USE 默认 database）。
+
+    2026-08-21 前端实测暴露：execute_sql 带 catalog 时 SWITCH 到联邦 catalog（如 pg_tupu）
+    后连接归还池未复位，后续裸表名/3段名查询出现 No database selected / Unknown table。
+    每次查询前后复位，保证连接池内连接始终处于默认上下文（内部幂等，失败静默）。
+    """
+    try:
+        cur.execute("SWITCH internal")
+        cur.execute(f"USE {_default_database()}")
+    except Exception:
+        pass
 
 
 def get_conn():
@@ -208,9 +235,11 @@ def execute_sql(sql: str, limit: int = 0, catalog: Optional[str] = None) -> Dict
     import time as _time
     _t0 = _time.time()
     conn = get_conn()
+    cur = None
     result: Dict[str, Any]
     try:
         cur = conn.cursor()
+        _reset_connection_catalog(cur)  # 前复位：防池内 SWITCH 残留
         if catalog:
             _check_ident(catalog)
             cur.execute(f"SWITCH {catalog}")
@@ -222,6 +251,11 @@ def execute_sql(sql: str, limit: int = 0, catalog: Optional[str] = None) -> Dict
         logger.error(f"[Doris] SQL执行失败: {e}")
         result = apply_error_class({"columns": [], "rows": [], "row_count": 0, "error": str(e)})
     finally:
+        if cur is not None:
+            try:
+                _reset_connection_catalog(cur)  # 后复位：SWITCH 副作用不泄漏进连接池
+            except Exception:
+                pass
         conn.close()
     # 批1：查询日志（异常不影响主流程）
     try:
@@ -247,8 +281,10 @@ def describe_sql_columns(sql: str, catalog: Optional[str] = None) -> List[Dict[s
     sql = sql.strip().rstrip(';').strip()
     final_sql = _with_query_timeout(f"SELECT * FROM ({sql}) t LIMIT 0")
     conn = get_conn()
+    cur = None
     try:
         cur = conn.cursor()
+        _reset_connection_catalog(cur)  # 前复位：防池内 SWITCH 残留
         if catalog:
             _check_ident(catalog)
             cur.execute(f"SWITCH {catalog}")
@@ -260,6 +296,11 @@ def describe_sql_columns(sql: str, catalog: Optional[str] = None) -> List[Dict[s
         logger.error(f"[Doris] 获取列信息失败: {e}")
         return []
     finally:
+        if cur is not None:
+            try:
+                _reset_connection_catalog(cur)  # 后复位：SWITCH 副作用不泄漏进连接池
+            except Exception:
+                pass
         conn.close()
 
 

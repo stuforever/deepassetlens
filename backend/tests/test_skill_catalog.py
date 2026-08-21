@@ -52,14 +52,16 @@ class TestParseDistributionOverload:
     def test_entity_aliases_resolve_physical_tables(self, catalog):
         skill = catalog.load_skill(REAL_SKILL)
         aliases = skill.entity_aliases
-        assert aliases.get("用电户") == "dim_cst_elec_cons_cust"
-        assert aliases.get("计量点") == "dim_cst_inst_elec_cons"
-        assert aliases.get("配电变压器") == "dim_grid_pub_dist_trans_resrc_standbk_e"
+        # 别名值为 3 段命名（含 catalog 前缀）：execute_doris_sql 必须用 3 段名，
+        # 裸表名在默认 catalog（internal/test_db）下解析失败（2026-08-21 前端实测暴露）
+        assert aliases.get("用电户") == "pg_tupu.public.dim_cst_elec_cons_cust"
+        assert aliases.get("计量点") == "pg_tupu.public.dim_cst_inst_elec_cons"
+        assert aliases.get("配电变压器") == "pg_tupu.public.dim_grid_pub_dist_trans_resrc_standbk_e"
 
     def test_alias_replacement_in_template_text(self, catalog):
         skill = catalog.load_skill(REAL_SKILL)
         out = resolve_entity_aliases("FROM ⟦用电户⟧ ec", skill.entity_aliases)
-        assert out == "FROM dim_cst_elec_cons_cust ec"
+        assert out == "FROM pg_tupu.public.dim_cst_elec_cons_cust ec"
 
 
 class TestCatalogCacheAndFailure:

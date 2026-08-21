@@ -227,8 +227,8 @@ class TestStructuralFingerprint:
         assert chk.ok is False and "scenario_strict" in chk.reason
         # 改 JOIN 条件
         chk2 = validate_against_template(
-            v.replace("LEFT JOIN dim_cst_dist_sta ds ON i.dist_sta_id = ds.dist_sta_id",
-                      "LEFT JOIN dim_cst_dist_sta ds ON i.dist_sta_id = ds.dist_sta_id AND ds.dist_sta_level = '1'"),
+            v.replace("LEFT JOIN pg_tupu.public.dim_cst_dist_sta ds ON i.dist_sta_id = ds.dist_sta_id",
+                      "LEFT JOIN pg_tupu.public.dim_cst_dist_sta ds ON i.dist_sta_id = ds.dist_sta_id AND ds.dist_sta_level = '1'"),
             step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
         assert chk2.ok is False and "scenario_strict" in chk2.reason
         # 第二分支新增未声明 WHERE 条件（find_all 覆盖，不只第一个 WHERE）
