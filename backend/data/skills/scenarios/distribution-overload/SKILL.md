@@ -72,6 +72,8 @@ x_tupu:
       required_slots: []
       templates:
         - templates/step1_household_transformer.sql
+        - templates/step1_household_transformer_elec.sql
+        - templates/step1_household_transformer_gen.sql
       reference_files:
         - reference/scope_cte.md
         - reference/dynamic_filters.md
@@ -91,6 +93,8 @@ x_tupu:
         - execute_sql
       templates:
         - templates/step1_household_transformer.sql
+        - templates/step1_household_transformer_elec.sql
+        - templates/step1_household_transformer_gen.sql
         - templates/step2_power_aggregation.sql
       required_slots: []
       allowed_next:
@@ -148,7 +152,7 @@ x_tupu:
 
 | 用户问 | 执行 | 必读 SQL 模板 | 按需读参考 |
 |--------|------|-------------|-----------|
-| 户变关系 | 第1步 | `/skills/scenarios/distribution-overload/templates/step1_household_transformer.sql` | `/skills/scenarios/distribution-overload/reference/scope_cte.md`（限客户时）|
+| 户变关系 | 第1步 | 只问**用电户**: `/skills/scenarios/distribution-overload/templates/step1_household_transformer_elec.sql`；只问**发电户**: `.../step1_household_transformer_gen.sql`；问**两者/泛问**（如"所有户变关系"）: `.../step1_household_transformer.sql`（UNION 全量）| `/skills/scenarios/distribution-overload/reference/scope_cte.md`（限客户时）|
 | 重载/过载/负载率 | 1+2 | step1 + `/skills/scenarios/distribution-overload/templates/step2_power_aggregation.sql` | `/skills/scenarios/distribution-overload/reference/rules.md`（口径）|
 | 连续N天重过载 | 1+2扩展 | step1 + `/skills/scenarios/distribution-overload/templates/step2b_continuous_days.sql` | `.../reference/rules.md` |
 | 负载占有率/倒排 | 1+2+3 | step1 + step2 + `/skills/scenarios/distribution-overload/templates/step3_load_ratio.sql` | `.../reference/rules.md` |
@@ -206,7 +210,7 @@ x_tupu:
 - 台区无配变关联（dist_sta_id 在调压设备中无记录）-> 如实说明"该台区无配变关联，无法定位配变"
 - 功率数据不足8个时间点 -> 按点数近似判定，结论注明"数据稀疏，连续性为近似"
 - 功率数据为空 -> 如实告知"该计量点无96点功率监测数据"，不编造结果
-- 用户只问用电户/发电户 -> 只跑对应 UNION 段
+- 用户只问用电户/发电户 -> 选用电户/发电户**单段变体模板**（`step1_household_transformer_elec.sql` / `step1_household_transformer_gen.sql`），**禁止对 UNION 模板做删段改写**（scenario_strict 结构冻结：删段属结构变化，平台不允许）；问两者/泛问（"所有户变关系"）才用 `step1_household_transformer.sql`（UNION 全量）
 - 用户只问某类负荷 -> WHERE 加 `AND inst_usage_cls='对应码'`（仅支持'01'用电/'1102'上网，发电'1101'不判定只参考）
 - 用户指定日期 -> dist_power 的 WHERE 加 `AND pw.date='YYYYMMDD'`；未指定则全量(多天分别判定)
 - 用户指定状态/分类 -> 按 `reference/dynamic_filters.md` 传参表注入对应 AND 条件

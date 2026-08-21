@@ -21,6 +21,15 @@ def _extract_main_table(sql: str) -> str:
     return name.rsplit(".", 1)[-1] if name else ""
 
 
+def _security_reject(reason: str, log: str) -> dict:
+    """安全校验拒绝 -> 结构化 error_class=SECURITY_VALIDATION（修复方向再评估 2026-08-20）。
+
+    层间裁决不一致/安全底座拒绝（如 validate_sql 拒 UNION 根、DDL/DML、表越界、占位符残留）
+    ——模型无错、不可自愈；SkillPolicy 据此 fail-fast（不纠错重试，直接失败卡）。
+    """
+    return {"error": f"SQL安全校验未通过: {reason}", "log": log, "error_class": "SECURITY_VALIDATION"}
+
+
 def _explain_precheck(exec_fn, sql: str, _ts: str) -> Optional[dict]:
     """G2（融合设计 §4.3）：EXPLAIN 预检——SYNTAX/TABLE_MISSING 提前返回，省一轮完整执行。
 
@@ -153,6 +162,7 @@ def _kg_validate_safe_sql(body: dict, _ts: str) -> dict:
     else:
         reason = (res or {}).get("reason", "") or (res or {}).get("error", "")
         res["log"] = f"[{_ts}] SQL安全校验未通过：{reason or '未知原因'}"
+        res["error_class"] = "SECURITY_VALIDATION"  # 分类学一致（校验工具拒绝，非引擎错误）
     return res
 
 def _kg_execute_sql(body: dict, _ts: str) -> dict:
@@ -200,7 +210,7 @@ def _kg_execute_sql(body: dict, _ts: str) -> dict:
     from app.services.secure_query_executor import validate_sql
     _chk = validate_sql(sql_text)
     if not _chk.ok:
-        return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] SQL校验失败：{_chk.reason}"}
+        return _security_reject(_chk.reason, f"[{_ts}] SQL校验失败：{_chk.reason}")
     sql_text = _chk.sql
     current_sql = sql_text
     current_sql = sql_text
@@ -450,7 +460,7 @@ def _kg_execute_api_sql(body: dict, _ts: str) -> dict:
     # P0 安全校验：AST 只读校验 + 强制 LIMIT（不可绕过，替代仅预检的 validate_safe_sql）
     _chk = validate_sql(sql_text)
     if not _chk.ok:
-        return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] API联邦SQL校验失败：{_chk.reason}"}
+        return _security_reject(_chk.reason, f"[{_ts}] API联邦SQL校验失败：{_chk.reason}")
     sql_text = _chk.sql
     db = SessionLocal()
     try:
@@ -494,7 +504,7 @@ def _kg_execute_api_sql(body: dict, _ts: str) -> dict:
         # P0-2: 改写后重新校验（pseudo_sql 替换可能引入非只读操作，必须重校）
         _chk2 = validate_sql(sql_text)
         if not _chk2.ok:
-            return {"error": f"SQL改写后安全校验未通过: {_chk2.reason}", "log": f"[{_ts}] API联邦SQL改写后校验失败：{_chk2.reason}"}
+            return _security_reject(_chk2.reason, f"[{_ts}] API联邦SQL改写后校验失败：{_chk2.reason}")
         sql_text = _chk2.sql
         result = _exec_api_sql(sql_text, endpoints)
         pushed = result.get("pushed_down", {})
@@ -537,7 +547,7 @@ def _kg_execute_entity_api(body: dict, _ts: str) -> dict:
         from app.services.secure_query_executor import validate_sql
         _chk = validate_sql(sql)
         if not _chk.ok:
-            return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] 对象API SQL校验失败：{_chk.reason}"}
+            return _security_reject(_chk.reason, f"[{_ts}] 对象API SQL校验失败：{_chk.reason}")
         sql = _chk.sql
         endpoints = load_endpoints_from_db(db)
         if not endpoints:
@@ -597,7 +607,7 @@ def _kg_execute_doris_sql(body: dict, _ts: str) -> dict:
     from app.services.secure_query_executor import validate_sql
     _chk = validate_sql(sql_text)
     if not _chk.ok:
-        return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] Doris SQL校验失败：{_chk.reason}"}
+        return _security_reject(_chk.reason, f"[{_ts}] Doris SQL校验失败：{_chk.reason}")
     sql_text = _chk.sql
     try:
         result = _doris_exec(sql_text, catalog=doris_catalog)
@@ -688,7 +698,7 @@ def _kg_sample_column_values(body: dict, _ts: str) -> dict:
         from app.services.secure_query_executor import validate_sql
         _chk = validate_sql(_sql)
         if not _chk.ok:
-            return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] 取样 SQL 校验失败：{_chk.reason}"}
+            return _security_reject(_chk.reason, f"[{_ts}] 取样 SQL 校验失败：{_chk.reason}")
         try:
             _sampled = _exec(_chk.sql)
         except Exception as e:
@@ -707,7 +717,7 @@ def _kg_sample_column_values(body: dict, _ts: str) -> dict:
         from app.services.secure_query_executor import validate_sql
         _chk = validate_sql(_sql)
         if not _chk.ok:
-            return {"error": f"SQL安全校验未通过: {_chk.reason}", "log": f"[{_ts}] 取样 SQL 校验失败：{_chk.reason}"}
+            return _security_reject(_chk.reason, f"[{_ts}] 取样 SQL 校验失败：{_chk.reason}")
         try:
             _sampled = _doris_exec(_chk.sql, catalog=_ent.doris_catalog or None)
         except Exception as e:

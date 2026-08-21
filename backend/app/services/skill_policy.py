@@ -72,6 +72,10 @@ _CORRECTION_GUIDES = {
     "AGGREGATE_DEGRADED": "聚合分布类问题必须返回 GROUP BY 维度列 + COUNT/SUM 的聚合视图，当前返回了明细全表（SQL 无 GROUP BY/DISTINCT）。"
                           "请勿重复执行同样的明细 SQL；必须立即改为聚合查询：SELECT 维度列, COUNT(*) AS cnt FROM 同一表 GROUP BY 维度列（可 ORDER BY cnt DESC）。"
                           "维度列请用系统给出的维度列提示；不确定时先 sample_column_values 确认真实枚举值。",
+    # 修复方向再评估（2026-08-20）：安全校验拒绝 = 层间裁决不一致/安全底座拒绝，模型无错、不可自愈
+    # -> 禁重试，直接基于已获信息给出结论（数据工具随后被移除，重试也会被闸门拒绝）
+    "SECURITY_VALIDATION": "SQL 安全校验拒绝（平台层裁决，如 UNION 根/只读语句校验/表集合越界/占位符残留）。"
+                           "本问题无法通过改写 SQL 自愈，禁止重试同一或类似查询；直接基于已获信息给出结论并如实说明无法完成检索。",
 }
 _CORRECTION_GUIDE_EMPTY = "结果为空。调用 sample_column_values 检查过滤值是否真实存在，复核时间范围与口径。"
 
@@ -414,6 +418,31 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             return
         data = _parse_tool_json(out_str)
         ec = data.get("error_class")
+        # 修复方向再评估（2026-08-20）：安全校验拒绝 = 层间裁决不一致/安全底座拒绝（如模板守卫
+        # 放行 UNION 而 validate_sql 拒 UNION 根）。模型无错、不可自愈 -> fail-fast 直接失败卡，
+        # 不纠错重试（避免 5 分钟 token 烧尽）。仅在首见时终止一次（后续同类结果幂等）。
+        if ec == "SECURITY_VALIDATION":
+            if not contract._runtime.get("security_failed"):
+                contract._runtime["security_failed"] = True
+                contract.set_stop_reached()  # 移除全部数据工具 + terminal -> 出失败卡
+                try:
+                    from app.services.skill_governance import get_governance
+                    get_governance().record_policy(
+                        "security.validation", contract.skill_id, contract.workflow_step,
+                        f"error_class={ec} tool={tool_name} -> fail-fast 失败卡（模板忠实仍被拒，不重试）")
+                except Exception:
+                    pass
+                try:
+                    asyncio.get_running_loop().create_task(self._emit(request, "correction.attempt", {
+                        "tool_call_id": request.tool_call.get("id"),
+                        "tool_name": tool_name, "error_class": ec,
+                        "attempt": 1, "limit": 1, "stopped": True,
+                        "reason": f"安全校验拒绝（{ec}）：模板忠实仍被拒 -> 直接失败卡，不重试",
+                        "contract": contract.to_dict(),
+                    }))
+                except Exception as e:
+                    logger.warning(f"[SkillPolicy] security.validation 事件派发失败: {e}")
+            return
         # S1（L2）：聚合退化（成功但未聚合）-> 计入纠错闭环（上限 2 次、超限失败卡）
         if ec is None and _is_aggregate_degraded(contract, data, sql_hint):
             ec = "AGGREGATE_DEGRADED"

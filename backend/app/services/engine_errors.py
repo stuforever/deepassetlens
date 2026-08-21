@@ -10,6 +10,8 @@
     TABLE_MISSING-- 表/catalog 不存在（pymysql 1146、duckdb CatalogException）
     TIMEOUT      -- 查询/上游超时（Doris 3024/1317、requests Timeout、DuckDB 120s 护栏）
     UPSTREAM_API -- 上游 API 异常（HTTP 5xx/解析失败等，可重试但非语法问题）
+    SECURITY_VALIDATION -- 安全校验拒绝（修复方向再评估 2026-08-20：层间裁决不一致/安全底座拒绝，
+                           模型无错、不可自愈 -> fail-fast 直接失败卡，不纠错重试）
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-ERROR_CLASSES = ("CONNECTION", "AUTH", "SYNTAX", "TABLE_MISSING", "TIMEOUT", "UPSTREAM_API")
+ERROR_CLASSES = ("CONNECTION", "AUTH", "SYNTAX", "TABLE_MISSING", "TIMEOUT", "UPSTREAM_API", "SECURITY_VALIDATION")
 DEFAULT_CLASS = "UPSTREAM_API"
 
 
@@ -134,6 +136,15 @@ def classify_by_message(err: str) -> str:
     if not err:
         return DEFAULT_CLASS
     low = err.lower()
+    # 安全校验拒绝（secure_query_executor / 执行器前置）：层间裁决不一致/安全底座拒绝，
+    # 模型无错不可自愈 -> SECURITY_VALIDATION（fail-fast，不纠错重试）。
+    # 放在引擎类关键词之前判断（"不支持"/"白名单"/"占位符"等校验语不落入引擎分类）。
+    if ("sql安全校验未通过" in low or "不支持的语句类型" in low or "禁止多语句" in low
+            or "禁止" in low and ("语句" in low or "函数" in low)
+            or "不在允许查询的白名单" in low or "残留未渲染的模板参数" in low
+            or "含未解析占位符" in low or "sql 含" in low or "sql为空" in low
+            or "sql 为空" in low):
+        return "SECURITY_VALIDATION"
     if "timeout" in low or "statement_timeout" in low or "execution_timeout" in low or "interrupted" in low:
         return "TIMEOUT"
     if "doesn't exist" in low or "1146" in low or "not exist" in low or "no such table" in low \
