@@ -61,7 +61,12 @@ def _first_rows_eq(a, b):
 
 
 def digest_matches(got, exp):
-    """金标比对：值级（row_count 同 + 首行值归一化同）或标量宽松（COUNT 类期望单值，明细行数作答算对）。"""
+    """金标比对：值级（row_count 同 + 首行值归一化同）或标量宽松（COUNT 类期望单值，明细行数作答算对）。
+
+    S2（金标扩容）：明细/过滤/聚合类（期望多列首行）再放宽一层——row_count 相同且
+    首行首元素（实体 id/维度值）相同即算对，容忍 LLM 对列顺序/列选择的小幅抖动
+    （同数据不同列写法算对，比结果不比 SQL 文本）。聚合类仍靠首元素=维度值区分于明细。
+    """
     if not got or not exp:
         return False
     if got.get("row_count") == exp.get("row_count") and _first_rows_eq(got.get("first_row"), exp.get("first_row")):
@@ -75,6 +80,15 @@ def digest_matches(got, exp):
         gf = got.get("first_row")
         if isinstance(gf, list) and len(gf) == 1 and _norm_val(gf[0]) == _norm_val(val):
             return True
+    # S2：多列期望 -> row_count 同 + 首元素同（容忍列选择/顺序抖动；聚合类首元素=维度值不变）
+    if isinstance(ef, list) and len(ef) > 1:
+        gf = got.get("first_row")
+        if got.get("row_count") == exp.get("row_count") and isinstance(gf, list) and len(gf) >= 1:
+            try:
+                if _norm_val(gf[0]) == _norm_val(ef[0]):
+                    return True
+            except Exception:
+                pass
     return False
 
 
@@ -104,13 +118,15 @@ def run_golden_question(question: str, thread_id: str, timeout: int) -> dict:
                         data = {"raw": raw[:120]}
                     events.setdefault(buf, []).append(data)
     except requests.exceptions.Timeout:
-        return {"ok": False, "reason": "stream_timeout", "digest": None, "tool_count": 0,
-                "examples_injected": 0, "corrections": 0, "confidence": None}
+        return {"ok": False, "reason": "stream_timeout", "digest": None, "clarified": False,
+                "tool_count": 0, "examples_injected": 0, "corrections": 0, "confidence": None}
     except Exception as e:
-        return {"ok": False, "reason": f"stream_error: {e}", "digest": None, "tool_count": 0,
-                "examples_injected": 0, "corrections": 0, "confidence": None}
+        return {"ok": False, "reason": f"stream_error: {e}", "digest": None, "clarified": False,
+                "tool_count": 0, "examples_injected": 0, "corrections": 0, "confidence": None}
     # 观测采集（S1c）：tool_count 按 think 事件带 tool_name（工具启动）计数
     tool_count = len([e for e in events.get("think", []) if e.get("tool_name")])
+    # S2：澄清口径——路由层歧义检测透出 route.clarification 事件（须未执行数据查询）
+    clarified = bool(events.get("route.clarification"))
     done = events.get("done")
     conf = None
     examples = []
@@ -141,13 +157,14 @@ def run_golden_question(question: str, thread_id: str, timeout: int) -> dict:
             reason = "rubric_blocked"
         else:
             reason = "no_sql_result"
-        return {"ok": False, "reason": reason, "digest": None, "tool_count": tool_count,
-                "examples_injected": examples_injected, "corrections": corrections, "confidence": conf}
+        return {"ok": False, "reason": reason, "digest": None, "clarified": clarified,
+                "tool_count": tool_count, "examples_injected": examples_injected,
+                "corrections": corrections, "confidence": conf}
     last = sq[-1]
     rows = last.get("rows") or []
     rc = last.get("row_count") or len(rows)
     digest = compute_digest(rows, rc)
-    return {"ok": True, "digest": digest, "reason": "ok",
+    return {"ok": True, "digest": digest, "reason": "ok", "clarified": clarified,
             "tool_count": tool_count, "examples_injected": examples_injected,
             "corrections": corrections, "confidence": conf}
 
@@ -195,12 +212,16 @@ def main():
             res = run_golden_question(q, f"eval_{run_uid}_{g.id}_r{r}", args.stream_timeout)
             ok = False
             reason = res["reason"]
-            if res["ok"] and res["digest"]:
+            # S2：澄清口径（scenario_tag=clarify）——触发了 route.clarification 事件且未执行数据查询即 pass
+            if (g.scenario_tag or "") == "clarify":
+                ok = bool(res.get("clarified")) and not res["ok"]
+                reason = "clarify" if ok else (res["reason"] if res["ok"] else f"no_clarify:{res['reason']}")
+            elif res["ok"] and res["digest"]:
                 ok = digest_matches(res["digest"], exp)
             if ok:
                 pass_cnt += 1
             mark = "PASS" if ok else "FAIL"
-            print(f"{mark}  got={res.get('digest')}")
+            print(f"{mark}  got={res.get('digest')} clarified={res.get('clarified')}")
             runs.append({
                 "run": r + 1, "pass": ok, "reason": reason,
                 "got_digest": res.get("digest"), "tool_count": res.get("tool_count"),

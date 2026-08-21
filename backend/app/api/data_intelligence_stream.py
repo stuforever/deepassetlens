@@ -186,6 +186,10 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 yield f"data: {json.dumps((_route.to_dict() if _route is not None else {'route_type': 'fallback', 'contract': _contract.to_dict()}), ensure_ascii=False)}\n\n"
                 yield f"event: contract\n"
                 yield f"data: {json.dumps(_contract.to_dict(), ensure_ascii=False)}\n\n"
+                # S2（金标扩容）：歧义提问 -> 路由层标记澄清，SSE 透出澄清事件（eval 澄清口径判定依据）
+                if getattr(_contract, "clarify_required", False):
+                    yield f"event: route.clarification\n"
+                    yield f"data: {json.dumps({'node': '澄清', 'clarify_required': True, 'question': req.user_input}, ensure_ascii=False)}\n\n"
 
             # 复用 ReAct 路径的事件消费逻辑
             # F4: 通过原生 context= 传递 runtime.context（astream_events 的 **kwargs 会透传给底层）

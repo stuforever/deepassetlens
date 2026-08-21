@@ -178,7 +178,8 @@ class TestG2CorrectionGate:
         assert qc._runtime.get("corrections", 0) == 0
 
     def test_聚合退化_计入纠错闭环(self, mw):
-        """S1（L2）：聚合退化计入 corrections 上限（同 SYNTAX 等可纠错类）。"""
+        """S1（L2）+S2：聚合退化计入 corrections 上限；S2 起聚合退化类上限放宽到 3
+        （改写聚合方差多一次机会），其他错误类仍为 2。"""
         qc = QueryContract.generic(aggregate_intent={"trigger": "分布", "required_shape": "GROUP BY"})
         agg_out = ('{"columns":["cust_id","cust_name","voltage_name","ctrt_cap","run_cap","impt_lv_name","bus_srv_addr_name"],'
                    '"rows":[[1,1,1,1,1,1,1],[2,2,2,2,2,2,2],[3,3,3,3,3,3,3]],"row_count":3,'
@@ -189,7 +190,12 @@ class TestG2CorrectionGate:
         # 二次触发仍计数，未超限
         mw._check_controlled_degradation(qc, "execute_doris_sql", agg_out, _Req())
         assert qc._runtime["corrections"] == 2
-        # 三次 -> 超限终止（失败卡）
+        assert not qc.stop_reached
+        # 三次（聚合退化上限 3）仍未超限
+        mw._check_controlled_degradation(qc, "execute_doris_sql", agg_out, _Req())
+        assert qc._runtime["corrections"] == 3
+        assert not qc.stop_reached
+        # 四次 -> 超限终止（失败卡）
         mw._check_controlled_degradation(qc, "execute_doris_sql", agg_out, _Req())
         assert qc.stop_reached and "execute_doris_sql" not in qc.allowed_tools
 

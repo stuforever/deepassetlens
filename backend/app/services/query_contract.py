@@ -84,6 +84,7 @@ class QueryContract:
     route_type: str = "scenario"                                   # scenario | generic | ...
     rubric: Optional[str] = None                                   # M3 DA-2：自评闸门 rubric（generic 默认文案；scenario 为 None）
     aggregate_intent: Optional[Dict[str, Any]] = None              # S1（稳定性攻坚 L1）：聚合分布意图标记 {dimension_hint, required_shape}
+    clarify_required: bool = False                                 # S2（金标扩容）：路由层歧义检测 -> 意图不明确，须澄清而非乱查
     multi_engine: bool = False                                     # 批4/场景迁移：多数据源逐源分发（引擎不唯一）
     forbid_markdown_detail_table: bool = True                      # 输出契约：结果已推前端时禁 Markdown 明细表
     entity_engine_map: Dict[str, str] = field(default_factory=dict)  # 实体 -> 引擎 真实映射（源模式工具返回）
@@ -139,18 +140,21 @@ class QueryContract:
 
     @classmethod
     def generic(cls, *, scope: Optional[Dict[str, Any]] = None,
-                route_reason: str = "", aggregate_intent: Optional[Dict[str, Any]] = None) -> "QueryContract":
+                route_reason: str = "", aggregate_intent: Optional[Dict[str, Any]] = None,
+                clarify_required: bool = False) -> "QueryContract":
         """未命中场景时的低权限只读通用契约（禁止写入/task/Shell）。
 
         aggregate_intent（S1 稳定性攻坚 L1）：路由层识别分布/占比/构成类触发词后注入，
         契约追加受控指令（禁止返回明细全表）+ 结果层硬校验钩子。
+        clarify_required（S2 金标扩容）：路由层歧义检测命中 -> 意图不明确，收缩工具集
+        为空（模型无法执行任何数据查询），契约指令要求仅输出一句澄清问题。
         """
         c = cls(
             run_id=f"run_{uuid.uuid4().hex[:12]}",
             skill_id="__generic__",
             skill_version="1.0",
             workflow_step="__generic__",
-            allowed_tools=sorted(GENERIC_ALLOWED_TOOLS),
+            allowed_tools=[] if clarify_required else sorted(GENERIC_ALLOWED_TOOLS),
             forbidden_tools=sorted(ABSOLUTE_FORBIDDEN_TOOLS),
             scope=dict(scope or {"customer_names": [], "commitment": "none", "source": "user_input"}),
             output_mode="default",
@@ -158,6 +162,7 @@ class QueryContract:
             route_type="generic",
             rubric=GENERIC_RUBRIC,
             aggregate_intent=aggregate_intent,
+            clarify_required=clarify_required,
             _runtime={"engine_locked": False, "result_obtained": False, "violations": 0},
         )
         return c
@@ -318,6 +323,7 @@ class QueryContract:
             "route_type": self.route_type,
             "rubric": self.rubric,
             "aggregate_intent": self.aggregate_intent,  # S1（L1）：聚合分布意图（前端证据/契约卡观测）
+            "clarify_required": self.clarify_required,  # S2：歧义需澄清（路由层标记）
             "multi_engine": self.multi_engine,
             "forbid_markdown_detail_table": self.forbid_markdown_detail_table,
             "confirmed_engines": list(self._runtime.get("confirmed_engines") or []),

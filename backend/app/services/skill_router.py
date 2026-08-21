@@ -225,6 +225,22 @@ class SkillRouter:
     # S1 稳定性攻坚（L1）：聚合分布意图触发词——命中即要求 GROUP BY 聚合视图，禁止返回明细全表
     _AGGREGATE_TRIGGERS = ("分布", "占比", "构成", "比例", "合计", "汇总", "分组", "分别")
 
+    # S2（金标扩容）：聚合分布维度词 -> 目标列提示（dimension_hint）。
+    # 解决「各行业的用电客户分布」这类维度不在 agent 规范明细视图内的聚合退化：
+    # 路由层命中聚合触发词且文本含已知维度词时，契约给列名提示（结构保障，不依赖模型猜列）。
+    _DIMENSION_HINT_MAP = (
+        ("电压等级", "voltage_name"),
+        ("重要性等级", "impt_lv_name"),
+        ("行业", "ind_cls_name"),
+        ("用电类别", "ec_categ_name"),
+        ("客户分类", "cust_cls_name"),
+        ("管理单位", "mgt_org_name"),
+        ("城乡类别", "urbanrural_categ_name"),
+        ("负荷性质", "load_char_name"),
+        ("用电状态", "ecc_stat_name"),
+        ("状态", "ecc_stat_name"),
+    )
+
     @staticmethod
     def detect_aggregate_intent(text: str) -> Optional[Dict[str, Any]]:
         """识别聚合分布/占比/构成类意图。命中 -> aggregate_intent；否则 None。"""
@@ -233,18 +249,51 @@ class SkillRouter:
         hit = [t for t in SkillRouter._AGGREGATE_TRIGGERS if t in text]
         if not hit:
             return None
+        dim_hint = None
+        for _w, _col in SkillRouter._DIMENSION_HINT_MAP:
+            if _w in text:
+                dim_hint = _col
+                break
         return {
             "trigger": hit[0],
-            "dimension_hint": None,  # 维度列提示可选：命中已知维度列名（voltage_name 等）时给出
+            "dimension_hint": dim_hint,  # 命中已知维度词 -> 目标列提示（行业->ind_cls_name 等）
             "required_shape": "GROUP BY 维度列 + COUNT/SUM",
         }
 
+    # S2（金标扩容）：歧义意图检测——命中 -> 须澄清而非乱查（纯规则不打模型）
+    # 有明确查询意图词（数量/聚合/过滤/清单/排序/TopN 等）则不算歧义；否则只要带模糊词就触发澄清。
+    _VAGUE_MARKERS = ("情况", "怎么样", "如何", "分析一下", "看看", "了解一下", "介绍", "大概", "概览", "评估一下")
+    _CLEAR_QUERY_MARKERS = (
+        "多少", "分布", "占比", "构成", "比例", "合计", "汇总", "分组", "分别",
+        "列出", "清单", "有哪些", "排序", "最大", "最小", "大于", "小于", "等于",
+        "超过", "数量", "总数", "统计", "过滤", "哪个", "谁", "前", "按", "每个",
+        "分布情况", "多少户", "多少条", "的客户", "用户", "客户名", "名称", "容量", "电压等级",
+        "重要性", "管理单位", "安装点", "台区", "计量", "电能表", "合同",
+    )
+
+    @staticmethod
+    def detect_vague_intent(text: str) -> bool:
+        """歧义检测：含模糊词且无明确查询意图词 -> True（触发澄清）。
+
+        S2 澄清层：模糊提问（如「客户情况」「分析一下用电客户」）不应乱查，
+        路由层直接标记 clarify_required，契约收敛工具集并指令输出澄清问题。
+        """
+        if not text:
+            return False
+        if any(m in text for m in SkillRouter._CLEAR_QUERY_MARKERS):
+            return False
+        return any(v in text for v in SkillRouter._VAGUE_MARKERS)
+
     def _route_generic(self, text: str) -> RouteResult:
         agg_intent = self.detect_aggregate_intent(text)
+        vague = self.detect_vague_intent(text)
         route_reason = "未命中场景剧本，进入低权限只读通用模式（禁止写/SQL执行外的工具）"
         if agg_intent:
             route_reason += f"；检测到聚合意图（触发词={agg_intent['trigger']}）"
-        contract = QueryContract.generic(route_reason=route_reason, aggregate_intent=agg_intent)
+        if vague:
+            route_reason += "；检测到歧义提问（无明确维度/指标），要求澄清而非查询"
+        contract = QueryContract.generic(route_reason=route_reason, aggregate_intent=agg_intent,
+                                         clarify_required=vague)
         return RouteResult(
             route_type="generic", skill_id="__generic__", workflow_step="__generic__",
             matched_rules=["fallback: 无场景命中"],

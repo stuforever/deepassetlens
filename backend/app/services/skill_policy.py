@@ -47,7 +47,10 @@ _DEGRADATION_TOOLS = frozenset({"search_entities", "list_tables"})
 # 触发降级的 error_class（表/catalog 不存在/语法类 -> 允许一次重定位）
 _DEGRADATION_TRIGGERS = frozenset({"TABLE_MISSING", "SYNTAX"})
 # G2（融合设计 §4.3）：可纠错 error_class（计数闸门计入）；上限 2 次，超限直接终止出失败卡
+# S2：聚合退化（AGGREGATE_DEGRADED）类上限放宽到 3（该错误非死循环，是模型改写聚合的方差，
+# 多一次纠错机会显著收敛；其余错误类维持 2）。超限仍终止出失败卡（P0 死循环教训不变）。
 _CORRECTION_LIMIT = 2
+_AGGREGATE_CORRECTION_LIMIT = 3
 _CORRECTABLE_CLASSES = frozenset({"TABLE_MISSING", "CATALOG_MISSING", "SYNTAX", "TIMEOUT", "AGGREGATE_DEGRADED"})
 # G2：error_class -> 结构化纠错指引（ToolMessage 附加 correction 字段，模型据此自纠）
 _CORRECTION_GUIDES = {
@@ -56,9 +59,9 @@ _CORRECTION_GUIDES = {
     "SYNTAX": "SQL 报错（语法/列名错误）。调用 validate_attributes 校验列名后修正重试。",
     "TIMEOUT": "查询超时。移除 ORDER BY / 增加 LIMIT / 确认可否命中预聚合加速表。",
     # S1（L2）：聚合退化（结果层硬校验）——聚合分布类问题返回了明细全表
-    "AGGREGATE_DEGRADED": "聚合分布类问题必须返回 GROUP BY 维度列 + COUNT/SUM 的聚合视图，当前返回了明细全表。"
-                          "请改为 SELECT 维度列, COUNT(*) AS cnt FROM 同一表 GROUP BY 维度列 ORDER BY cnt DESC，"
-                          "维度列先 sample_column_values 确认真实枚举值。",
+    "AGGREGATE_DEGRADED": "聚合分布类问题必须返回 GROUP BY 维度列 + COUNT/SUM 的聚合视图，当前返回了明细全表（SQL 无 GROUP BY/DISTINCT）。"
+                          "请勿重复执行同样的明细 SQL；必须立即改为聚合查询：SELECT 维度列, COUNT(*) AS cnt FROM 同一表 GROUP BY 维度列（可 ORDER BY cnt DESC）。"
+                          "维度列请用系统给出的维度列提示；不确定时先 sample_column_values 确认真实枚举值。",
 }
 _CORRECTION_GUIDE_EMPTY = "结果为空。调用 sample_column_values 检查过滤值是否真实存在，复核时间范围与口径。"
 
@@ -378,8 +381,12 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             _set_correction(result, _CORRECTION_GUIDE_EMPTY)
         elif _is_aggregate_degraded(contract, data, sql_hint):
             _dim = contract.aggregate_intent.get("dimension_hint")
-            _set_correction(result, _CORRECTION_GUIDES["AGGREGATE_DEGRADED"] + (
-                f"（维度列提示：{_dim}）" if _dim else ""))
+            if _dim:
+                # 维度列提示（S2）：直接给出目标列 -> 显式要求 SELECT {dim}, COUNT(*) AS cnt ... GROUP BY {dim}
+                _set_correction(result, _CORRECTION_GUIDES["AGGREGATE_DEGRADED"] +
+                                f"本问题维度列确定为 {_dim}，请执行 SELECT {_dim}, COUNT(*) AS cnt FROM 同一表 GROUP BY {_dim}。")
+            else:
+                _set_correction(result, _CORRECTION_GUIDES["AGGREGATE_DEGRADED"])
 
     def _check_controlled_degradation(self, contract: QueryContract, tool_name: str,
                                       out_str: str, request, sql_hint: str = "") -> None:
@@ -402,23 +409,25 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         # 计数闸门
         corrections = int(contract._runtime.get("corrections", 0)) + 1
         contract._runtime["corrections"] = corrections
+        # S2：聚合退化类上限放宽到 3（改写聚合方差多一次机会），其余类维持 2
+        _limit = _AGGREGATE_CORRECTION_LIMIT if ec == "AGGREGATE_DEGRADED" else _CORRECTION_LIMIT
         _stopped = False
-        if corrections > _CORRECTION_LIMIT:
+        if corrections > _limit:
             _stopped = True
             contract.set_stop_reached()  # 移除数据工具 + terminal -> 后续数据工具调用被拒，出失败卡
             try:
                 from app.services.skill_governance import get_governance
                 get_governance().record_policy(
                     "correction.limit", contract.skill_id, contract.workflow_step,
-                    f"corrections={corrections} > {_CORRECTION_LIMIT} -> 终止（失败卡）")
+                    f"corrections={corrections} > {_limit} -> 终止（失败卡）")
             except Exception:
                 pass
             try:
                 asyncio.get_running_loop().create_task(self._emit(request, "correction.attempt", {
                     "tool_call_id": request.tool_call.get("id"),
                     "tool_name": tool_name, "error_class": ec,
-                    "attempt": corrections, "limit": _CORRECTION_LIMIT, "stopped": True,
-                    "reason": f"纠错超限（{corrections}>{_CORRECTION_LIMIT}），已终止并出失败卡",
+                    "attempt": corrections, "limit": _limit, "stopped": True,
+                    "reason": f"纠错超限（{corrections}>{_limit}），已终止并出失败卡",
                     "contract": contract.to_dict(),
                 }))
             except Exception as e:
@@ -448,8 +457,8 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             asyncio.get_running_loop().create_task(self._emit(request, "correction.attempt", {
                 "tool_call_id": request.tool_call.get("id"),
                 "tool_name": tool_name, "error_class": ec,
-                "attempt": corrections, "limit": _CORRECTION_LIMIT, "stopped": False,
-                "reason": f"纠错第 {corrections} 次（上限 {_CORRECTION_LIMIT}）",
+                "attempt": corrections, "limit": _limit, "stopped": False,
+                "reason": f"纠错第 {corrections} 次（上限 {_limit}）",
                 "contract": contract.to_dict(),
             }))
         except Exception as e:

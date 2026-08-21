@@ -100,6 +100,12 @@ def _build_contract_system_message(contract, question: str = "") -> str:
             f"\n- 本问题要求聚合分布/占比视图{_dim}：必须返回 GROUP BY 维度列 + COUNT/SUM 的聚合结果，"
             "禁止返回明细全表；如需维度枚举值先 sample_column_values。"
         )
+    # S2（金标扩容）：歧义提问 -> 收缩工具集为空 + 指令输出澄清问题（禁止任何数据查询）
+    if getattr(contract, "clarify_required", False):
+        base += (
+            "\n- 本问题意图不明确（未指明关心的维度/指标）。本步骤不允许调用任何工具、禁止执行任何数据查询。"
+            "请直接用一句话向用户澄清：询问其想了解的具体维度或指标（如电压等级、容量、重要性等级等），不要作答数据结论。"
+        )
     if question:
         try:
             from app.services.qa_example_service import build_examples_payload, bump_hit_count
