@@ -43,8 +43,40 @@ description: SQL数据查询场景。用户要查数据：数量/统计/占比/�
 N值：前10/top10/10个 -> LIMIT 10；没说 -> 默认 LIMIT 10
 排序字段："用能面积最大"->用能面积；"客户数量最多"->COUNT(*)（需GROUP BY）；"最近登记"->登记日期
 
+**硬规则（排名查询必守）**：
+- **排名结果必须有 `ORDER BY <排序指标>`**；没有明确排序字段就先去定位指标列，**禁止**返回"任意 TopN"或业务量表明细冒充排名。
+- **禁止** `SELECT ... FROM <业务量表/电量表> LIMIT N` 充当排名（那是明细，不是"最大/最多"）。
+- 客户/实体排名必须 `GROUP BY <实体> + SUM(<指标>) + ORDER BY SUM(<指标>) DESC`，展示实体名+指标值。
+
 简单 TopN：`SELECT <展示字段>, <排序字段> FROM <表> ORDER BY <排序字段> DESC LIMIT <N>`
 分组 TopN：`SELECT <分组字段>, COUNT(*) AS 数量 FROM <表> GROUP BY <分组字段> ORDER BY 数量 DESC LIMIT <N>`
+
+### 指标不在主表（跨表排序/统计）——先定位指标表再 JOIN
+用户问的**指标值**（用电量/电量/负荷/功率等）通常不在主数据表，而在**业务量/时序表**。排序字段在主表找不到时，**禁止降级为「无排序字段的 TopN」**，必须：
+1. 用 locate/relate 定位指标所在表（如「用电量」→ 客户电量表）；
+2. 与主表按关联键 JOIN（客户表 `cust_id` ↔ 电量表 `cust_id`）；
+3. 对指标聚合后排序。
+
+常见指标↔表对照（列名以元数据为准）：
+
+| 指标 | 所在表 | 指标字段 |
+|-----|-------|---------|
+| 客户用电量（日/月） | `dwd_cst_mtcl_cons_cust_energy_day` / `_mon` | `cons_energy` |
+| 客户用电量（分钟） | `dwd_cst_mtcl_cons_cust_energy_min` | `energy` |
+| 计量点电量 | `dwd_cst_mtcl_inst_energy_day` / `_min` | `cons_energy` |
+| 电能表电量 | `dwd_cst_mtcl_meter_energy_day` / `_min` | `cons_energy` |
+
+**用电量排名优先用日电量表**（`_day`，聚合后值更准确）；这些表在 `pg_tupu` catalog，SQL 须用 3 段名 `pg_tupu.public.<表名>`。
+
+示例「用电量最大的前10个客户」：
+```
+SELECT c.cust_name, ROUND(SUM(e.cons_energy), 2) AS 用电量
+FROM pg_tupu.public.dim_cst_elec_cons_cust c
+JOIN pg_tupu.public.dwd_cst_mtcl_cons_cust_energy_day e ON c.cust_id = e.cust_id
+GROUP BY c.cust_name, c.cust_id
+ORDER BY 用电量 DESC
+LIMIT 10
+```
 
 ### 趋势类（问同比/环比/趋势/逐月/增长率）
 | 用户说法 | SQL 模板 |
@@ -85,6 +117,8 @@ N值：前10/top10/10个 -> LIMIT 10；没说 -> 默认 LIMIT 10
 - 只 SELECT/WITH，禁 DDL/DML
 - 不编造字段，不确定先 validate_attributes
 - SQL 只允许 SELECT/WITH，必须加 LIMIT
+- **表名/列名/JOIN 字段必须来自元数据**（locate/relate/explore/validate_attributes/list_tables 的返回），不凭记忆或猜测拼写；拼 SQL 前先确认列名存在，宁多一次元数据查询，避免执行后反复修复
+- **用户给的表名在系统不存在**（list_tables/元数据查无此表）：如实告知"表 X 不存在"，列出相近可用表供选择；**禁止模糊映射到相似表名返回数据**（答非所问）
 
 ## 多跳 JOIN 拼装（跨实体时）
 ```

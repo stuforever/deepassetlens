@@ -20,9 +20,12 @@ description: SQL执行能力包。校验并执行SQL，含表名校验兜底。�
 ## 硬约束
 - **必须先 validate_safe_sql 通过才能 execute_sql**
 - SQL 只允许 SELECT/WITH，必须加 LIMIT（默认500，全量可2000）
-- execute_sql 报错重试不超过 1 次，仍失败如实报告
+- execute_sql 报错重试不超过 1 次，仍失败如实报告（不反复试错烧轮次）
 - SQL 含 `{{` 未解析占位符或为空：拒绝执行
 - 字段名一律加表名前缀（多表时）：`表名.字段名`
+- **表名必须来自 list_tables/元数据**；execute_sql 报 `Unknown table/表不存在` 时先 list_tables 确认正确表名；
+  **确认系统无该表 → 如实报告"表 X 不存在"**（列出相近可用表），**禁止映射到相似表返回数据**
+- **列名必须来自 validate_attributes/explore 元数据**；Unknown column 时先核对列名再重试，最多 1 次重试
 
 ## 挑用示例
 - 正常流程 -> validate_safe_sql -> execute_sql

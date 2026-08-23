@@ -53,17 +53,17 @@ class TestSelectOnly:
 
 class TestTableScope:
     def test_tables_within_template_pass(self, step1_template_sql):
+        # 2026-08 模板修复：户变链路改为 用电户.cust_id = 计量点.cust_id（不再 JOIN 能源客户 cms20_cst_cust，其 cust_id 为数字与 CUS 前缀不一致）
         sql = """
-        SELECT ec.elec_cons_cust_id AS cid, c.cust_name, i.inst_id AS iid
+        SELECT ec.elec_cons_cust_id AS cid, ec.cust_name, i.inst_id AS iid
         FROM dim_cst_elec_cons_cust ec
-        JOIN cms20_cst_cust c ON ec.cust_id = c.cust_id
-        JOIN dim_cst_inst_elec_cons i ON ec.elec_cons_cust_id = i.elec_cons_cust_id
+        JOIN dim_cst_inst_elec_cons i ON ec.cust_id = i.cust_id
         LEFT JOIN dim_cst_dist_sta ds ON i.dist_sta_id = ds.dist_sta_id
-        WHERE i.inst_usage_cls = '01'
+        WHERE i.inst_id IS NOT NULL
         """
         chk = validate_against_template(sql, step1_template_sql, "t1")
         assert chk.ok is True
-        assert {"dim_cst_elec_cons_cust", "cms20_cst_cust", "dim_cst_inst_elec_cons"} <= chk.tables
+        assert {"dim_cst_elec_cons_cust", "dim_cst_inst_elec_cons", "dim_cst_dist_sta"} <= chk.tables
 
     def test_out_of_scope_table_rejected(self, step1_template_sql):
         sql = "SELECT * FROM dim_cst_elec_cons_cust JOIN secret_table s ON 1=1"
@@ -180,8 +180,8 @@ class TestStructuralFingerprint:
     def test_declared_dynamic_extension_passes_strict(self, step1_template_sql):
         """评审 P0-2：strict 允许唯一声明过的 AST 变化 = 模板【动态】片段（客户范围）。"""
         sql = step1_template_sql.replace(
-            "-- 【动态】用户限定客户: AND c.cust_name IN ('客户001','客户003')",
-            "AND c.cust_name IN ('客户001','客户003')",
+            "-- 【动态】用户限定客户: AND ec.cust_name IN ('客户001','客户003')",
+            "AND ec.cust_name IN ('客户001','客户003')",
         )
         chk = validate_against_template(sql, step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
         assert chk.ok is True
@@ -190,8 +190,8 @@ class TestStructuralFingerprint:
     def test_undeclared_extension_rejected_strict(self, step1_template_sql):
         """评审 P0-2：strict 拒绝未声明的结构变化（新增非【动态】WHERE 连接项）。"""
         sql = step1_template_sql.replace(
-            "WHERE i.inst_usage_cls = '01' AND i.elec_cons_cust_id IS NOT NULL",
-            "WHERE i.inst_usage_cls = '01' AND i.elec_cons_cust_id IS NOT NULL AND i.inst_stat = '5'",
+            "WHERE i.inst_id IS NOT NULL",
+            "WHERE i.inst_id IS NOT NULL AND i.inst_stat = '5'",
         )
         chk = validate_against_template(sql, step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
         assert chk.ok is False
@@ -217,12 +217,12 @@ class TestStructuralFingerprint:
     def test_strict_rejects_dynamic_plus_other_branch_change(self, step1_template_sql):
         """评审 P0-2（二轮）：第一个 WHERE 加合法动态 + 同时改其他结构（投影/GROUP BY/JOIN）必须拒绝。"""
         v = step1_template_sql.replace(
-            "-- 【动态】用户限定客户: AND c.cust_name IN ('客户001','客户003')",
-            "AND c.cust_name IN ('客户001','客户003')")
+            "-- 【动态】用户限定客户: AND ec.cust_name IN ('客户001','客户003')",
+            "AND ec.cust_name IN ('客户001','客户003')")
         # 合法动态本身通过
         assert validate_against_template(v, step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT).ok is True
         # 改第一分支投影列
-        chk = validate_against_template(v.replace("c.cust_name,", "UPPER(c.cust_name),", 1),
+        chk = validate_against_template(v.replace("ec.cust_name,", "UPPER(ec.cust_name),", 1),
                                         step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
         assert chk.ok is False and "scenario_strict" in chk.reason
         # 改 JOIN 条件
@@ -231,14 +231,15 @@ class TestStructuralFingerprint:
                       "LEFT JOIN pg_tupu.public.dim_cst_dist_sta ds ON i.dist_sta_id = ds.dist_sta_id AND ds.dist_sta_level = '1'"),
             step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
         assert chk2.ok is False and "scenario_strict" in chk2.reason
-        # 第二分支新增未声明 WHERE 条件（find_all 覆盖，不只第一个 WHERE）
-        chk3 = validate_against_template(
-            v.replace("AND i.gpc_id IS NOT NULL", "AND i.gpc_id IS NOT NULL AND i.inst_stat = '5'"),
-            step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
+        # 第二分支（发电户段）新增未声明 WHERE 条件（find_all 覆盖，不只第一个 WHERE）
+        idx = v.rfind("WHERE i.inst_id IS NOT NULL")
+        assert idx > 0
+        sql3 = v[:idx] + "WHERE i.inst_id IS NOT NULL AND i.inst_stat = '5'" + v[idx + len("WHERE i.inst_id IS NOT NULL"):]
+        chk3 = validate_against_template(sql3, step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
         assert chk3.ok is False and "scenario_strict" in chk3.reason
 
     def test_strict_rejects_deleting_template_condition(self, step1_template_sql):
         """评审 P0-2（二轮）：候选不得删除模板既有条件（t_conjs ⊆ c_conjs 硬校验）。"""
-        sql = step1_template_sql.replace("AND i.elec_cons_cust_id IS NOT NULL", "")
+        sql = step1_template_sql.replace("WHERE i.inst_id IS NOT NULL", "")
         chk = validate_against_template(sql, step1_template_sql, "t1", mode=TEMPLATE_MODE_STRICT)
         assert chk.ok is False

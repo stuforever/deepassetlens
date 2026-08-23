@@ -35,10 +35,13 @@ description: 定位能力包。把用户问句锚定到业务域(L2)、实体表
 - "项目定义/WBS元素/网络活动" -> 项目主数据
 - "用电客户/户号" -> 客户主数据
 - "电能表/计量点" -> 计量域
+- "用电量/电量最大/电量统计/负荷/功率" -> 客户主数据 或 计量域（电量指标在业务量/时序表，不是主数据表）
 
 ## 实体判定参考（子图多实体时选哪个）
 - "WBS预算" -> ProjectBudget（不是 WbsElement）
 - "WBS成本" -> ProjectCost（不是 WbsElement）
 - "WBS元素" -> WbsElement
+- "WBS元素层级/顶层WBS/一级WBS" -> WbsElement（查层级字段）
 - "项目定义" -> ProjectDefinition
 - "网络活动" -> NetworkActivity
+- "用电量/客户电量/电量最大" -> 客户电量表 `dwd_cst_mtcl_cons_cust_energy_day`（指标字段 `cons_energy`），**不是** `dim_cst_elec_cons_cust`（那是客户主数据，无电量值）
