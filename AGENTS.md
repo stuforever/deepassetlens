@@ -57,10 +57,23 @@
 
 ## 浏览器测试（铁律）
 
-- **测试一律用 IDE 内置浏览器（IAB）**，通过 `control-browser` 技能（browser-use 插件）驱动：用 `mcp__node_repl__js` 调用 `agent.browsers` API，在右侧标签页打开页面测试。
-- **凡是提到"测试 / webapptest / 前端测试工具 / 浏览器测试 / 验证页面"等，一律指此模式**，无需额外说明，不弹外部浏览器、不开桌面 Chrome。
-- 禁止用 `start`、`cmd /c start`、`explorer` 等命令弹出系统浏览器窗口；禁止使用桌面谷歌浏览器（Chrome）等任何外部浏览器测试。
+> **2026-08-23 用户定调（长期记忆）**：测试**一律用 Playwright 真实前端模拟**（headless 驱动真实浏览器访问前端 23000 页面），
+> **禁止把后端直连/后端流式脚本（_q_run 等）作为验收测试**——用户明确"后端测试没毛用"。
+
+- **Playwright 方案（标准，当前无 IAB 时唯一可用）**：
+  - 环境：Python313（`C:\Users\李钢柱\AppData\Local\Programs\Python\Python313\python.exe`）已装 playwright；
+    浏览器缓存 `%USERPROFILE%\AppData\Local\ms-playwright`（chromium-1200/1223/1228/1234 齐全，`python -u scripts/_pw_smoke.py` 已验证可启动）。
+  - 入口脚本：`backend/scripts/_pw_e2e.py <问题> <截图名> <超时秒>`——headless 打开 `http://localhost:23000`「数据资产探查」页 →
+    输入问题 → 发送 → 等流式 → 抓 `.ant-table` 查询结果表（thead th / tbody tr>td）+ 回答文本 → 截图 `scripts/_pw_<名>.png`。
+  - 定位选择器：输入框 `textarea.ant-input`（placeholder「想问什么数据？」），发送按钮 `button.ant-btn-primary`。
+  - **必须串行执行**：并发多个 e2e 会串扰后端会话（曾出现模型"未收到用户请求"），一次只跑一个。
+  - 登录态 anonymous/admin（前端已预置），打开即用。
+  - 参考脚本：`_pw_probe_dom.py`（dump DOM）、`_pw_smoke.py`（环境冒烟）。
+- 若将来 IAB（`mcp__node_repl__js` + `agent.browsers`）可用，优先 IAB（见下细则）；**无 IAB 时一律 Playwright headless**。
+- 禁止用 `start`、`cmd /c start`、`explorer` 等命令弹出系统浏览器窗口；Playwright 一律 headless（不弹窗口）。
 - 测试前端页面一律走 `http://localhost:23000`（前端 dev server），由 setupProxy.js 转发到 28000 后端。
+
+### IAB 细则（仅 IAB 可用时）
 - 浏览器绑定复用：首次 `globalThis.browser = await agent.browsers.get("iab")`，后续轮次复用同一绑定；每个标签页操作批次前先 `await browser.tabs.list()` 确认目标，再 `browser.tabs.get(id)` 激活，绝不按数组下标盲选。
 - 读页面优先用 `await tab.playwright.domSnapshot()`（AI/ARIA 树）定位元素、构造 locator；仅在需要视觉确认布局/样式/渲染时才 `tab.screenshot()` 并配 `nodeRepl.emitImage()`，同一 JS 单元默认不既快照又截图。
 - **不要和过时的 `mcp__playwright__*` 混淆**——当前环境无 Playwright MCP 服务，唯一入口是 `mcp__node_repl__js` + `agent.browsers`（IAB）。
