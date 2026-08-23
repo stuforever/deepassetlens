@@ -17,7 +17,9 @@ description: SQL数据查询场景。用户要查数据：数量/统计/占比/�
 
 ## 调用模式（LLM 自主判定走哪种，可组合）
 - **基础查询**：locate -> 拼 SELECT -> sql-exec
-- **用户给表名（直查）**：跳过 locate，explore(转表名) -> 拼 SQL -> sql-exec
+- **用户给表名（直查）**：跳过 locate，**先 `list_tables(keyword=<表名>)` 验证物理表存在**；
+  存在 -> 按元数据拼 SQL -> sql-exec；**list_tables 查无此表 -> 如实报告"表 X 不存在"**（列出相近可用表供选择），
+  **禁止 explore/search 把用户给的表名模糊映射到相似表返回数据**（答非所问）
 - **跨实体（多跳）**：locate -> relate(查JOIN) -> 拼 LEFT JOIN -> sql-exec
 - **API数据源**：locate -> execute_api_sql(联邦SQL) -> 取数
 - 已定位同一 L2+实体：跳过 locate，直接拼 SQL
@@ -47,6 +49,8 @@ N值：前10/top10/10个 -> LIMIT 10；没说 -> 默认 LIMIT 10
 - **排名结果必须有 `ORDER BY <排序指标>`**；没有明确排序字段就先去定位指标列，**禁止**返回"任意 TopN"或业务量表明细冒充排名。
 - **禁止** `SELECT ... FROM <业务量表/电量表> LIMIT N` 充当排名（那是明细，不是"最大/最多"）。
 - 客户/实体排名必须 `GROUP BY <实体> + SUM(<指标>) + ORDER BY SUM(<指标>) DESC`，展示实体名+指标值。
+- **TopN 超过实际数据量时降级**：目标 N 但当前数据只有 M 行（M<N，如 mock 仅 3 行客户/电量）时，**返回全部 M 行按指标排序**，并注明"当前数据仅 M 个客户，已全部列出"；**禁止因"数据不足 N"而中断不答**。
+- **表名/列名一律用元数据确认的 3 段名**（电量表在 `pg_tupu`，SQL 写 `pg_tupu.public.<表名>`）；引擎锁定后只用对应工具（execute_sql/execute_doris_sql 二选一，禁止跨引擎混用）。
 
 简单 TopN：`SELECT <展示字段>, <排序字段> FROM <表> ORDER BY <排序字段> DESC LIMIT <N>`
 分组 TopN：`SELECT <分组字段>, COUNT(*) AS 数量 FROM <表> GROUP BY <分组字段> ORDER BY 数量 DESC LIMIT <N>`
@@ -77,6 +81,8 @@ GROUP BY c.cust_name, c.cust_id
 ORDER BY 用电量 DESC
 LIMIT 10
 ```
+**排名必须返回"实体行 + 指标值"**（如 `客户名称 + 用电量` 的明细行），**禁止只返回 `COUNT(*)` 总数**当排名结果；
+即使当前数据仅 3 行，也要返回 3 行 `客户名称+用电量` 并按用电量降序——数据量多少不影响返回明细行的形式。
 
 ### 趋势类（问同比/环比/趋势/逐月/增长率）
 | 用户说法 | SQL 模板 |
