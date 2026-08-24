@@ -181,6 +181,26 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] WARNING: MCP /mcp 路由未找到，deepagent 工具加载将失败")
     except Exception as _mcp_err:
         logger.warning(f"[startup] WARNING: MCP 挂载检查异常: {_mcp_err}")
+    # 批13-N6：agent 单例启动预热——治重启后首问冷启动（MCP 工具加载 HTTP 自请求 2~5s）。
+    # 注意：lifespan startup 阶段 uvicorn 尚未监听（不能自请求），故用后台任务延迟预热：
+    # 服务开始接受连接后 sleep 1.5s 再构建单例；失败静默（首次请求时按原逻辑重建）。
+    async def _warmup_tupu_agent():
+        import asyncio
+        import time as _time_mod
+        try:
+            await asyncio.sleep(1.5)
+            from app.services.tupu_deepagent import get_tupu_agent
+            _w_t0 = _time_mod.time()
+            await get_tupu_agent("")
+            logger.info(f"[startup-bg] tupu agent 单例预热完成 ({(_time_mod.time() - _w_t0) * 1000:.0f}ms)")
+        except Exception as _warm_err:
+            logger.warning(f"[startup-bg] tupu agent 预热失败（首次请求将按原逻辑重建）: {_warm_err}")
+
+    try:
+        import asyncio
+        asyncio.get_running_loop().create_task(_warmup_tupu_agent())
+    except Exception as _warm_task_err:
+        logger.warning(f"[startup] WARNING: agent 预热任务创建失败: {_warm_task_err}")
     # F3-fix: 生产安全检查已移到 lifespan 最开头（fail-fast，在任何初始化之前）
     yield
     # Shutdown

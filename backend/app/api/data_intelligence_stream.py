@@ -38,6 +38,18 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
     """
     async def event_iter():
         try:
+            # 批13-N2：首个可见反馈提到编排第一行——此前首个 yield 排在全部准备之后
+            # （三次重复 aget_state + 可能 8s 改写 + 同步检索），浏览器首字节前零反馈
+            # （《首响应延迟解剖》W3）。status 先发，用户即时看到「小探正在运行中」。
+            yield f"event: status\n"
+            yield f"data: {json.dumps({'node': 'DeepAgent', 'phase': 'running', 'text': '小探正在运行中', 'routed_skill': 'free_plan'}, ensure_ascii=False)}\n\n"
+
+            # 批13-N 配套：prep 细分计时（lock/state/rewrite/route/retrieval/update 各段 ms 入日志，
+            # 与 v3.6 分段计时埋点互补；修完有数可证）
+            import time as _time
+            _t0 = _time.time()
+            _prep_timing: dict = {}
+
             aiter = None  # LangGraph 事件迭代器, finally 中 aclose 以响应客户端取消
             _evt_sink = None  # v3.1 关键事件持久化 sink; 提前置 None 防 early-exception 时 except/finally 引用未绑定变量
             _session_lock = None  # v3.5 会话执行锁, finally 中释放
@@ -58,11 +70,12 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             _current_user = get_current_user(request)
             _user_prefix = _current_user.sub if _current_user and _current_user.sub else "anonymous"
             _memory_thread_id = f"{_user_prefix}:{req.thread_id}"
-            config = {"configurable": {"thread_id": _memory_thread_id, "checkpoint_ns": "freeplan"}, "recursion_limit": 80}
 
             # v3.5: 同一会话执行锁 -- 防止同 thread_id 并发请求导致 checkpoint 分叉覆盖
             _session_lock = _get_session_lock(_memory_thread_id)
+            _t_lock = _time.time()
             await _session_lock.acquire()
+            _prep_timing["lock_ms"] = round((_time.time() - _t_lock) * 1000)
 
             # F4: scope 通过原生 context= 参数传递（不进 checkpoint，不混入消息历史）
             # P0-1: 从用户原始输入正则提取客户名，通过 context 传给中间件（source=user_input）
@@ -77,16 +90,27 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                     "source": "user_input",
                 }
 
-            # 跨轮 scope：从 checkpoint state 读上一轮 model_declared 范围
-            # （user_input 来源不进 checkpoint，只在本轮 context 里存活）
+            # ===== 批13-N3：checkpoint 一次性读取（原 :84/:104/:125 三次独立 aget_state，
+            # 各自完整反序列化全部历史消息、长会话线性膨胀——现合并为一次，scope/last_skill/
+            # 追问历史三处共用同一份）。config 用无 checkpoint_ns 形式：checkpoint 实际以
+            # ns='' 存储（带 ns 会触发 "Subgraph freeplan not found" 被吞，追问历史路径早已如此）。
+            _state_config_once = {"configurable": {"thread_id": _memory_thread_id}, "recursion_limit": 80}
+            _shared_state_values: dict = {}
+            try:
+                _t_state = _time.time()
+                _state_once = await agent.aget_state(_state_config_once)
+                _prep_timing["state_ms"] = round((_time.time() - _t_state) * 1000)
+                _shared_state_values = (_state_once.values or {}) if _state_once else {}
+            except Exception:
+                _prep_timing["state_ms"] = round((_time.time() - _t_state) * 1000) if "_t_state" in dir() else -1
+            # 写回/流式执行沿用原带 checkpoint_ns 的 config（行为不变；读取统一走上面的无 ns 形式）
+            config = {"configurable": {"thread_id": _memory_thread_id, "checkpoint_ns": "freeplan"}, "recursion_limit": 80}
+
+            # 跨轮 scope：从共享状态读上一轮 model_declared 范围
             if not _ctx.get("last_scope"):
-                try:
-                    _prev_state = await agent.aget_state(config)
-                    _prev_scope = (_prev_state.values or {}).get("last_scope") if _prev_state.values else None
-                    if _prev_scope and _prev_scope.get("customer_names"):
-                        _ctx["last_scope"] = _prev_scope
-                except Exception:
-                    pass
+                _prev_scope = _shared_state_values.get("last_scope")
+                if _prev_scope and _prev_scope.get("customer_names"):
+                    _ctx["last_scope"] = _prev_scope
 
             # F4: 删除 SystemMessage 注入 scope（改为 runtime.context 原生路径）
             # 模型从 system_prompt 里知道要写"范围:"行，闸门从 context.last_scope 读可信范围
@@ -99,55 +123,32 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             if _ctx.get("last_scope"):
                 _conversation_ctx["last_scope"] = _ctx["last_scope"]
                 _conversation_ctx["last_skill"] = None  # 跨轮技能延续由 checkpoint state 提供
-            try:
-                _prev_state_skill = None
-                _prev_state = await agent.aget_state(config)
-                if _prev_state and _prev_state.values:
-                    _prev_state_skill = (_prev_state.values or {}).get("last_skill")
-                if _prev_state_skill:
-                    _conversation_ctx["last_skill"] = _prev_state_skill
-            except Exception:
-                pass
+            _prev_state_skill = _shared_state_values.get("last_skill")
+            if _prev_state_skill:
+                _conversation_ctx["last_skill"] = _prev_state_skill
 
-            # ===== S3b（G9）追问改写：纯规则触发（thread 有历史 && 短问题/指代词）-> 单轮 LLM 改写 =====
-            # 兜底：8s 硬封顶超时/异常 -> 回退原问题（不阻塞主链路）；scenario 模式不改写（见下，路由后丢弃）
-            _followup_rewritten = None
-            import time as _fut
-            _fu_t0 = _fut.time()
-            try:
-                from app.services.followup_rewrite import (
-                    is_followup_question, history_text_from_state, rewrite_followup_question,
-                )
-                # 会话历史：config 的 checkpoint_ns="freeplan" 会触发既有 "Subgraph freeplan not found"
-                # 异常（被上层静默吞掉），故追问历史用「无 checkpoint_ns」的 config 读取——
-                # checkpoint 实际以 ns='' 存储，仅 thread_id 即可取到同线程消息。
-                _state_config = {"configurable": {"thread_id": _memory_thread_id}, "recursion_limit": 80}
-                _hist_state = await agent.aget_state(_state_config)
-                logger.debug(f"[FU-TIMING] aget_state={(_fut.time()-_fu_t0)*1000:.0f}ms")
-                _hist_messages = (_hist_state.values or {}).get("messages") if _hist_state and _hist_state.values else []
-                _has_history = bool(_hist_messages)
-                if _has_history and is_followup_question(req.user_input, _has_history):
-                    from app.services.followup_rewrite import (
-                        _REWRITE_HISTORY_TAIL, _REWRITE_HISTORY_PER_LINE, _REWRITE_TIMEOUT,
-                    )
-                    _history_text = history_text_from_state(_hist_state, tail=_REWRITE_HISTORY_TAIL, per_line=_REWRITE_HISTORY_PER_LINE)
-                    # 硬性封顶（_REWRITE_TIMEOUT=8s）：httpx timeout 在 OpenAI client 重试下不可靠
-                    # （实测可拖到 69s），用 wait_for 保证改写绝不无限阻塞主链路；超时后 to_thread
-                    # 的孤儿线程自行结束、结果丢弃
-                    _followup_rewritten = await _asyncio.wait_for(
-                        _asyncio.to_thread(
-                            rewrite_followup_question, req.user_input, _history_text, req.llm_connection_id or ""
-                        ),
-                        timeout=_REWRITE_TIMEOUT,
-                    ) or None
-                    if _followup_rewritten:
-                        logger.info(f"[FollowupRewrite] {req.user_input!r} -> {_followup_rewritten!r}")
-            except Exception as _frw:
-                logger.warning(f"[FollowupRewrite] 追问改写流程异常，回退原问题: {_frw}")
-                _followup_rewritten = None
+            # ===== 批13-N5：金标/示例向量检索后台化——检索（embedding+Qdrant，0.5~3s）不再阻塞
+            # 编排主链：此处即启动后台线程预取，契约组装点再收割结果（那时用户早已看到 status 行）。
+            # 异常/未完成 -> 本题降级不带锚定（retrieve_context_bundle 内部本就全链静默降级）。
+            _retrieval_task = None
+            if req.user_input:
+                def _prefetch_bundle():
+                    from app.services.qa_example_service import retrieve_context_bundle as _rcb
+                    from app.core.database import SessionLocal as _SL
+                    _db = _SL()
+                    try:
+                        return _rcb(_db, req.user_input)
+                    finally:
+                        _db.close()
+                try:
+                    _retrieval_task = _asyncio.create_task(_asyncio.to_thread(_prefetch_bundle))
+                except Exception:
+                    _retrieval_task = None
 
             try:
+                _t_route = _time.time()
                 _route = route_user_input(req.user_input, _conversation_ctx)
+                _prep_timing["route_ms"] = round((_time.time() - _t_route) * 1000)
             except Exception as _rte:
                 logger.warning(f"[SkillRouter] 路由异常，降级为低权限通用契约: {_rte}")
                 from app.services.query_contract import QueryContract
@@ -164,10 +165,42 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 except Exception:
                     pass
 
+            # ===== S3b（G9）追问改写 —— 批13-N4 顺序倒置修正：
+            # 原实现在路由【前】执行 LLM 改写，而非 generic 路径随后丢弃改写结果——场景命中的
+            # 短问题白白付最多 8s 改写费（《解剖》W1 最冤点）。现改为仅 generic 路由确认后才改写；
+            # 场景短问题从此零改写开销。
+            _followup_rewritten = None
+            _fu_t0 = _time.time()
+            _is_generic_route = (_route is not None and _route.route_type == "generic")
+            if _is_generic_route and _contract is not None:
+                try:
+                    from app.services.followup_rewrite import (
+                        is_followup_question, history_text_from_state, rewrite_followup_question,
+                        _REWRITE_HISTORY_TAIL, _REWRITE_HISTORY_PER_LINE, _REWRITE_TIMEOUT,
+                    )
+                    _has_history = bool(_shared_state_values.get("messages"))
+                    if _has_history and is_followup_question(req.user_input, _has_history):
+                        import types as _types
+                        _hist_state_like = _types.SimpleNamespace(values=_shared_state_values)
+                        _history_text = history_text_from_state(
+                            _hist_state_like, tail=_REWRITE_HISTORY_TAIL, per_line=_REWRITE_HISTORY_PER_LINE)
+                        # 硬性封顶（TUPU_REWRITE_TIMEOUT，默认 8s）：wait_for 保证改写绝不无限阻塞
+                        _followup_rewritten = await _asyncio.wait_for(
+                            _asyncio.to_thread(
+                                rewrite_followup_question, req.user_input, _history_text, req.llm_connection_id or ""
+                            ),
+                            timeout=_REWRITE_TIMEOUT,
+                        ) or None
+                        if _followup_rewritten:
+                            logger.info(f"[FollowupRewrite] {req.user_input!r} -> {_followup_rewritten!r}")
+                except Exception as _frw:
+                    logger.warning(f"[FollowupRewrite] 追问改写流程异常，回退原问题: {_frw}")
+                    _followup_rewritten = None
+            _prep_timing["rewrite_ms"] = round((_time.time() - _fu_t0) * 1000)
+
             # S3b 边界：scenario 模式不改写（问题结构化强）——改写只在 generic 路径生效
             _effective_question = req.user_input
-            if (_followup_rewritten and _route is not None and _route.route_type == "generic"
-                    and _contract is not None):
+            if (_followup_rewritten and _is_generic_route and _contract is not None):
                 _effective_question = _followup_rewritten
                 # 改写后的完整问题可能带聚合触发词（如「分布」）——补挂 aggregate_intent 使 L2 结果层硬校验生效
                 try:
@@ -178,13 +211,26 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 except Exception:
                     pass
             elif _followup_rewritten:
-                logger.info(f"[FollowupRewrite] 非 generic 路径（{_route.route_type if _route else 'fallback'}）丢弃改写，用原问题")
+                logger.info(f"[FollowupRewrite] 非 generic 路径丢弃改写，用原问题")
 
             # 契约注入 runtime.context（SkillPolicyMiddleware 读取的唯一边界）
             if _contract is not None:
                 _ctx["contract"] = _contract
+                # 批13-N5：收割后台检索结果（此刻距启动通常已过数百 ms~秒级，多数已完成；
+                # 未完成则在此等待至完成——用户全程已有状态行反馈，无新增感知延迟；
+                # 任务异常 -> 降级不带锚定，本题走常规定位流程）
+                _precomputed_bundle = None
+                if _retrieval_task is not None:
+                    try:
+                        _t_ret = _time.time()
+                        _precomputed_bundle = await _retrieval_task
+                        _prep_timing["retrieval_ms"] = round((_time.time() - _t_ret) * 1000)
+                    except Exception as _rt_err:
+                        logger.warning(f"[PrepTiming] 金标检索后台任务失败（降级不带锚定）: {_rt_err}")
+                        _prep_timing["retrieval_ms"] = -1
                 # 每次请求只向模型提供受控工作流上下文（设计 §7.1）；G1: 尾部追加 top-3 已验证示例
-                _contract_msg = _build_contract_system_message(_contract, question=_effective_question)
+                _contract_msg = _build_contract_system_message(
+                    _contract, question=_effective_question, precomputed_bundle=_precomputed_bundle)
                 # 批1-B：示例注入完成后按锚定强度分档（_build_contract_system_message 已写 example_hits）——
                 # 高分示例锚定的 generic 查询跳过 rubric 自评（省 20-40s）；聚合分布类不豁免。
                 try:
@@ -237,9 +283,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             from app.services.run_event_sink import RunEventSink
             _evt_sink = RunEventSink(req.user_input)
 
-            # v3.6 分段计时埋点：定位首响应延迟来源（6.73s 归因，评审要求先测量再归因）
-            import time as _time
-            _t0 = _time.time()
+            # v3.6 分段计时埋点：流式段五段计时（_t0 已在批13-N2 提前到生成器第一行，
+            # 使 total/first_event 覆盖 prep 段）
             _timing = {"first_event": None, "first_model_stream": None,
                        "first_tool_start": None, "first_decision": None,
                        "first_answer_token": None, "total": None}
@@ -247,8 +292,11 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 if _timing[key] is None:
                     _timing[key] = round((_time.time() - _t0) * 1000)
 
-            yield f"event: status\n"
-            yield f"data: {json.dumps({'node': 'DeepAgent', 'phase': 'running', 'text': '小探正在运行中', 'routed_skill': 'free_plan'}, ensure_ascii=False)}\n\n"
+            # 批13-N 配套：prep 细分计时入结构化日志（lock/state/rewrite/route/retrieval/update）
+            try:
+                logger.info(f"[PrepTiming] {json.dumps(_prep_timing, ensure_ascii=False)} total_prep_ms={round((_time.time() - _t0) * 1000)}")
+            except Exception:
+                pass
 
             # S3b（G9）：追问改写透明性 —— 前端最终答案上方渲染「理解为：xxx」（可点击展开原文对照）
             if _followup_rewritten and _effective_question == _followup_rewritten:

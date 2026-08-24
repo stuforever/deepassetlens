@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,10 @@ _FOLLOWUP_SHORT_LEN = 12
 # 实测 volces LLM 单轮改写 warm ~3s / 冷 ~9s（长历史上下文 7s）——设计原定 3s 对当前 LLM 过紧
 # （3s 封顶下实测每次都超时回退、功能失效），按测量放宽到 8s（仍为有界兜底，仅追问路径付费，
 # 普通问题经 17ms 级 aget_state 判断后零额外开销）。超时即静默回退原问题。
-_REWRITE_TIMEOUT = 8.0
+# 批13-N4 登记偏离：设计文档定「预算 8s→3s」，但本文件既有测量记录证明 3s 下改写全超时失效，
+# 故维持 8s 默认、开放 TUPU_REWRITE_TIMEOUT 环境变量可调；N4 主要收益来自顺序倒置修正
+# （scenario 命中的短问题不再白付改写费），非预算压缩。
+_REWRITE_TIMEOUT = float(os.getenv("TUPU_REWRITE_TIMEOUT", "8.0"))
 # 改写上下文裁剪：只取最后一轮问答（上轮用户问题 + 上轮助手回答），每行 150 字——
 # 足够携带实体/时间/过滤口径，又显著缩短 prompt 降低改写延迟
 _REWRITE_HISTORY_TAIL = 2

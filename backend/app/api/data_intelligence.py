@@ -80,12 +80,14 @@ _CONTRACT_OUTPUT_SUFFIX = (" —— 完整明细由前端查询结果表唯一�
                            "只写结论/发现/风险/建议")
 
 
-def _build_contract_system_message(contract, question: str = "") -> str:
+def _build_contract_system_message(contract, question: str = "", precomputed_bundle: dict | None = None) -> str:
     """按契约构造每次请求注入的 SystemMessage（设计 §7.1：只向模型提供受控上下文）。
 
     模型只在契约允许范围内做判断；契约本身由代码路由+SkillPolicy 强制执行。
     G1（融合设计 §4.1）：question 非空时尾部追加 top-3 已验证示例（Qdrant 不可用/无命中
     静默跳过，不阻断问答）；命中写入 contract._runtime["example_hits"] 并累计 hit_count。
+    批13-N5：precomputed_bundle 非空时直接使用流层后台预取的检索结果，跳过内部同步检索
+    （检索已与锁/状态读取/路由并行）；None 时维持原行为内部检索。
     """
     scope = contract.scope or {}
     customers = scope.get("customer_names") or []
@@ -122,13 +124,18 @@ def _build_contract_system_message(contract, question: str = "") -> str:
         try:
             # 批7-E1 检索单入口：一次 embedding 双集合（示例+实体）并搜 + E2 短窗缓存
             # （同问题 60s 内二次提问 0 远程检索；批9 直通判定共享同一份 example_hits）
-            from app.services.qa_example_service import retrieve_context_bundle, bump_hit_count
-            from app.core.database import SessionLocal
-            _db = SessionLocal()
-            try:
-                _bundle = retrieve_context_bundle(_db, question)
-            finally:
-                _db.close()
+            # 批13-N5：流层后台预取的 bundle 优先（检索已与编排并行，此处零等待收割）
+            if precomputed_bundle is not None:
+                _bundle = precomputed_bundle
+            else:
+                from app.services.qa_example_service import retrieve_context_bundle
+                from app.core.database import SessionLocal
+                _db = SessionLocal()
+                try:
+                    _bundle = retrieve_context_bundle(_db, question)
+                finally:
+                    _db.close()
+            from app.services.qa_example_service import bump_hit_count
             if _bundle["examples_block"]:
                 base += _bundle["examples_block"]
                 try:
