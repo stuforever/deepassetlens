@@ -296,7 +296,8 @@ const FreePlanChat: React.FC = () => {
           }));
         },
         (final) => {
-          patchAssistant({ final_answer: final.answer });
+          // 交付体验演进 v2：final（答案提交）→ 状态机切「答案整理中…」，覆盖 rubric 评分尾巴与收尾期
+          patchAssistant({ final_answer: final.answer, answer_generating: false, answer_finalizing: true });
         },
         (rec) => {
           patchAssistant({ recommendations: rec.questions });
@@ -446,12 +447,12 @@ const FreePlanChat: React.FC = () => {
                   let idx = ts.findIndex((t: any) => t.kind === 'answer' || t.kind === 'draft');
                   if (idx === -1) {
                     ts.push({ task: '答案生成', strategy: 'free_plan', kind: 'answer',
-                             phase: 'done', draft: content, round_id: roundId,
+                             phase: 'done', draft: '', round_id: roundId,
                              result_summary: `答案已生成（${charCount} 字）` });
                     idx = ts.length - 1;
                   } else {
-                    // P0-fix: answer_committed 是流式完整正文，draft 存完整内容（不再只存字数）
-                    ts[idx] = { ...ts[idx], kind: 'answer', phase: 'done', draft: content,
+                    // 交付体验演进 v2：折叠区不存答案正文（draft 恒空），done 兜底由 payload.final_answer 承担
+                    ts[idx] = { ...ts[idx], kind: 'answer', phase: 'done', draft: '',
                                round_id: roundId || ts[idx].round_id,
                                result_summary: `答案已生成（${charCount} 字）` };
                   }
@@ -463,6 +464,8 @@ const FreePlanChat: React.FC = () => {
                     final_answer: (messages[i].payload?.final_answer || content),
                     // 批1-A：标记答案已提交（rubric 修订轮 roundChanged 判定用）；answer_revising 保留至 rubric 事件到达再清
                     answer_committed: true,
+                    // 交付体验演进 v2：答案提交 → 生成态结束（ThinkStream 不存正文，draft 恒空）
+                    answer_generating: false,
                   };
                   break;
                 }
@@ -818,19 +821,19 @@ const FreePlanChat: React.FC = () => {
             const kind = tokens[0]?.kind || 'decision_draft';
             const combined = tokens.map((t: { kind: string; text: string }) => t.text).join('');
             if (kind === 'answer_draft') {
-              // 批1-A 答案直出：answer_draft token 双写 ——
-              // 正文进 payload.streaming_answer（答案气泡实时成型）；ThinkStream 的 answer 项只留状态不存全文
-              const prevStreaming = messages[i].payload?.streaming_answer || '';
+              // 交付体验演进 v2（用户定调）：批1-A 双写回退——answer_draft token 全部丢弃，
+              // 不再写 streaming_answer/气泡；仅驱动状态机「答案生成中…」。
+              // 正文唯一来源 = done 时的结构化渲染，裸文本期从机制上不可能发生。
               const roundChanged = !!lastAnswerRoundRef.current
                 && lastAnswerRoundRef.current !== roundId
                 && !!messages[i].payload?.answer_committed;   // rubric 修订：新一轮答案
               messages[i].payload = {
                 ...(messages[i].payload || {}),
-                streaming_answer: roundChanged ? combined : prevStreaming + combined,
+                answer_generating: true,   // 状态机：「答案生成中…」
                 answer_revising: roundChanged ? true : (messages[i].payload?.answer_revising || false),
               };
               lastAnswerRoundRef.current = roundId;
-              // ThinkStream 的 answer 项只保留状态步骤（不再累积全文，避免"日志上屏"）
+              // ThinkStream 的 answer 项只保留状态步骤（不存全文）
               let ansIdx = ts.findIndex((t: any) => t.kind === 'answer');
               if (ansIdx === -1) {
                 ts.push({ task: '答案生成', strategy: 'free_plan', kind: 'answer', phase: 'drafting', round_id: roundId, draft: '' });

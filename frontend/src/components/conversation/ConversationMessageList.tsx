@@ -1,8 +1,7 @@
 import React from 'react';
-import { Alert, Button, Card, Skeleton, Space, Spin, Tag, Typography, Popconfirm } from 'antd';
+import { Alert, Button, Card, Space, Spin, Typography, Popconfirm } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ThinkStream from './ThinkStream';
-import FinalAnswer from './FinalAnswer';
 import AssistantCanvas from './AssistantCanvas';
 import ContractCardsPanel from './contractCards/ContractCardsPanel';
 import SqlResultTable from './SqlResultTable';
@@ -100,45 +99,32 @@ const MessageRow = React.memo<{
             />
           ) : null}
           {/*
-            批10③ 单帧交付·骨架卡（交付体验演进 §五）：loading 态收到首个实质事件
-            （sql_result / 首 token）即立起交付卡骨架——结果区自始至终只有一张卡，
-            所有元素都是槽位，不存在「裸文本期」：
-              ├ 标题行：「查询结果」+ 徽标占位「复核中…」（done 后由完成态 Canvas 补终值）
-              ├ 数据表槽：sql_result 到达即入卡（先于答案 3s+）
-              └ 正文槽：answer_draft/streaming_answer 流进槽位（有骨架的流式=报告在写）
+            交付体验演进 v2 输出区状态机（用户定调版）：全程只有两种形态——状态行 或 完整交付卡。
+            四态推导：正在理解问题 → 检索数据中(有工具步骤) → 答案生成中(answer_generating)
+            → 答案整理中(final_answer 已到/answer_finalizing，覆盖 rubric 尾巴与收尾期)。
+            answer_draft token 已全部丢弃（批1-A 双写回退），正文唯一来源 = done 时结构化渲染；
+            步骤明细照旧进 ThinkStream 折叠区；不变式：不存在第三种形态（无裸文本期）。
           */}
-          {(msg.payload?.sql_result || msg.payload?.streaming_answer || msg.payload?.final_answer
-            || (msg.payload?.finalTokens && msg.payload.finalTokens.length > 0)) ? (
-            <Space direction="vertical" style={{ width: '100%' }} size={6}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.01em', paddingLeft: 8, borderLeft: '3px solid var(--ant-primary-color, #1677ff)' }}>
-                  查询结果
-                </h2>
-                <Tag color="processing" style={{ marginLeft: 10, fontSize: 11, lineHeight: '18px', padding: '0 8px', borderRadius: 999 }}>
-                  <Spin size="small" style={{ marginRight: 4 }} />{msg.payload?.answer_revising ? '校验修订中…' : '复核中…'}
-                </Tag>
-              </div>
-              {/* 正文槽：token 逐字流式（批1-A 直出能力保留，宿主改为卡内槽位） */}
-              {msg.payload?.finalTokens && msg.payload.finalTokens.length > 0 ? (
-                <FinalAnswer answer="" tokens={msg.payload.finalTokens} isStreaming={true} />
-              ) : (msg.payload?.final_answer || msg.payload?.streaming_answer) ? (
-                <FinalAnswer answer={msg.payload?.final_answer || msg.payload?.streaming_answer || ''} tokens={[]} isStreaming={!msg.payload?.final_answer} />
-              ) : null}
-              {/* 数据表槽：sql_result 到达即渲染（row_count>0 且有列，口径同完成态 showTable） */}
-              {(msg.payload?.sql_result?.row_count ?? 0) > 0 && !!msg.payload?.sql_result?.columns?.length ? (
-                <SqlResultTable data={msg.payload.sql_result} />
-              ) : null}
-            </Space>
-          ) : (
-            <Space>
-              <Spin size="small" />
-              <Text strong>{msg.payload?.live_text || msg.text || '正在思考...'}</Text>
-            </Space>
-          )}
-          {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0)
-            && !msg.payload?.finalTokens?.length && !msg.payload?.final_answer
-            && !msg.payload?.streaming_answer && !msg.payload?.sql_result ? (
-            <Skeleton active paragraph={{ rows: 1 }} title={false} />
+          {(() => {
+            const p = msg.payload || {};
+            const statusText = (p.final_answer || p.answer_finalizing)
+              ? '答案整理中，正以结构化方式输出，请稍候…'
+              : p.answer_generating
+                ? '答案生成中…'
+                : (p.thinkStream && p.thinkStream.length > 0)
+                  ? '检索数据中…'
+                  : '正在理解问题…';
+            return (
+              <Space>
+                <Spin size="small" />
+                <Text strong>{statusText}</Text>
+              </Space>
+            );
+          })()}
+          {/* 可选 TUPU_EARLY_TABLE 开关（默认关）：表格属结构化元素可提前入卡，正文仍等 done */}
+          {(typeof window !== 'undefined' && window.localStorage.getItem('TUPU_EARLY_TABLE') === '1'
+            && (msg.payload?.sql_result?.row_count ?? 0) > 0 && !!msg.payload?.sql_result?.columns?.length) ? (
+            <SqlResultTable data={msg.payload.sql_result} />
           ) : null}
         </Space>
       ) : (

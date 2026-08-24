@@ -80,12 +80,16 @@ export type ChatMessagePayload = {
   stream_events?: RunEventRecord[];
   thinkStream?: any[];
   final_answer?: string;
-  /** 批1-A 答案直出：answer_draft 实时累积（loading 态答案气泡逐字成型；final 后由 final_answer 校准覆盖） */
+  /** 批1-A 答案直出（已被交付体验演进 v2 回退）：字段保留兼容历史会话，v2 下恒空 */
   streaming_answer?: string;
   /** 批1-A 答案直出：rubric 修订轮新答案生成中（气泡显示「校验修订中」徽标） */
   answer_revising?: boolean;
   /** 批1-A 答案直出：最终答案已提交（用于 rubric 修订轮 roundChanged 判定） */
   answer_committed?: boolean;
+  /** 交付体验演进 v2 输出区状态机：answer_draft 已到达（生成期，状态行「答案生成中…」） */
+  answer_generating?: boolean;
+  /** 交付体验演进 v2 输出区状态机：final/answer_committed 已到（收尾期，「答案整理中…」，覆盖 rubric 尾巴） */
+  answer_finalizing?: boolean;
   /** 批3-F 分段计时外露（ms；first_event/first_model_stream/first_tool_start/first_answer_token/rubric_ms/total） */
   timing?: Record<string, number>;
   final_answer_structured?: FinalAnswerStructured | null;
