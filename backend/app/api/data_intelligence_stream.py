@@ -1099,11 +1099,14 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             _ev_corrections = int((_contract._runtime.get("corrections") or 0)) if _contract is not None else 0
             # 置信度三级：高=rubric satisfied 且 verification 无 warning；低=corrections>0 或 rubric 失败/超限/grader错；
             # 中=无 rubric（scenario）或 verification 有 warning
+            # 批10-B'-1：clean_aggregate 豁免（verification 全绿+单值聚合）与 satisfied 同口径给「高」——
+            # 数字直接来自工具返回+引擎校验全绿，确定性来源等同直通管道。
             _ev_confidence = "中"
             _rs = _ev_rubric["status"]
             if _ev_corrections > 0 or _rs in ("failed", "max_iterations_reached", "grader_error"):
                 _ev_confidence = "低"
-            elif _rs == "satisfied" and not _ev_verification.get("warnings"):
+            elif (_rs in ("satisfied", "skipped_clean_aggregate")
+                  and not _ev_verification.get("warnings")):
                 _ev_confidence = "高"
             # S1（b）：零执行但回答含数字 -> 无数据支撑告警（前端置信度判低 + 黄条提示）
             _ev_missing_data = False

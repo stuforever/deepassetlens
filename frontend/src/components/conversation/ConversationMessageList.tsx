@@ -1,10 +1,11 @@
 import React from 'react';
-import { Alert, Button, Card, Skeleton, Space, Spin, Typography, Popconfirm } from 'antd';
+import { Alert, Button, Card, Skeleton, Space, Spin, Tag, Typography, Popconfirm } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ThinkStream from './ThinkStream';
 import FinalAnswer from './FinalAnswer';
 import AssistantCanvas from './AssistantCanvas';
 import ContractCardsPanel from './contractCards/ContractCardsPanel';
+import SqlResultTable from './SqlResultTable';
 import type { ChatMessage, ConversationCardAction, ConversationSceneConfig } from './types';
 
 const { Text } = Typography;
@@ -97,21 +98,46 @@ const MessageRow = React.memo<{
               liveStatus={msg.payload?.live_text}
               metaInfo={msg.payload?.live_meta}
             />
+          ) : null}
+          {/*
+            批10③ 单帧交付·骨架卡（交付体验演进 §五）：loading 态收到首个实质事件
+            （sql_result / 首 token）即立起交付卡骨架——结果区自始至终只有一张卡，
+            所有元素都是槽位，不存在「裸文本期」：
+              ├ 标题行：「查询结果」+ 徽标占位「复核中…」（done 后由完成态 Canvas 补终值）
+              ├ 数据表槽：sql_result 到达即入卡（先于答案 3s+）
+              └ 正文槽：answer_draft/streaming_answer 流进槽位（有骨架的流式=报告在写）
+          */}
+          {(msg.payload?.sql_result || msg.payload?.streaming_answer || msg.payload?.final_answer
+            || (msg.payload?.finalTokens && msg.payload.finalTokens.length > 0)) ? (
+            <Space direction="vertical" style={{ width: '100%' }} size={6}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.01em', paddingLeft: 8, borderLeft: '3px solid var(--ant-primary-color, #1677ff)' }}>
+                  查询结果
+                </h2>
+                <Tag color="processing" style={{ marginLeft: 10, fontSize: 11, lineHeight: '18px', padding: '0 8px', borderRadius: 999 }}>
+                  <Spin size="small" style={{ marginRight: 4 }} />{msg.payload?.answer_revising ? '校验修订中…' : '复核中…'}
+                </Tag>
+              </div>
+              {/* 正文槽：token 逐字流式（批1-A 直出能力保留，宿主改为卡内槽位） */}
+              {msg.payload?.finalTokens && msg.payload.finalTokens.length > 0 ? (
+                <FinalAnswer answer="" tokens={msg.payload.finalTokens} isStreaming={true} />
+              ) : (msg.payload?.final_answer || msg.payload?.streaming_answer) ? (
+                <FinalAnswer answer={msg.payload?.final_answer || msg.payload?.streaming_answer || ''} tokens={[]} isStreaming={!msg.payload?.final_answer} />
+              ) : null}
+              {/* 数据表槽：sql_result 到达即渲染（row_count>0 且有列，口径同完成态 showTable） */}
+              {(msg.payload?.sql_result?.row_count ?? 0) > 0 && !!msg.payload?.sql_result?.columns?.length ? (
+                <SqlResultTable data={msg.payload.sql_result} />
+              ) : null}
+            </Space>
           ) : (
             <Space>
               <Spin size="small" />
               <Text strong>{msg.payload?.live_text || msg.text || '正在思考...'}</Text>
             </Space>
           )}
-          {/* 最终答案：token 逐字流式渲染（读占位消息 payload） */}
-          {msg.payload?.finalTokens && msg.payload.finalTokens.length > 0 ? (
-            <FinalAnswer answer="" tokens={msg.payload.finalTokens} isStreaming={true} />
-          ) : null}
-          {/* 批1-A 答案直出：loading 态实时渲染 streaming_answer；final 后 final_answer 校准 */}
-          {(msg.payload?.final_answer || msg.payload?.streaming_answer) && (!msg.payload?.finalTokens || msg.payload.finalTokens.length === 0) ? (
-            <FinalAnswer answer={msg.payload?.final_answer || msg.payload?.streaming_answer || ''} tokens={[]} isStreaming={!msg.payload?.final_answer} />
-          ) : null}
-          {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0) && !msg.payload?.finalTokens?.length && !msg.payload?.final_answer ? (
+          {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0)
+            && !msg.payload?.finalTokens?.length && !msg.payload?.final_answer
+            && !msg.payload?.streaming_answer && !msg.payload?.sql_result ? (
             <Skeleton active paragraph={{ rows: 1 }} title={false} />
           ) : null}
         </Space>

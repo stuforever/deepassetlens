@@ -679,7 +679,116 @@ def _on_rubric_evaluation(evaluation: dict) -> None:
         pass
 
 
-# ---------------------------------------------------------------------------
+def _is_clean_aggregate_result(state) -> bool:
+    """批10-B'-1：执行轨迹是否为「干净的单值聚合结果」。
+
+    设计（交付体验演进 §四 B'-1）：同时满足才免评——
+      1. 最后一条数据查询工具成功（无 error）；
+      2. 引擎校验全绿（verification.warnings 为空）；
+      3. 单一聚合型结果（row_count=1 且单行单列标量，非明细清单）。
+    数字直接来自工具返回已被 SkillPolicy/守卫锁定，grader 边际价值≈0。
+    解析失败一律返回 False（回退自评，宁可多评不可放过）。
+    """
+    import json as _json_ca
+    messages = state.get("messages") or []
+    # tool_call_id -> 工具名（AIMessage.tool_calls）
+    _name_by_tcid = {}
+    for m in messages:
+        for tc in (getattr(m, "tool_calls", None) or []):
+            if isinstance(tc, dict) and tc.get("id"):
+                _name_by_tcid[tc["id"]] = tc.get("name", "")
+    # 倒序找最后一条数据工具的 ToolMessage
+    last_content = None
+    for m in reversed(messages):
+        tcid = getattr(m, "tool_call_id", None)
+        if tcid and _name_by_tcid.get(tcid) in _DATA_QUERY_TOOLS:
+            last_content = getattr(m, "content", None)
+            break
+    if last_content is None:
+        return False
+    # content 解包（LangChain blocks / MCP 包装），与 DataSummaryMiddleware 同构
+    if isinstance(last_content, list):
+        for b in last_content:
+            if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str):
+                last_content = b["text"]
+                break
+    if not isinstance(last_content, str):
+        return False
+    try:
+        parsed = _json_ca.loads(last_content)
+        if isinstance(parsed, dict) and isinstance(parsed.get("text"), str):
+            parsed = _json_ca.loads(parsed["text"])
+    except Exception:
+        return False
+    if not isinstance(parsed, dict) or parsed.get("error"):
+        return False
+    verification = parsed.get("verification") or {}
+    if verification and (verification.get("warnings") or []):
+        return False  # 引擎校验有告警 -> 不豁免
+    rows = parsed.get("rows") or []
+    row_count = parsed.get("row_count")
+    # 单一聚合型：恰好 1 行 × 1 列标量（COUNT/SUM 等聚合输出形态）
+    return (row_count == 1 and len(rows) == 1
+            and isinstance(rows[0], (list, tuple)) and len(rows[0]) == 1)
+
+
+from deepagents.middleware.rubric import RubricMiddleware  # 批10②：模块级（_TupuRubricMiddleware 继承基类）
+
+
+class _TupuRubricMiddleware(RubricMiddleware):
+    """批10② B'-1：clean_aggregate 豁免 + 桥接登记。
+
+    示例锚定豁免（query_contract.apply_rubric_tier，Agent 前）之外的第二条规则，
+    在 grader 发起前（after_agent）基于执行轨迹判定：
+      verification 全绿 + 单值聚合结果 -> 跳过本轮自评（省 10~40s 关键路径阻塞）。
+    治理：governance 记 rubric.evaluation_skipped="clean_aggregate"；
+    contract._runtime["rubric_status"]="skipped_clean_aggregate" 供 done 置信度口径使用。
+    （模块级显式 import：create_tupu_agent 内的同名 import 为函数局部，不供本类继承用）
+    """
+
+    def _try_clean_aggregate_skip(self, state) -> bool:
+        """批10-B'-1：命中 clean_aggregate 豁免则登记治理+桥接并返回 True（跳过 grader）。"""
+        if not _is_clean_aggregate_result(state):
+            return False
+        try:
+            from app.services.skill_governance import get_governance
+            get_governance().record_policy(
+                "rubric.evaluation_skipped", "clean_aggregate", "clean_aggregate",
+                "批10-B'-1：verification 全绿+单值聚合结果，免评直出")
+        except Exception:
+            pass
+        bridge = _RUBRIC_HOOK_CTX.get()
+        if bridge is not None:
+            contract = bridge.get("contract")
+            if contract is not None:
+                contract._runtime["rubric_status"] = "skipped_clean_aggregate"
+            sink = bridge.get("sink")
+            if sink is not None:
+                sink.append("rubric_evaluation_end", {
+                    "result": "skipped_clean_aggregate", "iteration": 0,
+                    "explanation": "校验全绿的单值统计结果，免评直出",
+                })
+        return True
+
+    def after_agent(self, state, runtime):  # noqa: D102（框架签名；sync 图路径）
+        try:
+            if self._try_clean_aggregate_skip(state):
+                return None  # 不发起 grader 轮，图自然结束
+        except Exception as e:
+            logger.warning(f"[RubricTier] clean_aggregate 判定异常（回退自评）: {e}")
+        return super().after_agent(state, runtime)
+
+    async def aafter_agent(self, state, runtime):  # noqa: D102（框架签名）
+        # 关键：基类 aafter_agent 是独立实现（不委托 sync after_agent），astream_events
+        # 异步图分发的是本方法——只覆写 after_agent 会被完全绕过（批10② 实测教训）。
+        try:
+            if self._try_clean_aggregate_skip(state):
+                return None  # 不发起 grader 轮，图自然结束
+        except Exception as e:
+            logger.warning(f"[RubricTier] clean_aggregate 判定异常（回退自评）: {e}")
+        return await super().aafter_agent(state, runtime)
+
+
 # 4. Agent 工厂函数
 # ---------------------------------------------------------------------------
 
@@ -863,9 +972,11 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     if _os3.getenv("TUPU_RUBRIC_DISABLED", "") != "1":
         _rubric_conn = _os3.getenv("TUPU_RUBRIC_CONNECTION_ID", "") or connection_id
         _rubric_model = get_chat_model(temperature=0.0, streaming=True, connection_id=_rubric_conn)
-        middleware_list.append(RubricMiddleware(model=_rubric_model, max_iterations=1,
-                                               on_evaluation=_on_rubric_evaluation))
-        logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'）")
+        _rubric_mw = _TupuRubricMiddleware(model=_rubric_model, max_iterations=1,
+                                           on_evaluation=_on_rubric_evaluation)
+        middleware_list.append(_rubric_mw)
+        logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'，含批10-B'-1 clean_aggregate 豁免）"
+                    f" 实例类={type(_rubric_mw).__name__} 覆写生效={type(_rubric_mw).after_agent is not RubricMiddleware.after_agent}")
     else:
         logger.warning("[Rubric] TUPU_RUBRIC_DISABLED=1，跳过自评闸门装配（eval 净收益对比模式）")
 
