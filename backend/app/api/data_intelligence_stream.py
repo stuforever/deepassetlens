@@ -315,6 +315,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                         _rs["accumulated"] += content
                         _rs["seq"] += 1
                         _marker = "【下一步判断】"
+                        # deepagents 工具循环的"任务笔记"固定标题（模型每次调工具前输出，内部产物，不应作为回答上屏）
+                        _TOOL_NOTE_MARKERS = ("## SESSION INTENT", "## SUMMARY", "## ARTIFACTS", "## NEXT STEPS")
                         if _rs["classifier"] == "detecting":
                             _stripped = _rs["accumulated"].lstrip()
                             if _marker.startswith(_stripped) and len(_stripped) < len(_marker):
@@ -325,13 +327,20 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                 yield f"event: think_token\n"
                                 yield f"data: {json.dumps({'kind': 'decision_draft', 'round_id': _rid, 'delta': _rs['accumulated']}, ensure_ascii=False)}\n\n"
                                 continue
+                            elif any(_stripped.startswith(m) for m in _TOOL_NOTE_MARKERS):
+                                # 工具任务笔记（SESSION INTENT 等）：内部中间产物，丢弃不推 answer_draft，
+                                # 避免污染前端"答案生成"流（用户要求内部工作流文本不上屏）
+                                _rs["classifier"] = "notes"
+                                continue
                             else:
                                 _rs["classifier"] = "answer"
                                 _mark("first_answer_token")
                                 yield f"event: think_token\n"
                                 yield f"data: {json.dumps({'kind': 'answer_draft', 'round_id': _rid, 'delta': _rs['accumulated']}, ensure_ascii=False)}\n\n"
                                 continue
-                        # 已识别，只推增量
+                        # 已识别，只推增量（notes 类不推任何 think_token）
+                        if _rs["classifier"] == "notes":
+                            continue
                         _kind = "decision_draft" if _rs["classifier"] == "decision" else "answer_draft"
                         yield f"event: think_token\n"
                         yield f"data: {json.dumps({'kind': _kind, 'round_id': _rid, 'delta': content}, ensure_ascii=False)}\n\n"
