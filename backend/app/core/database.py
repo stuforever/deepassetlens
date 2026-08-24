@@ -97,6 +97,13 @@ def ensure_schema_compatibility():
             with engine.begin() as conn:
                 conn.execute(text("CREATE INDEX idx_exec_logs_skill_time ON `skill_exec_logs` (`skill_id`, `started_at`)"))
 
+    # 批9：模板直出管道标记列（直通率/兜底率看板口径）
+    if "kg_engine_query_logs" in table_names:
+        _eql_cols = {c["name"] for c in inspector.get_columns("kg_engine_query_logs")}
+        if "direct_pipeline" not in _eql_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE `kg_engine_query_logs` ADD COLUMN `direct_pipeline` TINYINT(1) NULL DEFAULT 0"))
+
     if "skill_api_bindings" not in table_names:
         create_sql = """
         CREATE TABLE `skill_api_bindings` (

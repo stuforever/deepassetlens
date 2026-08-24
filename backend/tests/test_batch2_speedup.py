@@ -33,9 +33,10 @@ class TestDirectPlan:
         from app.services.query_contract import QueryContract
         from app.api.data_intelligence import _build_contract_system_message
         hits = [{"id": "e1", "score": score, "question_raw": "统计用电客户总数", "sql": sql, "engine": ""}]
-        monkeypatch.setattr(qes, "build_examples_payload", lambda db, q: {"block": "\n参考示例...", "hits": hits})
+        # 批7-E1 后契约消息改走 retrieve_context_bundle 单入口——mock 之
+        monkeypatch.setattr(qes, "retrieve_context_bundle", lambda db, q, **kw: {
+            "examples_block": "\n参考示例...", "example_hits": hits, "entity_hint_block": ""})
         monkeypatch.setattr(qes, "bump_hit_count", lambda db, ids: None)
-        monkeypatch.setattr(qes, "build_entity_hint_block", lambda db, q, **kw: "")
         c = QueryContract.generic(route_reason="test")
         msg = _build_contract_system_message(c, question="统计用电客户数量")
         return c, msg

@@ -865,6 +865,7 @@ class EngineQueryLog(Base):
     duration_ms = Column(Integer, nullable=True)
     status = Column(String(16), nullable=False, default="ok")   # ok | error
     error_class = Column(String(32), nullable=True)     # 批1 错误分类
+    direct_pipeline = Column(Boolean, nullable=True, default=False)  # 批9：模板直出管道标记（直通率/兜底率看板）
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

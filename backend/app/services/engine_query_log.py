@@ -28,8 +28,8 @@ def _sql_hash(sql: str) -> str:
 
 def record_query_log(engine: str, sql: str, rows_returned: int = 0, duration_ms: int = 0,
                      status: str = "ok", error_class: Optional[str] = None,
-                     run_id: Optional[str] = None) -> None:
-    """落一条查询日志（best-effort，异常吞掉不影响主流程）。"""
+                     run_id: Optional[str] = None, direct_pipeline: bool = False) -> None:
+    """落一条查询日志（best-effort，异常吞掉不影响主流程）。批9：direct_pipeline 直通标记。"""
     try:
         from app.models.base import EngineQueryLog
         from app.core.database import SessionLocal
@@ -40,6 +40,7 @@ def record_query_log(engine: str, sql: str, rows_returned: int = 0, duration_ms:
                 engine=engine, sql_hash=_sql_hash(sql), sql=(sql or "")[:4000],
                 rows_returned=int(rows_returned or 0), duration_ms=int(duration_ms or 0),
                 status=status, error_class=error_class,
+                direct_pipeline=bool(direct_pipeline),
             ))
             db.commit()
         finally:
@@ -85,7 +86,7 @@ def list_queries(limit: int = 20, offset: int = 0, engine: Optional[str] = None,
         db = SessionLocal()
         try:
             q = ("SELECT id, run_id, engine, sql_hash, `sql`, rows_returned, duration_ms, "
-                 "status, error_class, created_at FROM kg_engine_query_logs")
+                 "status, error_class, direct_pipeline, created_at FROM kg_engine_query_logs")
             conds, params = [], {}
             if engine:
                 conds.append("engine = :engine")
@@ -104,7 +105,8 @@ def list_queries(limit: int = 20, offset: int = 0, engine: Optional[str] = None,
                     "id": r[0], "run_id": r[1], "engine": r[2], "sql_hash": r[3],
                     "sql": r[4], "rows_returned": r[5], "duration_ms": r[6],
                     "status": r[7], "error_class": r[8],
-                    "created_at": r[9].isoformat() if r[9] else None,
+                    "direct_pipeline": bool(r[9]) if r[9] is not None else False,
+                    "created_at": r[10].isoformat() if r[10] else None,
                 }
                 for r in rows
             ]

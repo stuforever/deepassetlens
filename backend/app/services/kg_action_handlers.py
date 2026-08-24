@@ -5,6 +5,10 @@ kg_api 动作处理器 —— dispatch_kg_action 16 分支从 tupu_deepagent.py 
 """
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # v3.5: 无 entity_code 时，从 SQL FROM 子句提取主表名（反查实体配置的 source_mode/data_source_id）
 # 支持 WITH CTE -> ... FROM main_table 和直接 FROM main_table
 # 不处理子查询别名（取第一个 FROM 后的裸表名，已覆盖场景剧本的 SQL 模板模式）
@@ -325,13 +329,77 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
                     "description": row[3] or "", "attributes": attrs,
                     "log": f"[{_ts}] 查实体「{entity_code}」数据字典：共 {len(attrs)} 个属性（物理表名: {row[2] or '未知'}）"}
         elif keyword:
-            # 按关键词搜实体名/实体描述/属性名（含物理表名 entity_en_name）
+            # 批8 三级融合检索：①精确（entity_code/en_name 全等，直返）→ ②LIKE（现状保留）
+            # → ③向量召回（同义词扩展 -> embedding -> Qdrant 实体集合，阈值>=0.6）。
+            # 向后兼容：每条 entity 加 match_type 字段；事实源仍 MySQL（向量只做召回不做事实）；
+            # Qdrant 断开静默降级为 LIKE（主链路零新依赖）。
+            import os as _os_b8
+            # 设计预估 0.6；实测 bge 中文短查询对「配电变压器*台账」最高仅 ~0.50，
+            # 故默认放宽至 0.48（环境变量可调）：保住 0.50 正命中、滤掉 ~0.47 弱相关噪声
+            _vec_threshold = float(_os_b8.getenv("TUPU_VECTOR_RECALL_THRESHOLD", "0.48"))
+
+            def _entity_row(r, match_type, score=None):
+                item = {"entity_code": r[0], "entity_name": r[1] or "", "entity_en_name": r[2] or "",
+                        "description": r[3] or "", "match_type": match_type}
+                if score is not None:
+                    item["score"] = round(float(score), 4)
+                return item
+
+            # ① 精确命中：keyword 与 entity_code / entity_en_name 全等 -> 直返（确定性保留）
+            exact_rows = db.execute(text(
+                "SELECT entity_code, entity_name, entity_en_name, description FROM kg_entities "
+                "WHERE entity_code = :kw OR entity_en_name = :kw LIMIT 5"
+            ), {"kw": keyword}).fetchall()
+            if exact_rows:
+                entities = [_entity_row(r, "exact") for r in exact_rows]
+                field_rows = db.execute(text(
+                    "SELECT DISTINCT table_en, table_cn, field_en, field_cn "
+                    "FROM kg_source_field_imports WHERE field_cn LIKE :kw OR field_en LIKE :kw OR table_cn LIKE :kw LIMIT 20"
+                ), {"kw": f"%{keyword}%"}).fetchall()
+                return {
+                    "entities": entities,
+                    "fields": [{"table_en": r[0], "table_cn": r[1] or "", "field_en": r[2], "field_cn": r[3] or ""} for r in field_rows],
+                    "log": f"[{_ts}] 搜实体/字段「{keyword}」：精确命中 {len(entities)} 个实体",
+                }
+            # ② 关键词 LIKE（现状逻辑保留）
             rows = db.execute(text(
                 "SELECT entity_code, entity_name, entity_en_name, description FROM kg_entities "
                 "WHERE entity_code LIKE :kw OR entity_name LIKE :kw OR description LIKE :kw "
                 "OR entity_en_name LIKE :kw "
                 "ORDER BY sort_order LIMIT 20"
             ), {"kw": f"%{keyword}%"}).fetchall()
+            entities = [_entity_row(r, "like") for r in rows]
+            seen_codes = {e["entity_code"] for e in entities}
+            # ③ 向量召回补充：LIKE 命中不足时，同义词扩展 -> embedding -> Qdrant 实体集合
+            if len(entities) < 20:
+                try:
+                    from app.services.hybrid_retrieval import expand_synonyms_for_query
+                    from app.services.entity_attr_vector_service import search_entity_vectors
+                    _vec_hits = []
+                    for _variant in expand_synonyms_for_query(keyword)[:6] or [keyword]:
+                        for h in (search_entity_vectors(_variant, top_k=10) or []):
+                            if float(h.get("score") or 0) >= _vec_threshold:
+                                _vec_hits.append(h)
+                    _vec_hits.sort(key=lambda h: -(float(h.get("score") or 0)))
+                    _pending_codes = []
+                    for h in _vec_hits[:20]:
+                        code = (h.get("code") or "").strip()
+                        if not code or code in seen_codes:
+                            continue
+                        seen_codes.add(code)
+                        _pending_codes.append((code, float(h.get("score") or 0)))
+                        if len(entities) + len(_pending_codes) >= 20:
+                            break
+                    # 事实源补齐：属性/名称仍从 MySQL kg_entities 取（向量只做召回）
+                    for _code, _sc in _pending_codes:
+                        _frow = db.execute(text(
+                            "SELECT entity_code, entity_name, entity_en_name, description FROM kg_entities "
+                            "WHERE entity_code = :c LIMIT 1"), {"c": _code}).fetchone()
+                        if _frow is not None:
+                            entities.append(_entity_row(_frow, "vector", score=_sc))
+                except Exception as _ve:
+                    # Qdrant/向量断开：静默回 LIKE（不阻断）
+                    logger.warning(f"[search_entities] 向量召回失败（降级 LIKE）: {_ve}")
             # 再搜源字段表（kg_source_field_imports）
             field_rows = db.execute(text(
                 "SELECT DISTINCT table_en, table_cn, field_en, field_cn "
@@ -339,16 +407,18 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
                 "WHERE field_cn LIKE :kw OR field_en LIKE :kw OR table_cn LIKE :kw "
                 "LIMIT 20"
             ), {"kw": f"%{keyword}%"}).fetchall()
+            _mt_counts = {}
+            for e in entities:
+                _mt_counts[e["match_type"]] = _mt_counts.get(e["match_type"], 0) + 1
             return {
-                "entities": [
-                    {"entity_code": r[0], "entity_name": r[1] or "", "entity_en_name": r[2] or "", "description": r[3] or ""}
-                    for r in rows
-                ],
+                "entities": entities,
                 "fields": [
                     {"table_en": r[0], "table_cn": r[1] or "", "field_en": r[2], "field_cn": r[3] or ""}
                     for r in field_rows
                 ],
-                "log": f"[{_ts}] 搜实体/字段「{keyword}」：命中 {len(rows)} 个实体、{len(field_rows)} 个源字段",
+                "log": (f"[{_ts}] 搜实体/字段「{keyword}」：命中 {len(entities)} 个实体"
+                        f"（exact={_mt_counts.get('exact', 0)}/like={_mt_counts.get('like', 0)}"
+                        f"/vector={_mt_counts.get('vector', 0)}）、{len(field_rows)} 个源字段"),
             }
         else:
             rows = db.execute(text(

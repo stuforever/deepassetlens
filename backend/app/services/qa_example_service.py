@@ -92,6 +92,7 @@ def search_qa_examples(
     question: str,
     top: int = _MAX_TOP,
     score_threshold: Optional[float] = None,
+    precomputed_vec: Optional[List[float]] = None,
 ) -> List[Dict[str, Any]]:
     """检索 top-N 已验证示例（status=enabled）。两级检索：
 
@@ -100,6 +101,7 @@ def search_qa_examples(
       Tier2（语义增强）：问题向量 -> Qdrant tupu_qa_examples 检索（阈值 0.75，按设计），补充不足 top 的部分。
 
     Qdrant/向量不可用时静默降级为仅 Tier1，不阻断问答。
+    批7-E1：precomputed_vec 由 retrieve_context_bundle 传入（一次 embedding 双集合并搜）。
     """
     question = (question or "").strip()
     if not question:
@@ -150,7 +152,7 @@ def search_qa_examples(
     # 批2-C：检索 query 用计数同义归一化（「统计用电客户数量」→「统计用电客户总数」→ Qdrant score≈1.0 命中，
     # 因为同义计数问法在字符层与向量层都查不到原始「总数」示例；有条件词时不归一化）
     _retrieve_q = _count_normalize(question)
-    vec = _embed_question(db, _retrieve_q)
+    vec = precomputed_vec if precomputed_vec else _embed_question(db, _retrieve_q)
     if not vec:
         return results
     client = _safe_client()
@@ -204,7 +206,8 @@ def build_examples_block(db: Session, question: str, top: int = _MAX_TOP) -> str
     return build_examples_payload(db, question, top=top)["block"]
 
 
-def build_entity_hint_block(db: Session, question: str, top: int = 3) -> str:
+def build_entity_hint_block(db: Session, question: str, top: int = 3,
+                            precomputed_vec: Optional[List[float]] = None) -> str:
     """批2-D 实体预解析：候选实体注入契约消息（省 search_entities 定位轮）。
 
     两步：
@@ -236,11 +239,11 @@ def build_entity_hint_block(db: Session, question: str, top: int = 3) -> str:
                 break
     except Exception as _e:
         logger.warning(f"[实体预解析] 子串扫描失败（跳过）: {_e}")
-    # 2) 无子串命中：退回向量检索（弱）
+    # 2) 无子串命中：退回向量检索（弱）；批7-E1 复用单入口预计算向量，避免二次 embedding
     if not _picked:
         try:
             from app.services.entity_attr_vector_service import search_entity_vectors
-            _hits = search_entity_vectors(q, top_k=top * 3, db=db)
+            _hits = search_entity_vectors(q, top_k=top * 3, db=db, vec=precomputed_vec)
         except Exception as _e2:
             logger.warning(f"[实体预解析] 向量检索失败（跳过）: {_e2}")
             _hits = []
@@ -254,6 +257,78 @@ def build_entity_hint_block(db: Session, question: str, top: int = 3) -> str:
     for _nm, _cd, _sc in _picked:
         lines.append(f"- {_nm}（{_cd}）")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 批7：检索单调用化 + 短窗缓存（问三）
+# ---------------------------------------------------------------------------
+
+# E2 短窗缓存：LRU {question_norm: (monotonic_ts, bundle)}，TTL=60s size=128——
+# 重复提问/纠错重试免远程检索（embedding + Qdrant 双写开销各免一次）。
+_BUNDLE_TTL_SECONDS = float(os.getenv("TUPU_BUNDLE_CACHE_TTL", "60"))
+_BUNDLE_CACHE_SIZE = max(1, int(os.getenv("TUPU_BUNDLE_CACHE_SIZE", "128")))
+try:
+    from collections import OrderedDict as _OrderedDict
+    _bundle_cache: "_OrderedDict[str, tuple]" = _OrderedDict()
+except Exception:  # pragma: no cover
+    _bundle_cache = {}
+
+
+def clear_bundle_cache() -> None:
+    """清空短窗缓存（管理/测试用）。"""
+    _bundle_cache.clear()
+
+
+def retrieve_context_bundle(db: Session, question: str, top_examples: int = _MAX_TOP,
+                            top_entities: int = 3) -> Dict[str, Any]:
+    """批7-E1 检索单入口：一次 embedding -> 并搜 tupu_qa_examples（示例 Tier2）与
+    实体集合（实体提示向量退回路径），返回 {examples_block, example_hits, entity_hint_block}。
+
+    - 短窗缓存（E2）：同规范化问题 TTL 内直接返回缓存 bundle，0 远程调用；
+    - 降级与既有单函数一致：Qdrant/向量不可用静默跳过（不阻断问答）；
+    - 调用方（_build_contract_system_message / 批9 直通判定）共享同一份命中结果。
+    """
+    key = _norm_question(question)
+    now = datetime.now(timezone.utc).timestamp()
+    if key:
+        _hit = _bundle_cache.get(key)
+        if _hit is not None:
+            _ts, _bundle = _hit
+            if now - _ts <= _BUNDLE_TTL_SECONDS:
+                try:
+                    _bundle_cache.move_to_end(key)
+                except Exception:
+                    pass
+                return _bundle
+            _bundle_cache.pop(key, None)
+    # 单次 embedding：用计数同义归一化后的查询文本（与示例 Tier2 检索口径一致；
+    # 实体提示为尽力而为的弱信号，复用同一向量即可）
+    vec = _embed_question(db, _count_normalize(question))
+    hits = search_qa_examples(db, question, top=top_examples, precomputed_vec=vec)
+    block_lines: List[str] = []
+    if hits:
+        block_lines = ["\n参考示例（历史已验证查询，仅供构造 SQL 参考，禁止照抄执行）："]
+        for i, ex in enumerate(hits, 1):
+            block_lines.append(f"[示例{i}] 问题：{ex['question_raw']}")
+            if ex.get("sql"):
+                block_lines.append(f"        SQL：{ex['sql']}")
+    entity_hint = build_entity_hint_block(db, question, top=top_entities, precomputed_vec=vec)
+    bundle = {
+        "examples_block": "\n".join(block_lines),
+        "example_hits": hits,
+        "entity_hint_block": entity_hint,
+    }
+    if key:
+        try:
+            _bundle_cache[key] = (now, bundle)
+            _bundle_cache.move_to_end(key)
+            while len(_bundle_cache) > _BUNDLE_CACHE_SIZE:
+                _bundle_cache.popitem(last=False)
+        except Exception:
+            pass
+    return bundle
+
+
 
 
 # ---------------------------------------------------------------------------

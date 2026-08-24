@@ -346,14 +346,9 @@ class QueryContract:
 _SKILL_SQL_QUERY_PATH = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "skills", "sql-query", "SKILL.md"))
 _GUIDANCE_SECTIONS: Optional[Dict[str, str]] = None
-# 意图规则：(小节标题前缀, 触发词) 按序判定；命中即摘录对应小节
-_GUIDANCE_RULES = (
-    ("聚合类", ("数量", "总数", "多少", "统计", "几个", "平均", "总和", "总计", "分组", "占比", "分布", "比例", "百分比")),
-    ("排名类", ("排名", "前", "最大", "最多", "最少", "top", "Top")),
-    ("趋势类", ("同比", "环比", "趋势", "逐月", "逐季", "增长率")),
-    ("对比类", ("对比", "相比", "哪个多", "哪个少")),
-    ("质检类", ("空值", "重复", "异常", "质检", "缺失", "完整性")),
-)
+# 批6-R2：意图词表收拢至 intent_classifier 单模块（路由/指引预载/模板直出三处共用同一套判定）；
+# 此处保留别名兼容既有引用。
+from app.services.intent_classifier import GUIDANCE_RULES as _GUIDANCE_RULES  # noqa: E402
 
 
 def _load_guidance_sections() -> Dict[str, str]:
@@ -391,10 +386,11 @@ def build_guidance_block(question: str, max_lines: int = 8) -> str:
     sections = _load_guidance_sections()
     if not sections:
         return ""
-    picked: List[str] = []
-    for _label, _words in _GUIDANCE_RULES:
-        if any(w in q for w in _words):
-            picked.append(_label)
+    try:
+        from app.services.intent_classifier import guidance_labels_for
+        picked = guidance_labels_for(q)
+    except Exception:
+        picked = [_label for _label, _words in _GUIDANCE_RULES if any(w in q for w in _words)]
     picked = list(dict.fromkeys(picked))
     if not picked:
         return ""

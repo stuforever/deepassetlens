@@ -263,18 +263,61 @@ def build_chat_model(
 
 
 def _extract_usage(resp) -> Optional[Dict[str, Any]]:
-    """从 ChatOpenAI 响应提取 token 用量"""
+    """从 ChatOpenAI 响应提取 token 用量（批5-C4：附探 DeepSeek 前缀缓存命中字段）。
+
+    DeepSeek OpenAI 兼容协议在 usage 中返回 prompt_cache_hit_tokens / prompt_cache_miss_tokens
+    （部分网关放 prompt_tokens_details.cached_tokens）。ChatOpenAI 可能吞掉非标字段——
+    本函数尽力从 additional_kwargs/response_metadata 兜底捞取；拿不到则返回基础三项，
+    上层降级为仅 TTFT 观测（设计允许）。
+    """
     try:
+        out: Dict[str, Any] = {}
         meta = getattr(resp, "usage_metadata", None)
         if meta:
-            return {
+            out.update({
                 "total_tokens": getattr(meta, "total_tokens", None),
                 "prompt_tokens": getattr(meta, "input_tokens", None),
                 "completion_tokens": getattr(meta, "output_tokens", None),
-            }
+            })
+        # 批5-C4：前缀缓存命中字段探测（多落点兜底）
+        for _src_name in ("additional_kwargs", "response_metadata"):
+            src = getattr(resp, _src_name, None) or {}
+            if not isinstance(src, dict):
+                continue
+            um = src.get("token_usage") or src.get("usage") or src
+            if not isinstance(um, dict):
+                continue
+            # 基础三项兜底（usage_metadata 缺失时，如部分网关只回 response_metadata）
+            if out.get("prompt_tokens") is None and um.get("prompt_tokens") is not None:
+                out["prompt_tokens"] = um.get("prompt_tokens")
+            if out.get("completion_tokens") is None and um.get("completion_tokens") is not None:
+                out["completion_tokens"] = um.get("completion_tokens")
+            if out.get("total_tokens") is None and um.get("total_tokens") is not None:
+                out["total_tokens"] = um.get("total_tokens")
+            details = um.get("prompt_tokens_details") or {}
+            hit = um.get("prompt_cache_hit_tokens")
+            if hit is None and isinstance(details, dict):
+                hit = details.get("cached_tokens")
+            miss = um.get("prompt_cache_miss_tokens")
+            if hit is not None and "cache_hit_tokens" not in out:
+                out["cache_hit_tokens"] = int(hit)
+            if miss is not None and "cache_miss_tokens" not in out:
+                out["cache_miss_tokens"] = int(miss)
+        return out or None
     except Exception:
         pass
     return None
+
+
+def _log_cache_usage(usage: Optional[Dict[str, Any]], conn_name: str) -> None:
+    """批5-C4：命中字段存在时打日志（观测口径）；不存在静默（=未透传，降级 TTFT 观测）。"""
+    try:
+        if usage and usage.get("cache_hit_tokens") is not None:
+            logger.info(
+                f"[llm_client][prefix-cache] conn={conn_name} hit={usage.get('cache_hit_tokens')} "
+                f"miss={usage.get('cache_miss_tokens')} prompt={usage.get('prompt_tokens')}")
+    except Exception:
+        pass
 
 
 def call_openai_compatible_chat(
@@ -304,7 +347,9 @@ def call_openai_compatible_chat(
         chat = build_chat_model(item, temperature=temperature, timeout=timeout)
         resp = chat.invoke(messages)
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
-        t.add_output(content=content, usage=_extract_usage(resp))
+        _usage = _extract_usage(resp)
+        t.add_output(content=content, usage=_usage)
+        _log_cache_usage(_usage, conn_name)
         return content
 
 
@@ -343,7 +388,9 @@ def call_openai_compatible_messages(
         chat = build_chat_model(item, temperature=temperature, timeout=timeout, extra_payload=extra_payload)
         resp = chat.invoke(lc_messages)
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
-        t.add_output(content=content, usage=_extract_usage(resp))
+        _usage = _extract_usage(resp)
+        t.add_output(content=content, usage=_usage)
+        _log_cache_usage(_usage, conn_name)
         return content
 
 

@@ -718,6 +718,12 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
         "tupu-kg": {"url": "http://127.0.0.1:28000/mcp/sse", "transport": "sse", "headers": _mcp_headers}
     })
     mcp_tools = await mcp_client.get_tools()
+    # 批5-C2：工具顺序固化——MCP list_tools 返回序可能抖动，打碎 DeepSeek 服务端前缀缓存；
+    # 装配时按工具名排序一次，保证同场景 system prompt 中工具清单逐字节一致。
+    try:
+        mcp_tools = sorted(mcp_tools, key=lambda t: getattr(t, "name", "") or "")
+    except Exception as _tse:
+        logger.warning(f"[批5-C2] 工具排序失败（保持原序）: {_tse}")
 
     from deepagents.backends import StateBackend, FilesystemBackend, CompositeBackend
     from deepagents.middleware.filesystem import FilesystemPermission
@@ -828,6 +834,20 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
                 keep=("messages", 10),
                 truncate_args_settings={"trigger": ("messages", 15), "keep": ("messages", 15)},
             )
+
+        def _should_summarize(self, messages, total_tokens):
+            # 批5-C3：摘要触发即 DeepSeek 前缀缓存失效点（bust）——记治理事件使「缓存被摘要打碎」可观测；
+            # trigger 30k 维持不变（保守化既定决策）。
+            _hit = super()._should_summarize(messages, total_tokens)
+            if _hit:
+                try:
+                    from app.services.skill_governance import get_governance
+                    get_governance().record_policy(
+                        "context.summarized", "_summ_", "_summ_",
+                        f"tokens={total_tokens}（批5-C3：摘要触发=前缀缓存失效点）")
+                except Exception:
+                    pass
+            return _hit
 
     _summ_mw = _TupuSummarizationMiddleware(model, backend)
     middleware_list.append(_summ_mw)

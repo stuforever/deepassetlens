@@ -275,6 +275,141 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             # M3：on_evaluation 回调 -> 当前请求 sink/契约（contextvar 同任务上下文可见）
             from app.services.tupu_deepagent import _RUBRIC_HOOK_CTX
             _rubric_hook_token = _RUBRIC_HOOK_CTX.set({"sink": _evt_sink, "contract": _contract})
+
+            # ===== 批9 模板直出管道 v1：路由后 Agent 前判定（问五）=====
+            # sim≥0.95 且 count 类且无动态条件 -> 绕过 Agent 直接执行验证 SQL（0 LLM 轮，目标 2~4s）；
+            # 执行报错自动回退完整 Agent 路径（用户无感，只是变慢）；与批2-C 首选计划分层共存。
+            if _contract is not None and getattr(_route, "route_type", "") == "generic":
+                _dp_plan = None
+                try:
+                    from app.services.direct_pipeline import evaluate_direct_eligibility
+                    _dp_plan = evaluate_direct_eligibility(_contract, _effective_question)
+                except Exception as _dpe:
+                    logger.warning(f"[DirectPipeline] 直通判定异常（走Agent）: {_dpe}")
+                if _dp_plan is not None:
+                    _mark("first_tool_start")
+                    _dp = None
+                    try:
+                        import asyncio as _dp_asyncio
+                        from app.services.direct_pipeline import run_direct_pipeline
+                        _dp = await _dp_asyncio.to_thread(
+                            run_direct_pipeline, _dp_plan, _effective_question, str(req.thread_id or ""))
+                    except Exception as _dre:
+                        logger.warning(f"[DirectPipeline] 直通执行失败，回退 Agent: {_dre}")
+                        try:
+                            from app.services.skill_governance import get_governance
+                            get_governance().record_policy(
+                                "direct_pipeline.fallback", "_direct_", "_direct_", str(_dre)[:300])
+                        except Exception:
+                            pass
+                    if _dp is not None:
+                        # ---- SSE 直出（事件序列与 Agent 路径一致，前端零改动）----
+                        _dp_res = _dp["result"]
+                        _dp_rows = _dp_res.get("rows") or []
+                        _dp_rc = int(_dp_res.get("row_count") or len(_dp_rows) or 0)
+                        _dp_cols = _dp_res.get("columns") or []
+                        _dp_sql = str(_dp_res.get("sql") or _dp_plan["sql"])
+                        _dp_answer = str(_dp["answer"] or "")
+                        _dp_summary = (f"命中已验证示例（相似度 {_dp_plan['score']:.2f}），"
+                                       f"直接执行验证 SQL：返回 {_dp_rc} 行")
+                        yield f"event: think\n"
+                        yield f"data: {json.dumps({'task': '模板直出执行', 'kind': 'skill', 'step_id': 1, 'tool_call_id': '', 'duration_ms': _dp['duration_ms'], 'result_summary': _dp_summary, 'result_status': 'locked', 'phase': 'done'}, ensure_ascii=False)}\n\n"
+                        try:
+                            _evt_sink.append("tool.completed", {"task": "模板直出执行", "tool_name": _dp["tool"], "result_summary": _dp_summary, "result_status": "locked", "duration_ms": _dp["duration_ms"]}, step_id="1")
+                        except Exception:
+                            pass
+                        _mark("first_answer_token")
+                        yield f"event: sql_result\n"
+                        yield f"data: {json.dumps({'columns': _dp_cols, 'rows': _dp_rows, 'row_count': _dp_rc, 'sql': _dp_sql, 'returned_rows': len(_dp_rows), 'preview_row_count': min(10, _dp_rc), 'is_preview': False, 'llm_is_preview': _dp_rc > 10, 'llm_preview_row_count': min(10, _dp_rc), 'result_available_for_ui': True, 'step_id': 1, 'data_snapshot_at': _dp_res.get('data_snapshot_at'), 'cache_sources': _dp_res.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
+                        if _dp_answer.strip():
+                            import time as _dp_t
+                            final_sent_at[0] = _dp_t.time()
+                            yield f"event: final\n"
+                            yield f"data: {json.dumps({'answer': _dp_answer}, ensure_ascii=False)}\n\n"
+                        _dp_recs = ["统计用电客户总数", "查客户的联系电话", "什么是变压器"]
+                        yield f"event: recommend\n"
+                        yield f"data: {json.dumps({'questions': [{'label': r, 'shortcut': r} for r in _dp_recs]}, ensure_ascii=False)}\n\n"
+                        # 会话历史写回 checkpoint（直通未走 agent 消息循环，保追问上下文连续性）
+                        try:
+                            from langchain_core.messages import AIMessage as _dp_AIM
+                            await agent.aupdate_state(config, {"messages": [
+                                HumanMessage(content=_effective_question), _dp_AIM(content=_dp_answer)]})
+                        except Exception as _upe:
+                            logger.warning(f"[DirectPipeline] 会话历史写回失败（忽略）: {_upe}")
+                        _dp_think = [{"task": "模板直出执行", "kind": "skill", "step_id": 1,
+                                      "phase": "done", "result_status": "locked",
+                                      "result_summary": _dp_summary, "duration_ms": _dp["duration_ms"]}]
+                        _dp_tables = []
+                        try:
+                            from app.services.kg_action_handlers import _extract_main_table as _dp_emt
+                            _t_dp = _dp_emt(_dp_sql)
+                            if _t_dp:
+                                _dp_tables = [_t_dp]
+                        except Exception:
+                            pass
+                        _dp_evidence = {
+                            "route": {"skill": "__generic__", "route_type": "generic"},
+                            "tables": _dp_tables,
+                            "examples_used": [{"q": _dp_plan["hit"].get("question_raw") or "", "sim": _dp_plan["score"]}],
+                            "verification": _dp_res.get("verification") or {},
+                            "rubric": {"status": None, "iterations": 0},
+                            "corrections": 0,
+                            "missing_data_support": False,
+                            "direct_pipeline": True,  # 批9：确定性来源标识
+                        }
+                        try:
+                            from app.services.skill_governance import get_governance as _dp_gov
+                            _dp_gov().record_policy(
+                                "direct_pipeline.executed", "_direct_", "_direct_",
+                                f"sim={_dp_plan['score']:.2f} rows={_dp_rc} engine={_dp_plan['engine']}")
+                        except Exception:
+                            pass
+                        _timing["total"] = round((_time.time() - _t0) * 1000)
+                        _timing["rubric_ms"] = 0  # 直通无 grader
+                        _dp_response = {
+                            "thread_id": req.thread_id,
+                            "current_task": "DeepAgent",
+                            "goal": "free_plan",
+                            "routed_skill": "free_plan",
+                            "pending_clarification": None,
+                            "confirmed": {"assembled_sql": _dp_sql},
+                            "completed_tasks": ["模板直出执行"],
+                            "flags": {"chain_locked": False, "entity_locked": False,
+                                      "sql_executed": True, "output_scrubbed": False,
+                                      "direct_pipeline": True},
+                            "route": (_route.to_dict() if _route is not None else None),
+                            "contract": _contract.to_dict() if _contract is not None else None,
+                            "output_contract_check": {"ok": True, "reason": ""},
+                            "think_stream": _dp_think,
+                            "final_answer": _dp_answer,
+                            "final_answer_structured": None,
+                            "response_format_degraded": False,
+                            "final_delivery": None,
+                            "sql_result": {
+                                "columns": _dp_cols, "rows": _dp_rows, "row_count": _dp_rc,
+                                "sql": _dp_sql, "returned_rows": len(_dp_rows),
+                                "preview_row_count": min(10, _dp_rc), "is_preview": False,
+                                "llm_is_preview": _dp_rc > 10, "llm_preview_row_count": min(10, _dp_rc),
+                                "result_available_for_ui": True,
+                            },
+                            "recommendations": [{"label": r, "shortcut": r} for r in _dp_recs],
+                            "next_step_recommendation": None,
+                            "message_card": None,
+                            "evidence": _dp_evidence,
+                            "confidence": "高",  # 确定性来源（验证 SQL 单源 + 安全校验通过）
+                            "timing": dict(_timing),
+                        }
+                        yield f"event: done\n"
+                        yield f"data: {json.dumps(_dp_response, ensure_ascii=False, default=str)}\n\n"
+                        try:
+                            yield f"event: timing\n"
+                            yield f"data: {json.dumps(_timing, ensure_ascii=False)}\n\n"
+                        except Exception:
+                            pass
+                        _evt_sink.complete({"final_answer": _dp_answer[:500], "completed_tasks": ["模板直出执行"], "sql_executed": True})
+                        logger.info(f"[DirectPipeline] 直通完成: sim={_dp_plan['score']:.2f} rows={_dp_rc} total={_timing['total']}ms")
+                        return
+
             aiter = agent.astream_events(
                 _inv_state,
                 config=config,

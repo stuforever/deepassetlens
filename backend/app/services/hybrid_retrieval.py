@@ -54,6 +54,7 @@ _SYNONYM_MAP = {
     "手机号": ["手机号", "手机", "联系电话", "电话", "联系方式", "联系手机"],
     "用能地址": ["用能地址", "用电地址", "客户地址", "供电地址", "装表地址", "通讯地址", "安装地址"],
     "变压器": ["变压器", "配变", "专变", "变压器总容量"],
+    "配电变压器": ["配电变压器", "配变", "专变", "配电变", "台区变压器"],
     "电表": ["电表", "电能表", "计量装置", "表计"],
     "断路器": ["断路器", "开关", "空开", "空气开关"],
     "专线": ["专线", "专用线路", "客户专线"],
@@ -207,6 +208,27 @@ def load_synonyms_from_db(db: Session) -> None:
         logger.info("load_synonyms_from_db merged=%d db_rows=%d", len(merged), len(rows))
     except Exception as e:
         logger.warning("load_synonyms_from_db failed: %s", e)
+
+
+def expand_synonyms_for_query(text: str, max_variants: int = 6) -> List[str]:
+    """批8：口语词同义扩展——返回文本命中的同义组变体列表（含标准词与全部同义词）。
+
+    「配变」-> ['变压器', '配变', '专变', '变压器总容量']；无命中返回 []。
+    只读静态/已合并词表（不强制刷 DB），失败静默返回 []（主链路零新依赖）。
+    """
+    t = str(text or "").strip().lower()
+    if not t:
+        return []
+    out: List[str] = []
+    try:
+        for key, syns in _SYNONYM_MAP.items():
+            group = [key] + list(syns or [])
+            if any(str(g).lower() in t for g in group):
+                out.extend(str(g) for g in group)
+        return list(dict.fromkeys(out))[:max(1, int(max_variants))]
+    except Exception as e:
+        logger.warning("expand_synonyms_for_query failed: %s", e)
+        return []
 
 _DOMAIN_PHRASE_SET = set(_DOMAIN_PHRASES)
 
@@ -456,4 +478,4 @@ def hybrid_search(
     return results
 
 
-__all__ = ["tokenize_query", "hybrid_search", "load_synonyms_from_db", "_SYNONYM_MAP"]
+__all__ = ["tokenize_query", "hybrid_search", "load_synonyms_from_db", "expand_synonyms_for_query", "_SYNONYM_MAP"]

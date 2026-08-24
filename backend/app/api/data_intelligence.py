@@ -69,6 +69,17 @@ class ChatResponse(BaseModel):
     message_card: Optional[Dict[str, Any]] = None
 
 
+# 批5-C1：契约文案模板常量——DeepSeek 服务端前缀缓存命中前提=前缀逐字节一致；
+# 固定骨架全部走这里（同场景逐字节一致），变化内容（示例块/首选计划/实体提示/指引）
+# 一律 append 在消息尾部，不打碎前缀。
+_CONTRACT_HEADER = "你当前处于受控工作流。以下契约由代码强制执行（SkillPolicyMiddleware），你无权改写："
+_CONTRACT_ENGINE_UNCONFIRMED = ("尚未确认 —— 先调用 batch_entity_source_mode 确认数据源模式，"
+                                "再执行数据查询；引擎一经锁定只允许对应工具，禁止切换重查")
+_CONTRACT_STOP_DEFAULT = "拿到查询结果即停止"
+_CONTRACT_OUTPUT_SUFFIX = (" —— 完整明细由前端查询结果表唯一展示，最终回答禁止输出 Markdown 明细表，"
+                           "只写结论/发现/风险/建议")
+
+
 def _build_contract_system_message(contract, question: str = "") -> str:
     """按契约构造每次请求注入的 SystemMessage（设计 §7.1：只向模型提供受控上下文）。
 
@@ -82,15 +93,15 @@ def _build_contract_system_message(contract, question: str = "") -> str:
     if scope.get("commitment") == "exact_set":
         scope_txt += f"（精确集合，{scope.get('source', 'user_input')}）"
     lines = [
-        "你当前处于受控工作流。以下契约由代码强制执行（SkillPolicyMiddleware），你无权改写：",
+        _CONTRACT_HEADER,
         f"- 场景/步骤：{contract.skill_id} / {contract.workflow_step}",
         f"- 允许工具：{', '.join(contract.allowed_tools)}",
         f"- 禁止工具：{', '.join(contract.forbidden_tools) or '无'}",
         f"- 本次允许的 SQL 模板：{', '.join(contract.template_ids) or '未声明（仅只读查询）'}",
         f"- 范围：客户名 {scope_txt}",
-        f"- 数据引擎：{contract.selected_engine or '尚未确认 —— 先调用 batch_entity_source_mode 确认数据源模式，再执行数据查询；引擎一经锁定只允许对应工具，禁止切换重查'}",
-        f"- 终止条件：{'；'.join(contract.stop_when) or '拿到查询结果即停止'}",
-        f"- 输出模式：{contract.output_mode} —— 完整明细由前端查询结果表唯一展示，最终回答禁止输出 Markdown 明细表，只写结论/发现/风险/建议",
+        f"- 数据引擎：{contract.selected_engine or _CONTRACT_ENGINE_UNCONFIRMED}",
+        f"- 终止条件：{'；'.join(contract.stop_when) or _CONTRACT_STOP_DEFAULT}",
+        f"- 输出模式：{contract.output_mode}{_CONTRACT_OUTPUT_SUFFIX}",
     ]
     base = "\n".join(lines)
     # S1（L1）：聚合分布意图 -> 追加受控指令（路由层标记，结构层要求聚合视图）
@@ -109,25 +120,27 @@ def _build_contract_system_message(contract, question: str = "") -> str:
         )
     if question:
         try:
-            from app.services.qa_example_service import build_examples_payload, build_entity_hint_block, bump_hit_count
+            # 批7-E1 检索单入口：一次 embedding 双集合（示例+实体）并搜 + E2 短窗缓存
+            # （同问题 60s 内二次提问 0 远程检索；批9 直通判定共享同一份 example_hits）
+            from app.services.qa_example_service import retrieve_context_bundle, bump_hit_count
             from app.core.database import SessionLocal
             _db = SessionLocal()
             try:
-                _payload = build_examples_payload(_db, question)
+                _bundle = retrieve_context_bundle(_db, question)
             finally:
                 _db.close()
-            if _payload["block"]:
-                base += _payload["block"]
+            if _bundle["examples_block"]:
+                base += _bundle["examples_block"]
                 try:
-                    contract._runtime["example_hits"] = _payload["hits"]
+                    contract._runtime["example_hits"] = _bundle["example_hits"]
                 except Exception:
                     pass
                 # 批2-C：高分示例直通首选计划（5 轮 → 2 轮核心杠杆）。
                 # 阈值比展示(0.75)/rubric 直通(0.85)更严（默认 0.90，环境变量 TUPU_DIRECT_PLAN_SIM 可调）；
                 # 示例 SQL 仍过 validate_sql（SELECT-only/强制 LIMIT）与 SkillPolicy 全链路，写错表有纠错兜底。
                 _DIRECT_PLAN_SIM = float(os.getenv("TUPU_DIRECT_PLAN_SIM", "0.90"))
-                if _payload["hits"]:
-                    _top = max(_payload["hits"], key=lambda h: h.get("score") or 0)
+                if _bundle["example_hits"]:
+                    _top = max(_bundle["example_hits"], key=lambda h: h.get("score") or 0)
                     if (_top.get("score") or 0) >= _DIRECT_PLAN_SIM and _top.get("sql"):
                         _eng = _top.get("engine") or "doris"
                         # 首选计划锚定：锁定引擎（示例 SQL 已验证，默认 Doris 联邦），
@@ -148,26 +161,15 @@ def _build_contract_system_message(contract, question: str = "") -> str:
                 try:
                     _db2 = SessionLocal()
                     try:
-                        bump_hit_count(_db2, [str(h["id"]) for h in _payload["hits"]])
+                        bump_hit_count(_db2, [str(h["id"]) for h in _bundle["example_hits"]])
                     finally:
                         _db2.close()
                 except Exception:
                     pass
+            if _bundle["entity_hint_block"]:
+                base += _bundle["entity_hint_block"]
         except Exception as _e:
             logger.warning(f"[QA示例库] 示例注入失败（静默跳过）: {_e}")
-        # 批2-D 实体预解析：候选实体注入（省 search_entities 定位轮；Qdrant 不可用静默跳过）
-        try:
-            from app.services.qa_example_service import build_entity_hint_block
-            from app.core.database import SessionLocal as _SL_hint
-            _dbh = _SL_hint()
-            try:
-                _entity_hint = build_entity_hint_block(_dbh, question)
-            finally:
-                _dbh.close()
-            if _entity_hint:
-                base += _entity_hint
-        except Exception as _eh:
-            logger.warning(f"[实体预解析] 注入失败（静默跳过）: {_eh}")
         # 批2-E 指引预载：规则意图分类注入 sql-query 写法指引（省 read_file 技能轮）
         try:
             from app.services.query_contract import build_guidance_block

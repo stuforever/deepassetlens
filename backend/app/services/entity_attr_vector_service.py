@@ -241,9 +241,11 @@ def get_attribute_vector_stats() -> Dict[str, Any]:
         return {"exists": False, "count": 0, "error": str(e)}
 
 
-def search_entity_vectors(query: str, top_k: int = 15, db: Optional[Session] = None) -> List[Dict[str, Any]]:
-    """实体向量检索（供 skill_injections 注入）"""
-    if not query:
+def search_entity_vectors(query: str, top_k: int = 15, db: Optional[Session] = None,
+                          vec: Optional[List[float]] = None) -> List[Dict[str, Any]]:
+    """实体向量检索（供 skill_injections 注入）；批7-E1：vec 由 retrieve_context_bundle
+    传入（一次 embedding 双集合并搜），为空时内部对 query 现算。"""
+    if not query and not vec:
         return []
     try:
         client = _get_client()
@@ -257,11 +259,13 @@ def search_entity_vectors(query: str, top_k: int = 15, db: Optional[Session] = N
         else:
             should_close = False
         try:
-            from app.services.semantic_retrieval import embed_texts
-            vectors = embed_texts(db, [query])
-            if not vectors or not vectors[0]:
-                return []
-            hits = client.search_points(ENTITY_COLLECTION, vectors[0], top=top_k, with_payload=True)
+            if not vec:
+                from app.services.semantic_retrieval import embed_texts
+                vectors = embed_texts(db, [query])
+                if not vectors or not vectors[0]:
+                    return []
+                vec = vectors[0]
+            hits = client.search_points(ENTITY_COLLECTION, vec, top=top_k, with_payload=True)
             out = []
             for h in hits:
                 p = (h.get("payload") or {}) if isinstance(h, dict) else getattr(h, "payload", {}) or {}
