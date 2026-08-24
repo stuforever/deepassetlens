@@ -726,6 +726,8 @@ const FreePlanChat: React.FC = () => {
           corrections: 0,
         } ?? null,
         confidence: (resp as any).confidence ?? loadingPayload?.confidence ?? null,
+        // 批3-F：分段计时外露（done 载荷 timing -> payload，置信度徽标悬停显示）
+        timing: (resp as any).timing ?? loadingPayload?.timing ?? undefined,
       };
       // 统一最终交付视图：模型无文本但确有查询数据时，用交付摘要兜底主区文字
       const deliveryView = buildFinalDeliveryView(assistantPayload);

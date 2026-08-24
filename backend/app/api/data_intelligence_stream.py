@@ -782,6 +782,10 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             finally:
                 # v3.6 推送分段计时（定位首响应延迟来源）
                 _timing["total"] = round((_time.time() - _t0) * 1000)
+                # 批3-F：自评段耗时（粗粒度）——首答案 token 到 done 的段落，主要为 rubric grader 调用；
+                # 未激活 rubric（示例锚定直通）时该段≈收尾开销。
+                _t_first_ans = _timing.get("first_answer_token") or 0
+                _timing["rubric_ms"] = max(0, _timing["total"] - _t_first_ans) if _t_first_ans else 0
                 try:
                     yield f"event: timing\n"
                     yield f"data: {json.dumps(_timing, ensure_ascii=False)}\n\n"
@@ -1016,6 +1020,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 "message_card": None,
                 "evidence": _evidence,   # M3 G7：证据链（路由/表/示例/验证/自评/纠错）
                 "confidence": _ev_confidence,  # M3 G7：置信度三级（高/中/低）
+                "timing": dict(_timing),  # 批3-F：分段计时外露（first_event/first_model_stream/first_tool_start/first_answer_token/total, ms）
             }
             yield f"event: done\n"
             yield f"data: {json.dumps(final_response, ensure_ascii=False, default=str)}\n\n"

@@ -339,6 +339,80 @@ class QueryContract:
 
 
 # ----------------------------------------------------------------------
+# 批2-E：指引预载（省 read_file 技能轮）
+# ----------------------------------------------------------------------
+# 规则意图分类命中 sql-query/SKILL.md 对应小节，摘录 5-8 行注入契约消息，
+# 模型直接参考无需 read_file(/skills/sql-query/...)。模块加载时解析一次并缓存。
+_SKILL_SQL_QUERY_PATH = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "skills", "sql-query", "SKILL.md"))
+_GUIDANCE_SECTIONS: Optional[Dict[str, str]] = None
+# 意图规则：(小节标题前缀, 触发词) 按序判定；命中即摘录对应小节
+_GUIDANCE_RULES = (
+    ("聚合类", ("数量", "总数", "多少", "统计", "几个", "平均", "总和", "总计", "分组", "占比", "分布", "比例", "百分比")),
+    ("排名类", ("排名", "前", "最大", "最多", "最少", "top", "Top")),
+    ("趋势类", ("同比", "环比", "趋势", "逐月", "逐季", "增长率")),
+    ("对比类", ("对比", "相比", "哪个多", "哪个少")),
+    ("质检类", ("空值", "重复", "异常", "质检", "缺失", "完整性")),
+)
+
+
+def _load_guidance_sections() -> Dict[str, str]:
+    """解析 sql-query/SKILL.md，按 `### ` 小节切分缓存（标题 -> 小节正文）。"""
+    global _GUIDANCE_SECTIONS
+    if _GUIDANCE_SECTIONS is not None:
+        return _GUIDANCE_SECTIONS
+    sections: Dict[str, str] = {}
+    try:
+        with open(_SKILL_SQL_QUERY_PATH, encoding="utf-8") as f:
+            text = f.read()
+        cur: Optional[str] = None
+        buf: List[str] = []
+        for line in text.splitlines():
+            if line.startswith("### "):
+                if cur and buf:
+                    sections[cur] = "\n".join(buf)
+                cur = line[4:].strip()
+                buf = []
+            elif cur is not None:
+                buf.append(line)
+        if cur and buf:
+            sections[cur] = "\n".join(buf)
+    except Exception as _e:
+        logger.warning(f"[指引预载] SKILL.md 解析失败: {_e}")
+    _GUIDANCE_SECTIONS = sections
+    return sections
+
+
+def build_guidance_block(question: str, max_lines: int = 8) -> str:
+    """规则意图分类 -> sql-query/SKILL.md 小节摘录（默认 ≤8 行）。无意图命中返回空串。"""
+    q = (question or "").strip()
+    if not q:
+        return ""
+    sections = _load_guidance_sections()
+    if not sections:
+        return ""
+    picked: List[str] = []
+    for _label, _words in _GUIDANCE_RULES:
+        if any(w in q for w in _words):
+            picked.append(_label)
+    picked = list(dict.fromkeys(picked))
+    if not picked:
+        return ""
+    lines = ["\n写法指引（摘自 sql-query 技能，直接参考无需 read_file）："]
+    for _label in picked[:2]:  # 最多两节，控制注入体积
+        # 规则标签（如「聚合类」）是 SKILL.md 小节标题前缀（如「聚合类（问数量/统计/占比/平均/分组）」），前缀匹配
+        body = next((v.splitlines() for k, v in sections.items() if k.startswith(_label)), [])
+        # 优先摘表格模板行（"用户说法" -> SQL 映射）与硬规则行；去表头分隔线
+        _core = [l.strip() for l in body if l.strip() and not l.strip().startswith("|---")][:max_lines]
+        if _core:
+            lines.append(f"· {_label}：")
+            lines.extend(_core)
+    if len(lines) <= 1:
+        return ""
+    return "\n".join(lines)
+
+
+# ----------------------------------------------------------------------
 # 批1-B：rubric 分档直通（示例锚定直通）
 # ----------------------------------------------------------------------
 # 示例锚定强度阈值：相似度 >= 该值时，已验证示例提供确定性保障（守卫+引擎锁定+金标回归），

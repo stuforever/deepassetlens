@@ -14,7 +14,7 @@
  * 配色全部走 token，零硬编码。
  */
 import React, { useState } from 'react';
-import { Collapse, Spin, Tag, Typography } from 'antd';
+import { Collapse, Spin, Tag, Tooltip, Typography } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ThinkStream from './ThinkStream';
@@ -154,7 +154,13 @@ const AssistantCanvas: React.FC<{
           </h2>
           {confidence ? (() => {
             const confColor = confidence === '高' ? tokens.colors.success : (confidence === '低' ? tokens.colors.error : tokens.colors.warning);
-            return (
+            // 批3-F：分段计时外露（悬停显示，不常驻占屏）——首token/首工具/作答/自评/总
+            const _t = payload?.timing;
+            const _sec = (v?: number) => (v != null && v > 0 ? `${(v / 1000).toFixed(1)}s` : '—');
+            const _tt = _t ? (
+              `首 token ${_sec(_t.first_answer_token)} · 首工具 ${_sec(_t.first_tool_start)} · 作答 ${_sec(_t.first_answer_token ? (_t.total ?? 0) - _t.first_answer_token : undefined)} · 自评 ${_sec(_t.rubric_ms)} · 总 ${_sec(_t.total)}`
+            ) : undefined;
+            const _badge = (
               <Tag
                 style={{
                   marginLeft: 10, color: confColor, border: `1px solid ${confColor}`,
@@ -165,6 +171,7 @@ const AssistantCanvas: React.FC<{
                 置信度{confidence}
               </Tag>
             );
+            return _tt ? <Tooltip title={_tt}><span>{_badge}</span></Tooltip> : _badge;
           })() : null}
         </div>
       ) : null}

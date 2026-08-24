@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -108,7 +109,7 @@ def _build_contract_system_message(contract, question: str = "") -> str:
         )
     if question:
         try:
-            from app.services.qa_example_service import build_examples_payload, bump_hit_count
+            from app.services.qa_example_service import build_examples_payload, build_entity_hint_block, bump_hit_count
             from app.core.database import SessionLocal
             _db = SessionLocal()
             try:
@@ -121,6 +122,29 @@ def _build_contract_system_message(contract, question: str = "") -> str:
                     contract._runtime["example_hits"] = _payload["hits"]
                 except Exception:
                     pass
+                # 批2-C：高分示例直通首选计划（5 轮 → 2 轮核心杠杆）。
+                # 阈值比展示(0.75)/rubric 直通(0.85)更严（默认 0.90，环境变量 TUPU_DIRECT_PLAN_SIM 可调）；
+                # 示例 SQL 仍过 validate_sql（SELECT-only/强制 LIMIT）与 SkillPolicy 全链路，写错表有纠错兜底。
+                _DIRECT_PLAN_SIM = float(os.getenv("TUPU_DIRECT_PLAN_SIM", "0.90"))
+                if _payload["hits"]:
+                    _top = max(_payload["hits"], key=lambda h: h.get("score") or 0)
+                    if (_top.get("score") or 0) >= _DIRECT_PLAN_SIM and _top.get("sql"):
+                        _eng = _top.get("engine") or "doris"
+                        # 首选计划锚定：锁定引擎（示例 SQL 已验证，默认 Doris 联邦），
+                        # 模型只能 execute_doris_sql 直接执行，跳过 batch_entity_source_mode 确认轮（省 ~10s）。
+                        # 若执行报 TABLE_MISSING/列名错误，纠错循环会触发回退。
+                        try:
+                            if _eng in ("doris", "duckdb", "physical"):
+                                contract.lock_engine(_eng, f"首选计划示例锚定（相似度 {_top['score']:.2f}）")
+                        except Exception:
+                            pass
+                        base += (
+                            f"\n首选计划（已验证示例，相似度 {_top['score']:.2f}）：直接执行以下 SQL 作答，"
+                            f"跳过实体定位与读技能步骤；数据引擎已锁定为 {_eng}，"
+                            f"用 execute_doris_sql 直接执行（示例 SQL 已通过金标回归；若报 TABLE_MISSING/列名错误，"
+                            f"再 batch_entity_source_mode 确认源模式后重试，仍失败则回退常规定位流程 search_entities）。\n"
+                            f"SQL：{_top['sql']}"
+                        )
                 try:
                     _db2 = SessionLocal()
                     try:
@@ -131,6 +155,27 @@ def _build_contract_system_message(contract, question: str = "") -> str:
                     pass
         except Exception as _e:
             logger.warning(f"[QA示例库] 示例注入失败（静默跳过）: {_e}")
+        # 批2-D 实体预解析：候选实体注入（省 search_entities 定位轮；Qdrant 不可用静默跳过）
+        try:
+            from app.services.qa_example_service import build_entity_hint_block
+            from app.core.database import SessionLocal as _SL_hint
+            _dbh = _SL_hint()
+            try:
+                _entity_hint = build_entity_hint_block(_dbh, question)
+            finally:
+                _dbh.close()
+            if _entity_hint:
+                base += _entity_hint
+        except Exception as _eh:
+            logger.warning(f"[实体预解析] 注入失败（静默跳过）: {_eh}")
+        # 批2-E 指引预载：规则意图分类注入 sql-query 写法指引（省 read_file 技能轮）
+        try:
+            from app.services.query_contract import build_guidance_block
+            _guidance = build_guidance_block(question)
+            if _guidance:
+                base += _guidance
+        except Exception as _eg:
+            logger.warning(f"[指引预载] 注入失败（静默跳过）: {_eg}")
     return base
 
 

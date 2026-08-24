@@ -645,6 +645,7 @@ def _on_rubric_evaluation(evaluation: dict) -> None:
     """M3 DA-2：grader 每次评估回调 -> 治理 + 当前请求 sink/契约（SSE 可见）。
 
     回调内异常只记不抛（框架对 on_evaluation 异常同样抑制）。
+    批3-F：记录单次 grader 耗时进 _runtime["rubric_ms"]（分段计时外露）。
     """
     try:
         from app.services import skill_governance as _gov
@@ -670,6 +671,10 @@ def _on_rubric_evaluation(evaluation: dict) -> None:
             contract._runtime["rubric_status"] = evaluation.get("result")
             contract._runtime["rubric_iterations"] = int(evaluation.get("iteration", 0) or 0) + 1
             contract._runtime["rubric_explanation"] = (evaluation.get("explanation") or "")[:500]
+            # 批3-F：grader 端到端耗时（ms）——RubricMiddleware 传 evaluation["elapsed_ms"]（若无则 0）
+            _el = evaluation.get("elapsed_ms") or 0
+            if _el:
+                contract._runtime["rubric_ms"] = int(_el)
     except Exception:
         pass
 
