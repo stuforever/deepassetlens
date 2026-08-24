@@ -14,7 +14,7 @@
  * 配色全部走 token，零硬编码。
  */
 import React, { useState } from 'react';
-import { Collapse, Tag, Typography } from 'antd';
+import { Collapse, Spin, Tag, Typography } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ThinkStream from './ThinkStream';
@@ -105,7 +105,9 @@ const AssistantCanvas: React.FC<{
 }> = ({ payload, isLast, liveMetaInfo, liveFinalAnswer, onSelectRecommendation }) => {
   const thinkStream = payload?.thinkStream || [];
   const traceLogs = payload?.traceLogs || [];
-  const finalAnswer = payload?.final_answer || (isLast ? liveFinalAnswer : undefined);
+  // 批1-A 答案直出：final 后 final_answer 权威校准覆盖；loading 中显示 streaming_answer 逐字成型
+  const finalAnswer = payload?.final_answer || payload?.streaming_answer || (isLast ? liveFinalAnswer : undefined);
+  const answerRevising = !!payload?.answer_revising;
   const recommendations = payload?.recommendations || [];
   const sqlResult = payload?.sql_result || null;
   const structured = payload?.final_answer_structured || null;
@@ -192,6 +194,12 @@ const AssistantCanvas: React.FC<{
           {/* S3b（G9）：追问改写透明性 —— 最终答案上方「理解为：xxx」（可点击展开原文对照） */}
           {payload?.followup_rewritten && payload.followup_rewritten.rewritten ? (
             <FollowupRewriteNote note={payload.followup_rewritten} />
+          ) : null}
+          {/* 批1-A：rubric 修订中徽标（新一轮答案生成中，内容即将续流替换） */}
+          {answerRevising ? (
+            <Tag color="warning" style={{ fontSize: 12, marginBottom: 6 }}>
+              <Spin size="small" style={{ marginRight: 4 }} />校验修订中
+            </Tag>
           ) : null}
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={renderComponents}>
             {finalAnswer}

@@ -65,16 +65,19 @@ export function buildFinalDeliveryView(payload?: ChatMessagePayload | null): Fin
 }
 
 /**
- * 最终答案保留优先级：done.final_answer → loading.payload.final_answer → answer draft。
+ * 最终答案保留优先级：done.final_answer → loading.payload.final_answer → streaming_answer → answer draft。
  * final 事件已到、done.final_answer 为空时，保留 final 事件已写入的答案，不得覆盖为空。
+ * 批1-A：第三优先级改为 payload.streaming_answer（ThinkStream 已不再存答案全文）；draft 仅作向后兼容回退。
  */
 export function resolveFinalAnswer(
   doneFinalAnswer: string | undefined,
   payloadFinalAnswer: string | undefined,
   thinkStream?: Array<{ kind?: string; draft?: string; [k: string]: any }>,
+  streamingAnswer?: string,
 ): string {
   if (doneFinalAnswer) return doneFinalAnswer;
   if (payloadFinalAnswer) return payloadFinalAnswer;
+  if (streamingAnswer) return streamingAnswer;
   const draftItem = (thinkStream || []).find((t) => (t.kind === 'answer' || t.kind === 'draft') && t.draft);
   return draftItem?.draft || '';
 }

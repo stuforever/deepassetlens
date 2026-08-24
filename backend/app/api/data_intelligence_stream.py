@@ -185,6 +185,13 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 _ctx["contract"] = _contract
                 # 每次请求只向模型提供受控工作流上下文（设计 §7.1）；G1: 尾部追加 top-3 已验证示例
                 _contract_msg = _build_contract_system_message(_contract, question=_effective_question)
+                # 批1-B：示例注入完成后按锚定强度分档（_build_contract_system_message 已写 example_hits）——
+                # 高分示例锚定的 generic 查询跳过 rubric 自评（省 20-40s）；聚合分布类不豁免。
+                try:
+                    from app.services.query_contract import apply_rubric_tier
+                    apply_rubric_tier(_contract)
+                except Exception as _rbe:
+                    logger.warning(f"[RubricTier] 分档失败(不影响执行): {_rbe}")
                 input_messages = [SystemMessage(content=_contract_msg), HumanMessage(content=_effective_question)]
                 logger.info(
                     f"[SkillRouter] route={_route.route_type if _route else 'fallback'} "
@@ -321,6 +328,10 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                             _stripped = _rs["accumulated"].lstrip()
                             if _marker.startswith(_stripped) and len(_stripped) < len(_marker):
                                 continue  # 仍是标记前缀，等待更多 token
+                            # 任务笔记标题前缀等待（如 "## S"、"## SE"）：前缀阶段不完整，
+                            # 不满足 startswith 完整标记，会落入 else 误判为 answer —— 须等待更多 token 再定
+                            if any(m.startswith(_stripped) and len(_stripped) < len(m) for m in _TOOL_NOTE_MARKERS):
+                                continue
                             if _stripped.startswith(_marker):
                                 _rs["classifier"] = "decision"
                                 # 首次冲刷：推完整累积内容（不丢前面的标记和文字）

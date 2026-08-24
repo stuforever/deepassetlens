@@ -80,6 +80,12 @@ export type ChatMessagePayload = {
   stream_events?: RunEventRecord[];
   thinkStream?: any[];
   final_answer?: string;
+  /** 批1-A 答案直出：answer_draft 实时累积（loading 态答案气泡逐字成型；final 后由 final_answer 校准覆盖） */
+  streaming_answer?: string;
+  /** 批1-A 答案直出：rubric 修订轮新答案生成中（气泡显示「校验修订中」徽标） */
+  answer_revising?: boolean;
+  /** 批1-A 答案直出：最终答案已提交（用于 rubric 修订轮 roundChanged 判定） */
+  answer_committed?: boolean;
   final_answer_structured?: FinalAnswerStructured | null;
   final_delivery?: FinalDelivery | null;   // 统一最终交付协议（标题/摘要/发现/告警/推荐/row_count）
   response_format_degraded?: boolean;  // R3: 结构化输出降级标识（GLM 不兼容时为 true）

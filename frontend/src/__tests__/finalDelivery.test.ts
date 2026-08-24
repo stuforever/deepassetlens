@@ -125,7 +125,17 @@ describe('统一最终交付显示（生产代码 finalDelivery.ts）', () => {
       expect(answer).toBe('done 答案');
     });
 
-    test('都为空时回退 answer draft', () => {
+    test('都为空时回退 streaming_answer（批1-A：ThinkStream 不再存答案全文）', () => {
+      const answer = resolveFinalAnswer('', '', [], '流式直出答案');
+      expect(answer).toBe('流式直出答案');
+    });
+
+    test('streaming_answer 优先于向后兼容的 answer draft', () => {
+      const answer = resolveFinalAnswer('', '', [{ kind: 'answer', draft: '旧草稿' }], '流式直出答案');
+      expect(answer).toBe('流式直出答案');
+    });
+
+    test('streaming_answer 为空时回退 answer draft（向后兼容）', () => {
       const answer = resolveFinalAnswer('', '', [{ kind: 'answer', draft: '草稿答案' }]);
       expect(answer).toBe('草稿答案');
     });

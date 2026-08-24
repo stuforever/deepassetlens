@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -335,3 +336,28 @@ class QueryContract:
             "confirmed_entities": list(self._runtime.get("confirmed_entities") or []),
             "completed_entities": list(self._runtime.get("completed_entities") or []),
         }
+
+
+# ----------------------------------------------------------------------
+# 批1-B：rubric 分档直通（示例锚定直通）
+# ----------------------------------------------------------------------
+# 示例锚定强度阈值：相似度 >= 该值时，已验证示例提供确定性保障（守卫+引擎锁定+金标回归），
+# grader 边际价值≈0 且固定 +20~40s，故跳过 rubric 自评。环境变量 TUPU_RUBRIC_ANCHOR_SIM 可调。
+EXAMPLE_ANCHOR_SIM = float(os.getenv("TUPU_RUBRIC_ANCHOR_SIM", "0.85"))
+
+
+def apply_rubric_tier(contract: QueryContract) -> None:
+    """示例锚定直通：有高分已验证示例锚定的 generic 查询跳过 rubric 自评。
+
+    依据：模板/示例锚定的 SQL 已有确定性保障（守卫+引擎锁定+金标回归），grader 边际价值≈0
+    且固定 +20~40s。未锚定查询保留自评。
+    边界：聚合分布类问题（S1 的 P-A 不稳定源）**不豁免**——aggregate_intent 命中时仍需自评兜底。
+    """
+    if contract.route_type != "generic" or not contract.rubric:
+        return
+    if getattr(contract, "aggregate_intent", None):
+        return  # S1：聚合分布正是自评兜底对象，不直通
+    hits = (contract._runtime or {}).get("example_hits") or []
+    if hits and max((h.get("score") or 0) for h in hits) >= EXAMPLE_ANCHOR_SIM:
+        contract.rubric = None
+        contract._runtime["rubric_skipped"] = "example_anchored"

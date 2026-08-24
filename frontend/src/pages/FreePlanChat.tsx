@@ -85,6 +85,8 @@ const FreePlanChat: React.FC = () => {
   const tokenBufRef = useRef<Map<string, {kind: string, text: string}[]>>(new Map());
   const closedRoundsRef = useRef<Set<string>>(new Set());
   const rafRef = useRef(0);
+  // 批1-A 答案直出：最近一次答案 round_id（rubric 修订轮判定新答案）
+  const lastAnswerRoundRef = useRef<string>('');
   // v3.5: 当前流式会话 id, flushTokens 只写该会话（防多会话串流）
   const streamingSidRef = useRef<string | null>(null);
 
@@ -459,6 +461,8 @@ const FreePlanChat: React.FC = () => {
                     ...(messages[i].payload || {}),
                     thinkStream: ts,
                     final_answer: (messages[i].payload?.final_answer || content),
+                    // 批1-A：标记答案已提交（rubric 修订轮 roundChanged 判定用）；answer_revising 保留至 rubric 事件到达再清
+                    answer_committed: true,
                   };
                   break;
                 }
@@ -652,9 +656,9 @@ const FreePlanChat: React.FC = () => {
           break;
         }
       }
-      // P0-fix: 兜底优先级 done.final_answer → loading.payload.final_answer → answer draft
+      // 批1-A: 兜底优先级 done.final_answer → loading.payload.final_answer → streaming_answer → answer draft
       // （final 事件已写入 payload，done.final_answer 为空时保留，不覆盖为空）
-      const finalAnswer = resolveFinalAnswer(resp.final_answer, payloadFinalAnswer, liveThinkStream);
+      const finalAnswer = resolveFinalAnswer(resp.final_answer, payloadFinalAnswer, liveThinkStream, loadingPayload?.streaming_answer);
       // v3.5: 不再"实时非空就完全放弃后端快照"。改为按 ID 合并：
       // live 保留 live_reason/决策步骤，backend 补 result_status/phase/duration_ms/result_summary
       const backendThink = resp.think_stream || sess.thinkStream || [];
@@ -810,19 +814,37 @@ const FreePlanChat: React.FC = () => {
           for (const [roundId, tokens] of Array.from(buf)) {
             if (closedRoundsRef.current.has(roundId)) continue;  // 已关闭 round 的旧 delta 丢弃
             const kind = tokens[0]?.kind || 'decision_draft';
-            const field = kind === 'answer_draft' ? 'draft' : 'live_reason';
-            const stepKind = kind === 'answer_draft' ? 'answer' : 'decision';
-            // answer_draft: 答案只有一个步骤，复用已有 answer item（LLM 可能跨多轮生成答案文本，round_id 不同但应归并）
+            const combined = tokens.map((t: { kind: string; text: string }) => t.text).join('');
+            if (kind === 'answer_draft') {
+              // 批1-A 答案直出：answer_draft token 双写 ——
+              // 正文进 payload.streaming_answer（答案气泡实时成型）；ThinkStream 的 answer 项只留状态不存全文
+              const prevStreaming = messages[i].payload?.streaming_answer || '';
+              const roundChanged = !!lastAnswerRoundRef.current
+                && lastAnswerRoundRef.current !== roundId
+                && !!messages[i].payload?.answer_committed;   // rubric 修订：新一轮答案
+              messages[i].payload = {
+                ...(messages[i].payload || {}),
+                streaming_answer: roundChanged ? combined : prevStreaming + combined,
+                answer_revising: roundChanged ? true : (messages[i].payload?.answer_revising || false),
+              };
+              lastAnswerRoundRef.current = roundId;
+              // ThinkStream 的 answer 项只保留状态步骤（不再累积全文，避免"日志上屏"）
+              let ansIdx = ts.findIndex((t: any) => t.kind === 'answer');
+              if (ansIdx === -1) {
+                ts.push({ task: '答案生成', strategy: 'free_plan', kind: 'answer', phase: 'drafting', round_id: roundId, draft: '' });
+              } else {
+                ts[ansIdx] = { ...ts[ansIdx], phase: 'drafting', draft: '' };
+              }
+              continue;
+            }
+            const field = 'live_reason';
+            const stepKind = 'decision';
             // decision_draft: 每个决策是独立步骤，按 round_id 归并
-            let idx = stepKind === 'answer'
-              ? ts.findIndex((t: any) => t.kind === 'answer')
-              : ts.findIndex((t: any) => t.round_id === roundId);
+            let idx = ts.findIndex((t: any) => t.round_id === roundId);
             if (idx === -1) {
-              ts.push({ task: stepKind === 'answer' ? '答案生成' : '', strategy: 'free_plan',
-                       kind: stepKind, phase: 'drafting', round_id: roundId, [field]: '' });
+              ts.push({ task: '', strategy: 'free_plan', kind: stepKind, phase: 'drafting', round_id: roundId, [field]: '' });
               idx = ts.length - 1;
             }
-            const combined = tokens.map((t: { kind: string; text: string }) => t.text).join('');
             ts[idx] = { ...ts[idx], [field]: (ts[idx][field] || '') + combined };
           }
           messages[i].payload = { ...(messages[i].payload || {}), thinkStream: ts };

@@ -107,8 +107,9 @@ const MessageRow = React.memo<{
           {msg.payload?.finalTokens && msg.payload.finalTokens.length > 0 ? (
             <FinalAnswer answer="" tokens={msg.payload.finalTokens} isStreaming={true} />
           ) : null}
-          {msg.payload?.final_answer && (!msg.payload?.finalTokens || msg.payload.finalTokens.length === 0) ? (
-            <FinalAnswer answer={msg.payload.final_answer} tokens={[]} isStreaming={false} />
+          {/* 批1-A 答案直出：loading 态实时渲染 streaming_answer；final 后 final_answer 校准 */}
+          {(msg.payload?.final_answer || msg.payload?.streaming_answer) && (!msg.payload?.finalTokens || msg.payload.finalTokens.length === 0) ? (
+            <FinalAnswer answer={msg.payload?.final_answer || msg.payload?.streaming_answer || ''} tokens={[]} isStreaming={!msg.payload?.final_answer} />
           ) : null}
           {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0) && !msg.payload?.finalTokens?.length && !msg.payload?.final_answer ? (
             <Skeleton active paragraph={{ rows: 1 }} title={false} />
