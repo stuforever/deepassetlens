@@ -1,4 +1,4 @@
-fastapi
+﻿fastapi
 uvicorn
 sqlalchemy
 pymysql
@@ -10,8 +10,8 @@ python-multipart
 langgraph>=0.2.50
 langgraph-checkpoint-sqlite>=2.0.0
 aiosqlite>=0.20.0
-deepagents>=0.6.0
-langsmith>=0.1.0
+deepagents>=0.7.7
+langsmith>=0.10.9
 langchain-openai>=0.1.0
 langchain-community>=0.1.0
 langchain-huggingface>=0.1.0
@@ -32,8 +32,8 @@ sqlglot>=23.0.0
 langchain-mcp-adapters>=0.3.0
 # LangChain/LangSmith 要求 packaging>=23.2
 packaging>=23.2
-# deepagents 固定当前验证版本
-deepagents==0.6.12
+# deepagents 固定当前验证版本（2026-08-24 批U 升级 0.7.7：anthropic==1.5.4/core==1.5.2/smith==0.10.9 最小跳动组合）
+deepagents==0.7.7
 # 电力领域中文分词（hybrid_retrieval.py 依赖）
 jieba>=0.42.1
 # 数据处理 / 配置解析

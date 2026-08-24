@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-08-24 16:10:34",
+  "total": 4,
+  "repeat": 2,
+  "first_round_accuracy_pct": 100.0,
+  "stable_accuracy_pct": 100.0,
+  "rubric": "on",
+  "reason_distribution": {
+    "ok": 8
+  },
+  "observations": [
+    {
+      "id": "dea96a1cfe21462b9c8e7a63751e27c0",
+      "question": "统计一下当前有多少用电客户",
+      "pass_ratio": 2,
+      "stable": true,
+      "tool_count_min": 2,
+      "tool_count_max": 2,
+      "examples_injected_any": false,
+      "corrections_max": 0
+    },
+    {
+      "id": "ac3a14ddd1d34d7298d39d7663b5ea28",
+      "question": "用电客户总数是多少",
+      "pass_ratio": 2,
+      "stable": true,
+      "tool_count_min": 2,
+      "tool_count_max": 2,
+      "examples_injected_any": false,
+      "corrections_max": 0
+    },
+    {
+      "id": "27209f5698a0452dbc77d076b32136c5",
+      "question": "统计用电客户总数",
+      "pass_ratio": 2,
+      "stable": true,
+      "tool_count_min": 0,
+      "tool_count_max": 0,
+      "examples_injected_any": true,
+      "corrections_max": 0
+    },
+    {
+      "id": "1957715fddfd418e968b1fd2bd6b680f",
+      "question": "列出用电客户清单",
+      "pass_ratio": 2,
+      "stable": true,
+      "tool_count_min": 2,
+      "tool_count_max": 2,
+      "examples_injected_any": false,
+      "corrections_max": 0
+    }
+  ],
+  "unstable": []
+}
