@@ -50,6 +50,10 @@ x_tupu:
     调压设备资产: pg_tupu.public.cms20_adj_volt_dev_asset
     配电变压器: pg_tupu.public.dim_grid_pub_dist_trans_resrc_standbk_e
     能源客户: pg_tupu.public.cms20_cst_cust
+    # 2026-08-24 修复：step2/step2b/step3 模板均引用 ⟦客户功率时序⟧ 但别名未登记，
+    # 模板表集合校验解析不出该表 -> 第2步判定 SQL 被判「超出模板允许范围」拦截
+    # （前端实测「哪些台区过载」暴露；物理表经 batch_entity_source_mode 确认 vw_cust_power_ts）
+    客户功率时序: pg_tupu.public.vw_cust_power_ts
 
   output:
     mode: single_result_table
@@ -129,6 +133,11 @@ x_tupu:
 > - **兜底降级**：若 `execute_doris_sql` 报 `Unknown table`/`Unknown catalog`（表未纳管 catalog），可降级 `execute_sql(sql, entity_code)` 物理直连重试一次。
 > 无需调 search_entities / fetch_join_expr / validate_safe_sql / fetch_l1_l2_tree / fetch_subgraph / validate_attributes--这些是未命中剧本时的定位流程，剧本已覆盖。仅当 SQL 执行报列名错误时，调 search_entities 排查。
 > **列名/表名以元数据为准**：SQL 模板中的列名已与 `kg_entities` 元数据核对一致（三方核对：技能↔元数据↔PG 全部匹配），**直接使用模板即可**。用户改了实体属性后，若 SQL 执行报列名错误，调 `kg_api(action=search_entities, params={"entity_code":"<表名>"})` 确认正确列名后修改重试。
+>
+> **空结果处理铁律（2026-08-24 前端实测「哪些台区过载」暴露后补）**：判定 SQL 执行成功（无 error）但返回 0 行时，**这就是最终答案**——如实作答「查询时段内无重载/过载台区」，并提示用户可指定日期缩小范围（模板含 `【动态】AND pw.date='YYYYMMDD'` 注释位）。**禁止**因结果为空而换工具、换引擎、改写 SQL 结构重试：
+> - 空结果的常见原因是功率时序表在该日期段无 96 点数据，换任何工具重查结果相同；
+> - 模板经 strict 校验绑定，改写结构必被拦截并计违规（2 次违规阻断本轮）；
+> - 引擎锁定后切换引擎同样被拦（契约一致性）。正确动作只有两个：如实报告空结果，或按用户补充的日期过滤重查一次。
 
 ## 核心设计：三步可独立执行
 

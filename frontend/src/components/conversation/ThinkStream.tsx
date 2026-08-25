@@ -454,28 +454,35 @@ const ThinkStream: React.FC<{
   // 点击步骤展开/折叠，展开即看全部详细日志（思考过程/技能执行/SQL/结果）
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastStepRef = useRef<HTMLDivElement>(null);
+  // 用户定调（2026-08-24）：头部可点击折叠/展开全部步骤日志，默认折叠——
+  // 折叠时头部标题仍是实时状态投影（进展可见），展开才显示历史轨迹明细
+  const [collapsed, setCollapsed] = useState(true);
 
-  // 自动滚动到最新内容
+  // 自动滚动到最新内容（折叠时不滚动）
   useEffect(() => {
-    if (scrollRef.current) {
+    if (!collapsed && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [items, liveStatus]);
+  }, [items, liveStatus, collapsed]);
 
   if (!items || items.length === 0 && !liveStatus) return null;
 
   // 批13-O：头部标题 = 实时状态投影（单一状态源）。active 且上游传入动态文案时，
   // 替换静态「正在定位数据」——进展在最上面随框架事件实时变化；无信号时回落原文案。
   const title = active ? (liveStatus || '小探 正在定位数据...') : '小探 已准备好答案';
-  const meta = metaInfo || (active
+  const meta = active
     ? `正在推理 · 已定位 ${items.length} 步`
-    : `推理完成 · 定位 ${items.length} 步`);
+    : `推理完成 · 定位 ${items.length} 步`;
 
   return (
     <div style={{ marginBottom: 8 }}>
-      {/* 头部(只显示标题) */}
-      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        <EyeIcon spinning={active} />
+      {/* 头部(标题+步数摘要)，整行可点击折叠/展开步骤日志 */}
+      <div
+        onClick={() => setCollapsed((c) => !c)}
+        style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, cursor: 'pointer', userSelect: 'none' }}
+        title={collapsed ? '展开执行日志' : '收起执行日志'}
+      >
+        <EyeIcon spinning={active && !collapsed ? true : active} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
             {title}
@@ -483,9 +490,11 @@ const ThinkStream: React.FC<{
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>{meta}</div>
         </div>
+        <span style={{ fontSize: 12, color: 'var(--text-tertiary)', flexShrink: 0 }}>{collapsed ? '▸ 展开' : '▾ 收起'}</span>
       </div>
 
-      {/* 步骤列表(始终可见, 两级: 一级标题+状态 / 二级技术日志) */}
+      {/* 步骤列表(两级: 一级标题+状态 / 二级技术日志)；默认折叠，点头部展开 */}
+      {!collapsed ? (
       <div ref={scrollRef} style={{ padding: '4px 14px 12px 34px' }}>
         <div ref={lastStepRef}>
           {items.map((item, idx) => (
@@ -517,6 +526,7 @@ const ThinkStream: React.FC<{
           {/* 批13-O：liveStatus 已上移至头部标题位（单一状态源，不在步骤列表底部重复显示） */}
         </div>
       </div>
+      ) : null}
 
       <style>{`
         @keyframes ts-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }

@@ -147,13 +147,14 @@ const MessageRow = React.memo<{
           ) : null}
           {/* 思考面板：读占位消息自身的 payload，实时渲染。
               批13-O：liveStatus = 框架事件流实时投影（deriveLiveStatus），
-              上移至 ThinkStream 头部标题位替换静态「正在定位数据」——进展在最上面动态展示 */}
+              上移至 ThinkStream 头部标题位替换静态「正在定位数据」——进展在最上面动态展示；
+              meta 不再传冻结的 live_meta（status SSE 仅首帧发一次，「已执行 0 步」即此残留），
+              用组件内默认「已定位 N 步」随步骤实时递增 */}
           {msg.payload?.thinkStream && msg.payload.thinkStream.length > 0 ? (
             <ThinkStream
               items={msg.payload.thinkStream}
               active={true}
               liveStatus={_live?.text}
-              metaInfo={msg.payload?.live_meta}
             />
           ) : null}
           {/* 批13-O：thinkStream 为空时（编排期首帧）状态行独立显示，保证首个可见反馈不依赖步骤产生 */}
