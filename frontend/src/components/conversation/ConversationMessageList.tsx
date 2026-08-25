@@ -145,23 +145,19 @@ const MessageRow = React.memo<{
               templateEvents={msg.payload.template_events}
             />
           ) : null}
-          {/* 思考面板：读占位消息自身的 payload，实时渲染 */}
+          {/* 思考面板：读占位消息自身的 payload，实时渲染。
+              批13-O：liveStatus = 框架事件流实时投影（deriveLiveStatus），
+              上移至 ThinkStream 头部标题位替换静态「正在定位数据」——进展在最上面动态展示 */}
           {msg.payload?.thinkStream && msg.payload.thinkStream.length > 0 ? (
             <ThinkStream
               items={msg.payload.thinkStream}
               active={true}
-              liveStatus={msg.payload?.live_text}
+              liveStatus={_live?.text}
               metaInfo={msg.payload?.live_meta}
             />
           ) : null}
-          {/*
-            批13-O 输出区状态行 = 框架事件流的实时投影（单一状态源）：
-            编排期「小探正在理解问题…」→ 思考期「小探正在推理·第N轮」(decision_draft)
-            → 工具期「{工具中文名}·{参数摘要}」(on_tool_start) → 完成闪示「完成(x.xs)」(on_tool_end, 2.5s 窗口)
-            → 交付期「答案整理中…」(answer_committed)；done 后状态行随 loading 消失。
-            去重规则：状态行=现在时；步骤卡=过去轨迹+耗时——同一时刻全屏只有一处进行时描述。
-          */}
-          {_live ? (
+          {/* 批13-O：thinkStream 为空时（编排期首帧）状态行独立显示，保证首个可见反馈不依赖步骤产生 */}
+          {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0) && _live ? (
             <Space>
               <Spin size="small" />
               <Text strong>{_live.text}</Text>

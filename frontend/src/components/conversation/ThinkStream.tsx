@@ -464,7 +464,9 @@ const ThinkStream: React.FC<{
 
   if (!items || items.length === 0 && !liveStatus) return null;
 
-  const title = active ? '小探 正在定位数据...' : '小探 已准备好答案';
+  // 批13-O：头部标题 = 实时状态投影（单一状态源）。active 且上游传入动态文案时，
+  // 替换静态「正在定位数据」——进展在最上面随框架事件实时变化；无信号时回落原文案。
+  const title = active ? (liveStatus || '小探 正在定位数据...') : '小探 已准备好答案';
   const meta = metaInfo || (active
     ? `正在推理 · 已定位 ${items.length} 步`
     : `推理完成 · 定位 ${items.length} 步`);
@@ -512,11 +514,7 @@ const ThinkStream: React.FC<{
               </div>
             </details>
           ) : null}
-          {liveStatus ? (
-            <div style={{ paddingBottom: 4, marginTop: 2 }}>
-              <Text style={{ fontSize: 12, color: tokens.colors.primary }}>{liveStatus}</Text>
-            </div>
-          ) : null}
+          {/* 批13-O：liveStatus 已上移至头部标题位（单一状态源，不在步骤列表底部重复显示） */}
         </div>
       </div>
 
