@@ -10,6 +10,53 @@ import type { ChatMessage, ConversationCardAction, ConversationSceneConfig } fro
 const { Text } = Typography;
 
 /**
+ * 批13-O 单一状态源 = 框架事件流的实时投影（后端零新增协议）。
+ * 状态行只显示「现在进行时」；步骤卡（ThinkStream 折叠区）显示「过去」轨迹+耗时摘要——
+ * 二者永不出现相同文案；联动感来自交接瞬间（事件落入步骤卡时状态行立刻切向下一动作）。
+ * 全部信号来自 payload.thinkStream 时间序（task/input_summary/phase/duration_ms/started_at_ms），
+ * 纯前端派生，无新增字段。
+ */
+type LiveStatus = { text: string; flashMs: number };
+
+const _shortParams = (s?: string): string => {
+  if (!s) return '';
+  const t = s.replace(/^输入参数：/, '').replace(/[{}'"]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.length > 36 ? t.slice(0, 36) + '…' : t;
+};
+
+const deriveLiveStatus = (p: any): LiveStatus => {
+  const ts: any[] = p?.thinkStream || [];
+  // 交付期：final/answer_committed 已到（覆盖 rubric 尾巴与收尾期）
+  if (p.final_answer || p.answer_finalizing)
+    return { text: '答案整理中，正以结构化方式输出，请稍候…', flashMs: 0 };
+  // 答案生成期（v2 用户定调文案保留）
+  if (p.answer_generating) return { text: '答案生成中…', flashMs: 0 };
+  // 推理轮次可靠信号：ReAct 循环「思考→工具→思考→…」，第 N 轮推理前恰有 N-1 个工具步骤
+  // （decision_draft 的 round_id 归并不稳定，不作计数依据）
+  const toolCount = ts.filter((t) => t.kind === 'skill' || t.kind === 'plan').length;
+  const roundNo = toolCount + 1;
+  // 工具期：running 步骤 → {工具中文名}·{参数摘要}
+  const running = ts.find((t) => t.phase === 'running');
+  if (running)
+    return { text: `${running.task || running.tool_name || '执行工具'}·${_shortParams(running.input_summary)}`, flashMs: 0 };
+  // 完成闪示：最近终态步骤在 2.5s 内 → 完成(x.xs)；done_at = started_at_ms + duration_ms
+  for (let i = ts.length - 1; i >= 0; i--) {
+    const t = ts[i];
+    if ((t.phase === 'done' || t.phase === 'error') && t.started_at_ms && t.duration_ms != null) {
+      const remain = t.started_at_ms + t.duration_ms + 2500 - Date.now();
+      if (remain > 0)
+        return { text: `${t.task}${t.phase === 'error' ? '执行失败' : '完成'}(${(t.duration_ms / 1000).toFixed(1)}s)`, flashMs: remain };
+      break; // 最近终态已过闪示窗口
+    }
+    if (t.kind === 'decision') break; // 最近活动是推理轮，跳过完成闪示
+  }
+  // 思考期 / 工具间间隙：已有任一步骤历史 -> 下一动作必是新一轮推理（联动感：交接瞬间即切向）
+  if (ts.length > 0) return { text: `小探正在推理 · 第${roundNo}轮`, flashMs: 0 };
+  // 编排期初始 / 无信号兜底占位（「小探正在运行中」降级为兜底语义）
+  return { text: '小探正在理解问题…', flashMs: 0 };
+};
+
+/**
  * 单条消息行：React.memo 隔离非末条消息的流式重渲染。
  * 关键前提（由父级保证）：
  *   - live 系列 props 只传给末条（isLast），其余行拿 stable undefined；
@@ -24,7 +71,16 @@ const MessageRow = React.memo<{
   onSelectRecommendation?: (rec: any) => void;
   onDeleteMessage?: (msgId: string) => void;
   onHITLDecision?: (interruptId: string, approve: boolean) => void;
-}>(({ msg, isLast, canDelete, liveMetaInfo, liveFinalAnswer, onSelectRecommendation, onDeleteMessage, onHITLDecision }) => (
+}>(({ msg, isLast, canDelete, liveMetaInfo, liveFinalAnswer, onSelectRecommendation, onDeleteMessage, onHITLDecision }) => {
+  // 批13-O：完成闪示窗口退出需要一次重渲（无新事件到来时「完成(x.xs)」短暂显示后切回兜底）
+  const [, _tick] = React.useReducer((x: number) => x + 1, 0);
+  const _live = msg.loading ? deriveLiveStatus(msg.payload) : null;
+  React.useEffect(() => {
+    if (!_live?.flashMs) return;
+    const timer = setTimeout(_tick, _live.flashMs + 120);
+    return () => clearTimeout(timer);
+  }, [_live?.text, _live?.flashMs]);
+  return (
   <div className="msg-row" style={{ position: 'relative', display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', width: '100%' }}>
     {canDelete ? (
       <Popconfirm title="删除该条消息？" okText="删除" cancelText="取消" onConfirm={() => onDeleteMessage!(msg.id)}>
@@ -99,28 +155,18 @@ const MessageRow = React.memo<{
             />
           ) : null}
           {/*
-            交付体验演进 v2 输出区状态机（用户定调版）：全程只有两种形态——状态行 或 完整交付卡。
-            四态推导：正在理解问题 → 检索数据中(有工具步骤) → 答案生成中(answer_generating)
-            → 答案整理中(final_answer 已到/answer_finalizing，覆盖 rubric 尾巴与收尾期)。
-            answer_draft token 已全部丢弃（批1-A 双写回退），正文唯一来源 = done 时结构化渲染；
-            步骤明细照旧进 ThinkStream 折叠区；不变式：不存在第三种形态（无裸文本期）。
+            批13-O 输出区状态行 = 框架事件流的实时投影（单一状态源）：
+            编排期「小探正在理解问题…」→ 思考期「小探正在推理·第N轮」(decision_draft)
+            → 工具期「{工具中文名}·{参数摘要}」(on_tool_start) → 完成闪示「完成(x.xs)」(on_tool_end, 2.5s 窗口)
+            → 交付期「答案整理中…」(answer_committed)；done 后状态行随 loading 消失。
+            去重规则：状态行=现在时；步骤卡=过去轨迹+耗时——同一时刻全屏只有一处进行时描述。
           */}
-          {(() => {
-            const p = msg.payload || {};
-            const statusText = (p.final_answer || p.answer_finalizing)
-              ? '答案整理中，正以结构化方式输出，请稍候…'
-              : p.answer_generating
-                ? '答案生成中…'
-                : (p.thinkStream && p.thinkStream.length > 0)
-                  ? '检索数据中…'
-                  : '正在理解问题…';
-            return (
-              <Space>
-                <Spin size="small" />
-                <Text strong>{statusText}</Text>
-              </Space>
-            );
-          })()}
+          {_live ? (
+            <Space>
+              <Spin size="small" />
+              <Text strong>{_live.text}</Text>
+            </Space>
+          ) : null}
           {/* 可选 TUPU_EARLY_TABLE 开关（默认关）：表格属结构化元素可提前入卡，正文仍等 done */}
           {(typeof window !== 'undefined' && window.localStorage.getItem('TUPU_EARLY_TABLE') === '1'
             && (msg.payload?.sql_result?.row_count ?? 0) > 0 && !!msg.payload?.sql_result?.columns?.length) ? (
@@ -138,7 +184,8 @@ const MessageRow = React.memo<{
       )}
     </Card>
   </div>
-));
+  );
+});
 MessageRow.displayName = 'MessageRow';
 
 const ConversationMessageList: React.FC<{
