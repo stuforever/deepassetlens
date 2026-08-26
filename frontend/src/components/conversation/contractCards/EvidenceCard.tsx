@@ -54,7 +54,14 @@ const EvidenceCard: React.FC<Props> = ({ evidence, confidence }) => {
   const verification = ev.verification || null;
   const rubric = ev.rubric || null;
   const corrections = Number(ev.corrections || 0);
-  const routeLabel = ev.route || '—';
+  // 修复 React#31 崩溃：直通管道 evidence.route 是对象 {skill, route_type}（后端批9 构造），
+  // 不能直接当 React child —— 统一格式化为文本
+  const _rr = ev.route as string | { skill?: string; route_type?: string } | undefined | null;
+  const routeLabel = typeof _rr === 'string'
+    ? _rr
+    : (_rr && typeof _rr === 'object'
+        ? [(_rr as any).skill, (_rr as any).route_type].filter(Boolean).join(' · ') || '—'
+        : '—');
   const warnings: string[] = (verification?.warnings || []).map(String);
   const missingData = !!ev.missing_data_support;
 

@@ -9,7 +9,7 @@
  * 同时保留 policy/template 事件徽标与列表（评审 P2：策略拒绝、模板绑定/漂移不丢失）。
  */
 import React, { useState } from 'react';
-import { Badge, Space, Tooltip, Typography } from 'antd';
+import { Badge, Popover, Space, Tooltip, Typography } from 'antd';
 import {
   ApiOutlined, AuditOutlined, DownOutlined, EnvironmentOutlined, ExperimentOutlined,
   PartitionOutlined, RightOutlined, SafetyCertificateOutlined, StopOutlined,
@@ -166,35 +166,23 @@ export function buildCapsules(
 }
 
 const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, templateEvents, evidence, confidence }) => {
-  const [collapsed, setCollapsed] = useState(true);
   const [activeCard, setActiveCard] = useState<string | null>(null);
+  // 用户定调（2026-08-25）：问答流内不再展示大长条胶囊条，改为**侧边单徽标**，
+  // 点击弹 Popover 查看六卡详情与运行事件（审计能力收进弹层）
+  const [open, setOpen] = useState(false);
 
   if (!contract && !route) {
     return null;
   }
 
   const capsules = buildCapsules(route, contract, evidence, confidence);
+  const routeCap = capsules[0];
+  const evCap = capsules.find((c) => c.key === 'evidence');
+  const statusDot = evCap?.dot || routeCap?.dot || DOT.mute;
+  const mainSummary = routeCap?.summary || '通用只读';
   const policyCount = (policyEvents || []).length;
   const templateCount = (templateEvents || []).length;
   const hasEvents = policyCount > 0 || templateCount > 0;
-  const expanded = !collapsed;
-  const showAll = expanded && !activeCard;
-
-  const handleCapsuleClick = (key: string) => {
-    if (activeCard === key) {
-      // 再点同一胶囊：收起回胶囊条
-      setActiveCard(null);
-      setCollapsed(true);
-    } else {
-      // 点击胶囊：展开对应卡（或切换）
-      setActiveCard(key);
-      setCollapsed(false);
-    }
-  };
-  const handleToggleAll = () => {
-    setActiveCard(null);
-    setCollapsed((c) => !c);
-  };
 
   const cardByKey = (key: string): React.ReactNode => {
     switch (key) {
@@ -228,157 +216,126 @@ const ContractCardsPanel: React.FC<Props> = ({ route, contract, policyEvents, te
     }
   };
 
-  return (
-    <div style={{ marginTop: 8 }}>
-      {/* 过程胶囊条（B2 美化：一行 5 枚彩色胶囊，点击展开对应卡） */}
-      <div
-        role="group"
-        aria-label="受控执行过程"
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-          border: `1px solid ${tokens.colors.border}`, borderRadius: tokens.radius.card,
-          padding: '5px 8px', background: 'var(--color-bg-container)',
-          userSelect: 'none',
-        }}
-      >
-        <SafetyCertificateOutlined style={{ color: tokens.colors.primary, fontSize: 13 }} />
+  const detail = (
+    <div style={{ width: 520, maxHeight: 460, overflowY: 'auto', paddingRight: 4 }}>
+      {/* 六枚胶囊概览行 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {capsules.map((cap) => (
           <div
             key={cap.key}
-            role="button"
-            tabIndex={0}
-            aria-expanded={activeCard === cap.key || showAll}
-            onClick={() => handleCapsuleClick(cap.key)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCapsuleClick(cap.key); } }}
+            onClick={() => setActiveCard(activeCard === cap.key ? null : cap.key)}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               padding: '2px 9px', borderRadius: tokens.radius.pill,
               background: cap.softBg, cursor: 'pointer',
-              boxShadow: activeCard === cap.key ? tokens.elevation.s2 : 'none',
-              transition: `box-shadow ${tokens.motion.duration.fast}ms ${tokens.motion.easing.enter}`,
             }}
-            title={`${cap.label}：${cap.summary}（点击展开）`}
+            title={`${cap.label}：${cap.summary}（点击看详情）`}
           >
             <span style={{ color: cap.color, display: 'inline-flex', alignItems: 'center' }}>{cap.icon}</span>
             <Text style={{ fontSize: 12, color: tokens.colors.textSecondary }}>{cap.label}</Text>
             <Text strong style={{ fontSize: 12, color: tokens.colors.textPrimary }}>{cap.summary}</Text>
-            <span className={cap.running ? 'dal-capsule-pulse' : undefined} style={{ width: 6, height: 6, borderRadius: 3, background: cap.dot, flexShrink: 0 }} />
           </div>
         ))}
-        {hasEvents ? (
-          <Space size={4}>
-            {policyCount > 0 ? (
-              <Tooltip title={`${policyCount} 次策略事件（含拒绝/引导）`}>
-                <Badge count={policyCount} color="red" showZero={false} style={{ boxShadow: 'none' }}>
-                  <StopOutlined style={{ fontSize: 13, color: tokens.colors.error }} />
-                </Badge>
-              </Tooltip>
-            ) : null}
-            {templateCount > 0 ? (
-              <Tooltip title={`${templateCount} 次模板事件（绑定/漂移）`}>
-                <Badge count={templateCount} color="blue" showZero={false} style={{ boxShadow: 'none' }}>
-                  <ApiOutlined style={{ fontSize: 13, color: tokens.colors.primary }} />
-                </Badge>
-              </Tooltip>
-            ) : null}
-          </Space>
-        ) : null}
-        <span style={{ flex: 1 }} />
-        {expanded ? (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={handleToggleAll}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleToggleAll(); } }}
-            style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: tokens.colors.textSecondary }}
-          >
-            {activeCard ? <RightOutlined style={{ fontSize: 11 }} /> : <DownOutlined style={{ fontSize: 11 }} />}
-          </span>
-        ) : (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={handleToggleAll}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleToggleAll(); } }}
-            style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: tokens.colors.textSecondary }}
-          >
-            <DownOutlined style={{ fontSize: 11 }} />
-          </span>
-        )}
       </div>
-
-      {/* 展开明细：单卡（activeCard）或全部六卡 + 事件 */}
-      {expanded ? (
-        <div style={{ marginTop: 8 }}>
-          {activeCard ? (
-            <>
-              {cardByKey(activeCard)}
-              <div style={{ marginTop: 4, textAlign: 'right' }}>
-                <Text
-                  type="secondary"
-                  style={{ fontSize: 12, cursor: 'pointer' }}
-                  onClick={() => setActiveCard(null)}
-                >
-                  展开全部六卡 ▾
-                </Text>
-              </div>
-            </>
-          ) : (
-            <>
-              {contract ? (
-                <>
-                  {route ? <RouteCard route={route} /> : null}
-                  <ScopeCard scope={contract.scope} />
-                  <DataAccessCard
-                    allowedTools={contract.allowed_tools}
-                    forbiddenTools={contract.forbidden_tools}
-                    templateIds={contract.template_ids}
-                  />
-                  <ExecutionDecisionCard
-                    selectedEngine={contract.selected_engine}
-                    engineReason={contract.engine_reason}
-                    outputMode={contract.output_mode}
-                    multiEngine={contract.multi_engine}
-                    forbidMarkdownDetailTable={contract.forbid_markdown_detail_table}
-                    confirmedEngines={contract.confirmed_engines}
-                    entityEngineMap={contract.entity_engine_map}
-                    stopReached={contract.stop_reached}
-                    requiredEntities={contract.required_entities}
-                    confirmedEntities={contract.confirmed_entities}
-                    completedEntities={contract.completed_entities}
-                  />
-                  <StopReasonCard stopWhen={contract.stop_when} />
-                  <EvidenceCard evidence={evidence} confidence={confidence} />
-                </>
-              ) : (
-                <>
-                  {route ? <RouteCard route={route} /> : null}
-                  <Text type="secondary" style={{ fontSize: 12 }}>本次请求未建立受控契约（无场景命中且后端未返回契约）。</Text>
-                </>
-              )}
-            </>
-          )}
-          {hasEvents ? (
-            <div style={{ marginTop: 8, border: '1px dashed var(--border-color)', borderRadius: tokens.radius.card, padding: '8px 12px' }}>
-              <Text strong style={{ fontSize: 12 }}>运行事件（{policyCount + templateCount}）</Text>
-              {(policyEvents || []).map((p, i) => (
-                <div key={`p-${p.run_id || ''}-${p.tool_call_id || ''}-${i}`} style={{ fontSize: 12, marginTop: 4 }}>
-                  <Text type="danger">策略·{p.kind || '事件'}</Text>
-                  <Text type="secondary"> {p.detail || p.reason || ''}</Text>
-                </div>
-              ))}
-              {(templateEvents || []).map((t, i) => (
-                <div key={`t-${t.run_id || ''}-${t.tool_call_id || ''}-${i}`} style={{ fontSize: 12, marginTop: 4 }}>
-                  <Text type={t.kind === 'template.drift' ? 'warning' : 'success'}>
-                    {t.kind === 'template.drift' ? '模板·漂移' : '模板·绑定'}
-                  </Text>
-                  <Text type="secondary"> {t.detail || ''}</Text>
-                </div>
-              ))}
+      {/* 明细：单卡或全部六卡 */}
+      {activeCard ? (
+        <>
+          {cardByKey(activeCard)}
+          <div style={{ marginTop: 4, textAlign: 'right' }}>
+            <Text type="secondary" style={{ fontSize: 12, cursor: 'pointer' }} onClick={() => setActiveCard(null)}>
+              展开全部六卡 ▾
+            </Text>
+          </div>
+        </>
+      ) : contract ? (
+        <>
+          {route ? <RouteCard route={route} /> : null}
+          <ScopeCard scope={contract.scope} />
+          <DataAccessCard
+            allowedTools={contract.allowed_tools}
+            forbiddenTools={contract.forbidden_tools}
+            templateIds={contract.template_ids}
+          />
+          <ExecutionDecisionCard
+            selectedEngine={contract.selected_engine}
+            engineReason={contract.engine_reason}
+            outputMode={contract.output_mode}
+            multiEngine={contract.multi_engine}
+            forbidMarkdownDetailTable={contract.forbid_markdown_detail_table}
+            confirmedEngines={contract.confirmed_engines}
+            entityEngineMap={contract.entity_engine_map}
+            stopReached={contract.stop_reached}
+            requiredEntities={contract.required_entities}
+            confirmedEntities={contract.confirmed_entities}
+            completedEntities={contract.completed_entities}
+          />
+          <StopReasonCard stopWhen={contract.stop_when} />
+          <EvidenceCard evidence={evidence} confidence={confidence} />
+        </>
+      ) : (
+        <>
+          {route ? <RouteCard route={route} /> : null}
+          <Text type="secondary" style={{ fontSize: 12 }}>本次请求未建立受控契约。</Text>
+        </>
+      )}
+      {hasEvents ? (
+        <div style={{ marginTop: 8, border: '1px dashed var(--border-color)', borderRadius: tokens.radius.card, padding: '8px 12px' }}>
+          <Text strong style={{ fontSize: 12 }}>运行事件（{policyCount + templateCount}）</Text>
+          {(policyEvents || []).map((p, i) => (
+            <div key={`p-${p.run_id || ''}-${p.tool_call_id || ''}-${i}`} style={{ fontSize: 12, marginTop: 4 }}>
+              <Text type="danger">策略·{p.kind || '事件'}</Text>
+              <Text type="secondary"> {p.detail || p.reason || ''}</Text>
             </div>
-          ) : null}
+          ))}
+          {(templateEvents || []).map((t, i) => (
+            <div key={`t-${t.run_id || ''}-${t.tool_call_id || ''}-${i}`} style={{ fontSize: 12, marginTop: 4 }}>
+              <Text type={t.kind === 'template.drift' ? 'warning' : 'success'}>
+                {t.kind === 'template.drift' ? '模板·漂移' : '模板·绑定'}
+              </Text>
+              <Text type="secondary"> {t.detail || ''}</Text>
+            </div>
+          ))}
         </div>
       ) : null}
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop: 6, display: 'flex', justifyContent: 'flex-end' }}>
+      {/* 侧边单徽标（用户定调：不要大长条）——点击弹出六卡详情 Popover */}
+      <Popover
+        content={detail}
+        trigger="click"
+        open={open}
+        onOpenChange={setOpen}
+        placement="topRight"
+        arrow={false}
+        overlayInnerStyle={{ padding: '10px 12px' }}
+      >
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v); } }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '2px 10px', borderRadius: tokens.radius.pill,
+            background: 'var(--color-bg-container)', border: `1px solid ${tokens.colors.border}`,
+            cursor: 'pointer', userSelect: 'none',
+            fontSize: 12, color: tokens.colors.textSecondary,
+          }}
+          title={`受控执行详情：${mainSummary}（点击查看审计明细）`}
+        >
+          <SafetyCertificateOutlined style={{ color: tokens.colors.primary, fontSize: 13 }} />
+          <Text strong style={{ fontSize: 12, color: tokens.colors.textPrimary }}>{mainSummary}</Text>
+          {evCap?.summary && evCap.summary !== '—' ? (
+            <Text style={{ fontSize: 11, color: tokens.colors.textTertiary }}>{evCap.summary}</Text>
+          ) : null}
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: statusDot, flexShrink: 0 }} />
+          {hasEvents ? <Badge count={policyCount + templateCount} color="red" showZero={false} style={{ boxShadow: 'none' }} /> : null}
+          <DownOutlined style={{ fontSize: 10, color: tokens.colors.textTertiary }} />
+        </div>
+      </Popover>
     </div>
   );
 };

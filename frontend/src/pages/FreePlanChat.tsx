@@ -6,10 +6,10 @@
  * 侧边栏「数据资产探查」= 新建会话
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Input, Popconfirm, Select, Space, Typography, message } from 'antd';
+import { Button, Drawer, Input, Popconfirm, Select, Space, Typography, message } from 'antd';
 import {
   ApiOutlined, ApartmentOutlined, ArrowDownOutlined, BookOutlined, ClearOutlined,
-  DatabaseOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
+  DatabaseOutlined, ExperimentOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import ConversationMessageList from '../components/conversation/ConversationMessageList';
 import { DATA_INTELLIGENCE_SCENE_CONFIG } from '../components/conversation/sceneConfigs';
@@ -59,6 +59,8 @@ const FreePlanChat: React.FC = () => {
 
   // 本地状态（仅对话相关）
   const [question, setQuestion] = useState('');
+  // 批13-P：受控路由模拟器 Drawer 开关（审计入口，不常驻前台）
+  const [simOpen, setSimOpen] = useState(false);
   const [status, setStatus] = useState<ChatStatus>('ready');
   const [llmConnectionId, setLlmConnectionId] = useState<string | undefined>(undefined);
   const [llmConnections, setLlmConnections] = useState<any[]>([]);
@@ -970,6 +972,15 @@ const FreePlanChat: React.FC = () => {
             popupMatchSelectWidth={180}
           />
           <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Shift+Enter 换行</span>
+          <Button
+            size="small"
+            type="text"
+            icon={<ExperimentOutlined />}
+            style={{ fontSize: 12, color: 'var(--text-tertiary)' }}
+            onClick={() => setSimOpen(true)}
+          >
+            审计模拟
+          </Button>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isBusy ? (
@@ -1001,10 +1012,17 @@ const FreePlanChat: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-page)' }}>
-      {/* 受控 Skill 问答平台 v2：路由模拟器（预览确定性路由 + 五张业务卡） */}
-      <div style={{ maxWidth: CONTENT_WIDTH, width: '100%', margin: '0 auto', padding: '12px 24px 0' }}>
+      {/* 批13-P：受控路由模拟器收进「审计模拟」按钮（Drawer），不再常驻问答页顶部 */}
+      <Drawer
+        title={<Space><ExperimentOutlined /> 受控路由模拟器（审计）</Space>}
+        placement="right"
+        width={560}
+        open={simOpen}
+        onClose={() => setSimOpen(false)}
+        destroyOnClose
+      >
         <RouteSimulator />
-      </div>
+      </Drawer>
       {hasMessages ? (
         /* 有消息：消息列表 + 底部输入框 */
         <>
