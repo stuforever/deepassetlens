@@ -108,6 +108,19 @@ const LiveTimer: React.FC<{ startedAtMs?: number }> = ({ startedAtMs }) => {
   );
 };
 
+/* result_status 中文映射（批13-Q：原值 locked/rejected 对用户不可读） */
+const _STATUS_CN: Record<string, string> = {
+  done: '已完成',
+  running: '执行中',
+  error: '执行异常',
+  rejected: '已拦截',
+  locked: '已锁定交付',
+};
+
+/* JSX 缩进清洗（批13-Q：pre-wrap 会把模板缩进空格原样渲染成大段空白） */
+const _tidy = (s?: string | null): string =>
+  typeof s === 'string' ? s.replace(/[ \t]+/g, ' ').trim() : '';
+
 /* 步骤项：一级(标题+状态) / 二级(技术日志)，点击一级展开二级。 */
 const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isActive: boolean }> = ({ item, index, isLast, isActive }) => {
   const [expanded, setExpanded] = useState(false);
@@ -230,9 +243,7 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
           {item.reason ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai)' }}><BulbOutlined /> 思考过程：</Text>
-              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
-                {item.reason}
-              </Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>{_tidy(item.reason)}</Text>
             </div>
           ) : null}
 
@@ -240,13 +251,9 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
           {item.detail ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: 600, color: tokens.colors.primary }}><ToolOutlined /> 技能执行：</Text>
-              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
-                {item.detail}
-              </Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>{_tidy(item.detail)}</Text>
               {item.input_summary ? (
-                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4, fontFamily: 'Consolas, Monaco, monospace' }}>
-                  {item.input_summary}
-                </Text>
+                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4, fontFamily: 'Consolas, Monaco, monospace' }}>{_tidy(item.input_summary)}</Text>
               ) : null}
             </div>
           ) : null}
@@ -298,9 +305,7 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
           {item.result_summary ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: 600, color: isRejected ? 'var(--color-warning, #faad14)' : 'var(--color-success)' }}>{isRejected ? '判定结果：' : '获取结果：'}</Text>
-              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
-                {item.result_summary}
-              </Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>{_tidy(item.result_summary)}</Text>
             </div>
           ) : null}
 
@@ -308,9 +313,7 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
           {isRejected && item.reject_reason ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'rgba(250, 173, 20, 0.08)', borderRadius: 6, border: '1px solid rgba(250, 173, 20, 0.2)' }}>
               <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-warning, #faad14)' }}>拒绝原因：</Text>
-              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
-                {item.reject_reason}
-              </Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>{_tidy(item.reject_reason)}</Text>
             </div>
           ) : null}
 
@@ -318,9 +321,7 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
           {isRejected && item.candidate_content ? (
             <div style={{ marginBottom: 6, padding: '8px 10px', background: 'rgba(114, 46, 209, 0.06)', borderRadius: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ai, #722ed1)' }}>候选内容（被拒）：</Text>
-              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>
-                {item.candidate_content}
-              </Text>
+              <Text style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', marginTop: 4, color: 'var(--text-primary)' }}>{_tidy(item.candidate_content)}</Text>
             </div>
           ) : null}
 
@@ -339,10 +340,16 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
             </details>
           ) : null}
 
-          {item.result_status ? (
+          {item.result_status && item.result_status !== 'done' ? (
             <div style={{ marginBottom: 4 }}>
-              <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>结果: </Text>
-              <StatusTag preset={item.result_status === 'locked' ? 'success' : 'warning'} style={{ fontSize: 11 }}>{item.result_status}</StatusTag>
+              <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>状态: </Text>
+              {/* 批13-Q：result_status 原值（locked/rejected/error）直出对用户不可读，映射中文 */}
+              <StatusTag
+                preset={item.result_status === 'locked' ? 'success' : (item.result_status === 'error' || item.result_status === 'rejected') ? 'error' : 'warning'}
+                style={{ fontSize: 11 }}
+              >
+                {_STATUS_CN[item.result_status] || item.result_status}
+              </StatusTag>
               {typeof item.candidates_count === 'number' ? <Text type="secondary" style={{ fontSize: 11 }}> ({item.candidates_count} 候选)</Text> : null}
             </div>
           ) : null}

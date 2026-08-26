@@ -11,7 +11,7 @@ WITH 计量点台区 AS (
     -- 【动态】用户只看某类负荷: AND i.inst_usage_cls = '1102'
 ),
 台区容量 AS (
-  SELECT v.dist_sta_id AS 台区编号, SUM(t.capacity) AS 台区总容量
+  SELECT v.dist_sta_id AS 台区编号, SUM(CAST(t.capacity AS DOUBLE)) AS 台区总容量
   FROM ⟦调压设备⟧ v JOIN ⟦调压设备资产⟧ va ON v.adj_volt_dev_asset_id=va.adj_volt_dev_asset_id
   JOIN ⟦配电变压器⟧ t ON va.pms_equip_id=t.psrid WHERE t.runstate='20' GROUP BY v.dist_sta_id
 ),

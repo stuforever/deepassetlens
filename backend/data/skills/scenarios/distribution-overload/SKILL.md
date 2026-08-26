@@ -50,9 +50,9 @@ x_tupu:
     调压设备资产: pg_tupu.public.cms20_adj_volt_dev_asset
     配电变压器: pg_tupu.public.dim_grid_pub_dist_trans_resrc_standbk_e
     能源客户: pg_tupu.public.cms20_cst_cust
-    # 2026-08-24 修复：step2/step2b/step3 模板均引用 ⟦客户功率时序⟧ 但别名未登记，
-    # 模板表集合校验解析不出该表 -> 第2步判定 SQL 被判「超出模板允许范围」拦截
-    # （前端实测「哪些台区过载」暴露；物理表经 batch_entity_source_mode 确认 vw_cust_power_ts）
+    # 2026-08-25 一致性修复：「客户功率时序」= PG 视图 vw_cust_power_ts（96点宽表 UNPIVOT 窄表，
+    # inst_id 由测量点 MET 前缀回填为 INS 与计量点对齐）。此前该实体元数据登记缺失且 PG 视图被删，
+    # Doris 联邦查无此表致 Unknown table 拦截。注意：PG 侧 DDL 变更后需 REFRESH CATALOG pg_tupu。
     客户功率时序: pg_tupu.public.vw_cust_power_ts
 
   output:

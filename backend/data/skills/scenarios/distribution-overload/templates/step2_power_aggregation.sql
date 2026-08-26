@@ -17,7 +17,7 @@ WITH 计量点台区 AS (
 台区容量 AS (
   -- 配变->台区, SUM容量(多路台区容量汇总), 配变列表
   SELECT v.dist_sta_id AS 台区编号,
-    SUM(t.capacity) AS 台区总容量,
+    SUM(CAST(t.capacity AS DOUBLE)) AS 台区总容量,
     GROUP_CONCAT(t.psrid, ', ') AS 配变列表,
     GROUP_CONCAT(t.equipname, ', ') AS 配变名称列表
   FROM ⟦调压设备⟧ v

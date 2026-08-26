@@ -26,7 +26,7 @@ WITH 户变关系 AS (
   -- 【动态】用户限定客户: AND c.cust_name IN ('客户001','客户003')
 ),
 台区容量 AS (
-  SELECT v.dist_sta_id AS 台区编号, SUM(t.capacity) AS 台区总容量,
+  SELECT v.dist_sta_id AS 台区编号, SUM(CAST(t.capacity AS DOUBLE)) AS 台区总容量,
     GROUP_CONCAT(t.psrid, ', ') AS 配变列表
   FROM ⟦调压设备⟧ v
   JOIN ⟦调压设备资产⟧ va ON v.adj_volt_dev_asset_id = va.adj_volt_dev_asset_id
