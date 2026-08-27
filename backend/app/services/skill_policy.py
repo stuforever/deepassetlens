@@ -215,7 +215,6 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         extensible/generic 允许同表结构变化但记漂移审计；未渲染参数任何模式都拒绝。
         request：评审 P1-2（二轮/三轮）传入，await 派发 template.bound / template.drift 到 SSE。
         """
-        errors = []
         templates = self._resolve_step_templates(contract)
         if not templates:
             # 契约未声明模板 -> 不阻断（generic 模式），但记录
@@ -223,18 +222,30 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             return TemplateCheck(ok=True, reason="契约未声明 SQL 模板，跳过模板校验（generic 模式）")
         # 技能级模板校验模式（SKILL.md x_tupu.template_mode；缺省 extensible）
         mode = "scenario_extensible"
+        skill = None
         try:
             skill = self._catalog.load_skill(contract.skill_id)
             if skill is not None and getattr(skill, "template_mode", ""):
                 mode = skill.template_mode
         except Exception:
             pass
+        # P4（批13-U）：拒绝理由透明化——注明「校验基准=当前契约步骤(标题)」，
+        # 模型一次定位替代多次盲试（《解剖》故障链第⑥步：模型在最终答案里才推理出契约钉的是 step1）
+        _base_note = f"校验基准=步骤『{contract.workflow_step}』"
+        try:
+            if skill is not None:
+                _step = skill.find_step(contract.workflow_step)
+                if _step is not None and getattr(_step, "title", None):
+                    _base_note = f"校验基准=步骤『{_step.title}』({contract.workflow_step})"
+        except Exception:
+            pass
+        errors = []
         for tpl_id, tpl_sql in templates:
             chk = validate_against_template(sql, tpl_sql, tpl_id, mode=mode)
             if chk.ok:
                 await self._record_template_bind(contract, tpl_id, chk, request=request)
                 return chk
-            errors.append(f"{tpl_id}: {chk.reason}")
+            errors.append(f"{_base_note}，{tpl_id}: {chk.reason}")
         from app.services.template_guard import TemplateCheck
         return TemplateCheck(ok=False, reason="；".join(errors[:3]) or "无可用模板")
 
