@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Boolean, JSON, DateTime, Text, Float
+from sqlalchemy import Column, String, Integer, ForeignKey, Boolean, JSON, DateTime, Text, Float, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 import uuid
@@ -950,3 +950,45 @@ class KgGoldenQaSet(Base):
     scenario_tag = Column(String(100), nullable=True)          # 场景标签（distribution-overload 等）
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class GuardPolicy(Base):
+    """安全控制中心：守卫策略（《安全控制中心实施设计》2.1）
+
+    guard_id 六条基线（五类对外 + 审批轨）：
+      capability / sql_safety / template / engine_lock / output / approval_track
+    开关（enabled）热生效：version+1 -> TTL 5s 缓存过期 -> run_guards 下轮读到新配置。
+    close_reason 红级关闭必填；risk_level 决定前端确认强度（red/yellow/green）。
+    """
+
+    __tablename__ = "guard_policies"
+    guard_id = Column(String(64), primary_key=True)
+    title = Column(String(64), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    mode = Column(String(16), nullable=False, default="block")      # block|warn|log
+    params = Column(JSON, nullable=True)                            # {"limit_max":500, ...}
+    risk_level = Column(String(8), nullable=False, default="yellow")  # red|yellow|green
+    description = Column(JSON, nullable=True)                       # {what,lose,remain} 三段式
+    confirm_required = Column(Boolean, nullable=False, default=True)
+    updated_by = Column(String(64), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+    close_reason = Column(String(500), nullable=True)               # 红级关闭必填
+    version = Column(Integer, nullable=False, default=1)
+
+
+class GuardEvent(Base):
+    """安全控制中心：拦截/试探/变更全量事件（《安全控制中心实施设计》2.1）
+
+    action: block|warn|pass|probe|toggle|reset；verdict: blocked|passed|probe_ok|probe_fail。
+    只留 30 天（启动时清理，防止表膨胀）。
+    """
+
+    __tablename__ = "guard_events"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    guard_id = Column(String(64), nullable=False, index=True)
+    ts = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    action = Column(String(16), nullable=False)                    # block|warn|pass|probe|toggle|reset
+    question_digest = Column(String(200), nullable=True)           # 脱敏摘要
+    verdict = Column(String(16), nullable=True)                    # blocked|passed|probe_ok|probe_fail
+    detail = Column(JSON, nullable=True)
+    updated_by = Column(String(64), nullable=True)

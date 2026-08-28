@@ -153,8 +153,12 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     # 前置校验
     # ------------------------------------------------------------------
     async def _precheck(self, contract: QueryContract, tool_name: str, request) -> Optional[str]:
+        # 安全控制中心接线：能力控制（capability）关闭时跳过工具白名单/禁用检查（管理员显式操作）
+        from app.services import guard_config as _gc
+        _cap_on = _gc.guard_enabled("capability")
+        _eng_on = _gc.guard_enabled("engine_lock")
         # 2) 禁用工具（绝对禁止 + 契约禁止）
-        if tool_name in contract.forbidden_tools:
+        if _cap_on and tool_name in contract.forbidden_tools:
             return f"调用禁用工具 {tool_name}（契约禁止: {sorted(contract.forbidden_tools)}）"
         # 2a) P1-2 多引擎复合终止：两源取齐后禁止继续检索任何数据工具（先于 allowed 检查，
         #     因为 set_stop_reached 已把全部 DATA_TOOLS 移出 allowed_tools）
@@ -167,12 +171,12 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                 and not contract._runtime.get("degradation_consumed")):
             contract._runtime["degradation_consumed"] = True
             return None
-        # 1) 不在允许集
-        if not contract.allows(tool_name):
+        # 1) 不在允许集（capability 关闭时放行）
+        if _cap_on and not contract.allows(tool_name):
             allowed = sorted(set(contract.allowed_tools) - set(contract.forbidden_tools))
             return f"工具 {tool_name} 不在本步骤允许范围（允许: {allowed}）"
         # 3) 引擎一致性：数据工具必须匹配已确认引擎（单引擎锁定 / 多引擎逐源确认）
-        if contract.is_data_tool(tool_name):
+        if contract.is_data_tool(tool_name) and _eng_on:
             if contract.multi_engine:
                 confirmed = contract.confirmed_engines()
                 # P1-2 复合终止：多引擎取齐后禁止继续检索任何源
@@ -199,12 +203,16 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         # 5) stop_when：终端步骤已拿到结果 -> 禁止继续检索
         if contract.is_data_tool(tool_name) and contract.result_obtained and contract._runtime.get("terminal"):
             return "已命中终止条件（已获得查询结果），禁止重复/继续检索"
-        # 4) SQL 模板校验
-        if tool_name in _SQL_TOOLS:
+        # 4) SQL 模板校验（template 控制关闭时跳过模板校验，安全控制中心接线）
+        if tool_name in _SQL_TOOLS and _gc.guard_enabled("template"):
             sql = (request.tool_call.get("args") or {}).get("sql") or ""
             if sql:
                 chk = await self._check_sql_against_templates(contract, sql, request=request)
                 if not chk.ok:
+                    from app.services import guard_config as _gc2
+                    _gc2.record_event("template", "block",
+                                      detail={"tool": tool_name, "reason": chk.reason[:200],
+                                              "step": contract.workflow_step})
                     return f"SQL 未通过模板校验: {chk.reason}"
         return None
 

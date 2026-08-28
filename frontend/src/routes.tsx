@@ -19,6 +19,7 @@ const LLMConfigManager = lazy(() => import(/* webpackChunkName: "llmconfig" */ '
 const GovernanceObservatory = lazy(() => import(/* webpackChunkName: "governance" */ './pages/GovernanceObservatory'));
 const EngineWorkbench = lazy(() => import(/* webpackChunkName: "workbench" */ './pages/EngineWorkbench'));
 const QaExamplesManager = lazy(() => import(/* webpackChunkName: "qaexamples" */ './pages/QaExamplesManager'));
+const SecurityControlCenter = lazy(() => import(/* webpackChunkName: "security" */ './pages/SecurityControlCenter'));
 
 export type RouteConfig = {
   path: string;
@@ -43,6 +44,7 @@ export const routes: RouteConfig[] = [
   { path: '/governance', element: GovernanceObservatory, label: '运行观测', menuKey: 'governance' },
   { path: '/engine-workbench', element: EngineWorkbench, label: '引擎工作台', menuKey: 'engine_workbench' },
   { path: '/qa-examples', element: QaExamplesManager, label: '示例库管理', menuKey: 'qa_examples' },
+  { path: '/security-controls', element: SecurityControlCenter, label: '安全控制中心', menuKey: 'security_controls' },
   { path: '/datasource', element: DataSourceConfigPage, label: '数据源', menuKey: 'datasource' },
   { path: '/doris-config', element: DorisConfigPage, label: 'Doris 配置', menuKey: 'doris_config' },
   { path: '/vector', element: VectorManagePanel, label: '向量管理', menuKey: 'vector_manage' },

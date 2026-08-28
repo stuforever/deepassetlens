@@ -456,4 +456,59 @@ export const qaExamplesApi = {
     api.get(`/qa-examples/${id}/similar`, config),
 };
 
+// ===== 安全控制中心（《安全控制中心实施设计》，/api/guards）=====
+// guards 路由自带 /api 前缀（不经 /api/v1），独立 client
+const guardsClient = createApiClient('/api');
+
+export interface GuardDescription {
+  what: string;
+  lose: string;
+  remain: string;
+}
+
+export interface GuardStats {
+  h24: number;
+  h7d: number;
+  last_block_at?: string | null;
+}
+
+export interface GuardItem {
+  guard_id: string;
+  title: string;
+  enabled: boolean;
+  mode: string;                              // block | warn | log
+  params: Record<string, unknown>;
+  risk_level: 'red' | 'yellow' | 'green';
+  description: GuardDescription;
+  confirm_required: boolean;
+  stats?: GuardStats;
+  updated_by?: string | null;
+  updated_at?: string | null;
+  close_reason?: string | null;
+  version: number;
+}
+
+export interface GuardEventItem {
+  id: number;
+  guard_id: string;
+  ts?: string | null;
+  action: string;                            // block|warn|pass|probe|toggle|reset
+  question_digest?: string | null;
+  verdict?: string | null;
+  detail?: Record<string, unknown>;
+  updated_by?: string | null;
+}
+
+export const guardsApi = {
+  list: (config?: AxiosRequestConfig) => guardsClient.get('/guards', config),
+  update: (guardId: string, body: { enabled?: boolean; mode?: string; params?: Record<string, unknown>; confirm?: boolean; close_reason?: string }, config?: AxiosRequestConfig) =>
+    guardsClient.patch(`/guards/${guardId}`, body, config),
+  probe: (guardId: string, config?: AxiosRequestConfig) =>
+    guardsClient.post(`/guards/${guardId}/probe`, {}, config),
+  events: (params?: { guard_id?: string; range?: string; page?: number; page_size?: number }, config?: AxiosRequestConfig) =>
+    guardsClient.get('/guards/events', { params, ...config }),
+  resetDefaults: (config?: AxiosRequestConfig) =>
+    guardsClient.post('/guards/reset-defaults', {}, config),
+};
+
 export default api;

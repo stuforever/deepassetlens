@@ -63,6 +63,12 @@ def validate_sql(sql: str, allowed_tables: Optional[set[str]] = None, max_limit:
     if not sql or not sql.strip():
         return SqlCheck(ok=False, reason="SQL 为空")
 
+    # 安全控制中心接线（sql_safety）：开关关闭 -> 跳过机械安全校验，直接放行（管理员显式操作）。
+    # 默认开启（fail-closed 基线），关闭仅影响本层校验，其余守卫仍生效。
+    from app.services import guard_config as _gc
+    if not _gc.guard_enabled("sql_safety"):
+        return SqlCheck(ok=True, sql=sql, tables=[])
+
     # 1. AST 解析
     try:
         # 多语句检测：sqlglot.parse 返回多棵树说明有多语句

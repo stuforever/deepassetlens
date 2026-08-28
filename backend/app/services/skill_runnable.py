@@ -226,8 +226,10 @@ class SkillRunnable(Runnable):
             result = self._module.execute(input)
             if not isinstance(result, dict):
                 result = {"status": "error", "error": f"技能返回非 dict: {type(result)}"}
-            # 5. 输出校验（只警告，不阻断）
-            self._validate_output(result)
+            # 5. 输出校验（只警告，不阻断）；安全控制中心接线：output 关闭则跳过输出形态校验
+            from app.services import guard_config as _gc
+            if _gc.guard_enabled("output"):
+                self._validate_output(result)
             return result
         except Exception as e:
             logger.exception(f"SkillRunnable[{self.skill_code}] 执行失败")

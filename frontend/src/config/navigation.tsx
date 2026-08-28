@@ -23,6 +23,7 @@ import {
   FundOutlined,
   ThunderboltOutlined,
   FileSearchOutlined,
+  PoweroffOutlined,
 } from '@ant-design/icons';
 
 export interface NavItem {
@@ -100,6 +101,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { menuKey: 'doris_config', label: 'Doris 配置', path: '/doris-config', icon: DatabaseOutlined },
       { menuKey: 'llmconfig', label: 'LLM 配置', path: '/llm-config', icon: SettingOutlined },
+      { menuKey: 'security_controls', label: '安全控制中心', path: '/security-controls', icon: PoweroffOutlined },
     ],
   },
 ];

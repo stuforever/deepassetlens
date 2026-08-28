@@ -1034,7 +1034,14 @@ async def get_tupu_agent(connection_id: str = ""):
     懒加载 + 初始化锁：首次真实请求时才创建。
     """
     global _GLOBAL_CHECKPOINTER
-    _cache_key = connection_id or "__default__"
+    # 审批轨（approval_track）接线：配置版本号并入缓存键——PATCH 任一守卫后版本+1，
+    # 下一个请求按新 interrupt_on 重建 agent（《安全控制中心实施设计》2.2 get_version 用途）。
+    try:
+        from app.services import guard_config as _gc
+        _gver = _gc.get_version()
+    except Exception:
+        _gver = 0
+    _cache_key = f"{connection_id or '__default__'}#g{_gver}"
     if _cache_key not in _GLOBAL_AGENTS:
         async with _AGENT_INIT_LOCK:
             if _cache_key not in _GLOBAL_AGENTS:
