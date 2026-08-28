@@ -95,6 +95,111 @@ def _seed_guard_policies(db: Session):
     db.commit()
 
 
+# ---------------------------------------------------------------------------
+# 能力开关中心基线（批13-Q，16 行：14 可切 + 4 灰显锁定；默认基线全开）
+# ---------------------------------------------------------------------------
+_CAP_DESC = lambda what, lose, remain: {"what": what, "lose": lose, "remain": remain}
+
+CAPABILITY_POLICY_SEED = [
+    {"capability_id": "skills", "title": "技能包", "risk_level": "yellow",
+     "description": _CAP_DESC("装配 SkillsMiddleware：Agent 自动发现 data/skills 下 SKILL.md 并按需读取子文件（场景剧本/参考/模板）。",
+                              "关闭后场景剧本路由失去技能文件支撑，Agent 只能靠系统提示词与 MCP 工具裸跑。",
+                              "受控契约/模板/引擎守卫仍生效；generic 链路不受影响。"), "confirm_required": True},
+    {"capability_id": "filesystem_tools", "title": "文件系统工具", "risk_level": "yellow",
+     "description": _CAP_DESC("装配 CompositeBackend：/skills/ 只读技能目录、/memory/ 只读纪律文件，提供 ls/read_file 等文件工具。",
+                              "关闭后 Agent 无法读取 SKILL.md 与模板文件，技能依赖 read_file 的链路退化。",
+                              "文件写操作本就被 permissions 拒绝；MCP 数据工具不受影响。"), "confirm_required": True},
+    {"capability_id": "memory", "title": "常驻记忆", "risk_level": "yellow",
+     "description": _CAP_DESC("装配 MemoryMiddleware：注入 /memory/AGENTS.md 常驻纪律（全局长期纪律，运营可改文件）。",
+                              "关闭后全局纪律文件不再注入，跨会话纪律约束消失。",
+                              "单次会话的系统提示词与契约约束不受影响。"), "confirm_required": True},
+    {"capability_id": "summarization", "title": "上下文摘要", "risk_level": "yellow",
+     "description": _CAP_DESC("装配保守摘要件（30k token 触发/保留10条/参数截断15条）+ compact_conversation 手动压缩工具。",
+                              "关闭后长会话不再自动压缩，可能触达模型上下文上限导致报错。",
+                              "compact_conversation 工具随之消失；单轮问答不受影响。"), "confirm_required": True},
+    {"capability_id": "rubric", "title": "自评闸门", "risk_level": "yellow",
+     "description": _CAP_DESC("装配 RubricMiddleware：generic 契约回答后按 rubric 自评一轮（只评不改）。",
+                              "关闭后回答不再自评，rubric 违例不再可观测。",
+                              "数据校验（validate_safe_sql/ScopeChecker）与守卫面不受影响。"), "confirm_required": True},
+    {"capability_id": "patch_tool_calls", "title": "悬空调用修复", "risk_level": "green",
+     "description": _CAP_DESC("框架自动装配 PatchToolCallsMiddleware：修复会话中断后的悬空 tool_calls（补 cancelled ToolMessage）。",
+                              "框架恒装（无装配参数），开关作用于装配清单记录与审计；关闭仅移除清单标记。",
+                              "修复逻辑本身无安全语义，恒在无风险。"), "confirm_required": False},
+    {"capability_id": "message_eviction", "title": "消息淘汰", "risk_level": "green",
+     "description": _CAP_DESC("框架自动的消息淘汰健壮件（超长历史裁剪，防上下文溢出）。",
+                              "框架恒装（无装配参数），开关作用于装配清单记录与审计；关闭仅移除清单标记。",
+                              "摘要件关闭时本件是最后一道上下文溢出防线。"), "confirm_required": False},
+    {"capability_id": "response_format", "title": "结构化最终交付", "risk_level": "yellow",
+     "params": {"schema": "final"},
+     "description": _CAP_DESC("给 Agent 配 response_format（final 扁平 schema）：最终答案走结构化通道（F5 统一交付协议）。",
+                              "关闭后回退文本答案 + data_intelligence A-E 确定性降级策略（现状行为）。",
+                              "回答内容本身不受影响；A-E 降级恒在。"), "confirm_required": True},
+    {"capability_id": "store", "title": "长期记忆库", "risk_level": "yellow",
+     "params": {"max_prefs": 5},
+     "description": _CAP_DESC("注入 InMemoryStore：支持跨会话命名空间偏好存取（批13-F store 件）。",
+                              "关闭后偏好存取工具不可用，跨会话个性化退化。",
+                              "checkpointer 会话记忆不受影响。"), "confirm_required": True},
+    {"capability_id": "subagents", "title": "子代理（受限）", "risk_level": "red",
+     "params": {"specs": [{"name": "entity_locator",
+                           "description": "按业务域并行定位实体表，返回候选清单（code/name/引擎/置信度）",
+                           "prompt": "只做实体定位与校验，不做 SQL 拼装，不做跨域推断，不超出给定工具。",
+                           "tools": ["search_entities", "fetch_l1_l2_tree", "validate_l2", "fetch_subgraph"]}],
+                "max_concurrent": 2},
+     "description": _CAP_DESC("装配 task 委派工具与声明式子代理规格（与父代理同栈共享守卫链）；工具集=全局白名单子集。",
+                              "委派面扩大（并发上下文隔离的子代理），靠四护栏约束：契约 allow_subagents 复合条件/继承守卫/白名单窄化/全程审计。",
+                              "关闭或护栏拒绝时回退串行定位（委派是加速器不是依赖项）；守卫面（SQL/模板/引擎）对子代理仍生效。"), "confirm_required": True},
+    {"capability_id": "permissions", "title": "文件权限规则", "risk_level": "yellow",
+     "description": _CAP_DESC("装配 FilesystemPermission 规则：允许读 /skills/**，拒绝其余读与全部写。",
+                              "关闭后文件工具不再有 allow/deny 规则约束（backend 路由仍限制在 /skills/ /memory/ 根内）。",
+                              "virtual_mode 防目录穿越仍生效；write_file 在工具排除清单本就不可用。"), "confirm_required": True},
+    {"capability_id": "debug", "title": "调试模式", "risk_level": "yellow",
+     "description": _CAP_DESC("create_deep_agent(debug=True)：框架图执行详细日志（开发排障用）。",
+                              "关闭后框架回归常规日志级别（生产推荐）。",
+                              "业务行为无差异；仅日志详细度变化。"), "confirm_required": True},
+    {"capability_id": "approval_track", "title": "审批轨", "risk_level": "green",
+     "description": _CAP_DESC("能力侧审批轨标记：与安全控制中心审批轨联动（子代理 interrupt_on 继承父级配置）。",
+                              "关闭后子代理规格不继承 interrupt_on 审批中断点。",
+                              "安全控制中心的审批轨开关独立生效。"), "confirm_required": False},
+    {"capability_id": "prompt_caching", "title": "提示词缓存", "risk_level": "yellow",
+     "physical_blocked": True, "blocked_reason": "Anthropic 专属特性：当前模型（DeepSeek/GLM）不支持显式 cache_control 断点",
+     "description": _CAP_DESC("Anthropic 原生提示词缓存断点（cache_control）。",
+                              "物理不可用：当前模型不支持，装配恒跳过。",
+                              "DeepSeek 服务端前缀缓存自动生效（批5-C2/C3 已治理）。"), "confirm_required": True},
+    {"capability_id": "video", "title": "视频能力", "risk_level": "yellow",
+     "physical_blocked": True, "blocked_reason": "域无关能力：业务问答平台无视频输入/输出场景",
+     "description": _CAP_DESC("多模态视频输入处理（deepagents 预留）。",
+                              "物理不可用：平台无视频场景，装配恒跳过。",
+                              "无剩余防线需求。"), "confirm_required": True},
+    {"capability_id": "local_shell", "title": "本地 Shell", "risk_level": "yellow",
+     "physical_blocked": True, "blocked_reason": "安全红线：服务端任意命令执行不可开放（execute 工具已在排除清单）",
+     "description": _CAP_DESC("本地 Shell 执行工具（execute）。",
+                              "物理禁用：安全红线，execute 在 HarnessProfile 排除清单且 backend 非 Sandbox 协议。",
+                              "数据查询全部走 MCP 受控工具（SELECT-only + 守卫面）。"), "confirm_required": True},
+    {"capability_id": "sandbox", "title": "沙箱执行", "risk_level": "yellow",
+     "physical_blocked": True, "blocked_reason": "安全红线：SandboxBackend 未接入（无 sandbox-executor 后端绑定）",
+     "description": _CAP_DESC("SandboxBackend 协议接入（代码执行沙箱）。",
+                              "物理不可用：未接入沙箱后端，装配恒跳过。",
+                              "业务问答不需要沙箱执行；数据分析走 SQL 受控链路。"), "confirm_required": True},
+]
+
+
+def _seed_capability_policies(db: Session):
+    """能力开关中心基线种子：仅当表为空时插入（幂等）。"""
+    from ..models.base import CapabilityPolicy
+    if db.query(CapabilityPolicy).first():
+        return
+    for p in CAPABILITY_POLICY_SEED:
+        db.add(CapabilityPolicy(
+            capability_id=p["capability_id"], title=p["title"], enabled=True,
+            params=p.get("params"), risk_level=p.get("risk_level", "yellow"),
+            description=p.get("description"), confirm_required=p.get("confirm_required", True),
+            physical_blocked=p.get("physical_blocked", False),
+            blocked_reason=p.get("blocked_reason"),
+            version=1,
+        ))
+    db.commit()
+
+
 def _sync_scenario_skills(db: Session):
     """将文件式场景剧本(scenarios/*/SKILL.md)同步到 skills 表，使其在技能管理页可见。
 
@@ -162,3 +267,6 @@ def init_db(db: Session):
 
     # 安全控制中心基线策略（幂等：仅表空时插入）
     _seed_guard_policies(db)
+
+    # 能力开关中心基线策略（批13-Q，幂等）
+    _seed_capability_policies(db)

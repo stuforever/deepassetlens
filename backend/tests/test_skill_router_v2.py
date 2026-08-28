@@ -51,12 +51,21 @@ class TestScenarioRouting:
 
 class TestGenericFallback:
     def test_generic_low_permission_no_task(self, router):
-        """通用问题 -> generic 契约，禁止 task/Shell/写文件（不回退自由 free-plan）"""
+        """通用问题 -> generic 契约，禁止 Shell/写文件（不回退自由 free-plan）。
+
+        批13-Q 变更：task 契约层放行（allow_subagents=True，委派作为探索加速器），
+        运行时层由 SkillPolicy 复合校验（caps.subagents.enabled AND contract.allow_subagents）；
+        subagents 关闭或护栏拒绝时 task 仍被拒（capability_events.task_reject）。
+        """
         r = router.route("查一下用电客户总数")
         assert r.route_type == "generic"
         assert r.fallback_level == "generic"
-        assert ABSOLUTE_FORBIDDEN_TOOLS <= set(r.contract.forbidden_tools)
-        assert "task" not in r.contract.allowed_tools
+        # 绝对禁止（除 task 外）仍生效
+        assert {"execute", "write_file", "edit_file", "grep", "glob"} <= set(r.contract.forbidden_tools)
+        # 批13-Q：task 入白名单（契约层），运行时层复合校验仍在
+        assert r.contract.allow_subagents is True
+        assert "task" in r.contract.allowed_tools
+        assert "task" not in r.contract.forbidden_tools
         assert "execute" not in r.contract.allowed_tools
         assert "write_file" not in r.contract.allowed_tools
 

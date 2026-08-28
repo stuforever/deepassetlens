@@ -793,19 +793,30 @@ class _TupuRubricMiddleware(RubricMiddleware):
 # ---------------------------------------------------------------------------
 
 
-async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
-    """创建 tupu DeepAgent（业务工具走 MCP，与 deepagent 解耦）
+# ---------------------------------------------------------------------------
+# 4. Agent 装配（批13-Q：能力开关中心条件化装配）
+# ---------------------------------------------------------------------------
 
-    业务工具（fetch_l1_l2_tree 等 16 个）通过 MCP client 从 MCP server 加载，
-    不再用进程内 @tool。框架工具（read_file/write_todos/ls）由 deepagents 中间件自动注入。
+# F5/批13-Q：结构化最终交付 schema（final 扁平结构，规避嵌套 schema 与 GLM/DeepSeek 的不兼容）
+_FINAL_RESPONSE_FORMAT = {
+    "title": "FinalAnswer",
+    "description": "最终交付结构：面向用户的最终答案文本。",
+    "type": "object",
+    "properties": {
+        "final_answer": {"type": "string", "description": "面向用户的最终答案（含结论/表格引用/建议）"},
+    },
+    "required": ["final_answer"],
+    "additionalProperties": False,
+}
 
-    Args:
-        checkpointer: LangGraph checkpointer（AsyncSqliteSaver/PostgresSaver/MemorySaver）
-        connection_id: LLM 连接 ID（v3.6：让前端选模型真正生效）；空串用默认连接
+# 装配清单（批13-Q 探针读）：{version, agent_key, items: {capability_id: bool(装配态)}}
+_ASSEMBLY_MANIFEST: dict = {"version": 0, "agent_key": "", "items": {}}
+# fail-safe 快照：最近一次成功装配的 caps（新配置装配失败时回退此版本）
+_LAST_GOOD_ASSEMBLY: dict = {"caps": None, "caps_version": 0}
 
-    Returns:
-        CompiledStateGraph (DeepAgent)
-    """
+
+async def _build_agent(checkpointer, connection_id: str, caps: dict):
+    """按能力开关条件装配 DeepAgent（批13-Q 4.1）。失败抛异常，由 create_tupu_agent 包装器 fail-safe。"""
     from deepagents import create_deep_agent
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -834,8 +845,13 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     except Exception as _tse:
         logger.warning(f"[批5-C2] 工具排序失败（保持原序）: {_tse}")
 
+    def _cap(cid: str) -> dict:
+        return caps.get(cid) or {}
+
+    def _on(cid: str) -> bool:
+        return bool((_cap(cid) or {}).get("enabled"))
+
     from deepagents.backends import StateBackend, FilesystemBackend, CompositeBackend
-    from deepagents.middleware.filesystem import FilesystemPermission
     from pathlib import Path as _Path
 
     # CompositeBackend: /skills/ 路由到只读 FilesystemBackend（virtual_mode 防目录穿越），其他走 StateBackend
@@ -843,23 +859,34 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     # 不再需要 data_intelligence.py 手工枚举 + 注入；FilesystemBackend 限制只能读技能目录。
     # M2（融合设计 §4.4）：/memory/ 路由到只读 FilesystemBackend（data/memory），供 MemoryMiddleware
     # 常驻纪律 AGENTS.md（全局长期纪律，运营可改文件；职责边界=动态系统提示仍由 _build_dynamic_system_prompt 承担）。
+    # 批13-Q：filesystem_tools 关闭 -> 退化 StateBackend（无文件路由，文件工具不可用面收窄）。
     _skills_root = _Path(__file__).resolve().parent.parent.parent / "data" / "skills"
     _skills_backend = FilesystemBackend(root_dir=str(_skills_root), virtual_mode=True)
     _memory_root = _Path(__file__).resolve().parent.parent.parent / "data" / "memory"
     _memory_backend = FilesystemBackend(root_dir=str(_memory_root), virtual_mode=True)
-    backend = CompositeBackend(
-        default=StateBackend(),
-        routes={"/skills/": _skills_backend, "/memory/": _memory_backend},
-    )
+    if _on("filesystem_tools"):
+        backend = CompositeBackend(
+            default=StateBackend(),
+            routes={"/skills/": _skills_backend, "/memory/": _memory_backend},
+        )
+    else:
+        backend = StateBackend()
+        logger.warning("[Capability] filesystem_tools 已关闭：backend 退化为 StateBackend（文件路由不可用）")
     # 权限规则（按序匹配，首条命中生效，无命中默认允许）：
     #   1. 允许读 /skills/**（技能文件）
     #   2. 拒绝读 /**（兜底封堵：/skills/../../、/etc/passwd、.env 等全部 deny）
     #   3. 拒绝写 /**（业务问答不写文件）
-    permissions = [
-        FilesystemPermission(operations=["read"], paths=["/skills/**"], mode="allow"),
-        FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
-        FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
-    ]
+    # 批13-Q：permissions 关闭 -> 不装配权限规则（backend 路由仍限制根目录，virtual_mode 防穿越仍在）。
+    permissions = None
+    if _on("permissions"):
+        from deepagents.middleware.filesystem import FilesystemPermission
+        permissions = [
+            FilesystemPermission(operations=["read"], paths=["/skills/**"], mode="allow"),
+            FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
+            FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
+        ]
+    else:
+        logger.warning("[Capability] permissions 已关闭：文件工具无 allow/deny 规则（管理员显式操作）")
     # v3.6: 用公开 HarnessProfile 替换私有 _ToolExclusionMiddleware（评审点5：消除下划线私有依赖）
     # P1-2: 从 model 对象提取真实 identifier 注册，不硬编码模型名（防大小写/变体不匹配）
     # register 是增量合并，幂等安全；create_deep_agent 内部按 model 自动匹配此 profile。
@@ -959,9 +986,12 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
             return _hit
 
     _summ_mw = _TupuSummarizationMiddleware(model, backend)
-    middleware_list.append(_summ_mw)
-    middleware_list.append(SummarizationToolMiddleware(_summ_mw))
-    logger.info("[Summarization] 显式保守摘要中间件已装配（30k/10/15，替代 monkey-patch）+ compact_conversation 工具")
+    if _on("summarization"):
+        middleware_list.append(_summ_mw)
+        middleware_list.append(SummarizationToolMiddleware(_summ_mw))
+        logger.info("[Summarization] 显式保守摘要中间件已装配（30k/10/15，替代 monkey-patch）+ compact_conversation 工具")
+    else:
+        logger.warning("[Capability] summarization 已关闭：不装配自动摘要件（长会话可能触达上下文上限）")
 
     # M3（融合设计 §5.1）：自评闸门 RubricMiddleware —— 仅调用方传 rubric 时激活（generic 契约，
     # scenario 不传即不激活）。grader 模型缺省会话模型；TUPU_RUBRIC_CONNECTION_ID 可指轻量连接。
@@ -969,7 +999,7 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
     # TUPU_RUBRIC_DISABLED=1 时跳过装配（§6.2 eval 开/关对比度量净收益）。
     from deepagents.middleware.rubric import RubricMiddleware
     import os as _os3
-    if _os3.getenv("TUPU_RUBRIC_DISABLED", "") != "1":
+    if _os3.getenv("TUPU_RUBRIC_DISABLED", "") != "1" and _on("rubric"):
         _rubric_conn = _os3.getenv("TUPU_RUBRIC_CONNECTION_ID", "") or connection_id
         _rubric_model = get_chat_model(temperature=0.0, streaming=True, connection_id=_rubric_conn)
         _rubric_mw = _TupuRubricMiddleware(model=_rubric_model, max_iterations=1,
@@ -978,12 +1008,38 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
         logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'，含批10-B'-1 clean_aggregate 豁免）"
                     f" 实例类={type(_rubric_mw).__name__} 覆写生效={type(_rubric_mw).after_agent is not RubricMiddleware.after_agent}")
     else:
-        logger.warning("[Rubric] TUPU_RUBRIC_DISABLED=1，跳过自评闸门装配（eval 净收益对比模式）")
+        logger.warning("[Rubric] 跳过自评闸门装配（TUPU_RUBRIC_DISABLED=1 或 capability rubric 已关闭）")
 
-    # F5: response_format（统一最终交付协议）。当前模型(GLM/DeepSeek)与嵌套结构化 schema
-    # 不兼容：接入后会破坏 Agent 的最终文本生成（SQL 执行后不再产出结论），故不启用。
-    # 统一最终交付由 data_intelligence 的 A-E 确定性降级策略构造（response_format_degraded=true）。
-    _response_format = None
+    # F5/批13-Q: response_format（统一最终交付协议）按能力开关装配（final 扁平 schema）。
+    # 结构化降级仍由 data_intelligence 的 A-E 确定性降级策略兜底（structured_degraded 标识）。
+    _response_format = _FINAL_RESPONSE_FORMAT if _on("response_format") else None
+    if _response_format is not None:
+        logger.info("[Capability] response_format 已装配（final 扁平 schema，结构化最终交付）")
+
+    # 批13-Q：store（长期记忆库，运行时类能力）——InMemoryStore 注入，支持跨会话命名空间偏好存取。
+    _store = None
+    if _on("store"):
+        from langgraph.store.memory import InMemoryStore
+        _store = InMemoryStore()
+        logger.info("[Capability] store 已装配（InMemoryStore，跨会话偏好存取）")
+
+    # 批13-Q：subagents 受限启用（四护栏）——护栏2/3 在 build_subagent_specs：
+    # 子代理显式携带守卫链（SkillPolicyMiddleware 复用父实例，契约经 context 共享传导）；
+    # 规格工具集窄化到全局白名单子集，空交集拒装配 + spec_invalid 事件。
+    _subagents = None
+    if _on("subagents"):
+        from app.services.subagent_specs import build_subagent_specs
+        _skill_policy_mw = next((m for m in middleware_list if type(m).__name__ == "SkillPolicyMiddleware"), None)
+        _subagents = build_subagent_specs(_cap("subagents"), model,
+                                          guard_middlewares=[_skill_policy_mw] if _skill_policy_mw else None,
+                                          parent_tools=mcp_tools)
+        if _subagents:
+            logger.info(f"[Capability] subagents 已装配（{len(_subagents)} 个规格：{[s['name'] for s in _subagents]}）")
+        else:
+            logger.warning("[Capability] subagents 开启但全部规格被护栏拒绝（回退串行定位）")
+
+    # 批13-Q：debug 能力 -> create_deep_agent(debug=True)（框架图执行详细日志，开发排障用）。
+    _debug = _on("debug")
 
     agent = create_deep_agent(
             model=model,
@@ -991,16 +1047,71 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
             system_prompt=_build_dynamic_system_prompt(),
             state_schema=TupuAgentState,
             context_schema=TupuAgentContext,  # F4: 原生运行时上下文（不进 checkpoint）
-            response_format=_response_format,  # F5: 结构化最终答案（GLM 不兼容时为 None，降级手动）
+            response_format=_response_format,  # F5/批13-Q: 结构化最终答案（按能力开关装配）
             checkpointer=checkpointer,
             backend=backend,
-            permissions=permissions,
-            skills=["/skills/"],
-            memory=["/memory/AGENTS.md"],  # M2: 常驻纪律（MemoryMiddleware 框架自动装配）
+            permissions=permissions,  # 批13-Q: 按能力开关装配（None=无规则约束）
+            skills=["/skills/"] if _on("skills") else None,  # 批13-Q: 按能力开关装配
+            memory=["/memory/AGENTS.md"] if _on("memory") else None,  # M2/批13-Q: 常驻纪律（按能力开关装配）
+            subagents=_subagents,  # 批13-Q: subagents 受限启用（四护栏）
+            store=_store,  # 批13-Q: 长期记忆库
+            debug=_debug,  # 批13-Q: 调试模式
             middleware=middleware_list,
         )
 
+    # 批13-Q：装配清单落盘（探针读；patch_tool_calls/message_eviction 为框架自动件，恒装=True）
+    try:
+        from app.services.capability_config import get_version as _cap_version
+        _cap_ids = ["skills", "filesystem_tools", "memory", "summarization", "rubric",
+                    "patch_tool_calls", "message_eviction", "response_format", "store",
+                    "subagents", "permissions", "debug", "approval_track"]
+        manifest_items = {}
+        for _cid in _cap_ids:
+            manifest_items[_cid] = _on(_cid)
+        manifest_items["patch_tool_calls_frame"] = True   # 框架自动件恒装（graph.py L674/759/844）
+        manifest_items["message_eviction_frame"] = True   # 框架自动件恒装
+        manifest_items["subagent_specs"] = [s["name"] for s in (_subagents or [])]
+        manifest_items["response_format_installed"] = _response_format is not None
+        manifest_items["store_installed"] = _store is not None
+        _ASSEMBLY_MANIFEST.clear()
+        _ASSEMBLY_MANIFEST.update({
+            "version": _cap_version(), "agent_key": connection_id or "__default__",
+            "items": manifest_items,
+        })
+    except Exception as _mfe:
+        logger.warning(f"[Capability] 装配清单写入失败（不影响运行）: {_mfe}")
+
     return agent
+
+
+async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
+    """创建 tupu DeepAgent（业务工具走 MCP）——批13-Q fail-safe 包装器。
+
+    按能力开关（capability_config）条件装配；新配置装配失败自动回退上一可用版本
+    （fallback 事件+告警，配置写坏不至于全瘫）；回退也失败则 fail-closed 阻止创建（P0-1）。
+    """
+    from app.services import capability_config
+    caps = {p["capability_id"]: p for p in capability_config.get_policies()}
+    try:
+        agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps)
+        _LAST_GOOD_ASSEMBLY["caps"] = caps
+        _LAST_GOOD_ASSEMBLY["caps_version"] = capability_config.get_version()
+        return agent
+    except Exception as e:
+        if _LAST_GOOD_ASSEMBLY.get("caps"):
+            logger.error(f"[Capability] 新配置装配失败，fail-safe 回退上一可用版本: {e}")
+            try:
+                capability_config.record_event(
+                    "assembly", "fallback",
+                    detail={"reason": str(e)[:300], "failed_version": capability_config.get_version(),
+                            "fallback_version": _LAST_GOOD_ASSEMBLY.get("caps_version")},
+                    updated_by="assembly", _sync=True)
+                return await _build_agent(checkpointer=checkpointer, connection_id=connection_id,
+                                          caps=_LAST_GOOD_ASSEMBLY["caps"])
+            except Exception as e2:
+                logger.error(f"[Capability] 回退装配也失败（fail-closed 阻止创建）: {e2}")
+                raise
+        raise
 
 
 def build_skill_system_message(skill_name: str = "") -> str:
@@ -1026,22 +1137,50 @@ _CHECKPOINT_DB = os.path.join(
 )
 
 
-async def get_tupu_agent(connection_id: str = ""):
-    """获取 tupu DeepAgent（按 connection_id 缓存，让前端选模型真正生效）。
+def _evict_old_agents(current_key: str) -> None:
+    """批13-Q：LRU 保留最近 2 个 capability 版本的 Agent 实例，更旧版本回收。
 
-    v3.6: 不再用全局单例。按 connection_id 缓存不同模型的 Agent 实例。
-    空串 connection_id 用默认模型（兼容旧调用）。
+    缓存键形如 "<conn>#g{guard_ver}#c{caps_ver}"；按 caps 版本排序，保留最新 2 档。
+    在跑请求持有的旧实例引用不受 dict 回收影响（Python 引用计数）。
+    """
+    import re as _re
+    try:
+        entries = []
+        for k in list(_GLOBAL_AGENTS.keys()):
+            m = _re.search(r"#c(\d+)", k)
+            entries.append((int(m.group(1)) if m else 0, k))
+        versions = sorted({v for v, _ in entries}, reverse=True)
+        keep_versions = set(versions[:2])
+        for v, k in entries:
+            if v not in keep_versions and k != current_key:
+                _GLOBAL_AGENTS.pop(k, None)
+                logger.info(f"[DeepAgent] LRU 回收旧能力版本 Agent: {k}")
+    except Exception as e:
+        logger.warning(f"[DeepAgent] LRU 回收失败（不影响运行）: {e}")
+
+
+async def get_tupu_agent(connection_id: str = ""):
+    """获取 tupu DeepAgent（按 connection_id + capability 版本缓存，让前端选模型/能力开关真正生效）。
+
+    v3.6: 按 connection_id 缓存不同模型的 Agent 实例（空串用默认模型）。
+    批13-Q: 缓存键并入能力版本号（<conn>#g{guard}#c{caps}）——PATCH 能力开关后 version+1 ->
+    新键建新实例；旧实例 LRU 保留最近 2 个版本（在跑请求不断）；重建写 capability_events(rebuild)。
     懒加载 + 初始化锁：首次真实请求时才创建。
     """
     global _GLOBAL_CHECKPOINTER
-    # 审批轨（approval_track）接线：配置版本号并入缓存键——PATCH 任一守卫后版本+1，
-    # 下一个请求按新 interrupt_on 重建 agent（《安全控制中心实施设计》2.2 get_version 用途）。
+    # 审批轨（approval_track，批13-V）+ 能力开关中心（批13-Q）版本号并入缓存键：
+    # 任一守卫/能力 PATCH 后版本+1，下一个请求按新配置重建 Agent。
     try:
         from app.services import guard_config as _gc
         _gver = _gc.get_version()
     except Exception:
         _gver = 0
-    _cache_key = f"{connection_id or '__default__'}#g{_gver}"
+    try:
+        from app.services import capability_config as _cc
+        _cver = _cc.get_version()
+    except Exception:
+        _cver = 0
+    _cache_key = f"{connection_id or '__default__'}#g{_gver}#c{_cver}"
     if _cache_key not in _GLOBAL_AGENTS:
         async with _AGENT_INIT_LOCK:
             if _cache_key not in _GLOBAL_AGENTS:
@@ -1050,11 +1189,22 @@ async def get_tupu_agent(connection_id: str = ""):
                     import aiosqlite
                     os.makedirs(os.path.dirname(_CHECKPOINT_DB), exist_ok=True)
                     _GLOBAL_CHECKPOINTER = AsyncSqliteSaver(aiosqlite.connect(_CHECKPOINT_DB))
+                # 批13-Q：已有旧版本实例在缓存 -> 本次为能力/守卫版本失配重建 -> 写 rebuild 事件
+                if _GLOBAL_AGENTS:
+                    try:
+                        from app.services import capability_config as _cc
+                        _cc.record_event("assembly", "rebuild",
+                                         detail={"new_key": _cache_key, "caps_version": _cver,
+                                                 "old_keys": list(_GLOBAL_AGENTS.keys())[:4]},
+                                         updated_by="assembly")
+                    except Exception:
+                        pass
                 agent = await create_tupu_agent(
                     checkpointer=_GLOBAL_CHECKPOINTER,
                     connection_id=connection_id or None,
                 )
                 _GLOBAL_AGENTS[_cache_key] = agent
+                _evict_old_agents(_cache_key)
                 logger.info(f"[DeepAgent] tupu ReAct agent 已创建 (key={_cache_key}), checkpoint={_CHECKPOINT_DB}")
     return _GLOBAL_AGENTS[_cache_key]
 

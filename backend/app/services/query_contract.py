@@ -91,6 +91,9 @@ class QueryContract:
     entity_engine_map: Dict[str, str] = field(default_factory=dict)  # 实体 -> 引擎 真实映射（源模式工具返回）
     # 评审 P1-1（二轮）：多引擎必达数据源（Skill 显式声明 required_sources），终止按实体/角色判断
     required_entities: List[str] = field(default_factory=list)
+    # 批13-Q 护栏1：task 委派复合条件（contract.allow_subagents AND caps.subagents.enabled 才放行）。
+    # generic/探索默认 True，场景默认 False；SKILL.md x_tupu.allow_subagents: true 数据化显式开。
+    allow_subagents: bool = False
     _runtime: Dict[str, Any] = field(default_factory=dict)         # {engine_locked, result_obtained, violations, confirmed_engines, ...}
 
     # ------------------------------------------------------------------
@@ -103,15 +106,19 @@ class QueryContract:
                   multi_engine: bool = False,
                   forbid_markdown_detail_table: bool = True,
                   output_mode: Optional[str] = None,
-                  required_entities: Optional[List[str]] = None) -> "QueryContract":
+                  required_entities: Optional[List[str]] = None,
+                  allow_subagents: bool = False) -> "QueryContract":
         """按 Skill 定义 + 命中步骤构造契约。step 为 skill_catalog.StepDefinition。
 
         output_mode 优先级：显式参数 > 步骤级 step.output_mode > 类默认 single_result_table。
         required_entities：多引擎技能声明必达数据源（SKILL.md required_sources），
         终止按实体/角色判断而非按"已确认引擎"（评审 P1-1 二轮）。
+        allow_subagents（批13-Q 护栏1）：场景剧本 SKILL.md x_tupu.allow_subagents: true 数据化开。
         """
         # read_file 永久允许（只读 /skills/** 子文件，模型须读 SKILL.md 与步骤模板/参考）
         allowed = list(dict.fromkeys(list(step.allowed_tools) + ["read_file"]))
+        if allow_subagents:
+            allowed = list(dict.fromkeys(allowed + ["task"]))  # task 入白名单（护栏1 契约层）
         c = cls(
             run_id=f"run_{uuid.uuid4().hex[:12]}",
             skill_id=skill_id,
@@ -127,6 +134,7 @@ class QueryContract:
             multi_engine=multi_engine,
             forbid_markdown_detail_table=forbid_markdown_detail_table,
             required_entities=[str(e) for e in (required_entities or []) if e],
+            allow_subagents=allow_subagents,
             _runtime={
                 "engine_locked": False, "result_obtained": False, "violations": 0,
                 "confirmed_engines": [],
@@ -134,8 +142,11 @@ class QueryContract:
                 "terminal": not bool(step.allowed_next),  # 无后继步骤 = 拿到结果即终止
             },
         )
-        # 契约内 always 禁用绝对禁止工具（模型/技能声明只能加不能减）
-        forbidden = [t for t in ABSOLUTE_FORBIDDEN_TOOLS if t not in c.allowed_tools]
+        # 契约内 always 禁用绝对禁止工具（模型/技能声明只能加不能减）；
+        # 批13-Q：task 在 allow_subagents=True 时移出 forbidden（契约层放行，运行时层仍由
+        # skill_policy 复合校验 caps.subagents.enabled）。
+        forbidden = [t for t in ABSOLUTE_FORBIDDEN_TOOLS
+                     if t not in c.allowed_tools and not (t == "task" and c.allow_subagents)]
         c.forbidden_tools = forbidden
         return c
 
@@ -164,8 +175,13 @@ class QueryContract:
             rubric=GENERIC_RUBRIC,
             aggregate_intent=aggregate_intent,
             clarify_required=clarify_required,
+            allow_subagents=True,  # 批13-Q 护栏1：generic/探索默认允许委派（运行时层仍校验 caps.subagents）
             _runtime={"engine_locked": False, "result_obtained": False, "violations": 0},
         )
+        # task 入白名单（护栏1 契约层）：非 clarify 契约把 task 移出 forbidden
+        if not clarify_required:
+            c.allowed_tools = sorted(set(c.allowed_tools) | {"task"})
+            c.forbidden_tools = [t for t in c.forbidden_tools if t != "task"]
         return c
 
     # ------------------------------------------------------------------

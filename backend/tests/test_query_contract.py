@@ -80,8 +80,12 @@ class TestGeneric:
         assert c.route_type == "generic"
         assert c.skill_id == "__generic__"
         assert c.template_ids == []
-        assert "task" not in c.allowed_tools
-        assert set(ABSOLUTE_FORBIDDEN_TOOLS) <= set(c.forbidden_tools)
+        # 批13-Q：task 契约层入白名单（allow_subagents=True）；运行时层复合校验仍在
+        assert c.allow_subagents is True
+        assert "task" in c.allowed_tools
+        assert "task" not in c.forbidden_tools
+        # 其余绝对禁止工具仍生效
+        assert {"execute", "write_file", "edit_file", "grep", "glob"} <= set(c.forbidden_tools)
 
     def test_generic_allows_real_kg_tools(self):
         """P0 整改：generic 白名单必须是真实注册的 MCP 工具（见 test_mcp_whitelist_alignment）。"""

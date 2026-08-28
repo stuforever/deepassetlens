@@ -21,7 +21,8 @@ from .api import (
     qa_examples,
     golden_qa,
     feedback,
-    guards,)
+    guards,
+    capabilities,)
 from .models.base import Base
 # 确保模型注册到 Base.metadata（避免循环导入，在这里集中导入）
 from .models.skill import Skill, SkillVersion, SkillExecLog, SkillApiBinding, SkillType
@@ -69,6 +70,14 @@ async def lifespan(app: FastAPI):
                 logger.info(f"[startup] guard_events 清理 {_cleaned} 条（>30 天）")
         except Exception as _gce:
             logger.warning(f"[startup] guard_events 清理失败: {_gce}")
+        # 能力开关中心（批13-Q）：清理 30 天前 capability_events
+        try:
+            from .services.capability_config import cleanup_old_events as _cap_cleanup
+            _cap_cleaned = _cap_cleanup(days=30)
+            if _cap_cleaned:
+                logger.info(f"[startup] capability_events 清理 {_cap_cleaned} 条（>30 天）")
+        except Exception as _cce:
+            logger.warning(f"[startup] capability_events 清理失败: {_cce}")
         # master_activity 关系统一为"打点维护"：把 source/target 为 L2/L4 的"手工维护"
         # 关系迁移为"打点维护"（与资产矩阵打点同义）；若该实体对已有打点维护关系则删掉重复手工条目。
         try:
@@ -274,6 +283,7 @@ app.include_router(doris_config.router, prefix="/api/v1", tags=["doris_config"])
 # 数据引擎增强（批3）：观测端点（自带 prefix="/api/engine"）
 app.include_router(engine_observability.router)
 app.include_router(guards.router)  # 自带 prefix="/api/guards"（安全控制中心）
+app.include_router(capabilities.router)  # 自带 prefix="/api/capabilities"（能力开关中心，批13-Q）
 
 # MCP Server（业务工具标准化，deepagent 和外部 client 共用，SSE 传输 /mcp/sse）
 from app.mcp_server import mount_mcp

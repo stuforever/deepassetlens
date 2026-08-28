@@ -992,3 +992,44 @@ class GuardEvent(Base):
     verdict = Column(String(16), nullable=True)                    # blocked|passed|probe_ok|probe_fail
     detail = Column(JSON, nullable=True)
     updated_by = Column(String(64), nullable=True)
+
+
+class CapabilityPolicy(Base):
+    """能力开关中心：DeepAgents 能力策略（《能力开关中心与subagents受限启用设计》批13-Q 二）
+
+    capability_id 16 行基线：14 可切（skills/filesystem_tools/memory/summarization/rubric/
+    patch_tool_calls/message_eviction/response_format/store/subagents/permissions/debug/
+    approval_track…）+ 4 灰显锁定（prompt_caching/video/local_shell/sandbox，
+    physical_blocked=TRUE，PATCH 一律 403）。
+    enabled 默认基线全开（批13-F 全量启用定调）；version 并入 agent 缓存键（装配类）或 TTL 刷新（运行时类）。
+    """
+
+    __tablename__ = "capability_policies"
+    capability_id = Column(String(64), primary_key=True)
+    title = Column(String(64), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    params = Column(JSON, nullable=True)              # subagents:{specs,max_concurrent} / response_format:{schema} / store:{max_prefs}
+    risk_level = Column(String(8), nullable=False, default="yellow")
+    description = Column(JSON, nullable=True)         # {what,lose,remain} 三段式
+    confirm_required = Column(Boolean, nullable=False, default=True)
+    physical_blocked = Column(Boolean, nullable=False, default=False)  # 灰显锁定
+    blocked_reason = Column(String(255), nullable=True)
+    updated_by = Column(String(64), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+    close_reason = Column(String(500), nullable=True)
+    version = Column(Integer, nullable=False, default=1)
+
+
+class CapabilityEvent(Base):
+    """能力开关中心：变更/重建/探针/subagents 委派审计流（批13-Q 二）
+
+    action: toggle|rebuild|probe|task_invoke|task_reject|spec_invalid|fallback。
+    """
+
+    __tablename__ = "capability_events"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    capability_id = Column(String(64), nullable=False, index=True)
+    ts = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    action = Column(String(16), nullable=False)
+    detail = Column(JSON, nullable=True)              # {actor,reason,spec_name,duration_ms,result_digest}
+    updated_by = Column(String(64), nullable=True)

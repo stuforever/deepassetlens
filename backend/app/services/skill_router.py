@@ -136,6 +136,7 @@ class SkillRouter:
             forbid_markdown_detail_table=bool((skill.output or {}).get("forbid_markdown_detail_table", True)),
             output_mode=step.output_mode or (skill.output or {}).get("mode") or (skill.output or {}).get("output_mode"),
             required_entities=skill.required_entity_codes(),
+            allow_subagents=bool(getattr(skill, "allow_subagents", False)),  # 批13-Q 护栏1 数据化
         )
         return RouteResult(
             route_type="scenario", skill_id=skill.name, workflow_step=step.id,
@@ -211,6 +212,7 @@ class SkillRouter:
             forbid_markdown_detail_table=bool((skill.output or {}).get("forbid_markdown_detail_table", True)),
             output_mode=chosen.output_mode or (skill.output or {}).get("mode") or (skill.output or {}).get("output_mode"),
             required_entities=skill.required_entity_codes(),
+            allow_subagents=bool(getattr(skill, "allow_subagents", False)),  # 批13-Q 护栏1 数据化
         )
         return RouteResult(
             route_type="scenario", skill_id=skill.name, workflow_step=chosen.id,

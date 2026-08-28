@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -120,7 +121,24 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             return await self._do_reject(request, contract, tool_name, tc_id, violation)
 
         # ---- 通过：调 handler，再后置处理结果 ----
+        # 批13-Q 护栏4：task 委派全程审计（task_invoke：规格/耗时/结果摘要 -> capability_events）
+        _task_t0 = time.monotonic() if tool_name == "task" else 0.0
         result = await handler(request)
+        if tool_name == "task":
+            try:
+                from app.services import capability_config as _cc
+                _digest = ""
+                try:
+                    _content = getattr(result, "content", None) or (result if isinstance(result, str) else "")
+                    _digest = str(_content)[:150]
+                except Exception:
+                    pass
+                _cc.record_event("subagents", "task_invoke",
+                                 detail={"step": contract.workflow_step,
+                                         "duration_ms": round((time.monotonic() - _task_t0) * 1000, 1),
+                                         "result_digest": _digest})
+            except Exception as _tie:
+                logger.warning(f"[SkillPolicy] task_invoke 审计失败（不阻塞）: {_tie}")
         try:
             self._postcheck(contract, tool_name, result, request)
             # S5（HITL v2）：表/catalog 不存在 -> 由「自动降级一次」升级为「interrupt 请求人审」
@@ -153,6 +171,19 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     # 前置校验
     # ------------------------------------------------------------------
     async def _precheck(self, contract: QueryContract, tool_name: str, request) -> Optional[str]:
+        # 批13-Q 护栏1+4：task 委派复合条件（运行时层，不受 capability 守卫开关影响）。
+        # 放行条件 = caps.subagents.enabled AND contract.allow_subagents；拒绝即写 task_reject 审计。
+        if tool_name == "task":
+            from app.services import capability_config as _cc
+            if not _cc.cap_enabled("subagents"):
+                _cc.record_event("subagents", "task_reject",
+                                 detail={"reason": "capability subagents 已关闭", "step": contract.workflow_step})
+                return "task 子代理委派未获准：subagents 能力已关闭（回退串行定位）"
+            if not getattr(contract, "allow_subagents", False):
+                _cc.record_event("subagents", "task_reject",
+                                 detail={"reason": "契约未声明 allow_subagents", "step": contract.workflow_step})
+                return ("task 子代理委派未获准：当前步骤契约未声明 allow_subagents"
+                        "（场景默认禁委派，SKILL.md x_tupu.allow_subagents: true 可显式开）")
         # 安全控制中心接线：能力控制（capability）关闭时跳过工具白名单/禁用检查（管理员显式操作）
         from app.services import guard_config as _gc
         _cap_on = _gc.guard_enabled("capability")

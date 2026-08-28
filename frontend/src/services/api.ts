@@ -511,4 +511,48 @@ export const guardsApi = {
     guardsClient.post('/guards/reset-defaults', {}, config),
 };
 
+// ===== 能力开关中心（批13-Q，/api/capabilities）=====
+export interface SubagentSpec {
+  name: string;
+  description: string;
+  prompt: string;
+  tools: string[];
+}
+
+export interface CapabilityStats {
+  probe_pass_rate?: number | null;
+  probe_total_7d?: number;
+  task_invoke_7d?: number;
+  last_change?: string | null;
+}
+
+export interface CapabilityItem {
+  capability_id: string;
+  title: string;
+  enabled: boolean;
+  params: Record<string, unknown>;
+  risk_level: 'red' | 'yellow' | 'green';
+  description: { what?: string; lose?: string; remain?: string };
+  confirm_required: boolean;
+  physical_blocked: boolean;
+  blocked_reason?: string | null;
+  stats?: CapabilityStats;
+  updated_by?: string | null;
+  updated_at?: string | null;
+  close_reason?: string | null;
+  version: number;
+}
+
+export const capabilitiesApi = {
+  list: (config?: AxiosRequestConfig) => guardsClient.get('/capabilities', config),
+  update: (capabilityId: string, body: { enabled?: boolean; params?: Record<string, unknown>; confirm?: boolean; close_reason?: string }, config?: AxiosRequestConfig) =>
+    guardsClient.patch(`/capabilities/${capabilityId}`, body, config),
+  probe: (capabilityId: string, config?: AxiosRequestConfig) =>
+    guardsClient.post(`/capabilities/${capabilityId}/probe`, {}, config),
+  events: (params?: { capability_id?: string; range?: string; page?: number; page_size?: number }, config?: AxiosRequestConfig) =>
+    guardsClient.get('/capabilities/events', { params, ...config }),
+  resetDefaults: (config?: AxiosRequestConfig) =>
+    guardsClient.post('/capabilities/reset-defaults', {}, config),
+};
+
 export default api;
