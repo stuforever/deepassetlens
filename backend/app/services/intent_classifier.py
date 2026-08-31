@@ -167,3 +167,40 @@ def guidance_labels_for(text: str) -> List[str]:
         return []
     picked = [_label for _label, _words in GUIDANCE_RULES if any(w in q for w in _words)]
     return list(dict.fromkeys(picked))
+
+
+# ---------------------------------------------------------------------------
+# 批13-J R3：否定模式检测（路由治理）——命中触发词但句内明确否定时不触发该场景
+# ---------------------------------------------------------------------------
+
+# 否定标记词（紧邻触发词前/后 N 字内才视为否定；避免「排除/别」等与业务语义冲突）
+NEGATION_MARKERS: Tuple[str, ...] = ("不要", "别", "不查", "不用", "无需", "排除", "去掉", "不算", "不看", "别查", "不是")
+_NEG_WINDOW = 4  # 否定词与触发词之间的最大字符距离（含否定词本身）
+
+
+def has_negation(text: str, keyword: str) -> bool:
+    """批13-J R3：句内否定模式检测——否定标记词出现在触发词前后 _NEG_WINDOW 字符内则视为否定。
+
+    例：
+      "不要查台区" -> "台区" 前有「不要」-> True（不触发台区场景）
+      "排除掉这些" -> "这些" 前有「排除」-> True
+      "统计用电客户数量" -> 无否定词 -> False（正常触发）
+    """
+    t = str(text or "")
+    k = str(keyword or "")
+    if not t or not k:
+        return False
+    idx = t.find(k)
+    if idx < 0:
+        return False
+    # 否定词在触发词前：取触发词左侧窗口
+    left = t[max(0, idx - _NEG_WINDOW):idx]
+    for neg in NEGATION_MARKERS:
+        if neg in left:
+            return True
+    # 否定词在触发词后：取触发词右侧窗口（如「台区不要查」）
+    right = t[idx + len(k):idx + len(k) + _NEG_WINDOW]
+    for neg in NEGATION_MARKERS:
+        if neg in right:
+            return True
+    return False

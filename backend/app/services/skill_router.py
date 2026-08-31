@@ -149,14 +149,25 @@ class SkillRouter:
     # 优先级 2/3：精确场景剧本 / 澄清
     # ------------------------------------------------------------------
     def _match_scenarios(self, text: str) -> List[SkillDefinition]:
-        """按触发词匹配所有启用的场景 Skill。"""
+        """按触发词匹配所有启用的场景 Skill。
+
+        批13-J R3（路由治理）：命中触发词但句内否定（「不要/别/排除+该词」模式）
+        时不触发该场景（低成本正则升级，如「不要查台区」不命中台区场景）。
+        """
         hits = []
         for skill in self._catalog.list_skills():
             if not skill.enabled:
                 continue
             trig = skill.triggers or {}
-            any_hits = match_any_keywords(text, trig.get("any") or [])
-            group_hits = match_all_groups(text, trig.get("all_groups") or [])
+            # 否定过滤：any 词命中但被否定 -> 剔除；组内任一词被否定 -> 整组不算
+            _any_raw = match_any_keywords(text, trig.get("any") or [])
+            any_hits = [k for k in _any_raw if not intent_classifier.has_negation(text, k)]
+            _grp_raw = match_all_groups(text, trig.get("all_groups") or [])
+            group_hits = []
+            for g in _grp_raw:
+                _words = [w.strip() for w in g.split(" + ")]
+                if not any(intent_classifier.has_negation(text, w) for w in _words):
+                    group_hits.append(g)
             if any_hits or group_hits:
                 hits.append((skill, any_hits, group_hits))
         return [h[0] for h in hits]
