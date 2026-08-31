@@ -129,3 +129,80 @@ class TestDelivery:
                   "response_format_degraded", "final_delivery", "sql_result",
                   "next_step_recommendation", "message_card"):
             assert k in p
+
+
+class TestPrep:
+    """批13-D Step2：freeplan.prep.run_prep（prep 段提取，行为零变化）。"""
+
+    def _mk(self, monkeypatch, route_type="generic"):
+        import types
+        from unittest.mock import AsyncMock, MagicMock
+
+        # 路由：generic/scenario -> 带 contract 的 route
+        class _Contract:
+            skill_id = "test_skill"
+            workflow_step = "step1"
+            allowed_tools = []
+            forbid_markdown_detail_table = False
+            aggregate_intent = None
+            hitl_enabled = False
+
+            def __init__(self):
+                self._runtime = {}
+                self.route_type = route_type
+
+        class _Route:
+            def __init__(self, rt):
+                self.route_type = rt
+                self.contract = _Contract()
+                self.to_dict = lambda: {"route_type": rt}
+
+        _route = _Route(route_type)
+
+        from app.services import skill_router as sr_mod
+        monkeypatch.setattr(sr_mod, "route_user_input", lambda q, ctx: _route)
+
+        from app.api import data_intelligence as di_mod
+        monkeypatch.setattr(di_mod, "_build_contract_system_message",
+                            lambda c, question="", precomputed_bundle=None: "契约消息")
+
+        agent = MagicMock()
+        agent.aget_state = AsyncMock(return_value=MagicMock(values={"messages": [], "last_scope": None}))
+        agent.aupdate_state = AsyncMock(return_value=None)
+
+        req = types.SimpleNamespace(user_input="查询项目数量", thread_id="t1", llm_connection_id="")
+        return agent, req
+
+    async def _run(self, agent, req):
+        from app.api.freeplan.prep import run_prep
+        timing = {}
+        return await run_prep(req=req, agent=agent, memory_thread_id="u:t1", prep_timing=timing), timing
+
+    def test_generic_契约注入(self, monkeypatch):
+        import asyncio
+        agent, req = self._mk(monkeypatch, "generic")
+        prep, timing = asyncio.run(self._run(agent, req))
+        assert prep.contract is not None and prep.route.route_type == "generic"
+        assert prep.effective_question == "查询项目数量"
+        assert len(prep.input_messages) == 2  # SystemMessage + HumanMessage
+        assert prep.ctx.get("contract") is prep.contract
+        assert "route_ms" in timing and "rewrite_ms" in timing
+        # last_skill 写回：generic -> 清空
+        agent.aupdate_state.assert_called_once()
+        assert agent.aupdate_state.call_args[0][1] == {"last_skill": None, "last_step": None}
+
+    def test_scenario_不改写(self, monkeypatch):
+        import asyncio
+        agent, req = self._mk(monkeypatch, "scenario")
+        prep, timing = asyncio.run(self._run(agent, req))
+        assert prep.route.route_type == "scenario"
+        # scenario 路径契约注入也走双消息（含 SystemMessage）
+        assert len(prep.input_messages) == 2
+        # last_skill 写回：scenario -> 记录 skill/step
+        assert agent.aupdate_state.call_args[0][1] == {"last_skill": "test_skill", "last_step": "step1"}
+
+    def test_hitl_enabled_generic(self, monkeypatch):
+        import asyncio
+        agent, req = self._mk(monkeypatch, "generic")
+        prep, _ = asyncio.run(self._run(agent, req))
+        assert prep.contract.hitl_enabled is True
