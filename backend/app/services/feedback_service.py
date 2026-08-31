@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""feedback_service.py - 用户反馈闭环（融合设计 §6.1 G5）
+"""feedback_service.py - 用户反馈观测闭环（融合设计 §6.1 G5；批13-C 重定义）
 
 POST /api/v1/data-intelligence/feedback {run_id, message_id, verdict, corrected_sql?, comment?}
-入库路由：
-  - 👍 且无修正 SQL -> 示例库 status=user_confirmed 直接入库 + Qdrant upsert（G1 良性数据源）
-  - 👎 + 修正 SQL -> 示例库 status=review 进审核队列（管理页 /qa-examples 审核）
-  - 👎 无修正 -> 仅记录（不污染示例库）
+批13-C 题库移除：👍👎 **纯观测信号**——唯一写路径为 KgFeedbackLog 观测表
+（不再有任何示例库自动写路径：👍 直接入库 / 👎+修正进审核队列均已移除）。
+聚合消费：候选推荐队列 = 近 N 天高频反馈且金标无覆盖的问题 TopM
+（golden_qa_service.list_candidate_recommendations）；人工审核后经管理页录入金标。
 run_id -> MetricQueryLog（user_query + executed_sql）取原问题与实际执行 SQL 作存证。
 """
 from __future__ import annotations
@@ -37,38 +37,22 @@ def _lookup_run(db: Session, run_id: str) -> Dict[str, Any]:
 def process_feedback(db: Session, *, run_id: str, message_id: Optional[str] = None,
                      verdict: str, corrected_sql: Optional[str] = None,
                      comment: Optional[str] = None) -> Dict[str, Any]:
-    """处理一条反馈，返回 {ok, route: created|review|ignored|noop, example_id?, reason}。"""
+    """处理一条反馈（批13-C：纯观测），返回 {ok, route: observed|ignored|noop, reason}。"""
     verdict = (verdict or "").strip().lower()
     if verdict not in ("up", "down"):
         return {"ok": False, "route": "noop", "reason": "verdict 必须为 up|down"}
     run = _lookup_run(db, run_id or "")
     question = (run.get("question") or "").strip()
     sql = (corrected_sql or "").strip() or (run.get("sql") or "").strip()
-    corrected = bool((corrected_sql or "").strip())
     try:
-        from app.services.qa_example_service import add_qa_example
-        if verdict == "up" and not corrected:
-            # 👍 无修正 -> 直接入库（user_confirmed）+ Qdrant upsert
-            if not question or not sql:
-                return {"ok": False, "route": "ignored",
-                        "reason": "无问题/SQL 存证（run_id 未命中 MetricQueryLog 或执行 SQL 为空）"}
-            res = add_qa_example(db, question_raw=question, sql=sql,
-                                 route_type="generic", example_type="user_confirmed",
-                                 entity_codes=[])
-            if not res.get("ok"):
-                return {"ok": False, "route": "ignored", "reason": str(res.get("error", "入库失败"))}
-            return {"ok": True, "route": "created", "example_id": res.get("id"),
-                    "reason": "👍 无修正：user_confirmed 直接入库 + Qdrant"}
-        if verdict == "down" and corrected:
-            # 👎 + 修正 SQL -> review 审核队列（管理页审核后启用）
-            if not question:
-                return {"ok": False, "route": "ignored", "reason": "无原问题存证"}
-            res = add_qa_example(db, question_raw=question, sql=sql,
-                                 route_type="generic", example_type="user_confirmed",
-                                 entity_codes=[], status="review")
-            return {"ok": True, "route": "review", "example_id": res.get("id"),
-                    "reason": "👎+修正：status=review 进审核队列"}
-        return {"ok": True, "route": "noop", "reason": f"verdict={verdict} corrected={corrected}：仅记录"}
+        from app.services.golden_qa_service import record_feedback
+        res = record_feedback(
+            db, run_id=run_id, verdict=verdict, question=question, sql=sql,
+            corrected_sql=(corrected_sql or "").strip(), comment=(comment or "").strip())
+        if not res.get("ok"):
+            return {"ok": False, "route": "ignored", "reason": str(res.get("error", "观测记录失败"))}
+        return {"ok": True, "route": "observed",
+                "reason": f"👍👎 纯观测（批13-C）：已记录，聚合进候选推荐队列（无任何自动写路径）"}
     except Exception as e:
         logger.warning(f"[Feedback] 处理失败: {e}")
         return {"ok": False, "route": "noop", "reason": f"异常: {e}"}

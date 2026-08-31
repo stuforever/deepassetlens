@@ -934,11 +934,13 @@ class KgExampleHitLog(Base):
 
 
 class KgGoldenQaSet(Base):
-    """金标评估集（融合设计 §6.2 G6）。
+    """金标评估集（融合设计 §6.2 G6；批13-C 升级为运行时唯一锚定源）。
 
-    人工/自动种子的「问题 -> 期望 SQL -> 结果 digest（row_count + 首行 sha1）」
-    供 eval_golden.py 逐条走流式问答比对结果 digest（比结果不比 SQL 文本）；
-    金标同时以 example_type=golden 灌入示例库（G1 冷启动即有数据）。
+    「问题 -> 期望 SQL -> 结果 digest（row_count + 首行 sha1）」供 eval_golden.py
+    逐条走流式问答比对结果 digest（比结果不比 SQL 文本）。
+    批13-C：question 向量化入 Qdrant tupu_golden_qa（增删改同步）；运行时契约
+    组装切 build_golden_payload（直通判定源 golden_hits）；example_type 灌示例库
+    的旧路径移除（👍👎 改纯观测聚合，无任何自动写路径）。
     """
 
     __tablename__ = "kg_golden_qa_set"
@@ -949,7 +951,29 @@ class KgGoldenQaSet(Base):
     route_type = Column(String(32), nullable=False, default="generic")  # generic | scenario
     scenario_tag = Column(String(100), nullable=True)          # 场景标签（distribution-overload 等）
     enabled = Column(Boolean, nullable=False, default=True)
+    engine = Column(String(16), nullable=True)                 # 批13-C：doris | physical | duckdb | api_integration（直通/锁引擎依据；NULL 时由 SQL 前缀推断）
+    hit_count = Column(Integer, nullable=False, default=0)     # 批13-C：命中统计（注入/直通后 +1）
+    last_hit_at = Column(DateTime(timezone=True), nullable=True)  # 批13-C：最近命中时间（管理页可见）
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class KgFeedbackLog(Base):
+    """批13-C：👍👎 观测表（重定义为纯观测信号）。
+
+    每条反馈落一行（verdict=up|down + 原问题 + SQL 存证）；不再有任何示例库
+    自动写路径（G1 upsert/审核队列移除）。候选推荐队列 = 近 N 天按 question
+    聚合（up 优先、计数排序）且金标无覆盖的问题 TopM（golden_qa_service.
+    list_candidate_recommendations）。
+    """
+    __tablename__ = "kg_feedback_logs"
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    run_id = Column(String(64), nullable=True, index=True)
+    verdict = Column(String(8), nullable=False)                # up | down
+    question = Column(String(500), nullable=True)              # 原问题存证（MetricQueryLog/EngineQueryLog 回溯）
+    sql = Column(Text, nullable=True)                          # 实际执行 SQL 存证
+    corrected_sql = Column(Text, nullable=True)                # 用户修正 SQL（如有）
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class GuardPolicy(Base):

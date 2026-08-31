@@ -1,4 +1,8 @@
+import logging
+
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 
 # 安全控制中心基线策略（《安全控制中心实施设计》2.1 种子数据）
@@ -270,3 +274,42 @@ def init_db(db: Session):
 
     # 能力开关中心基线策略（批13-Q，幂等）
     _seed_capability_policies(db)
+
+    # 批13-C：金标表兼容补列（已有库缺 engine/hit_count/last_hit_at；create_all 不改已有表）
+    _ensure_golden_columns(db)
+
+
+def _ensure_golden_columns(db: Session):
+    """批13-C：kg_golden_qa_set 增列兼容（engine/hit_count/last_hit_at）+ engine 值回填。
+
+    直通需 engine 列（设计字段核对项）：NULL 时按 SQL 前缀推断——
+    internal./test_db./pg_tupu. -> doris 联邦，其余 -> physical。失败仅告警不阻断启动。
+    """
+    try:
+        from sqlalchemy import text
+        _want = {
+            "engine": "VARCHAR(16) NULL",
+            "hit_count": "INTEGER NULL DEFAULT 0",
+            "last_hit_at": "DATETIME NULL",
+        }
+        _existing = {r[0] for r in db.execute(text(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kg_golden_qa_set'")).fetchall()}
+        for col, ddl in _want.items():
+            if col not in _existing:
+                db.execute(text(f"ALTER TABLE kg_golden_qa_set ADD COLUMN {col} {ddl}"))
+                logger.info(f"[InitDB] kg_golden_qa_set 补列 {col}")
+        db.commit()
+        # engine 值回填（仅 NULL 行；与 _exec_for_digest 同一前缀口径）
+        db.execute(text(
+            "UPDATE kg_golden_qa_set SET engine='doris' "
+            "WHERE engine IS NULL AND (expected_sql LIKE '%internal.%' OR expected_sql LIKE '%test_db.%' OR expected_sql LIKE '%pg_tupu.%')"))
+        db.execute(text(
+            "UPDATE kg_golden_qa_set SET engine='physical' WHERE engine IS NULL"))
+        db.commit()
+    except Exception as _e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.warning(f"[InitDB] 金标表补列/回填失败（忽略）: {_e}")

@@ -48,17 +48,20 @@ class TestM4Golden:
         assert d1["first_row_hash"] == d2["first_row_hash"]
         assert d1["first_row_hash"] != d3["first_row_hash"]  # 首行不同 -> hash 不同
 
-    def test_CRUD(self, db):
-        from app.services.golden_qa_service import add_golden, delete_golden, list_golden, set_golden_status
-        res = add_golden(db, question="q_test", expected_sql="SELECT 1",
-                         expected_result_digest={"row_count": 1, "first_row_hash": "h"},
-                         scenario_tag="test", feed_example=False)
+    def test_CRUD(self, db, monkeypatch):
+        """批13-C：CRUD 正常 + 同步向量（mock 掉 Qdrant 同步与 embed，避免网络依赖）。"""
+        from app.services import golden_qa_service as gsvc
+        monkeypatch.setattr(gsvc, "_sync_golden_qdrant", lambda *a, **k: None)
+        monkeypatch.setattr(gsvc, "_delete_golden_qdrant", lambda *a, **k: None)
+        res = gsvc.add_golden(db, question="q_test", expected_sql="SELECT 1",
+                              expected_result_digest={"row_count": 1, "first_row_hash": "h"},
+                              scenario_tag="test")
         assert res["ok"] and res["expected_result_digest"]["row_count"] == 1
         gid = res["id"]
-        assert any(g["id"] == gid for g in list_golden(db))
-        assert set_golden_status(db, gid, False)["enabled"] is False
-        assert list_golden(db, enabled_only=True) == [] or all(g["id"] != gid for g in list_golden(db, enabled_only=True))
-        assert delete_golden(db, gid)["ok"]
+        assert any(g["id"] == gid for g in gsvc.list_golden(db))
+        assert gsvc.set_golden_status(db, gid, False)["enabled"] is False
+        assert all(g["id"] != gid for g in gsvc.list_golden(db, enabled_only=True))
+        assert gsvc.delete_golden(db, gid)["ok"]
 
     def test_add缺digest不执行失败SQL(self, db):
         from app.services.golden_qa_service import add_golden
@@ -74,6 +77,9 @@ class TestM4Golden:
             return {"row_count": 2, "first_row_hash": "abc123"}
 
         monkeypatch.setattr(gsvc, "_exec_for_digest", fake_exec)
+        # 批13-C：种子同步向量 mock（不触网）
+        _synced = {"n": 0}
+        monkeypatch.setattr(gsvc, "_sync_golden_qdrant", lambda *a, **k: _synced.__setitem__("n", _synced["n"] + 1))
         # 用独立测试模板（scenario_tag=test，避免触碰真实种子金标），fixture 负责清理
         monkeypatch.setattr(gsvc, "SEED_TEMPLATES", [
             {"question": "test_seed_统计客户数", "expected_sql": "SELECT COUNT(*) FROM t",
@@ -86,9 +92,8 @@ class TestM4Golden:
         goldens = db.query(KgGoldenQaSet).filter(KgGoldenQaSet.question.in_(
             ["test_seed_统计客户数", "test_seed_客户类型分布"])).count()
         assert goldens >= 1
-        # 金标兼灌示例库（example_type=golden，G1 冷启动）
-        ex = db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.example_type == "golden").count()
-        assert ex >= 1
+        # 批13-C：种子新行同步向量 tupu_golden_qa（不再灌示例库）
+        assert _synced["n"] >= res["seeded"]
         # 幂等：再跑不重复
         res2 = gsvc.seed_golden(db, max_count=5)
         assert res2["seeded"] == 0 or all(t["question"] in [x["question"] for x in res2] or True for _ in [0])

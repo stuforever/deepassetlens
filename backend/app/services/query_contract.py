@@ -443,7 +443,7 @@ def apply_rubric_tier(contract: QueryContract) -> None:
         return
     if getattr(contract, "aggregate_intent", None):
         return  # S1：聚合分布正是自评兜底对象，不直通
-    hits = (contract._runtime or {}).get("example_hits") or []
+    hits = (contract._runtime or {}).get("golden_hits") or []
     if hits and max((h.get("score") or 0) for h in hits) >= EXAMPLE_ANCHOR_SIM:
         contract.rubric = None
-        contract._runtime["rubric_skipped"] = "example_anchored"
+        contract._runtime["rubric_skipped"] = "golden_anchored"

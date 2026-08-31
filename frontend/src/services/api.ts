@@ -419,41 +419,45 @@ export const engineApi = {
     engineClient.post('/accelerators/refresh/all', {}, config),
 };
 
-// G1 验证示例库（融合设计 §4.1，/api/v1/qa-examples）
-export type QaExampleItem = {
+// ===== 金标锚定管理（批13-C 题库移除：示例库 -> 金标，/api/v1/golden-qa）=====
+
+// ===== 金标锚定管理（批13-C 题库移除：示例库 -> 金标，/api/v1/golden-qa）=====
+export type GoldenQaItem = {
   id: string;
-  question_raw: string;
-  question_norm?: string;
-  sql?: string;
-  entity_codes?: string[];
+  question: string;
+  expected_sql?: string | null;
+  expected_result_digest?: { row_count?: number; first_row_hash?: string } | null;
   route_type?: string;
-  engine?: string | null;
-  example_type?: string;
-  status?: string;      // enabled | disabled | review
-  hit_count?: number;
-  hit_count_30d?: number;   // S4a：近 30 天命中
+  scenario_tag?: string | null;
+  enabled?: boolean;
+  engine?: string | null;      // doris | physical | duckdb | api_integration
+  hit_count?: number;          // 批13-C：命中统计
+  last_hit_at?: string | null; // 最近命中时间
   created_at?: string | null;
 };
 
-export type QaExampleSimilarItem = {
-  id: string;
-  question_raw: string;
-  score?: number;
+export type GoldenCandidate = {
+  question: string;        // 展示串（最近一次反馈原文）
+  up_count: number;
+  down_count: number;
+  total: number;
+  last_seen?: string | null;
+  latest_sql?: string;     // 反馈 SQL 存证（corrected 优先）
 };
 
-export const qaExamplesApi = {
-  list: (params?: { status?: string; keyword?: string; page?: number; size?: number }, config?: AxiosRequestConfig) =>
-    api.get('/qa-examples', { params, ...config }),
-  create: (data: { question_raw: string; sql?: string; entity_codes?: string[]; route_type?: string; engine?: string; example_type?: string }, config?: AxiosRequestConfig) =>
-    api.post('/qa-examples', data, config),
-  seed: (items: Array<{ question_raw: string; sql?: string; entity_codes?: string[]; route_type?: string; engine?: string; example_type?: string }>, config?: AxiosRequestConfig) =>
-    api.post('/qa-examples/seed', { items }, config),
-  setStatus: (id: string, status: string, config?: AxiosRequestConfig) =>
-    api.patch(`/qa-examples/${id}/status`, { status }, config),
+export const goldenQaApi = {
+  list: (params?: { enabled_only?: boolean }, config?: AxiosRequestConfig) =>
+    api.get('/golden-qa', { params, ...config }),
+  create: (data: { question: string; expected_sql: string; expected_result_digest?: object; route_type?: string; scenario_tag?: string; engine?: string }, config?: AxiosRequestConfig) =>
+    api.post('/golden-qa', data, config),
+  seed: (config?: AxiosRequestConfig) => api.post('/golden-qa/seed', {}, config),
+  reseedVectors: (config?: AxiosRequestConfig) => api.post('/golden-qa/reseed', {}, config),
+  candidates: (params?: { days?: number; top_m?: number }, config?: AxiosRequestConfig) =>
+    api.get('/golden-qa/candidates', { params, ...config }),
+  setStatus: (id: string, enabled: boolean, config?: AxiosRequestConfig) =>
+    api.patch(`/golden-qa/${id}`, { enabled }, config),
   remove: (id: string, config?: AxiosRequestConfig) =>
-    api.delete(`/qa-examples/${id}`, config),
-  similar: (id: string, config?: AxiosRequestConfig) =>
-    api.get(`/qa-examples/${id}/similar`, config),
+    api.delete(`/golden-qa/${id}`, config),
 };
 
 // ===== 安全控制中心（《安全控制中心实施设计》，/api/guards）=====

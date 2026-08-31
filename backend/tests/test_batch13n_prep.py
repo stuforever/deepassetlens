@@ -75,18 +75,18 @@ class TestN4RewriteAfterRoute:
 
 class TestN5PrefetchBundle:
     def test_build_msg_uses_precomputed_without_internal_retrieval(self):
-        """precomputed_bundle 非空时不触发内部同步检索。"""
+        """precomputed_bundle 非空时不触发内部同步检索（批13-C：金标 bundle）。"""
         from app.api.data_intelligence import _build_contract_system_message
         from app.services.query_contract import QueryContract
         contract = QueryContract.generic(route_reason="test")
-        bundle = {"examples_block": "\n示例块", "example_hits": [{"id": 1, "score": 0.99, "sql": "SELECT 1", "engine": "doris"}],
+        bundle = {"golden_block": "\n金标锚定块", "golden_hits": [{"id": 1, "score": 0.99, "sql": "SELECT 1", "engine": "doris"}],
                   "entity_hint_block": ""}
-        with patch("app.services.qa_example_service.retrieve_context_bundle") as mock_ret:
+        with patch("app.services.golden_qa_service.retrieve_golden_bundle") as mock_ret:
             msg = _build_contract_system_message(contract, question="查询项目数量", precomputed_bundle=bundle)
             mock_ret.assert_not_called()
-        assert "首选计划" in msg or "示例块" in msg
-        hits = getattr(contract, "_runtime", {}).get("example_hits")
-        assert hits, "precomputed bundle 命中应写入 contract._runtime.example_hits"
+        assert "首选计划" in msg or "金标锚定块" in msg
+        hits = getattr(contract, "_runtime", {}).get("golden_hits")
+        assert hits, "precomputed bundle 命中应写入 contract._runtime.golden_hits"
 
     def test_prefetch_task_wiring(self):
         """流层启动后台预取并在契约组装点收割。"""

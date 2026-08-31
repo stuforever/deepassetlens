@@ -32,15 +32,15 @@ class DirectPipelineError(Exception):
 def evaluate_direct_eligibility(contract: Any, question: str) -> Optional[Dict[str, Any]]:
     """路由后、Agent 前的直通判定（纯规则，静默不满足返回 None）。
 
-    条件（设计 §2.5）：route_type=generic 且 example_hits 最高分 ≥0.95
+    条件（设计 §2.5；批13-C 切源 golden_hits）：route_type=generic 且 golden_hits 最高分 ≥0.95
     且 intent_classifier=count 类 且 无动态条件（日期/编号/比较词）
-    且 示例 sql 非空（命中行本就来自 status=enabled 单源——DB 层过滤 + Qdrant payload 过滤）。
+    且 金标 sql 非空（命中行本就来自 enabled 且有 SQL 单源——DB 层过滤 + Qdrant payload 过滤）。
     """
     if contract is None or getattr(contract, "route_type", "") != "generic":
         return None
     if getattr(contract, "clarify_required", False):
         return None
-    hits = (getattr(contract, "_runtime", {}) or {}).get("example_hits") or []
+    hits = (getattr(contract, "_runtime", {}) or {}).get("golden_hits") or []
     if not hits:
         return None
     top = max(hits, key=lambda h: h.get("score") or 0)
@@ -94,13 +94,13 @@ def run_direct_pipeline(plan: Dict[str, Any], question: str,
         )
     except Exception as _le:
         logger.warning(f"[DirectPipeline] 查询日志失败（忽略）: {_le}")
-    # ④ 命中计数（与 Agent 注入路径一致；👍 幂等——直通不新增示例，只累计命中）
+    # ④ 命中计数（批13-C：bump 金标 hit_count；👍 已改纯观测——直通不新增示例/金标）
     try:
         from app.core.database import SessionLocal
-        from app.services.qa_example_service import bump_hit_count
+        from app.services.golden_qa_service import bump_golden_hit
         _db = SessionLocal()
         try:
-            bump_hit_count(_db, [str(plan["hit"].get("id"))])
+            bump_golden_hit(_db, [str(plan["hit"].get("id"))])
         finally:
             _db.close()
     except Exception as _he:

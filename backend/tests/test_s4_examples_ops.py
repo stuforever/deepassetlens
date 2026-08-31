@@ -155,21 +155,14 @@ class TestS4Similar:
         finally:
             db.close()
 
-    def test_similar_api(self, monkeypatch):
-        """Qdrant 不可用 -> similar 端点仍 200 且 items=[]（不抛）。"""
-        import app.services.qa_example_service as svc
-        monkeypatch.setattr(svc, "_safe_client", lambda: None)
+    def test_similar_api_410_下线壳(self):
+        """批13-C：qa-examples API 已下线 -> similar 端点返回 410 deprecation 壳。"""
         from app.main import app
 
-        db = SessionLocal()
-        try:
-            eid = _seed_one(db)
-        finally:
-            db.close()
         tc = TestClient(app)
-        r = tc.get(f"/api/v1/qa-examples/{eid}/similar")
+        r = tc.get("/api/v1/qa-examples/not-exist-id/similar")
         assert r.status_code == 200
-        assert r.json()["data"]["items"] == []
+        assert r.json()["code"] == 410
 
 
 class TestS4Table:

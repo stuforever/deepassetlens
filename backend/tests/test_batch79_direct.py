@@ -98,8 +98,8 @@ class TestRetrieveContextBundle:
 def _generic_contract_with_hit(score=0.99, sql="SELECT COUNT(*) AS total FROM pg_tupu.public.dim_cst_elec_cons_cust"):
     from app.services.query_contract import QueryContract
     c = QueryContract.generic(route_reason="test")
-    c._runtime["example_hits"] = [{
-        "id": "ex-1", "score": score, "question_raw": "统计用电客户总数",
+    c._runtime["golden_hits"] = [{
+        "id": "gold-1", "score": score, "question_raw": "统计用电客户总数",
         "sql": sql, "route_type": "generic", "engine": "doris",
     }]
     return c
@@ -130,10 +130,10 @@ class TestDirectEligibility:
     def test_empty_sql_or_api_engine_not_eligible(self):
         from app.services.direct_pipeline import evaluate_direct_eligibility
         c = _generic_contract_with_hit()
-        c._runtime["example_hits"][0]["sql"] = ""
+        c._runtime["golden_hits"][0]["sql"] = ""
         assert evaluate_direct_eligibility(c, "统计用电客户数量") is None
         c2 = _generic_contract_with_hit()
-        c2._runtime["example_hits"][0]["engine"] = "api_integration"
+        c2._runtime["golden_hits"][0]["engine"] = "api_integration"
         assert evaluate_direct_eligibility(c2, "统计用电客户数量") is None
 
 
@@ -161,8 +161,8 @@ class TestRunDirectPipeline:
         monkeypatch.setattr(kgh, "dispatch_kg_action", dispatch_fn)
         import app.services.engine_query_log as eql
         monkeypatch.setattr(eql, "record_query_log", lambda **kw: None)
-        import app.services.qa_example_service as qes
-        monkeypatch.setattr(qes, "bump_hit_count", lambda db, ids: None)
+        import app.services.golden_qa_service as gqs
+        monkeypatch.setattr(gqs, "bump_golden_hit", lambda db, ids: None)
         import app.services.direct_pipeline as dp
 
     def test_success_path(self, monkeypatch):

@@ -1,14 +1,15 @@
-"""M4 G5 反馈闭环测试（融合设计 §6.1）。
+"""M4 G5 反馈观测测试（融合设计 §6.1；批13-C 重定义为纯观测信号）。
 
-覆盖：👍 无修正 -> user_confirmed 直接入库；👎+修正 -> review 审核队列；👎 无修正 -> 仅记录；
+覆盖：👍/👎 全部落 KgFeedbackLog 观测表（无任何示例库自动写路径；SQL/question 存证）；
 无效 verdict；run_id -> MetricQueryLog 取原问题/执行 SQL 存证。
+候选推荐消费见 test_golden_candidates.py（list_candidate_recommendations）。
 """
 import uuid
 
 import pytest
 
 from app.core.database import SessionLocal
-from app.models.base import KgVerifiedQaExample, MetricQueryLog
+from app.models.base import KgFeedbackLog, KgVerifiedQaExample, MetricQueryLog
 
 
 @pytest.fixture
@@ -36,27 +37,43 @@ def run_row(db):
 
 
 class TestM5Feedback:
-    def test_点赞无修正_直接入库(self, db, run_row):
+    def test_点赞无修正_纯观测(self, db, run_row):
+        """批13-C 重定义：👍 无修正 -> 纯观测落 KgFeedbackLog（不再入示例库）。"""
         from app.services.feedback_service import process_feedback
         res = process_feedback(db, run_id=run_row, verdict="up")
-        assert res["ok"] and res["route"] == "created"
-        row = db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.id == res["example_id"]).first()
-        assert row is not None and row.example_type == "user_confirmed" and row.status == "enabled"
-        assert row.question_raw == "统计用电客户总数"
+        assert res["ok"] and res["route"] == "observed"
+        row = db.query(KgFeedbackLog).filter(KgFeedbackLog.run_id == run_row,
+                                             KgFeedbackLog.verdict == "up").order_by(
+            KgFeedbackLog.created_at.desc()).first()
+        assert row is not None and row.question == "统计用电客户总数"
         assert "cms20_cst_cust" in (row.sql or "")
+        db.query(KgFeedbackLog).filter(KgFeedbackLog.id == row.id).delete(synchronize_session=False)
+        db.commit()
 
-    def test_点踩加修正_进审核(self, db, run_row):
+    def test_点踩加修正_纯观测存证(self, db, run_row):
+        """批13-C 重定义：👎+修正 -> 纯观测记录（SQL 存证；候选推荐队列消费，无自动写路径）。"""
         from app.services.feedback_service import process_feedback
-        res = process_feedback(db, run_id=run_row, verdict="down",
-                               corrected_sql="SELECT COUNT(*) AS total FROM cms20_cst_cust WHERE 1=1")
-        assert res["ok"] and res["route"] == "review"
-        row = db.query(KgVerifiedQaExample).filter(KgVerifiedQaExample.id == res["example_id"]).first()
-        assert row is not None and row.status == "review"
+        _fixed = "SELECT COUNT(*) AS total FROM cms20_cst_cust WHERE 1=1"
+        res = process_feedback(db, run_id=run_row, verdict="down", corrected_sql=_fixed)
+        assert res["ok"] and res["route"] == "observed"
+        row = db.query(KgFeedbackLog).filter(KgFeedbackLog.run_id == run_row,
+                                             KgFeedbackLog.verdict == "down").order_by(
+            KgFeedbackLog.created_at.desc()).first()
+        assert row is not None and (row.corrected_sql or "") == _fixed
+        db.query(KgFeedbackLog).filter(KgFeedbackLog.id == row.id).delete(synchronize_session=False)
+        db.commit()
 
-    def test_点踩无修正_仅记录(self, db, run_row):
+    def test_点踩无修正_纯观测(self, db, run_row):
+        """批13-C 重定义：👎 无修正 -> 同样落观测表（存证 question/sql）。"""
         from app.services.feedback_service import process_feedback
         res = process_feedback(db, run_id=run_row, verdict="down")
-        assert res["ok"] and res["route"] == "noop"
+        assert res["ok"] and res["route"] == "observed"
+        row = db.query(KgFeedbackLog).filter(KgFeedbackLog.run_id == run_row,
+                                             KgFeedbackLog.verdict == "down").order_by(
+            KgFeedbackLog.created_at.desc()).first()
+        assert row is not None
+        db.query(KgFeedbackLog).filter(KgFeedbackLog.id == row.id).delete(synchronize_session=False)
+        db.commit()
 
     def test_无效verdict(self, db, run_row):
         from app.services.feedback_service import process_feedback

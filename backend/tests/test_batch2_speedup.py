@@ -25,18 +25,19 @@ class TestCountNormalize:
 
 
 # ---------------------------------------------------------------------------
-# 批2-C 首选计划注入（_build_contract_system_message 内，高分示例 -> 「首选计划」块）
+# 批2-C 首选计划注入（_build_contract_system_message 内，高分金标 -> 「首选计划」块）
+# 批13-C：数据源 example_hits -> golden_hits（金标锚定，qa_example_service 运行时退役）
 # ---------------------------------------------------------------------------
 class TestDirectPlan:
     def _build(self, monkeypatch, score, sql="SELECT COUNT(*) AS total FROM cms20_cst_cust"):
-        import app.services.qa_example_service as qes
+        import app.services.golden_qa_service as gqs
         from app.services.query_contract import QueryContract
         from app.api.data_intelligence import _build_contract_system_message
-        hits = [{"id": "e1", "score": score, "question_raw": "统计用电客户总数", "sql": sql, "engine": ""}]
-        # 批7-E1 后契约消息改走 retrieve_context_bundle 单入口——mock 之
-        monkeypatch.setattr(qes, "retrieve_context_bundle", lambda db, q, **kw: {
-            "examples_block": "\n参考示例...", "example_hits": hits, "entity_hint_block": ""})
-        monkeypatch.setattr(qes, "bump_hit_count", lambda db, ids: None)
+        hits = [{"id": "g1", "score": score, "question_raw": "统计用电客户总数", "sql": sql, "engine": ""}]
+        # 契约消息走 retrieve_golden_bundle 单入口——mock 之
+        monkeypatch.setattr(gqs, "retrieve_golden_bundle", lambda db, q, **kw: {
+            "golden_block": "\n金标锚定（已验证查询，仅供构造参考，禁止照抄执行）：", "golden_hits": hits, "entity_hint_block": ""})
+        monkeypatch.setattr(gqs, "bump_golden_hit", lambda db, ids: None)
         c = QueryContract.generic(route_reason="test")
         msg = _build_contract_system_message(c, question="统计用电客户数量")
         return c, msg
@@ -46,13 +47,13 @@ class TestDirectPlan:
         c, msg = self._build(monkeypatch, score=0.95)
         assert "首选计划" in msg
         assert "跳过实体定位与读技能步骤" in msg
-        assert c._runtime["example_hits"][0]["score"] == 0.95
+        assert c._runtime["golden_hits"][0]["score"] == 0.95
 
     def test_low_score_no_direct_plan(self, monkeypatch):
-        """sim<0.90 -> 不含「首选计划」（仍只给参考示例）"""
+        """sim<0.90 -> 不含「首选计划」（仍只给金标锚定参考）"""
         c, msg = self._build(monkeypatch, score=0.80)
         assert "首选计划" not in msg
-        assert "参考示例" in msg
+        assert "金标锚定" in msg
 
     def test_no_sql_no_direct_plan(self, monkeypatch):
         """高分但无 sql -> 不直通"""

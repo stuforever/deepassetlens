@@ -118,20 +118,36 @@ class TestG1Retrieval:
         finally:
             db.close()
 
-    def test_契约注入含示例与example_hits(self):
+    def test_契约注入含金标与golden_hits(self):
+        """批13-C：运行时契约注入切金标（golden_hits；示例库退役不再注入）。"""
         from app.api.data_intelligence import _build_contract_system_message
         from app.services.query_contract import QueryContract
+        from app.models.base import KgGoldenQaSet
 
+        _QG = "test_g1c_统计用电客户总数"
+        _QG_SQL = "SELECT COUNT(*) FROM dim_cst_elec_cons_cust"
         db = SessionLocal()
         try:
-            _seed_one(db)
+            db.query(KgGoldenQaSet).filter(KgGoldenQaSet.question == _QG).delete(synchronize_session=False)
+            db.add(KgGoldenQaSet(id="test-g1c-gold", question=_QG, expected_sql=_QG_SQL,
+                                 expected_result_digest={"row_count": 1, "first_row_hash": "x"},
+                                 route_type="generic", engine="doris", enabled=True))
+            db.commit()
         finally:
             db.close()
-        qc = QueryContract.generic()
-        msg = _build_contract_system_message(qc, question=_QA)
-        assert "参考示例" in msg
-        assert _SQL in msg
-        assert qc._runtime.get("example_hits"), "example_hits 应被记录"
+        try:
+            qc = QueryContract.generic()
+            msg = _build_contract_system_message(qc, question=_QG)
+            assert "金标锚定" in msg
+            assert _QG_SQL in msg
+            assert qc._runtime.get("golden_hits"), "golden_hits 应被记录"
+        finally:
+            db = SessionLocal()
+            try:
+                db.query(KgGoldenQaSet).filter(KgGoldenQaSet.id == "test-g1c-gold").delete(synchronize_session=False)
+                db.commit()
+            finally:
+                db.close()
 
 
 class TestG1Degrade:
@@ -164,17 +180,24 @@ class TestG1Degrade:
 
 class TestG1AdminAPI:
     def test_crud_api(self):
+        """批13-C：qa-examples API 下线（410 deprecation 壳）；golden-qa CRUD 正常。"""
         from app.main import app
 
         tc = TestClient(app)
-        r = tc.post("/api/v1/qa-examples", json={
-            "question_raw": _QA, "sql": _SQL, "route_type": "generic", "engine": "physical", "example_type": "golden"})
-        assert r.status_code == 200
-        eid = r.json()["data"]["id"]
-        # 只断言测试行存在/消失（生产示例共存时不依赖绝对 total）
-        lst = tc.get("/api/v1/qa-examples").json()["data"]["items"]
-        assert any(i["id"] == eid for i in lst)
-        assert tc.patch(f"/api/v1/qa-examples/{eid}/status", json={"status": "disabled"}).status_code == 200
-        assert tc.delete(f"/api/v1/qa-examples/{eid}").status_code == 200
-        lst2 = tc.get("/api/v1/qa-examples").json()["data"]["items"]
-        assert all(i["id"] != eid for i in lst2)
+        # 示例库端点已 410
+        assert tc.post("/api/v1/qa-examples", json={"question_raw": _QA, "sql": _SQL}).status_code == 200
+        body = tc.post("/api/v1/qa-examples", json={"question_raw": _QA, "sql": _SQL}).json()
+        assert body.get("code") == 410
+        # 金标 CRUD（显式 digest 绕过 SQL 执行；同步向量失败仅告警不阻断）
+        r = tc.post("/api/v1/golden-qa", json={
+            "question": "test_g1c_金标CRUD专用问题", "expected_sql": _SQL,
+            "expected_result_digest": {"row_count": 1, "first_row_hash": "x"},
+            "route_type": "generic"})
+        assert r.status_code == 200 and r.json().get("ok") is True
+        gid = r.json()["id"]
+        lst = tc.get("/api/v1/golden-qa").json()["data"]["items"]
+        assert any(i["id"] == gid for i in lst)
+        assert tc.patch(f"/api/v1/golden-qa/{gid}", json={"enabled": False}).status_code == 200
+        assert tc.delete(f"/api/v1/golden-qa/{gid}").status_code == 200
+        lst2 = tc.get("/api/v1/golden-qa").json()["data"]["items"]
+        assert all(i["id"] != gid for i in lst2)

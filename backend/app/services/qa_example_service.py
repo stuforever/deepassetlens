@@ -1,5 +1,14 @@
-"""G1 验证示例库服务（融合设计 §4.1）。
+"""G1 验证示例库服务（融合设计 §4.1）——批13-C 运行时退役。
 
+**批13-C 题库移除**：运行时契约组装/直通判定/自评豁免已全部切换金标体系
+（golden_qa_service.retrieve_golden_bundle / build_golden_payload / bump_golden_hit，
+runtime 键 example_hits -> golden_hits）；👍👎 改纯观测（KgFeedbackLog +
+候选推荐队列），feedback_service 不再调用本服务；QA API（/api/v1/qa-examples）
+已下线为 410 deprecation 壳。本模块保留 CRUD/检索原函数仅供历史数据迁移与
+既有测试引用，**运行时路径零引用**；Qdrant tupu_qa_examples 集合退役脚本见
+scripts/_retire_qa_examples.py。
+
+历史功能（已不在运行时路径）：
 - 语义检索：问题 embedding -> Qdrant 集合 tupu_qa_examples 检索 top-3（阈值 0.75，status=enabled）；
 - 注入块：build_examples_block 供 _build_contract_system_message 尾部追加（仅供构造参考，禁止照抄执行）；
 - CRUD：新增/列表/启停/删除（DB 行 + Qdrant point 同步）；
