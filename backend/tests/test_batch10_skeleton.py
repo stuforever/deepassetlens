@@ -56,12 +56,13 @@ class TestCleanAggregate:
 
 class TestWiring:
     def test_confidence_treats_skip_as_high(self):
-        """done 置信度口径：skipped_clean_aggregate 与 satisfied 同档（源码接线检查）"""
-        with open(__import__("os").path.join(
+        """done 置信度口径：skipped_clean_aggregate 与 satisfied 同档（源码接线检查，批13-D 迁移至 freeplan.delivery）"""
+        _base = __import__("os").path.join(
                 __import__("os").path.dirname(__file__),
-                "..", "app", "api", "data_intelligence_stream.py"), encoding="utf-8") as f:
-            src = f.read()
-        assert "skipped_clean_aggregate" in src
+                "..", "app", "api")
+        with open(__import__("os").path.join(_base, "freeplan", "delivery.py"), encoding="utf-8") as f:
+            dsrc = f.read()
+        assert "skipped_clean_aggregate" in dsrc
 
     def test_middleware_installed(self):
         """装配点使用 _TupuRubricMiddleware 子类"""

@@ -124,18 +124,27 @@ class TestM3Verification:
 
 class TestM3G7SSE:
     def test_stream含rubric与query_verified事件(self):
-        p = Path(__file__).resolve().parent.parent / "app" / "api" / "data_intelligence_stream.py"
-        src = p.read_text(encoding="utf-8")
-        assert 'yield f"event: query_verified\\n"' in src
-        assert 'yield f"event: rubric\\n"' in src
+        """批13-D：事件帧经 freeplan.sse.sse_frames 统一生成（拆分后锚点迁移）。"""
+        base = Path(__file__).resolve().parent.parent / "app"
+        src = (base / "api" / "data_intelligence_stream.py").read_text(encoding="utf-8")
+        dsrc = (base / "api" / "freeplan" / "delivery.py").read_text(encoding="utf-8")
+        # 帧触发点仍在 stream（sse_frames 调用），证据/自评载荷构建在 delivery
+        assert 'sse_frames("query_verified"' in src
+        assert 'sse_frames("rubric"' in src
+        assert '"verification": _ev_verification' in dsrc
+        assert '"confidence": _ev_confidence' in src  # query_verified/rubric 帧带置信度
 
     def test_final含evidence与confidence(self):
-        p = Path(__file__).resolve().parent.parent / "app" / "api" / "data_intelligence_stream.py"
-        src = p.read_text(encoding="utf-8")
-        assert '"evidence": _evidence' in src
-        assert '"confidence": _ev_confidence' in src
-        # 置信度三级规则
-        assert '_ev_confidence = "中"' in src
-        assert '_ev_confidence = "高"' in src
-        assert '_ev_confidence = "低"' in src
-        assert '"rubric": _ev_rubric, "corrections": _ev_corrections' in src
+        """批13-D：evidence 聚合 + 置信度三级逻辑迁移至 freeplan.delivery.build_evidence。"""
+        base = Path(__file__).resolve().parent.parent / "app"
+        src = (base / "api" / "data_intelligence_stream.py").read_text(encoding="utf-8")
+        dsrc = (base / "api" / "freeplan" / "delivery.py").read_text(encoding="utf-8")
+        assert "_ev = build_evidence(" in src
+        assert '_evidence = _ev["evidence"]' in src
+        assert '"evidence": evidence' in dsrc  # done 载荷键（build_done_payload）
+        assert '"confidence": _ev_confidence' in dsrc
+        # 置信度三级规则（迁移至 delivery.build_evidence）
+        assert '_ev_confidence = "中"' in dsrc
+        assert '_ev_confidence = "高"' in dsrc
+        assert '_ev_confidence = "低"' in dsrc
+        assert '"rubric": _ev_rubric, "corrections": _ev_corrections' in dsrc

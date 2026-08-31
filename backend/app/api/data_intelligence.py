@@ -84,8 +84,8 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
     """按契约构造每次请求注入的 SystemMessage（设计 §7.1：只向模型提供受控上下文）。
 
     模型只在契约允许范围内做判断；契约本身由代码路由+SkillPolicy 强制执行。
-    G1（融合设计 §4.1）：question 非空时尾部追加 top-3 已验证示例（Qdrant 不可用/无命中
-    静默跳过，不阻断问答）；命中写入 contract._runtime["example_hits"] 并累计 hit_count。
+    G1（融合设计 §4.1；批13-C 金标锚定）：question 非空时尾部追加 top-3 金标锚定
+    静默跳过，不阻断问答）；命中写入 contract._runtime["golden_hits"] 并累计 hit_count。
     批13-N5：precomputed_bundle 非空时直接使用流层后台预取的检索结果，跳过内部同步检索
     （检索已与锁/状态读取/路由并行）；None 时维持原行为内部检索。
     """
@@ -122,53 +122,54 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
         )
     if question:
         try:
-            # 批7-E1 检索单入口：一次 embedding 双集合（示例+实体）并搜 + E2 短窗缓存
-            # （同问题 60s 内二次提问 0 远程检索；批9 直通判定共享同一份 example_hits）
+            # 批13-C：金标锚定检索单入口（qa_example_service 运行时退役，题库移除）
+            # 一次 embedding 双集合（金标+实体）并搜 + E2 短窗缓存
+            # （同问题 60s 内二次提问 0 远程检索；直通判定/自评豁免共享同一份 golden_hits）
             # 批13-N5：流层后台预取的 bundle 优先（检索已与编排并行，此处零等待收割）
             if precomputed_bundle is not None:
                 _bundle = precomputed_bundle
             else:
-                from app.services.qa_example_service import retrieve_context_bundle
+                from app.services.golden_qa_service import retrieve_golden_bundle
                 from app.core.database import SessionLocal
                 _db = SessionLocal()
                 try:
-                    _bundle = retrieve_context_bundle(_db, question)
+                    _bundle = retrieve_golden_bundle(_db, question)
                 finally:
                     _db.close()
-            from app.services.qa_example_service import bump_hit_count
-            if _bundle["examples_block"]:
-                base += _bundle["examples_block"]
+            from app.services.golden_qa_service import bump_golden_hit
+            if _bundle["golden_block"]:
+                base += _bundle["golden_block"]
                 try:
-                    contract._runtime["example_hits"] = _bundle["example_hits"]
+                    contract._runtime["golden_hits"] = _bundle["golden_hits"]
                 except Exception:
                     pass
-                # 批2-C：高分示例直通首选计划（5 轮 → 2 轮核心杠杆）。
+                # 首选计划（L1 层）：高分金标直接执行已验证 SQL（5 轮 → 2 轮核心杠杆）。
                 # 阈值比展示(0.75)/rubric 直通(0.85)更严（默认 0.90，环境变量 TUPU_DIRECT_PLAN_SIM 可调）；
-                # 示例 SQL 仍过 validate_sql（SELECT-only/强制 LIMIT）与 SkillPolicy 全链路，写错表有纠错兜底。
+                # 金标 SQL 仍过 validate_sql（SELECT-only/强制 LIMIT）与 SkillPolicy 全链路，写错表有纠错兜底。
                 _DIRECT_PLAN_SIM = float(os.getenv("TUPU_DIRECT_PLAN_SIM", "0.90"))
-                if _bundle["example_hits"]:
-                    _top = max(_bundle["example_hits"], key=lambda h: h.get("score") or 0)
+                if _bundle["golden_hits"]:
+                    _top = max(_bundle["golden_hits"], key=lambda h: h.get("score") or 0)
                     if (_top.get("score") or 0) >= _DIRECT_PLAN_SIM and _top.get("sql"):
                         _eng = _top.get("engine") or "doris"
-                        # 首选计划锚定：锁定引擎（示例 SQL 已验证，默认 Doris 联邦），
+                        # 首选计划锚定：锁定引擎（金标 SQL 已验证，默认 Doris 联邦），
                         # 模型只能 execute_doris_sql 直接执行，跳过 batch_entity_source_mode 确认轮（省 ~10s）。
                         # 若执行报 TABLE_MISSING/列名错误，纠错循环会触发回退。
                         try:
                             if _eng in ("doris", "duckdb", "physical"):
-                                contract.lock_engine(_eng, f"首选计划示例锚定（相似度 {_top['score']:.2f}）")
+                                contract.lock_engine(_eng, f"首选计划金标锚定（相似度 {_top['score']:.2f}）")
                         except Exception:
                             pass
                         base += (
-                            f"\n首选计划（已验证示例，相似度 {_top['score']:.2f}）：直接执行以下 SQL 作答，"
+                            f"\n首选计划（已验证金标，相似度 {_top['score']:.2f}）：直接执行以下 SQL 作答，"
                             f"跳过实体定位与读技能步骤；数据引擎已锁定为 {_eng}，"
-                            f"用 execute_doris_sql 直接执行（示例 SQL 已通过金标回归；若报 TABLE_MISSING/列名错误，"
+                            f"用 execute_doris_sql 直接执行（金标 SQL 已通过回归验证；若报 TABLE_MISSING/列名错误，"
                             f"再 batch_entity_source_mode 确认源模式后重试，仍失败则回退常规定位流程 search_entities）。\n"
                             f"SQL：{_top['sql']}"
                         )
                 try:
                     _db2 = SessionLocal()
                     try:
-                        bump_hit_count(_db2, [str(h["id"]) for h in _bundle["example_hits"]])
+                        bump_golden_hit(_db2, [str(h["id"]) for h in _bundle["golden_hits"]])
                     finally:
                         _db2.close()
                 except Exception:
@@ -176,7 +177,7 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
             if _bundle["entity_hint_block"]:
                 base += _bundle["entity_hint_block"]
         except Exception as _e:
-            logger.warning(f"[QA示例库] 示例注入失败（静默跳过）: {_e}")
+            logger.warning(f"[金标锚定] 注入失败（静默跳过）: {_e}")
         # 批2-E 指引预载：规则意图分类注入 sql-query 写法指引（省 read_file 技能轮）
         try:
             from app.services.query_contract import build_guidance_block

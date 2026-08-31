@@ -19,8 +19,14 @@ from fastapi.responses import StreamingResponse
 from .data_intelligence import ChatRequest, _build_contract_system_message
 from .data_intelligence_support import (
     _KG_ACTION_LABELS, _get_session_lock, _extract_customer_names_from_input,
-    _extract_recommendations, _build_final_delivery, _build_action_detail,
+    _build_final_delivery, _build_action_detail,
     _build_result_summary, _build_nonjson_result_summary,
+)
+# 批13-D Step1：收尾段纯函数提取（freeplan 包）；SSE 帧统一走 sse_frames（字节不变）
+from .freeplan.sse import sse_frames
+from .freeplan.delivery import (
+    extract_final_answer_from_state, apply_output_contract, build_sql_result_payload,
+    build_confirmed, build_evidence, build_recommendations, build_done_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,13 +133,13 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             if _prev_state_skill:
                 _conversation_ctx["last_skill"] = _prev_state_skill
 
-            # ===== 批13-N5：金标/示例向量检索后台化——检索（embedding+Qdrant，0.5~3s）不再阻塞
+            # ===== 批13-N5：金标向量检索后台化——检索（embedding+Qdrant，0.5~3s）不再阻塞
             # 编排主链：此处即启动后台线程预取，契约组装点再收割结果（那时用户早已看到 status 行）。
-            # 异常/未完成 -> 本题降级不带锚定（retrieve_context_bundle 内部本就全链静默降级）。
+            # 异常/未完成 -> 本题降级不带锚定（retrieve_golden_bundle 内部本就全链静默降级）。
             _retrieval_task = None
             if req.user_input:
                 def _prefetch_bundle():
-                    from app.services.qa_example_service import retrieve_context_bundle as _rcb
+                    from app.services.golden_qa_service import retrieve_golden_bundle as _rcb
                     from app.core.database import SessionLocal as _SL
                     _db = _SL()
                     try:
@@ -228,11 +234,11 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                     except Exception as _rt_err:
                         logger.warning(f"[PrepTiming] 金标检索后台任务失败（降级不带锚定）: {_rt_err}")
                         _prep_timing["retrieval_ms"] = -1
-                # 每次请求只向模型提供受控工作流上下文（设计 §7.1）；G1: 尾部追加 top-3 已验证示例
+                # 每次请求只向模型提供受控工作流上下文（设计 §7.1）；批13-C: 尾部追加 top-3 金标锚定
                 _contract_msg = _build_contract_system_message(
                     _contract, question=_effective_question, precomputed_bundle=_precomputed_bundle)
-                # 批1-B：示例注入完成后按锚定强度分档（_build_contract_system_message 已写 example_hits）——
-                # 高分示例锚定的 generic 查询跳过 rubric 自评（省 20-40s）；聚合分布类不豁免。
+                # 批13-C：金标注入完成后按锚定强度分档（_build_contract_system_message 已写 golden_hits）——
+                # 高分金标锚定的 generic 查询跳过 rubric 自评（省 20-40s）；聚合分布类不豁免。
                 try:
                     from app.services.query_contract import apply_rubric_tier
                     apply_rubric_tier(_contract)
@@ -990,35 +996,25 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 err_msg = str(consume_error) or repr(consume_error) or "DeepAgent 执行异常（LLM 调用失败或超时）"
                 if _evt_sink is not None:
                     _evt_sink.fail(err_msg)
-                yield f"event: error\n"
-                yield f"data: {json.dumps({'error': err_msg}, ensure_ascii=False)}\n\n"
+                for _f in sse_frames("error", {"error": err_msg}):
+                    yield _f
                 return
 
-            # final：优先从 state 取最后一条 AIMessage（最终回复），避免推中间步骤汇报
+            # final：优先从 state 取最后一条 AIMessage（最终回复），避免推中间步骤汇报（批13-D 提取）
+            # 批13-N3 收尾合并：final 答案 + F5 结构化响应共用一次 aget_state（原两次独立读）
             final_answer = ""
+            _structured = None
             try:
                 final_state = await _asyncio.wait_for(agent.aget_state(config), timeout=10)
-                msgs = final_state.values.get("messages", []) if final_state.values else []
-                for msg in reversed(msgs):
-                    if msg.__class__.__name__ == "AIMessage" and not getattr(msg, "tool_calls", None):
-                        c = msg.content if isinstance(msg.content, str) else str(msg.content)
-                        if c and c.strip():
-                            final_answer = c
-                            break
+                _sv = final_state.values if final_state.values else {}
+                msgs = _sv.get("messages", []) if isinstance(_sv, dict) else []
+                final_answer = extract_final_answer_from_state(msgs)
+                _structured = _sv.get("structured_response") if isinstance(_sv, dict) else None
             except Exception:
                 pass
             # state 无最终回复时，用 on_chat_model_end 捕获的 ai_reply
             if not final_answer:
                 final_answer = tool_results.get("ai_reply", "")
-
-            # F5: 尝试从 state 取结构化最终答案（FinalDelivery，response_format 生效时）
-            _structured = None
-            try:
-                _fs = await _asyncio.wait_for(agent.aget_state(config), timeout=5)
-                _sv = _fs.values if _fs.values else {}
-                _structured = _sv.get("structured_response") if isinstance(_sv, dict) else None
-            except Exception:
-                pass
 
             # 统一最终交付构建（A-E 确定性降级）。
             # 替换旧的"二次 LLM 四段式总结"兜底：不再根据 rows[:3] 让模型总结全量结果，
@@ -1040,176 +1036,70 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 logger.info("[FreePlan] response_format 降级：GLM 未产出结构化结果，使用文本/确定性交付")
 
             # 输出契约（设计 §8/§10）：完整数据已推前端查询结果表时，最终回答不得再输出
-            # Markdown 明细表（SKILL.md 输出格式硬规则第2条）——确定性清洗 + 记录
+            # Markdown 明细表（SKILL.md 输出格式硬规则第2条）——确定性清洗 + 记录（批13-D 提取）
             _output_scrubbed = False
             _output_check_reason = ""
             _sr_for_check = tool_results.get("sql_result")
-            _has_ui_result = bool(_sr_for_check and isinstance(_sr_for_check, dict) and not _sr_for_check.get("error"))
-            if _has_ui_result and final_answer:
-                try:
-                    from app.services.output_contract import validate_final_output, scrub_markdown_tables
-                    # 输出契约旗标来自受控契约（skill 声明 forbid_markdown_detail_table）：
-                    # 分布过载(true)剥离答案表格；跨源汇总类技能(false)保留答案呈现的表
-                    _forbid_md = True
-                    if _contract is not None:
-                        _forbid_md = bool(_contract.forbid_markdown_detail_table)
-                    _oc = validate_final_output(
-                        final_answer, result_available_for_ui=True,
-                        row_count=(_sr_for_check or {}).get("row_count"),
-                        forbid_markdown_detail_table=_forbid_md,
-                    )
-                    _output_check_reason = _oc.reason
-                    if not _oc.ok:
-                        _scrubbed = scrub_markdown_tables(final_answer)
-                        if _scrubbed != final_answer:
-                            final_answer = _scrubbed
-                            _output_scrubbed = True
-                        logger.info(f"[OutputContract] 已清洗最终回答 Markdown 明细表: {_oc.reason}")
-                        # 批4 治理：记录输出契约清洗审计
-                        try:
-                            from app.services.skill_governance import EVENT_OUTPUT_SCRUBBED, get_governance
-                            get_governance().record_output(EVENT_OUTPUT_SCRUBBED, _oc.reason or "markdown_detail_table")
-                        except Exception:
-                            pass
-                except Exception as _oce:
-                    logger.warning(f"[OutputContract] 输出校验异常: {_oce}")
+            if final_answer:
+                _forbid_md = True
+                if _contract is not None:
+                    _forbid_md = bool(_contract.forbid_markdown_detail_table)
+                _oc_res = apply_output_contract(final_answer, _sr_for_check, forbid_md=_forbid_md)
+                final_answer = _oc_res["answer"]
+                _output_check_reason = _oc_res["reason"]
+                _output_scrubbed = _oc_res["scrubbed"]
 
             if final_answer and final_answer.strip():
                 import time as _t2
                 final_sent_at[0] = _t2.time()
-                yield f"event: final\n"
-                yield f"data: {json.dumps({'answer': final_answer}, ensure_ascii=False)}\n\n"
+                for _f in sse_frames("final", {"answer": final_answer}):
+                    yield _f
 
             # 推送推荐问题（优先 final_delivery.recommendations，其次从 final_answer 提取，再默认兜底）
-            recs = final_delivery.get("recommendations") or _extract_recommendations(final_answer)
-            if not recs:
-                recs = ["统计用电客户总数", "查客户的联系电话", "什么是变压器"]
-            yield f"event: recommend\n"
-            yield f"data: {json.dumps({'questions': [{'label': r, 'shortcut': r} for r in recs]}, ensure_ascii=False)}\n\n"
+            recs = build_recommendations(final_delivery, final_answer)
+            for _f in sse_frames("recommend", {"questions": [{"label": r, "shortcut": r} for r in recs]}):
+                yield _f
 
-            # 构建 confirmed
-            confirmed = {
-                "L2": tool_results.get("l2_name", ""),
-                "L2_id": tool_results.get("l2_id", ""),
-                "L2X": tool_results.get("entity_code", ""),
-                "L2X_name": tool_results.get("entity_name", ""),
-                "attributes": tool_results.get("attributes", []),
-                "assembled_sql": tool_results.get("assembled_sql", ""),
-            }
+            # 构建 confirmed + SQL 结果载荷（批13-D 提取）
+            confirmed = build_confirmed(tool_results)
+            sql_result_data = build_sql_result_payload(tool_results.get("sql_result"),
+                                                       tool_results.get("assembled_sql", ""))
 
-            # SQL 执行结果（供前端渲染数据表格；附带完整性契约字段，前端不把预览当不完整）
-            sql_result_data = None
-            _sr = tool_results.get("sql_result")
-            if _sr and isinstance(_sr, dict) and not _sr.get("error"):
-                _rows = _sr.get("rows", [])
-                _rc = _sr.get("row_count", 0) or len(_rows)
-                sql_result_data = {
-                    "columns": _sr.get("columns", []),
-                    "rows": _rows,
-                    "row_count": _rc,
-                    "sql": tool_results.get("assembled_sql", ""),
-                    "returned_rows": len(_rows),
-                    "preview_row_count": min(10, _rc),
-                    "is_preview": False,                    # 前端拿完整数据，一律 false
-                    "llm_is_preview": _rc > 10,             # 模型是否只看前 10 行分析样本
-                    "llm_preview_row_count": min(10, _rc),  # 模型样本行数
-                    "result_available_for_ui": True,
-                }
-
-            # M3（融合设计 §5.1/§5.3）：证据链聚合 + 置信度三级（答案头部小徽标）
-            _ev_route = {
-                "skill": _contract.skill_id if _contract is not None else "__generic__",
-                "route_type": _contract.route_type if _contract is not None else "generic",
-            }
-            _ev_tables = []
-            _ev_verification = {}
-            _sr_ev = tool_results.get("sql_result")
-            if isinstance(_sr_ev, dict):
-                _ev_verification = _sr_ev.get("verification") or {}
-                _ev_sql_txt = str(tool_results.get("assembled_sql") or _sr_ev.get("sql") or "")
-                if _ev_sql_txt:
-                    try:
-                        from app.services.kg_action_handlers import _extract_main_table
-                        _t = _extract_main_table(_ev_sql_txt)
-                        if _t:
-                            _ev_tables = [_t]
-                    except Exception:
-                        pass
-            _ev_examples = []
-            for _h in ((_contract._runtime.get("example_hits") or []) if _contract is not None else []):
-                if isinstance(_h, dict):
-                    _ev_examples.append({"q": _h.get("question_raw") or _h.get("question") or "",
-                                         "sim": _h.get("score")})
-            _ev_rubric = {
-                "status": _contract._runtime.get("rubric_status") if _contract is not None else None,
-                "iterations": int((_contract._runtime.get("rubric_iterations") or 0)) if _contract is not None else 0,
-            }
-            _ev_corrections = int((_contract._runtime.get("corrections") or 0)) if _contract is not None else 0
-            # 置信度三级：高=rubric satisfied 且 verification 无 warning；低=corrections>0 或 rubric 失败/超限/grader错；
-            # 中=无 rubric（scenario）或 verification 有 warning
-            # 批10-B'-1：clean_aggregate 豁免（verification 全绿+单值聚合）与 satisfied 同口径给「高」——
-            # 数字直接来自工具返回+引擎校验全绿，确定性来源等同直通管道。
-            _ev_confidence = "中"
-            _rs = _ev_rubric["status"]
-            if _ev_corrections > 0 or _rs in ("failed", "max_iterations_reached", "grader_error"):
-                _ev_confidence = "低"
-            elif (_rs in ("satisfied", "skipped_clean_aggregate")
-                  and not _ev_verification.get("warnings")):
-                _ev_confidence = "高"
-            # S1（b）：零执行但回答含数字 -> 无数据支撑告警（前端置信度判低 + 黄条提示）
-            _ev_missing_data = False
-            if not tool_results.get("sql_executed", False) and (final_answer or ""):
-                if any(_ch.isdigit() for _ch in final_answer):
-                    _ev_missing_data = True
-                    _ev_confidence = "低"
-            _evidence = {
-                "route": _ev_route, "tables": _ev_tables, "examples_used": _ev_examples,
-                "verification": _ev_verification, "rubric": _ev_rubric, "corrections": _ev_corrections,
-                "missing_data_support": _ev_missing_data,  # S1（b）：未执行数据查询却在回答中给出数字
-            }
+            # M3（融合设计 §5.1/§5.3）：证据链聚合 + 置信度三级（答案头部小徽标；批13-D 提取）
+            _ev = build_evidence(
+                _contract, tool_results, final_answer,
+                (_contract._runtime.get("golden_hits") or []) if _contract is not None else None,
+            )
+            _evidence = _ev["evidence"]
+            _ev_confidence = _ev["confidence"]
+            _ev_verification = _evidence["verification"]
+            _ev_rubric = _ev["rubric"]
             # SSE：query_verified（G4 验证结论） + rubric（DA-2 自评状态），均带置信度
             if _ev_verification:
-                yield f"event: query_verified\n"
-                yield f"data: {json.dumps({'verification': _ev_verification, 'confidence': _ev_confidence, 'thread_id': req.thread_id}, ensure_ascii=False)}\n\n"
+                for _f in sse_frames("query_verified", {
+                    "verification": _ev_verification, "confidence": _ev_confidence, "thread_id": req.thread_id,
+                }):
+                    yield _f
             if _ev_rubric.get("status"):
-                yield f"event: rubric\n"
-                yield f"data: {json.dumps({'status': _ev_rubric['status'], 'iterations': _ev_rubric['iterations'],
-                                           'feedback_summary': (_contract._runtime.get('rubric_explanation') or '') if _contract is not None else '',
-                                           'confidence': _ev_confidence}, ensure_ascii=False)}\n\n"
+                for _f in sse_frames("rubric", {
+                    "status": _ev_rubric["status"], "iterations": _ev_rubric["iterations"],
+                    "feedback_summary": (_contract._runtime.get('rubric_explanation') or '') if _contract is not None else '',
+                    "confidence": _ev_confidence,
+                }):
+                    yield _f
 
-            # 推送 done
-            final_response = {
-                "thread_id": req.thread_id,
-                "current_task": "DeepAgent",
-                "goal": "free_plan",
-                "routed_skill": "free_plan",
-                "pending_clarification": None,
-                "confirmed": confirmed,
-                "completed_tasks": [t["task"] for t in think_stream],
-                "flags": {
-                    "chain_locked": bool(confirmed.get("L2")),
-                    "entity_locked": bool(confirmed.get("L2X")),
-                    "sql_executed": tool_results.get("sql_executed", False),
-                    "output_scrubbed": _output_scrubbed,
-                },
-                "route": (_route.to_dict() if _route is not None else None),  # 受控路由结果（前端 RouteCard）
-                "contract": _contract.to_dict() if _contract is not None else None,  # 受控契约（前端五卡）
-                "output_contract_check": {"ok": not _output_scrubbed, "reason": _output_check_reason},
-                "think_stream": think_stream,
-                "final_answer": final_answer,
-                "final_answer_structured": _structured,  # F5: 结构化输出（GLM 不兼容时为 None，降级手动）
-                "response_format_degraded": _structured_degraded,  # F5: 降级标识（true=GLM 未产出结构化，用文本答案）
-                "final_delivery": final_delivery,  # 统一最终交付协议（标题/摘要/发现/告警/推荐/row_count）
-                "sql_result": sql_result_data,  # P1-4: 清理后的数据（排除 error 结果），删除重复键
-                "recommendations": [{"label": r, "shortcut": r} for r in recs],
-                "next_step_recommendation": None,
-                "message_card": None,
-                "evidence": _evidence,   # M3 G7：证据链（路由/表/示例/验证/自评/纠错）
-                "confidence": _ev_confidence,  # M3 G7：置信度三级（高/中/低）
-                "timing": dict(_timing),  # 批3-F：分段计时外露（first_event/first_model_stream/first_tool_start/first_answer_token/total, ms）
-            }
-            yield f"event: done\n"
-            yield f"data: {json.dumps(final_response, ensure_ascii=False, default=str)}\n\n"
+            # 推送 done（批13-D 提取）
+            final_response = build_done_payload(
+                thread_id=req.thread_id, confirmed=confirmed, think_stream=think_stream,
+                tool_results=tool_results, route=_route, contract=_contract,
+                final_answer=final_answer, structured=_structured,
+                structured_degraded=_structured_degraded, final_delivery=final_delivery,
+                sql_result_data=sql_result_data, recs=recs,
+                evidence=_evidence, confidence=_ev_confidence, timing=dict(_timing),
+                output_scrubbed=_output_scrubbed, output_check_reason=_output_check_reason,
+            )
+            for _f in sse_frames("done", final_response, default=str):
+                yield _f
             _evt_sink.complete({"final_answer": (final_answer or "")[:500], "completed_tasks": final_response.get("completed_tasks", []), "sql_executed": final_response.get("flags", {}).get("sql_executed", False)})
 
         except Exception as e:
@@ -1217,8 +1107,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             logger.error(f"[FreePlan] event_iter 异常: {e}\n{_tb.format_exc()}")
             if _evt_sink is not None:
                 _evt_sink.fail(str(e) or repr(e) or "event_iter 异常")
-            yield f"event: error\n"
-            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+            for _f in sse_frames("error", {"error": str(e)}):
+                yield _f
         finally:
             # 客户端断开(abort)或异常时, 关闭 LangGraph 事件迭代器, 取消底层 agent task
             # (停止后续 LLM/MCP/SQL 调用, 不再烧 token; GeneratorExit 也会经此清理)

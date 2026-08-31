@@ -243,7 +243,7 @@ def get_attribute_vector_stats() -> Dict[str, Any]:
 
 def search_entity_vectors(query: str, top_k: int = 15, db: Optional[Session] = None,
                           vec: Optional[List[float]] = None) -> List[Dict[str, Any]]:
-    """实体向量检索（供 skill_injections 注入）；批7-E1：vec 由 retrieve_context_bundle
+    """实体向量检索（供 skill_injections 注入）；批7-E1：vec 由 retrieve_golden_bundle
     传入（一次 embedding 双集合并搜），为空时内部对 query 现算。"""
     if not query and not vec:
         return []
