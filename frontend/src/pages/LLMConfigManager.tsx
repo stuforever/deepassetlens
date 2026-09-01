@@ -406,6 +406,15 @@ const LLMConfigManager: React.FC = () => {
               options={(modelList || []).map((m: string) => ({ value: m, label: m }))}
             />
           </Form.Item>
+          <Form.Item name="capability" label="能力类型" initialValue="chat"
+            extra="对话(chat)才会出现在问数对话页的模型下拉；向量(embedding)用于语义向量化。复制连接会继承此值，换用途时记得改。">
+            <Select
+              options={[
+                { value: 'chat', label: 'chat（对话，进问数模型下拉）' },
+                { value: 'embedding', label: 'embedding（向量化）' },
+              ]}
+            />
+          </Form.Item>
           <Form.Item name="is_default" label="设为默认大模型" valuePropName="checked" initialValue={false}>
             <Switch />
           </Form.Item>
