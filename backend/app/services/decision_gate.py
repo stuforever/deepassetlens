@@ -8,14 +8,17 @@ content 里写明【下一步判断】（已知/判断/因此），再带工具�
 
 两层校验：
 - 理由闸门（全工具）：下一步判断存在（标记+已知/判断/因此）、因此行工具名与实际一致、一轮单工具。
-- 范围闸门（仅 execute_sql）：声明了客户名集合时，SQL 的 cust_name 过滤 ⊆ 声明范围。
+- 范围闸门（取数工具 execute_sql/execute_doris_sql/execute_entity_api/execute_api_sql，即
+  SCOPE_GATED_TOOLS）：①首轮无可信范围时，决策必须含"范围:"行（"范围: 无"也算合法声明，
+  表示无客户范围限制）——缺行即拒绝；②仅 execute_sql 额外做 cust_name 子集强校验：
+  声明了客户名集合时，SQL 的 cust_name 过滤 ⊆ 声明范围。
 
 下一步判断格式（模型在 content 内、工具调用前写，标记必须在第一个非空白位置）：
     【下一步判断】
     已知: <来自用户要求、剧本规则或上一步真实结果>
     判断: <为什么当前需要这个工具>
     因此: 调用 <本轮工具名>。
-    范围: <仅 execute_sql：客户名精确集合, 逗号分隔, 如 客户001,客户003; 无客户限定写 无>
+    范围: <四个取数工具都需写：客户名精确集合, 逗号分隔, 如 客户001,客户003; 无客户限定写 无>
 
 v3.4：中间件在闸门通过/拒绝时通过 adispatch_custom_event 派发 decision_committed /
 decision_rejected 事件，供 SSE 消费层推给前端。前端据此实现"候选判断实时流"。
@@ -400,7 +403,8 @@ def _reject_no_decision(attempt: int, tool_name: str = "工具") -> str:
         f"（与工具调用在同一轮 content 内）：\n"
         f"{DECISION_MARKER}\n已知: <来自用户要求、剧本规则或上一步真实结果>\n"
         f"判断: <为什么当前需要这个工具>\n因此: 调用 {tool_name}。\n"
-        f"范围: <仅 execute_sql 需写：客户名精确集合, 逗号分隔, 如 客户001,客户003; 无客户限定写 无>\n"
+        f"范围: <execute_sql/execute_doris_sql/execute_entity_api/execute_api_sql 四个取数工具都需写："
+        f"客户名精确集合, 逗号分隔, 如 客户001,客户003; 无客户限定写 无>\n"
         f"写完后, 同一轮重新发起 {tool_name}（会生成新的工具调用）。原工具未执行。"
     )
 

@@ -395,3 +395,30 @@ class TestScopeSourcePriority:
         assert _after is not None
         assert _after["customer_names"] == ["客户001"]
 
+
+class TestScopeWordingAlignment:
+    """提示词与闸门口径一致（防"仅 execute_sql"旧口径漂移复发）：
+
+    闸门 SCOPE_GATED_TOOLS=4 取数工具首轮都要"范围:"行；提示词/拒绝模板必须同口径，
+    否则 LLM 按提示词不写范围行 -> 被闸门拒绝 -> 补判重发，白费一轮（2026-08-29 黄色问题）。
+    """
+
+    def test_系统提示词口径覆盖四工具(self):
+        from pathlib import Path
+        src = (Path(__file__).resolve().parent.parent / "app" / "services"
+               / "tupu_deepagent.py").read_text(encoding="utf-8")
+        assert "execute_doris_sql / execute_entity_api / execute_api_sql" in src
+        assert "四个工具都要写" in src
+        assert "调用 execute_sql 时，" not in src  # 旧口径已移除
+
+    def test_拒绝模板口径覆盖四工具(self):
+        from app.services.decision_gate import _reject_no_decision
+        msg = _reject_no_decision(1, "execute_entity_api")
+        assert "execute_doris_sql/execute_entity_api/execute_api_sql" in msg
+        assert "仅 execute_sql 需写" not in msg
+
+    def test_闸门工具集与提示词工具集一致(self):
+        from app.services.decision_gate import SCOPE_GATED_TOOLS
+        assert SCOPE_GATED_TOOLS == frozenset(
+            {"execute_sql", "execute_doris_sql", "execute_entity_api", "execute_api_sql"})
+
