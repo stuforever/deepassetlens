@@ -127,6 +127,31 @@ def get_policy(capability_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+# 批13-J 收尾（问题二）：工具黑名单配置化——默认排除名单（安全红线，与 HarnessProfile 硬编码 5 件一致）
+DEFAULT_TOOL_EXCLUSIONS: List[str] = ["grep", "glob", "write_file", "edit_file", "execute"]
+# 物理锁定（前端灰显，不可恢复）：技能渐进披露靠 read_file/ls 活命
+LOCKED_TOOL_EXCLUSIONS: List[str] = ["read_file", "ls"]
+
+
+def get_tool_exclusions() -> Dict[str, List[str]]:
+    """读工具黑名单配置（capability_policies.tool_availability.params，定稿能力项名）。
+
+    返回 {"excluded": [...], "locked": [...]}。**fail-safe**：读配置异常/缺 params
+    -> 返回默认 5 件（绝不因配置读崩变成"全放开"）。locked 恒为物理锁定件（不可改）。
+    """
+    excluded = list(DEFAULT_TOOL_EXCLUSIONS)
+    try:
+        p = get_policy("tool_availability")
+        if p and isinstance(p.get("params"), dict):
+            x = p["params"].get("excluded")
+            if isinstance(x, list) and all(isinstance(t, str) and t for t in x):
+                # 排除名单可配置（但 locked 件永远不可出现在 excluded——物理保护）
+                excluded = [t for t in x if t not in LOCKED_TOOL_EXCLUSIONS]
+    except Exception as _e:
+        logger.error(f"[ToolExclusions] 读配置失败，fail-safe 用默认 5 件: {_e}")
+    return {"excluded": excluded, "locked": list(LOCKED_TOOL_EXCLUSIONS)}
+
+
 def validate_params(capability_id: str, params: Dict[str, Any]) -> Optional[str]:
     """PATCH 前置校验。返回 None=合法；返回字符串=拒绝原因（API 转 400 且不落库）。
 
@@ -165,6 +190,19 @@ def validate_params(capability_id: str, params: Dict[str, Any]) -> Optional[str]
         mp = params.get("max_prefs")
         if mp is not None and (not isinstance(mp, int) or mp < 1 or mp > 50):
             return "max_prefs 必须是 1-50 的整数"
+    if capability_id == "tool_availability":
+        x = params.get("excluded")
+        if x is not None:
+            if not isinstance(x, list) or not all(isinstance(t, str) and t for t in x):
+                return "excluded 必须是工具名字符串数组"
+            registry = _global_tool_registry()
+            known = registry | set(DEFAULT_TOOL_EXCLUSIONS) | set(LOCKED_TOOL_EXCLUSIONS)
+            unknown = [t for t in x if t not in known]
+            if unknown:
+                return f"未知工具名（不在注册表内）：{sorted(unknown)[:6]}"
+            locked = [t for t in x if t in LOCKED_TOOL_EXCLUSIONS]
+            if locked:
+                return f"物理锁定工具不可排除：{sorted(locked)}（read_file/ls 为技能渐进披露命脉）"
     return None
 
 

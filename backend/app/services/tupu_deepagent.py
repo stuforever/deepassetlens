@@ -226,6 +226,45 @@ _KNOWLEDGE_FLOW_RULES = """
 # 改由 SkillCatalog 实时扫描 SKILL.md frontmatter 生成（设计 §3.3，SKILL.md 是唯一业务来源）。
 # 完整口径、SQL 细节、关联链路留在 SKILL.md；这里只生成简短索引。
 
+
+def _get_model_identifier(model) -> str:
+    """提取模型标识（等价 deepagents._models.get_model_identifier，仅依赖 langchain 公开属性）。
+
+    Provider 对字段名不统一：有的用 model_name，有的用 model。取其一。
+    不再从框架私有模块 import（升级稳定性）；行为与原私有 helper 一致。
+    """
+    try:
+        v = getattr(model, "model_name", None)
+        if v:
+            return str(v)
+    except Exception:
+        pass
+    try:
+        v = getattr(model, "model", None)
+        if v:
+            return str(v)
+    except Exception:
+        pass
+    return None
+
+
+def _get_model_provider(model) -> str:
+    """提取模型厂商（等价 deepagents._models.get_model_provider，仅依赖 langchain 公开 API）。
+
+    用 BaseChatModel._get_ls_params() 的 ls_provider 字段（langchain 公开字段，
+    各主流 provider 覆盖为硬编码值如 "deepseek"/"anthropic"）。
+    """
+    try:
+        ls_params = model._get_ls_params()
+        if isinstance(ls_params, dict):
+            p = ls_params.get("ls_provider")
+            if isinstance(p, str) and p:
+                return p
+    except Exception:
+        pass
+    return None
+
+
 def _load_skill_md(skill_name: str) -> str:
     """读取 SKILL.md 文件内容（去掉 frontmatter），并解析 ⟦实体中文名⟧ -> 物理表名。
 
@@ -890,17 +929,24 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     # v3.6: 用公开 HarnessProfile 替换私有 _ToolExclusionMiddleware（评审点5：消除下划线私有依赖）
     # P1-2: 从 model 对象提取真实 identifier 注册，不硬编码模型名（防大小写/变体不匹配）
     # register 是增量合并，幂等安全；create_deep_agent 内部按 model 自动匹配此 profile。
+    # 批13-J 收尾（问题一修复）：不再 from deepagents._models import get_model_identifier/get_model_provider
+    # （框架私有小门，升级可能改名/挪位）；改用 langchain 公开属性自写等价（model_name/model + _get_ls_params()["ls_provider"]）。
     from deepagents import HarnessProfile, register_harness_profile
-    from deepagents._models import get_model_identifier, get_model_provider
-    _model_id = get_model_identifier(model)
-    _model_provider = get_model_provider(model)
-    _excluded = frozenset({
-        "grep",          # 搜文件内容，业务问答无用，曾导致 LLM 翻配置找库名绕死循环
-        "glob",          # 列文件，同上
-        "write_file",    # 写文件，业务问答无用
-        "edit_file",     # 改文件，业务问答无用
-        "execute",       # 执行 shell 命令，危险且无用
-    })
+    # X-2 审计锚点（2026-08-24 审查）：当前主力模型（DeepSeek-V4-Flash/GLM-5.3-Flash，OpenAI 兼容接入）
+    # 未观测到需要 system_prompt_suffix 行为适配的问题；已知 GLM 与 response_format 不兼容
+    # 由 data_intelligence 确定性降级路径兜底。将来发现模型行为偏差时，适配（并行工具调用后缀/
+    # 工具格式纠正/工具描述改写，见《装配层配置化设计》X-3 登记表）加在本注册处，不加不预支。
+    _model_id = _get_model_identifier(model)
+    _model_provider = _get_model_provider(model)
+    # 批13-J 收尾（问题二）：工具黑名单配置化——excluded 从 capability_policies.tool_availability 读
+    # （定稿《装配层配置化设计》W-1；管理员可调整；默认 5 件与历史硬编码完全一致=迁移零变化）；
+    # fail-safe：配置读崩 -> 默认 5 件（绝不全放开）。
+    try:
+        from app.services import capability_config as _cc
+        _excl_cfg = _cc.get_tool_exclusions()
+        _excluded = frozenset(_excl_cfg["excluded"])
+    except Exception:
+        _excluded = frozenset({"grep", "glob", "write_file", "edit_file", "execute"})
     _registered_keys = []
     if _model_provider and _model_id and ":" not in _model_id:
         _key = f"{_model_provider}:{_model_id}"
@@ -1073,6 +1119,13 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         manifest_items["subagent_specs"] = [s["name"] for s in (_subagents or [])]
         manifest_items["response_format_installed"] = _response_format is not None
         manifest_items["store_installed"] = _store is not None
+        # 批13-J 收尾（问题二）：装配清单记实际排除名单（探针据此断言黑名单真生效 + 抓框架升级改工具名漂移）
+        try:
+            from app.services import capability_config as _cc2
+            manifest_items["tool_availability_installed"] = sorted(_cc2.get_tool_exclusions()["excluded"])
+        except Exception:
+            manifest_items["tool_availability_installed"] = sorted(
+                {"grep", "glob", "write_file", "edit_file", "execute"})
         _ASSEMBLY_MANIFEST.clear()
         _ASSEMBLY_MANIFEST.update({
             "version": _cap_version(), "agent_key": connection_id or "__default__",

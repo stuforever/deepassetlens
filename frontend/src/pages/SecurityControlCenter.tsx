@@ -55,7 +55,7 @@ const ACTION_META: Record<string, { label: string; preset: 'success' | 'warning'
 
 /**
  * CapabilityPanel - 能力开关 Tab（批13-Q 七）。
- * 13 可切能力卡（五件套同款：开关/三段说明/统计/探针/参数）+ 4 灰显锁定区。
+ * 14 可切能力卡（五件套同款：开关/三段说明/统计/探针/参数；含批13-J 工具黑名单）+ 4 灰显锁定区。
  * subagents 卡特殊：🔴 徽标 + 参数区=规格编辑器（specs JSON + max_concurrent 步进 + 校验按钮）。
  * 关闭确认风险分级与 Tab1 同款（🔴双 Modal+必填理由 / 🟡单 Modal / 🟢直接切）。
  */

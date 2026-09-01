@@ -160,12 +160,76 @@ def _probe_subagents() -> Dict[str, object]:
             "blocked_reason": f"两枚子探针通过：①{r1.get('blocked_reason')} ②{r2.get('blocked_reason')}"}
 
 
+def _probe_tool_exclusions() -> Dict[str, object]:
+    """tool_availability：验证黑名单工具确实不在 Agent 工具列表（保险丝：抓框架升级改名导致拉黑落空）。"""
+    from app.services.capability_config import get_tool_exclusions, LOCKED_TOOL_EXCLUSIONS
+    cfg = get_tool_exclusions()
+    excluded = set(cfg["excluded"])
+    try:
+        import asyncio
+        from app.services.tupu_deepagent import get_tupu_agent
+
+        async def _go():
+            agent = await get_tupu_agent()
+            tools = agent.tools if hasattr(agent, "tools") else []
+            names = set(getattr(t, "name", "") for t in tools)
+            return names
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            names = loop.run_until_complete(_go())
+        finally:
+            loop.close()
+        # Agent 工具列表为空（独立进程/未连 MCP 的真实装配态不可得）-> 回退 manifest 断言，
+        # 避免「locked 命脉件缺失」误报。真实后端进程内（能力页点探针）tools 完整时走真实断言。
+        if not names:
+            m2 = _manifest()
+            rec = (m2.get("items") or {}).get("tool_availability_installed")
+            if isinstance(rec, list):
+                have = set(rec)
+                missing = [t for t in excluded if t not in have]
+                if not missing:
+                    return {"verdict": "blocked",
+                            "blocked_reason": (f"Agent 工具列表不可得（回退装配清单断言）：排除名单={sorted(have)}"
+                                               f" 与配置一致（agent_key={m2.get('agent_key')} v{m2.get('version')}）")}
+                return {"verdict": "passed",
+                        "blocked_reason": f"装配清单排除名单缺 {missing}（配置={sorted(excluded)}）"}
+            return {"verdict": "blocked",
+                    "blocked_reason": "Agent 未就绪且装配清单无排除记录——需先触发一次真实请求建 Agent 后再探"}
+    except Exception as e:
+        # Agent 不可得：退化为 manifest 断言（装配清单记录了实际排除名单）
+        m = _manifest()
+        installed = m.get("items") or {}
+        rec = installed.get("tool_availability_installed")
+        if not isinstance(rec, list):
+            return {"verdict": "passed",
+                    "blocked_reason": f"无法验证 Agent 工具列表（{str(e)[:80]}），且装配清单无排除记录——需重建 Agent"}
+        have = set(rec)
+        missing = [t for t in excluded if t not in have]
+        if not missing:
+            return {"verdict": "blocked",
+                    "blocked_reason": f"装配清单排除名单={sorted(have)}，与配置一致（黑名单生效，agent_key={m.get('agent_key')} v{m.get('version')}）"}
+        return {"verdict": "passed", "blocked_reason": f"装配清单排除名单缺 {missing}（配置={sorted(excluded)}）"}
+    # 真实工具列表断言：excluded 每件都不在；locked 件应在（read_file/ls 命脉）
+    leaked = [t for t in excluded if t in names]
+    if leaked:
+        return {"verdict": "passed",
+                "blocked_reason": f"黑名单工具泄漏进 Agent：{sorted(leaked)}（框架升级改名漂移或装配失效！）"}
+    locked_missing = [t for t in LOCKED_TOOL_EXCLUSIONS if t not in names]
+    note = f"（locked 命脉件缺失:{locked_missing}）" if locked_missing else ""
+    return {"verdict": "blocked",
+            "blocked_reason": (f"黑名单验证通过：excluded {sorted(excluded)} 均不在 Agent 工具列表{note}；"
+                               f"Agent 工具数={len(names)}")}
+
+
 _PROBES: Dict[str, Callable[[], Dict[str, object]]] = {
     **{cid: (lambda cid=cid: _probe_assembly(cid)) for cid in _ASSEMBLY_ASSERTED},
     "response_format": _probe_response_format,
     "store": _probe_store,
     "subagents": _probe_subagents,
     "subagents_compliant": _probe_subagents_compliant,
+    "tool_availability": _probe_tool_exclusions,
 }
 
 

@@ -184,15 +184,49 @@ CAPABILITY_POLICY_SEED = [
      "description": _CAP_DESC("SandboxBackend 协议接入（代码执行沙箱）。",
                               "物理不可用：未接入沙箱后端，装配恒跳过。",
                               "业务问答不需要沙箱执行；数据分析走 SQL 受控链路。"), "confirm_required": True},
+    {"capability_id": "tool_availability", "title": "工具黑名单", "risk_level": "red",
+     "params": {"excluded": ["grep", "glob", "write_file", "edit_file", "execute"]},
+     "description": _CAP_DESC("HarnessProfile 工具排除名单（grep/glob/write_file/edit_file/execute，安全红线）——",
+                              "调整 excluded 会触发 version+1 重建 Agent（下个请求生效）；危险工具恢复走 🔴 风险确认。",
+                              "read_file/ls 物理锁定（技能渐进披露命脉）；子代理依赖被排除工具时交集护栏拒装配回退串行。"), "confirm_required": True},
 ]
 
 
 def _seed_capability_policies(db: Session):
-    """能力开关中心基线种子：仅当表为空时插入（幂等）。"""
+    """能力开关中心基线种子（幂等）。
+
+    空表 -> 全量 seed；非空 -> **增量补种**：仅补 seed 中缺失的 capability_id
+    （批13-J 收尾：已有库自动补 tool_availability 等新能力行，不覆盖管理员已有配置）；
+    并把历史能力项 tool_exclusions 迁移为 tool_availability（定稿能力项名统一）。
+    """
     from ..models.base import CapabilityPolicy
-    if db.query(CapabilityPolicy).first():
+    # 能力项名迁移（2026-08-24 定稿对齐）：tool_exclusions -> tool_availability
+    try:
+        from sqlalchemy import text
+        db.execute(text(
+            "UPDATE capability_policies SET capability_id='tool_availability' "
+            "WHERE capability_id='tool_exclusions'"))
+        db.commit()
+    except Exception:
+        db.rollback()
+    if not db.query(CapabilityPolicy).first():
+        for p in CAPABILITY_POLICY_SEED:
+            db.add(CapabilityPolicy(
+                capability_id=p["capability_id"], title=p["title"], enabled=True,
+                params=p.get("params"), risk_level=p.get("risk_level", "yellow"),
+                description=p.get("description"), confirm_required=p.get("confirm_required", True),
+                physical_blocked=p.get("physical_blocked", False),
+                blocked_reason=p.get("blocked_reason"),
+                version=1,
+            ))
+        db.commit()
         return
+    # 增量补种：缺失的 capability_id 补齐（已有行不动）
+    existing_ids = {row.capability_id for row in db.query(CapabilityPolicy.capability_id).all()}
+    added = 0
     for p in CAPABILITY_POLICY_SEED:
+        if p["capability_id"] in existing_ids:
+            continue
         db.add(CapabilityPolicy(
             capability_id=p["capability_id"], title=p["title"], enabled=True,
             params=p.get("params"), risk_level=p.get("risk_level", "yellow"),
@@ -201,7 +235,12 @@ def _seed_capability_policies(db: Session):
             blocked_reason=p.get("blocked_reason"),
             version=1,
         ))
-    db.commit()
+        added += 1
+    if added:
+        db.commit()
+        logger.info(f"[CapabilitySeed] 增量补种 {added} 个能力: "
+                    + ", ".join(p["capability_id"] for p in CAPABILITY_POLICY_SEED
+                                if p["capability_id"] not in existing_ids))
 
 
 def _sync_scenario_skills(db: Session):
