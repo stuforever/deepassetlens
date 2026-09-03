@@ -407,3 +407,40 @@ def resolve_entity_aliases(text: str, aliases: Dict[str, str]) -> str:
         if marker in out:
             out = out.replace(marker, table)
     return out
+
+
+# ---------------------------------------------------------------------------
+# 批13-AB2：精确 entity_name 解析（自 tupu_deepagent.py 搬迁，函数体一字不改）。
+# 归属说明：这是「模板/技能文件装配时」的确定性翻译（skill_policy._resolve_step_templates
+# 模板表集合比对、_load_skill_md 系统提示词构建共用，0 模型轮次成本），与已退役的
+# SkillEntityResolverMiddleware（read_file 运行时翻译站，批13-AB2 删除）无关。
+# 运行时模型读技能文件看到 ⟦⟧ 原文 -> 按 AGENTS.md 纪律主动 search_entities 翻译 ->
+# 漏网写进 SQL 由模板守卫硬拒（双层安全网，见设计 §2.2）。
+# ---------------------------------------------------------------------------
+_ENTITY_REF_RE = __import__('re').compile(r'⟦([^⟧]+)⟧')
+
+
+def _resolve_entity_refs(text: str) -> str:
+    """将文本中的 ⟦实体中文名⟧ 替换为元数据中的物理表名（entity_en_name）。
+    找不到的保留原文，不阻断。"""
+    if '⟦' not in text:
+        return text
+    names = set(_ENTITY_REF_RE.findall(text))
+    if not names:
+        return text
+    # 一次批量查元数据
+    from app.core.database import SessionLocal
+    from app.models.base import Entity
+    db = SessionLocal()
+    try:
+        ents = db.query(Entity.entity_name, Entity.entity_en_name).filter(Entity.entity_name.in_(names)).all()
+        mapping = {name: en_name for name, en_name in ents if en_name}
+    finally:
+        db.close()
+    if not mapping:
+        return text
+    # 逐个替换
+    def _replacer(m):
+        cn = m.group(1)
+        return mapping.get(cn, m.group(0))  # 找不到保留原文
+    return _ENTITY_REF_RE.sub(_replacer, text)

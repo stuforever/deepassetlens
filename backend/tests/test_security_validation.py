@@ -29,7 +29,7 @@ VARIANTS = ("step1_household_transformer_elec.sql", "step1_household_transformer
 
 def _resolve_template(skill, rel_path: str) -> str:
     """读取 + 解析（⟦中文名⟧ -> 物理表 + 精确实体名解析）模板 SQL。"""
-    from app.services.tupu_deepagent import _resolve_entity_refs
+    from app.services.template_guard import _resolve_entity_refs  # 批13-AB2：自 tupu_deepagent 搬迁
     raw = load_template(Path(skill.path.parent) / "templates" / rel_path)
     resolved = resolve_entity_aliases(raw, skill.entity_aliases)
     return _resolve_entity_refs(resolved)

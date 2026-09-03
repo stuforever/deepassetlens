@@ -64,3 +64,35 @@ class TestAB1OfficialFactory:
         """manifest 记 summarization_mode（official_factory/disabled），探针断言用。"""
         src = _agent_src()
         assert 'manifest_items["summarization_mode"] = "official_factory" if _on("summarization") else "disabled"' in src
+
+
+class TestAB2PlaceholderToSkill:
+    """批13-AB2 占位符站转技能：删 read_file 运行时 ⟦⟧ 翻译站，装配时翻译搬迁 template_guard，
+    模型按 AGENTS.md §五纪律主动 search_entities 翻译，漏网 ⟦⟧ SQL 由模板守卫硬拒。"""
+
+    def test_运行时翻译站已删除(self):
+        src = _agent_src()
+        assert "class SkillEntityResolverMiddleware" not in src
+        assert "SkillEntityResolverMiddleware()" not in src
+        # 装配时翻译器已搬迁 template_guard（skill_policy/_load_skill_md 继续可用）
+        from app.services.template_guard import _resolve_entity_refs  # noqa: F401 搬迁到位可导入
+        from app.services import skill_policy  # noqa: F401 import 链健康（内部改从 template_guard 取）
+
+    def test_AGENTS_md占位符纪律在位(self):
+        from pathlib import Path
+        p = Path(__file__).resolve().parent.parent / "data" / "memory" / "AGENTS.md"
+        md = p.read_text(encoding="utf-8")
+        assert "五、数据样本纪律（13-AB）" in md
+        assert "⟦中文占位符⟧" in md and "search_entities" in md and "严禁出现 ⟦⟧" in md
+
+    def test_守卫拒含占位符SQL(self):
+        """探针（设计 §2.3）：含 ⟦x⟧ 的 SQL 走模板守卫必被拒（表不在模板表集合/解析失败）。"""
+        from tests._tpl_helpers import relationship_template_sql
+        from app.services.template_guard import validate_against_template
+        tpl = relationship_template_sql()
+        bad = "SELECT count(*) AS cnt FROM ⟦台区表⟧"
+        chk = validate_against_template(bad, tpl, "t1")
+        assert not chk.ok, "含 ⟦⟧ 占位符的 SQL 必须被模板守卫拒绝"
+        bad2 = "SELECT a.cust_no FROM ⟦户变关系⟧ a JOIN dim_cst_elec_cons_cust b ON a.cust_no=b.cust_no"
+        chk2 = validate_against_template(bad2, tpl, "t1")
+        assert not chk2.ok

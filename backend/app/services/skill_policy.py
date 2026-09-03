@@ -324,7 +324,7 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         skill = self._catalog.load_skill(contract.skill_id)
         if skill is None:
             return []
-        from app.services.tupu_deepagent import _resolve_entity_refs
+        from app.services.template_guard import _resolve_entity_refs  # 批13-AB2：自 tupu_deepagent 搬迁
         from app.services.template_guard import resolve_entity_aliases
         out = []
         for tpl_id in contract.template_ids:

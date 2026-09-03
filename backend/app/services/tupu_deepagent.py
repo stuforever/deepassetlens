@@ -298,69 +298,16 @@ def _load_skill_md(skill_name: str) -> str:
         end = content.find("---", 3)
         if end > 0:
             content = content[end + 3:].strip()
-    # 解析 ⟦实体中文名⟧ -> 物理表名（entity_en_name）
+    # 解析 ⟦实体中文名⟧ -> 物理表名（entity_en_name）（批13-AB2：解析器已搬迁 template_guard）
+    from app.services.template_guard import _resolve_entity_refs
     content = _resolve_entity_refs(content)
     return content
 
 
-# ⟦中文名⟧ 正则：匹配 ⟦ 和 ⟧ 之间的内容（不含换行）
-_ENTITY_REF_RE = __import__('re').compile(r'⟦([^⟧]+)⟧')
-
-def _resolve_entity_refs(text: str) -> str:
-    """将文本中的 ⟦实体中文名⟧ 替换为元数据中的物理表名（entity_en_name）。
-    找不到的保留原文，不阻断。"""
-    if '⟦' not in text:
-        return text
-    names = set(_ENTITY_REF_RE.findall(text))
-    if not names:
-        return text
-    # 一次批量查元数据
-    from app.core.database import SessionLocal
-    from app.models.base import Entity
-    db = SessionLocal()
-    try:
-        ents = db.query(Entity.entity_name, Entity.entity_en_name).filter(Entity.entity_name.in_(names)).all()
-        mapping = {name: en_name for name, en_name in ents if en_name}
-    finally:
-        db.close()
-    if not mapping:
-        return text
-    # 逐个替换
-    def _replacer(m):
-        cn = m.group(1)
-        return mapping.get(cn, m.group(0))  # 找不到保留原文
-    return _ENTITY_REF_RE.sub(_replacer, text)
-
-
-class SkillEntityResolverMiddleware(AgentMiddleware):
-    """技能文件 ⟦中文名⟧ -> 物理表名 解析中间件。
-
-    单一职责：read_file 成功返回技能文件内容后，对其中的 ⟦实体中文名⟧ 占位符
-    做物理表名解析（与 SKILL.md 主文件一致）。
-
-    安全说明（P0 修复）：原 SkillEntityRefMiddleware 含磁盘 fallback 职责，当 read_file
-    在 StateBackend 找不到子文件时直接从磁盘读取--这是目录穿越漏洞的根因。现已切换到
-    CompositeBackend + FilesystemBackend(virtual_mode=True)，子文件由原生 Backend 安全提供，
-    不再需要任何磁盘逃生通道。本中间件只处理已由安全 Backend 成功读取的内容，绝不自行访问磁盘。
-    """
-
-    async def awrap_tool_call(self, request, handler):
-        tool_name = request.tool_call.get("name", "")
-        tool_result = await handler(request)
-        if tool_name != "read_file":
-            return tool_result
-
-        # ⟦中文名⟧ 解析（正常路径：文件已由 CompositeBackend 安全读取）
-        try:
-            content = getattr(tool_result, "content", None)
-            if isinstance(content, str) and '⟦' in content:
-                resolved = _resolve_entity_refs(content)
-                if resolved != content:
-                    object.__setattr__(tool_result, "content", resolved)
-        except Exception:
-            pass  # 解析失败不阻断 read_file
-        return tool_result
-
+# 批13-AB2：占位符站转技能——SkillEntityResolverMiddleware（read_file 运行时 ⟦⟧ 翻译站）已删除。
+# _resolve_entity_refs/_ENTITY_REF_RE 搬迁至 template_guard.py（模板装配/系统提示词构建的
+# 装配时翻译继续可用，与运行时站无关）；运行时模型按 AGENTS.md §五纪律主动 search_entities
+# 翻译，漏网 ⟦⟧ SQL 由模板守卫硬拒（双层安全网，见设计 §2.2）。
 
 # 数据查询工具集合：返回 {columns, rows, row_count} 格式的工具，统一做摘要截断
 _DATA_QUERY_TOOLS = frozenset({
@@ -984,8 +931,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     from app.services.skill_policy import SkillPolicyMiddleware
     middleware_list.insert(0, SkillPolicyMiddleware())
     logger.info("[SkillPolicy] 受控执行契约中间件已装配（最外层闸门，技能/步骤/模板/引擎/终止硬校验）")
-    # read_file 结果 ⟦中文名⟧ -> 物理表名 解析（技能子文件 reference/*.md templates/*.sql 受益）
-    middleware_list.append(SkillEntityResolverMiddleware())
+    # 批13-AB2：SkillEntityResolverMiddleware（read_file 运行时 ⟦⟧ 翻译站）已删除——
+    # 模型按 AGENTS.md §五纪律主动 search_entities 翻译，漏网 SQL 由模板守卫硬拒。
     # 数据查询结果摘要：明细不传 LLM 全量，推完整数据给前端 + ToolMessage 截断为前10行摘要
     middleware_list.append(DataSummaryMiddleware())
     if _DECISION_GATE_ENABLED:

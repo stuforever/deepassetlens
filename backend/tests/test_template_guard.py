@@ -30,7 +30,7 @@ def step1_template_sql():
     skill = catalog.load_skill(REAL_SKILL)
     assert skill is not None
     from app.services.template_guard import load_template
-    from app.services.tupu_deepagent import _resolve_entity_refs
+    from app.services.template_guard import _resolve_entity_refs  # 批13-AB2：自 tupu_deepagent 搬迁
     raw = load_template(Path(skill.path.parent) / "templates/step1_household_transformer.sql")
     resolved = resolve_entity_aliases(raw, skill.entity_aliases)
     return _resolve_entity_refs(resolved)
