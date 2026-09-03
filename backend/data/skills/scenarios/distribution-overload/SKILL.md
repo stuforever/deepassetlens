@@ -10,6 +10,11 @@ x_tupu:
   # P0-2 强牢笼：模板派生 SQL 强制执行 —— 结构指纹与模板不一致（同表但骨架不同）即拒绝
   template_mode: scenario_strict
 
+  # 批13-Z 子代理激活（路线A）：多实体域跨表定位（台区+客户+线路）允许委派 entity_locator
+  # 子代理（定位类只读工具窄集，见 capability_policies.subagents.specs）。
+  # 护栏1 复合条件：本声明 AND caps.subagents.enabled（能力开关仍是总闸）；其他剧本未声明默认拒绝。
+  allow_subagents: true
+
   triggers:
     any:
       - 户变关系
@@ -30,7 +35,6 @@ x_tupu:
       - [发电户, 配变]
 
   forbidden_tools:
-    - task
     - write_file
     - edit_file
     - execute
