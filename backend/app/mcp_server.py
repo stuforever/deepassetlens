@@ -64,6 +64,52 @@ def validate_safe_sql(sql: str) -> dict:
     return dispatch_kg_action("validate_safe_sql", {"sql": sql})
 
 
+# ---------------------------------------------------------------------------
+# 批13-AB4 数据摘要站一件三拆：四查询工具出口统一「全量暂存+模型摘要视图」。
+# 全量数据存 query_result_store（uuid4+TTL 10min+上限 64），SSE 路由层按 result_ref
+# 取回派发前端（data_intelligence_stream.on_tool_end）；DataSummaryMiddleware 退役。
+# ---------------------------------------------------------------------------
+from app.services import query_result_store as _qrs
+
+_SUMMARY_THRESHOLD = 10  # 超过此行数则截断为摘要（自 tupu_deepagent._SUMMARY_THRESHOLD 随迁）
+
+
+def _with_result_ref(result: dict) -> dict:
+    """13-AB ④：查询工具出口统一处理——全量暂存+返回模型摘要视图。
+    row_count<=10: 全量返回(带 result_ref)；>10: 截断前10行+指令(带 result_ref)。"""
+    if not isinstance(result, dict) or "rows" not in result or "row_count" not in result:
+        return result                                    # 错误消息/非查询结果原样放行
+    ref = _qrs.put(result)                               # 全量进暂存柜
+    row_count = result.get("row_count", len(result["rows"]))
+    if row_count <= _SUMMARY_THRESHOLD:
+        return {**result, "result_ref": ref}             # 小结果全量给模型+指针(前端表格走同一派发通道)
+    _limit_reached = row_count >= 500                    # SQL 强制 LIMIT 500(现状口径)
+    _limit_hint = "（已达 LIMIT 500 上限，可能还有更多数据未取回）" if _limit_reached else "（未触发 LIMIT 截断，已是全部结果）"
+    directive = (                                        # 原 DataSummaryMiddleware._directive 原文迁移,一字不改
+        f"【数据已完整获取】共 {row_count} 行{_limit_hint}。\n"
+        f"下方仅展示前 {_SUMMARY_THRESHOLD} 行分析样本，完整 {row_count} 行数据已推前端查询结果表展示（is_preview=false）。\n"
+        f"JSON 中 row_count={row_count}（完整结果数）、returned_rows={row_count}（前端拿到的完整行数）、"
+        f"llm_is_preview=true、llm_preview_row_count={_SUMMARY_THRESHOLD}（你的分析样本行数）、result_available_for_ui=true。\n"
+        f"前 {_SUMMARY_THRESHOLD} 行只是你的分析样本，不是面向用户的展示数据：禁止复述为'明细如下'或制作预览表格。"
+        f"row_count 就是全部数量，样本行数≠数据不完整。"
+        f"**只能对 row_count 下全量结论；对行内字段只能说'样本显示'；'全部 X/所有 Y 均 Z'类结论必须由 SQL 聚合统计提供证据。**"
+        f"禁止分页重查、禁止分段查询、禁止调用 task 子代理。"
+        f"{'可能需要提示用户缩小范围。' if _limit_reached else '请直接基于 row_count 和样本写结论，并注明完整明细见下方查询结果表。'}\n"
+    )
+    return {
+        "columns": result.get("columns", []),
+        "rows": result["rows"][:_SUMMARY_THRESHOLD],
+        "row_count": row_count, "returned_rows": row_count,
+        "is_preview": False, "llm_is_preview": True, "llm_preview_row_count": _SUMMARY_THRESHOLD,
+        "result_available_for_ui": True,
+        "result_ref": ref,                               # ← SSE 路由层取全量的接力棒
+        "sql": result.get("sql", ""),
+        "data_snapshot_at": result.get("data_snapshot_at"),
+        "cache_sources": result.get("cache_sources"),
+        "_directive": directive,                         # 指令文本(模型读；JSON 形态不破坏既有解析链)
+    }
+
+
 @mcp.tool()
 def execute_sql(sql: str, entity_code: str = "") -> dict:
     """执行 SELECT SQL 并返回结果（columns/rows/row_count）。自动修复 Unknown column。
@@ -71,7 +117,7 @@ def execute_sql(sql: str, entity_code: str = "") -> dict:
     body = {"sql": sql}
     if entity_code:
         body["entity_code"] = entity_code
-    return dispatch_kg_action("execute_sql", body)
+    return _with_result_ref(dispatch_kg_action("execute_sql", body))
 
 
 @mcp.tool()
@@ -127,13 +173,13 @@ def batch_entity_source_mode(entity_codes: list) -> dict:
 @mcp.tool()
 def execute_api_sql(sql: str) -> dict:
     """执行多源 API 联邦 SQL（DuckDB，WHERE/JOIN 自动下推到 API 参数）。虚拟表名从 /api-endpoints/tables 查。"""
-    return dispatch_kg_action("execute_api_sql", {"sql": sql})
+    return _with_result_ref(dispatch_kg_action("execute_api_sql", {"sql": sql}))
 
 
 @mcp.tool()
 def execute_entity_api(entity_code: str, filters: dict = {}) -> dict:
     """执行对象 API 映射（对象来源 API 时用，伪逻辑 SQL + 过滤条件自动下推）。"""
-    return dispatch_kg_action("execute_entity_api", {"entity_code": entity_code, "filters": filters or {}})
+    return _with_result_ref(dispatch_kg_action("execute_entity_api", {"entity_code": entity_code, "filters": filters or {}}))
 
 
 @mcp.tool()
@@ -143,7 +189,7 @@ def execute_doris_sql(entity_code: str = "", sql: str = "", filters: dict = {}) 
     优先传 entity_code：自动加载平台预配的 integration_sql + doris_catalog，并按 filters 下推 WHERE，无需自己拼 SQL。
     仅当对象未配 integration_sql 时才传 sql 自建，且 sql 必须用 3 段命名 catalog.db.table（否则报 No database selected）。
     """
-    return dispatch_kg_action("execute_doris_sql", {"entity_code": entity_code, "sql": sql, "filters": filters or {}})
+    return _with_result_ref(dispatch_kg_action("execute_doris_sql", {"entity_code": entity_code, "sql": sql, "filters": filters or {}}))
 
 
 @mcp.tool()

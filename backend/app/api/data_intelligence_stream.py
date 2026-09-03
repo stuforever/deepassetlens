@@ -115,8 +115,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             _pending_tcname = [""]  # 本轮 tool_name(同上)
             _pending_reason = [""]  # 本轮"下一步判断"content(on_chat_model_end 设, on_tool_start 写入 think_stream.live_reason)
             _run_id_to_tcid = {}   # ev.run_id -> tool_call_id(on_tool_start 设, on_tool_end 用)
-            _sid_to_tool_name = {}  # step_id -> tool_name(on_tool_start 设, data_result 兜底关联用)
-            _data_result_sids = set()  # 已由 DataSummaryMiddleware 派发 data_result -> sql_result 的 step_id（防止 on_tool_end 再发截断版覆盖完整数据）
+            # 批13-AB4：_data_result_sids 防覆盖集已删（DataSummaryMiddleware 退役，sql_result 统一 on_tool_end 派发）
             # v3.1 步骤5: 关键事件持久化(flag-gated+容错); _consume_events 内 append, final/except 里 complete/fail, finally 里 close
             from app.services.run_event_sink import RunEventSink
             _evt_sink = RunEventSink(req.user_input)
@@ -486,7 +485,6 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                         if _tcid:
                             _run_id_to_tcid[ev.get("run_id", "")] = _tcid
                         _tool_name = action if (name == "kg_api" and action) else name
-                        _sid_to_tool_name[_sid] = _tool_name  # data_result 兜底关联用
                         # R1: 检测是否为补判重试--同 tool_name 的最近 rejected 步骤，关联 step_id
                         # 让前端能展示"#4 校验SQL(失败) -> #5 校验SQL(修正后重试)"的因果关系
                         _retry_of_step = None
@@ -614,9 +612,34 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                     tool_results["assembled_sql"] = parsed.get("sql", "")
                                     yield f"event: trace\n"
                                     yield f"data: {json.dumps({'node': last_task or name, 'status': 'done', 'row_count': parsed.get('row_count', 0), 'detail': tool_log, 'step_id': _sid}, ensure_ascii=False)}\n\n"
-                                    # 仅当 DataSummaryMiddleware 未派发 data_result（完整数据）时才在此发 sql_result。
-                                    # 若已派发（_sid in _data_result_sids），此处 parsed 已被截断为前10行，再发会覆盖前端的完整数据。
-                                    if _sid not in _data_result_sids:
+                                    # 批13-AB4：DataSummaryMiddleware 退役 -> sql_result 统一在此派发。
+                                    # parsed 带 result_ref（工具端 _with_result_ref 已全量存 query_result_store）：
+                                    # 取全量派发（is_preview=false 完整数据，字段与原 data_result 帧逐字段一致）；
+                                    # 未命中（TTL 过期/极端内存淘汰）降级发模型侧截断版保底（前端少行数但不空窗）；
+                                    # 无 result_ref（非 AB4 工具/异常路径）按原兜底发 parsed 本身。
+                                    _ref = parsed.get("result_ref") if isinstance(parsed, dict) else None
+                                    if _ref:
+                                        from app.services import query_result_store as _qrs
+                                        _full = _qrs.get(_ref)
+                                        if _full is not None:
+                                            _payload = {"columns": _full.get("columns", []), "rows": _full.get("rows", []),
+                                                        "row_count": _full.get("row_count", 0), "sql": _full.get("sql", ""),
+                                                        "returned_rows": len(_full.get("rows", [])),
+                                                        "preview_row_count": min(10, _full.get("row_count", 0)),
+                                                        "is_preview": False,
+                                                        "llm_is_preview": bool(parsed.get("llm_is_preview")),
+                                                        "llm_preview_row_count": parsed.get("llm_preview_row_count", 10),
+                                                        "result_available_for_ui": True,
+                                                        "step_id": _sid, "tool_name": name,
+                                                        "data_snapshot_at": _full.get("data_snapshot_at"),
+                                                        "cache_sources": _full.get("cache_sources")}
+                                            yield f"event: sql_result\n"
+                                            yield f"data: {json.dumps(_payload, ensure_ascii=False, default=str)}\n\n"
+                                        else:
+                                            logger.warning(f"[SSE] result_ref 未命中降级截断版: tool={name} ref={str(_ref)[:8]} sid={_sid}")
+                                            yield f"event: sql_result\n"
+                                            yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', ''), 'returned_rows': len(parsed.get('rows', [])), 'is_preview': False, 'llm_is_preview': True, 'llm_preview_row_count': parsed.get('llm_preview_row_count', 10), 'result_available_for_ui': True, 'step_id': _sid, 'tool_name': name, 'data_snapshot_at': parsed.get('data_snapshot_at'), 'cache_sources': parsed.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
+                                    else:
                                         yield f"event: sql_result\n"
                                         yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', ''), 'step_id': _sid, 'step_no': _sid, 'returned_rows': len(parsed.get('rows', [])), 'is_preview': False, 'llm_is_preview': parsed.get('_truncated', False), 'llm_preview_row_count': parsed.get('llm_preview_row_count', parsed.get('preview_row_count', 0)), 'result_available_for_ui': True, 'data_snapshot_at': parsed.get('data_snapshot_at'), 'cache_sources': parsed.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
                             else:
@@ -685,21 +708,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                             yield f"data: {json.dumps({'kind': 'decision_rejected', 'round_id': _rid, 'tool_call_id': _tcid, 'tool_name': _tcn, 'candidate_content': _cdata.get('candidate_content', ''), 'attempt': _cdata.get('attempt', 0), 'reason': _cdata.get('reason', '')}, ensure_ascii=False)}\n\n"
                             if _evt_sink is not None:
                                 _evt_sink.append("decision.rejected", {"round_id": _rid, "tool_call_id": _tcid, "tool_name": _tcn, "attempt": _cdata.get('attempt', 0), "reason": _cdata.get('reason', '')[:500]})
-                        elif _cname == "data_result":
-                            # 数据查询结果摘要中间件派发：完整数据推前端直出（不经 LLM 全量转手）
-                            # 关联 step_id：优先按 run_id（on_tool_start 已映射），custom_event 异步延迟导致
-                            # on_tool_end 可能已 pop，故兜底按 tool_name 找最近同名步骤（ReAct 串行无并行风险）
-                            _ev_run_id = ev.get("run_id", "")
-                            _d_sid = _run_id_to_sid.get(_ev_run_id)
-                            _d_tool = _cdata.get("tool_name", "")
-                            if _d_sid is None and _d_tool:
-                                _d_sid = max((_s for _s, _tn in _sid_to_tool_name.items() if _tn == _d_tool), default=None)
-                            if _d_sid is not None:
-                                _data_result_sids.add(_d_sid)  # 标记：此 step_id 的完整数据已推送，on_tool_end 不再发截断版覆盖
-                            _d_rows = _cdata.get("rows", [])
-                            _d_rc = _cdata.get("row_count", 0)
-                            yield f"event: sql_result\n"
-                            yield f"data: {json.dumps({'columns': _cdata.get('columns', []), 'rows': _d_rows, 'row_count': _d_rc, 'sql': _cdata.get('sql', ''), 'returned_rows': _cdata.get('returned_rows', len(_d_rows)), 'preview_row_count': _cdata.get('preview_row_count', min(10, _d_rc)), 'is_preview': _cdata.get('is_preview', False), 'llm_is_preview': _cdata.get('llm_is_preview', False), 'llm_preview_row_count': _cdata.get('llm_preview_row_count', 0), 'result_available_for_ui': _cdata.get('result_available_for_ui', True), 'step_id': _d_sid, 'tool_name': _d_tool, 'data_snapshot_at': _cdata.get('data_snapshot_at'), 'cache_sources': _cdata.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
+                        # 批13-AB4：data_result 自定义事件分支已删——DataSummaryMiddleware 退役后
+                        # 无人派发 data_result；sql_result 统一由 on_tool_end 按 result_ref 派发。
                         elif _cname in ("engine.selected", "stop.reached", "policy.rejected",
                                        "template.bound", "template.drift", "correction.attempt",
                                        "policy.interrupt"):

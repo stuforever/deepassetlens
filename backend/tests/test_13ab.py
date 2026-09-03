@@ -96,3 +96,65 @@ class TestAB2PlaceholderToSkill:
         bad2 = "SELECT a.cust_no FROM ⟦户变关系⟧ a JOIN dim_cst_elec_cons_cust b ON a.cust_no=b.cust_no"
         chk2 = validate_against_template(bad2, tpl, "t1")
         assert not chk2.ok
+
+
+class TestAB4ResultRef:
+    """批13-AB4 数据摘要站一件三拆：工具端暂存+result_ref，SSE 路由层取全量派发。"""
+
+    def test_store_put_get_roundtrip(self):
+        from app.services import query_result_store as qrs
+        payload = {"columns": ["a"], "rows": [{"a": 1}], "row_count": 1}
+        key = qrs.put(payload)
+        assert len(key) == 36  # uuid4
+        assert qrs.get(key) == payload
+        assert qrs.get("nonexistent-key") is None
+
+    def test_store_ttl过期(self):
+        from app.services import query_result_store as qrs
+        key = qrs.put({"rows": [1], "row_count": 1})
+        ts, pl = qrs._store[key]
+        qrs._store[key] = (ts - qrs._RESULT_TTL - 1, pl)  # 人为拨旧
+        assert qrs.get(key) is None  # 过期删+None
+        assert key not in qrs._store
+
+    def test_store_上限64淘汰最旧(self):
+        from app.services import query_result_store as qrs
+        qrs._store.clear()
+        keys = [qrs.put({"i": i}) for i in range(65)]
+        assert len(qrs._store) == qrs._MAX_ENTRIES
+        assert keys[0] not in qrs._store  # 最旧被淘汰
+        assert qrs.get(keys[64]) == {"i": 64}  # 最新存活
+        qrs._store.clear()
+
+    def test_with_result_ref_大结果截断(self):
+        from app.mcp_server import _with_result_ref
+        from app.services import query_result_store as qrs
+        rows = [{"i": i, "v": f"r{i}"} for i in range(30)]
+        out = _with_result_ref({"columns": ["i", "v"], "rows": rows, "row_count": 30, "sql": "SELECT 1"})
+        assert len(out["rows"]) == 10            # 模型只看 10 行样本
+        assert out["row_count"] == 30            # 完整结果数
+        assert out["llm_is_preview"] is True and out["llm_preview_row_count"] == 10
+        assert out["is_preview"] is False        # 前端协议：false
+        assert "_directive" in out and "数据已完整获取" in out["_directive"]
+        _full = qrs.get(out["result_ref"])       # SSE 路由层按 ref 取全量
+        assert _full is not None and len(_full["rows"]) == 30
+
+    def test_with_result_ref_小结果全量(self):
+        from app.mcp_server import _with_result_ref
+        from app.services import query_result_store as qrs
+        rows = [{"i": i} for i in range(3)]
+        out = _with_result_ref({"columns": ["i"], "rows": rows, "row_count": 3})
+        assert len(out["rows"]) == 3 and out["row_count"] == 3
+        assert "_directive" not in out           # 小结果不截断不指令
+        assert qrs.get(out["result_ref"]) is not None
+
+    def test_with_result_ref_错误消息放行(self):
+        from app.mcp_server import _with_result_ref
+        err = {"error": "Unknown column", "log": "..."}
+        assert _with_result_ref(err) is err      # 非 rows/row_count 结构原样放行
+
+    def test_manifest_data_summary_mode(self):
+        src = _agent_src()
+        assert 'manifest_items["data_summary_mode"] = "tool_ref"' in src
+        assert "class DataSummaryMiddleware" not in src  # 站已删
+        assert "_dispatch_data_result" not in src

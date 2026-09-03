@@ -309,144 +309,18 @@ def _load_skill_md(skill_name: str) -> str:
 # 装配时翻译继续可用，与运行时站无关）；运行时模型按 AGENTS.md §五纪律主动 search_entities
 # 翻译，漏网 ⟦⟧ SQL 由模板守卫硬拒（双层安全网，见设计 §2.2）。
 
-# 数据查询工具集合：返回 {columns, rows, row_count} 格式的工具，统一做摘要截断
+# 批13-AB4 数据摘要站一件三拆——DataSummaryMiddleware（data_result 自定义事件 + ToolMessage
+# 截断的运行时站）已删除：四查询工具出口在 mcp_server._with_result_ref 统一「全量存
+# query_result_store + 返回模型摘要视图(带 result_ref/_directive)」，SSE 路由层 on_tool_end
+# 按 result_ref 取全量派发前端。_SUMMARY_THRESHOLD(10) 随迁 mcp_server.py 模块常量。
+
+# 四取数工具名单（13-AB4 后不再用于摘要拦截，仅 clean_aggregate 免评豁免逻辑使用）
 _DATA_QUERY_TOOLS = frozenset({
     "execute_doris_sql",    # Doris 联邦
     "execute_sql",          # 物理直连
     "execute_entity_api",   # DuckDB API 联邦（单对象）
     "execute_api_sql",      # DuckDB API 联邦（多源SQL）
 })
-_SUMMARY_THRESHOLD = 10  # 超过此行数则截断为摘要
-
-
-class DataSummaryMiddleware(AgentMiddleware):
-    """数据查询结果摘要中间件：明细数据不传 LLM 全量。
-
-    拦截 execute_doris_sql / execute_sql / execute_entity_api / execute_api_sql：
-    1. adispatch_custom_event("data_result", 完整数据) 推给前端（前端直出表格）
-    2. ToolMessage content 截断为摘要（前10行 + row_count + _summary），LLM 只看摘要写结论
-    row_count <= 10 时不截断（数据量小，全量给 LLM 无妨）。
-    """
-
-    async def awrap_tool_call(self, request, handler):
-        tool_name = request.tool_call.get("name", "")
-        tool_result = await handler(request)
-        if tool_name not in _DATA_QUERY_TOOLS:
-            return tool_result
-        try:
-            await self._summarize_and_dispatch(tool_result, request)
-        except Exception as e:
-            logger.warning(f"[DataSummary] 摘要截断失败({tool_name}): {e}", exc_info=True)
-        return tool_result
-
-    async def _summarize_and_dispatch(self, tool_result, request):
-        """解析工具结果 -> 推完整数据给前端 -> 截断为摘要给 LLM。"""
-        import json as _json
-
-        content = getattr(tool_result, "content", None)
-        if content is None:
-            return
-        # LangChain content blocks: [{"type":"text","text":"<JSON>"}] -> 取第一个 text block
-        if isinstance(content, list):
-            for _block in content:
-                if isinstance(_block, dict) and _block.get("type") == "text" and isinstance(_block.get("text"), str):
-                    content = _block["text"]
-                    break
-        if not isinstance(content, str):
-            content = _json.dumps(content, ensure_ascii=False, default=str)
-        if len(content) < 20:
-            return  # 错误消息等短内容不处理
-
-        # 解析 MCP 格式 {"type":"text","text":"<JSON>"} 或裸 JSON
-        parsed = None
-        try:
-            parsed = _json.loads(content)
-        except Exception:
-            return
-        # 解嵌套 text 字段（MCP tool 包装格式）
-        if isinstance(parsed, dict) and isinstance(parsed.get("text"), str):
-            try:
-                parsed = _json.loads(parsed["text"])
-            except Exception:
-                return
-        if not isinstance(parsed, dict):
-            return
-        # 必须有 rows + row_count 才处理
-        if "rows" not in parsed or "row_count" not in parsed:
-            return
-
-        columns = parsed.get("columns", [])
-        rows = parsed.get("rows", [])
-        row_count = parsed.get("row_count", len(rows))
-        logger.info(f"[DataSummary] {request.tool_call.get('name','')} row_count={row_count}, 派发 data_result + 截断摘要")
-
-        # 派发完整数据给前端：前端拿到的是完整 rows -> is_preview 必须为 false。
-        # 模型是否只看前 N 行分析样本，用 llm_is_preview / llm_preview_row_count 表达，不混用。
-        config = request.runtime.config if request.runtime else None
-        full_payload = {
-            "columns": columns, "rows": rows,
-            "row_count": row_count, "tool_name": request.tool_call.get("name", ""),
-            "sql": parsed.get("sql", ""),                               # SQL 文本（前端"复制SQL"按钮用）
-            "returned_rows": len(rows),                              # 前端实际拿到行数（=row_count，完整数据）
-            "preview_row_count": min(_SUMMARY_THRESHOLD, row_count), # 兼容旧字段（前端不再依赖）
-            "is_preview": False,                                     # 前端拿完整数据，一律 false
-            "llm_is_preview": row_count > _SUMMARY_THRESHOLD,        # 模型是否只看前 N 行分析样本
-            "llm_preview_row_count": min(_SUMMARY_THRESHOLD, row_count),  # 模型样本行数
-            "result_available_for_ui": True,                          # 完整数据已推前端表格
-            # 批3：数据快照披露（API 内存缓存命中时携带，前端对话卡标注快照时间）
-            "data_snapshot_at": parsed.get("data_snapshot_at"),
-            "cache_sources": parsed.get("cache_sources"),
-        }
-        await _dispatch_data_result(full_payload, config)
-
-        # row_count <= 阈值：不截断，全量给 LLM
-        if row_count <= _SUMMARY_THRESHOLD:
-            return
-
-        # 截断为摘要：前 N 行 + _summary
-        summary_rows = rows[:_SUMMARY_THRESHOLD]
-        # P0-B: 显著指令放在 JSON 前面，让 LLM 第一眼看到"数据已完整"
-        _limit_reached = row_count >= 500  # SQL 强制 LIMIT 500
-        _limit_hint = "（已达 LIMIT 500 上限，可能还有更多数据未取回）" if _limit_reached else "（未触发 LIMIT 截断，已是全部结果）"
-        _directive = (
-            f"【数据已完整获取】共 {row_count} 行{_limit_hint}。\n"
-            f"下方仅展示前 {_SUMMARY_THRESHOLD} 行分析样本，完整 {row_count} 行数据已推前端查询结果表展示（is_preview=false）。\n"
-            f"JSON 中 row_count={row_count}（完整结果数）、returned_rows={row_count}（前端拿到的完整行数）、"
-            f"llm_is_preview=true、llm_preview_row_count={len(summary_rows)}（你的分析样本行数）、result_available_for_ui=true。\n"
-            f"前 {_SUMMARY_THRESHOLD} 行只是你的分析样本，不是面向用户的展示数据：禁止复述为'明细如下'或制作预览表格。"
-            f"row_count 就是全部数量，样本行数≠数据不完整。"
-            f"**只能对 row_count 下全量结论；对行内字段只能说'样本显示'；'全部 X/所有 Y 均 Z'类结论必须由 SQL 聚合统计提供证据。**"
-            f"禁止分页重查、禁止分段查询、禁止调用 task 子代理。"
-            f"{'可能需要提示用户缩小范围。' if _limit_reached else '请直接基于 row_count 和样本写结论，并注明完整明细见下方查询结果表。'}\n"
-        )
-        summary = {
-            "columns": columns,
-            "rows": summary_rows,
-            "row_count": row_count,                                  # 完整结果数
-            "returned_rows": row_count,                              # 前端实际拿到的行数（完整数据）
-            "preview_row_count": len(summary_rows),                  # 兼容旧字段（=llm_preview_row_count）
-            "is_preview": False,                                     # 前端拿完整数据，一律 false
-            "llm_is_preview": True,                                  # 你（模型）只拿到分析样本
-            "llm_preview_row_count": len(summary_rows),              # 你的样本行数
-            "result_available_for_ui": True,                         # 完整数据已推前端
-            "_summary": f"共 {row_count} 行，仅展示前 {_SUMMARY_THRESHOLD} 行样例，完整数据已推前端直出",
-            "_truncated": True,
-            "_limit_reached": _limit_reached,
-        }
-        # 重新包装为 MCP 格式，指令前置
-        new_inner = _json.dumps(summary, ensure_ascii=False, default=str)
-        new_content = _json.dumps({"type": "text", "text": _directive + new_inner}, ensure_ascii=False, default=str)
-        object.__setattr__(tool_result, "content", new_content)
-        logger.info(f"[DataSummary] 已截断为前{_SUMMARY_THRESHOLD}行摘要（原{row_count}行，limit_reached={_limit_reached}）")
-
-
-async def _dispatch_data_result(payload: dict, config):
-    """派发 data_result 自定义事件给前端。"""
-    try:
-        from langchain_core.callbacks import adispatch_custom_event
-        await adispatch_custom_event("data_result", payload, config=config)
-    except Exception as e:
-        logger.warning(f"[DataSummary] dispatch data_result 失败: {e}")
 
 
 def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
@@ -692,7 +566,7 @@ def _is_clean_aggregate_result(state) -> bool:
             break
     if last_content is None:
         return False
-    # content 解包（LangChain blocks / MCP 包装），与 DataSummaryMiddleware 同构
+    # content 解包（LangChain blocks / MCP 包装），与 mcp_server._with_result_ref 输出同构
     if isinstance(last_content, list):
         for b in last_content:
             if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str):
@@ -933,8 +807,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     logger.info("[SkillPolicy] 受控执行契约中间件已装配（最外层闸门，技能/步骤/模板/引擎/终止硬校验）")
     # 批13-AB2：SkillEntityResolverMiddleware（read_file 运行时 ⟦⟧ 翻译站）已删除——
     # 模型按 AGENTS.md §五纪律主动 search_entities 翻译，漏网 SQL 由模板守卫硬拒。
-    # 数据查询结果摘要：明细不传 LLM 全量，推完整数据给前端 + ToolMessage 截断为前10行摘要
-    middleware_list.append(DataSummaryMiddleware())
+    # 批13-AB4：DataSummaryMiddleware（数据摘要运行时站）已删除——
+    # 摘要逻辑下沉 mcp_server._with_result_ref（工具端截断）+ SSE 路由层 result_ref 派发。
     if _DECISION_GATE_ENABLED:
         from app.services.decision_gate import SCOPE_GATED_TOOLS, DecisionGateMiddleware
         middleware_list.append(DecisionGateMiddleware(scope_gated=SCOPE_GATED_TOOLS))
@@ -1046,6 +920,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         manifest_items["store_installed"] = _store is not None
         # 批13-AB1：摘要装配模式（探针断言用）——"official_factory"=官方工厂双件套同名替换
         manifest_items["summarization_mode"] = "official_factory" if _on("summarization") else "disabled"
+        # 批13-AB4：数据摘要模式（探针断言用）——"tool_ref"=工具端暂存+SSE result_ref 派发
+        manifest_items["data_summary_mode"] = "tool_ref"
         # 批13-J 收尾（问题二）：装配清单记实际排除名单（探针据此断言黑名单真生效 + 抓框架升级改工具名漂移）
         try:
             from app.services import capability_config as _cc2
