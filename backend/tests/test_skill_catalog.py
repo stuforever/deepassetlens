@@ -33,7 +33,11 @@ class TestParseDistributionOverload:
 
     def test_forbidden_tools_include_task_execute(self, catalog):
         skill = catalog.load_skill(REAL_SKILL)
-        assert {"task", "write_file", "edit_file", "execute", "grep", "glob"} <= set(skill.forbidden_tools)
+        # 批13-Z：task 已从 forbidden_tools 移除（剧本声明 allow_subagents: true，
+        # 声明+禁用自相矛盾），委派改由护栏1 复合条件（本声明 AND caps 总闸）约束
+        assert {"write_file", "edit_file", "execute", "grep", "glob"} <= set(skill.forbidden_tools)
+        assert "task" not in set(skill.forbidden_tools)
+        assert skill.allow_subagents is True
 
     def test_steps_relationship_overload_load_ratio(self, catalog):
         skill = catalog.load_skill(REAL_SKILL)

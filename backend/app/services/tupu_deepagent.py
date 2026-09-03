@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import asyncio
+from pathlib import Path
 from typing import Annotated, Any, Dict, List, Literal, TypedDict
 
 try:
@@ -350,6 +351,67 @@ def _rubric_effective_mode() -> str:
         return (_p.get("params") or {}).get("mode", "skill_prompt")
     except Exception:
         return "skill_prompt"
+
+
+# 批13-Y：Backend 官方服务器模式迁移——/skills/ 与 /memory/ 从 FilesystemBackend
+# （窄化使用+五层缓解的记录偏离）迁移至 StoreBackend（官方 Web 服务器推荐组合）。
+# 技能/纪律树在装配时种子进独立 InMemoryStore（_files_store），运行时 Agent 文件路径
+# 结构性零磁盘——目录穿越攻击类别整体消失。permissions 三规则保留为冗余保险带。
+# 实施调和：设计原文「种子与运行时同库（create_deep_agent store）」；实际用独立
+# _files_store 显式传参——消除 filesystem_tools 开+store 关的能力组合耦合，且文件种子柜
+# 与用户偏好库 namespace 本就不同（语义不变）。新鲜度：files_hash 并入缓存键，
+# 文件增删改 -> hash 变 -> 下次请求重装配+重种子（进行中会话用旧种子，低频运维可接受）。
+_SKILLS_ROOT = Path(__file__).resolve().parent.parent.parent / "data" / "skills"
+_MEMORY_ROOT = Path(__file__).resolve().parent.parent.parent / "data" / "memory"
+_FILES_NS_SKILLS = ("tupu", "skills")
+_FILES_NS_MEMORY = ("tupu", "memory")
+
+
+def _compute_files_hash() -> str:
+    """技能树+纪律树新鲜度指纹：逐文件 相对路径+mtime+size 有序拼接 sha256（前16位）。
+
+    任何增删改 -> hash 变 -> 缓存未命中 -> 重装配重种子。装配区与 get_tupu_agent 缓存键共用。
+    """
+    import hashlib as _hl
+    h = _hl.sha256()
+    for root, prefix in ((_SKILLS_ROOT, "skills"), (_MEMORY_ROOT, "memory")):
+        try:
+            files = sorted(p for p in root.rglob("*") if p.is_file())
+        except Exception:
+            files = []
+        for p in files:
+            try:
+                st = p.stat()
+                rel = p.relative_to(root).as_posix()
+                h.update(f"{prefix}/{rel}|{int(st.st_mtime)}|{st.st_size};".encode("utf-8"))
+            except OSError:
+                continue  # 竞态删除：跳过（下轮 hash 自然更新）
+    return h.hexdigest()[:16]
+
+
+def _seed_files(store, ns: tuple, root: Path) -> int:
+    """装配时把磁盘树种子进 store（key=/相对路径，value={"content": text}）。
+
+    key 带前导斜杠：CompositeBackend 路由 /skills/xxx 后传给子 backend 的路径保留前导 /，
+    StoreBackend 不做归一化（实测 /scenarios/.. 找不到 scenarios/.. 的 key），故种子 key
+    必须同形（FilesystemBackend 时代由其内部虚拟根归一化兜住，迁移后由种子 key 对齐）。
+    先清场（PutOp value=None 批量删）再种——防删除文件后旧 key 残留（InMemoryStore 无 TTL）。
+    返回种子文件数。value 形态按 StoreBackend._convert_store_item_to_file_data 约定
+    （store_item.value["content"] 为 str）。"""
+    from langgraph.store.base import PutOp as _PutOp
+    old_keys = [i.key for i in store.search(ns)]
+    if old_keys:
+        store.batch([_PutOp(ns, k, None) for k in old_keys])
+    n = 0
+    for p in sorted(root.rglob("*")):
+        if not p.is_file():
+            continue
+        if "__pycache__" in p.parts or p.suffix == ".pyc":
+            continue  # 防御：字节码缓存不入种子（非技能内容，且非 UTF-8 会炸 read_text）
+        rel = p.relative_to(root).as_posix()
+        store.put(ns, f"/{rel}", {"content": p.read_text("utf-8")})
+        n += 1
+    return n
 
 
 def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
@@ -744,25 +806,27 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     def _on(cid: str) -> bool:
         return bool((_cap(cid) or {}).get("enabled"))
 
-    from deepagents.backends import StateBackend, FilesystemBackend, CompositeBackend
-    from pathlib import Path as _Path
+    from deepagents.backends import StateBackend, CompositeBackend, StoreBackend
 
-    # CompositeBackend: /skills/ 路由到只读 FilesystemBackend（virtual_mode 防目录穿越），其他走 StateBackend
-    # 安全原则（P0 修复）：原生 SkillsMiddleware 自动发现 SKILL.md frontmatter，Agent 按需 read_file 子文件，
-    # 不再需要 data_intelligence.py 手工枚举 + 注入；FilesystemBackend 限制只能读技能目录。
-    # M2（融合设计 §4.4）：/memory/ 路由到只读 FilesystemBackend（data/memory），供 MemoryMiddleware
-    # 常驻纪律 AGENTS.md（全局长期纪律，运营可改文件；职责边界=动态系统提示仍由 _build_dynamic_system_prompt 承担）。
+    # 批13-Y：Backend 官方服务器模式——/skills/ 与 /memory/ 路由到 StoreBackend（官方 Web 服务器
+    # 推荐组合），技能/纪律树装配时种子进独立 _files_store，运行时零磁盘访问（目录穿越类别消失）。
+    # 默认 StateBackend：路由表外路径=会话草稿纸（驱逐历史等），语义不变。
     # 批13-Q：filesystem_tools 关闭 -> 退化 StateBackend（无文件路由，文件工具不可用面收窄）。
-    _skills_root = _Path(__file__).resolve().parent.parent.parent / "data" / "skills"
-    _skills_backend = FilesystemBackend(root_dir=str(_skills_root), virtual_mode=True)
-    _memory_root = _Path(__file__).resolve().parent.parent.parent / "data" / "memory"
-    _memory_backend = FilesystemBackend(root_dir=str(_memory_root), virtual_mode=True)
+    from langgraph.store.memory import InMemoryStore as _InMemStore
+    _files_store = _InMemStore()
     if _on("filesystem_tools"):
+        _n_seeded = _seed_files(_files_store, _FILES_NS_SKILLS, _SKILLS_ROOT)
+        _n_seeded += _seed_files(_files_store, _FILES_NS_MEMORY, _MEMORY_ROOT)
         backend = CompositeBackend(
             default=StateBackend(),
-            routes={"/skills/": _skills_backend, "/memory/": _memory_backend},
+            routes={
+                "/skills/": StoreBackend(store=_files_store, namespace=lambda _rt: _FILES_NS_SKILLS),
+                "/memory/": StoreBackend(store=_files_store, namespace=lambda _rt: _FILES_NS_MEMORY),
+            },
         )
+        logger.info(f"[13-Y] StoreBackend 路由已装配（种子 {_n_seeded} 个文件，files_hash={_compute_files_hash()}）——运行时零磁盘")
     else:
+        _n_seeded = 0
         backend = StateBackend()
         logger.warning("[Capability] filesystem_tools 已关闭：backend 退化为 StateBackend（文件路由不可用）")
     # 权限规则（按序匹配，首条命中生效，无命中默认允许）：
@@ -965,6 +1029,10 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         manifest_items["data_summary_mode"] = "tool_ref"
         # 批13-AB3：评分模式（探针断言用）——skill_prompt=自检段进提示词 / middleware=独立评分站
         manifest_items["rubric_mode"] = _rubric_mode
+        # 批13-Y：backend 模式与种子状态（探针断言用）
+        manifest_items["backend_mode"] = "store" if _on("filesystem_tools") else "state_only"
+        manifest_items["files_hash"] = _compute_files_hash()
+        manifest_items["seeded_files"] = _n_seeded
         # 批13-J 收尾（问题二）：装配清单记实际排除名单（探针据此断言黑名单真生效 + 抓框架升级改工具名漂移）
         try:
             from app.services import capability_config as _cc2
@@ -1079,7 +1147,13 @@ async def get_tupu_agent(connection_id: str = ""):
         _cver = _cc.get_version()
     except Exception:
         _cver = 0
-    _cache_key = f"{connection_id or '__default__'}#g{_gver}#c{_cver}"
+    # 批13-Y：files_hash 并入缓存键——技能/纪律树任何增删改 -> hash 变 -> 缓存未命中 ->
+    # 重装配+重种子（下次请求生效；进行中会话用旧种子，低频运维可接受，设计 §五.1）。
+    try:
+        _fhash = _compute_files_hash()
+    except Exception:
+        _fhash = "err"
+    _cache_key = f"{connection_id or '__default__'}#g{_gver}#c{_cver}#f{_fhash}"
     if _cache_key not in _GLOBAL_AGENTS:
         async with _AGENT_INIT_LOCK:
             if _cache_key not in _GLOBAL_AGENTS:

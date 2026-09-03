@@ -69,6 +69,8 @@ class TestAcceptance:
 
     # 3) task / 自由 Shell / 模板外 SQL 被拒
     def test_acceptance_03_forbidden_rejected(self, policy, relationship_contract):
+        # 批13-Z 后剧本声明 allow_subagents=true（task 契约层放行）——拒绝路径显式置 False 构造
+        relationship_contract.allow_subagents = False
         for name in ("task", "write_file", "execute", "grep", "glob"):
             out = _run(policy, relationship_contract, _tc(name, {}))
             assert "SkillPolicy" in out.content, f"{name} 未被拒"
@@ -116,6 +118,7 @@ class TestAcceptance:
 
     # 8) 二次违规终止本轮
     def test_acceptance_08_second_violation_blocks(self, policy, relationship_contract):
+        relationship_contract.allow_subagents = False  # 批13-Z：剧本默认放行 task，拒绝路径显式构造
         o1 = _run(policy, relationship_contract, _tc("task", {}))
         assert "拒绝" in o1.content and "阻断" not in o1.content
         o2 = _run(policy, relationship_contract, _tc("task", {}))

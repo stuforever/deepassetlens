@@ -65,6 +65,9 @@ def _run(policy, contract, tc, result=None):
 
 class TestForbiddenAndAllowedTools:
     def test_task_blocked(self, policy, relationship_contract):
+        # 批13-Z 后 distribution-overload 剧本已声明 allow_subagents=true（task 放行）；
+        # 本测试验证「未声明/未获准」拒绝路径，显式置 False 构造（护栏1 fail-closed 语义）。
+        relationship_contract.allow_subagents = False
         out = _run(policy, relationship_contract, _tc("task", {"description": "x"}))
         assert "SkillPolicy" in out.content and "拒绝" in out.content
         assert "task" in out.content
@@ -145,11 +148,14 @@ class TestTemplateAndStop:
 
 class TestViolationBudget:
     def test_second_violation_blocks(self, policy, relationship_contract):
+        # 批13-Z 后剧本默认放行 task——违规预算测试显式置 False 走拒绝路径（违规计数载体）
+        relationship_contract.allow_subagents = False
         _run(policy, relationship_contract, _tc("task", {}))       # 第1次：拒绝+指引
         out = _run(policy, relationship_contract, _tc("task", {}))  # 第2次：阻断
         assert "已阻断本轮" in out.content
 
     def test_first_violation_guidance_only(self, policy, relationship_contract):
+        relationship_contract.allow_subagents = False  # 批13-Z：显式走拒绝路径（见上）
         out = _run(policy, relationship_contract, _tc("task", {}))
         assert "拒绝" in out.content
         assert "已阻断本轮" not in out.content
