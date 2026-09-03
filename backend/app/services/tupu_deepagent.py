@@ -947,21 +947,27 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         _excluded = frozenset(_excl_cfg["excluded"])
     except Exception:
         _excluded = frozenset({"grep", "glob", "write_file", "edit_file", "execute"})
+    # 批13-AB1：排除栏条件化——从「常态杀默认摘要件」变为「能力开关关闭时的执行器」。
+    # 开关开：官方工厂件 .name="SummarizationMiddleware" 与框架自动件同名 -> graph.py 拼接机
+    #         原地替换（我们的件顶掉自动件），排除栏必须为空，否则把工厂件也排除了；
+    # 开关关：排除栏把框架自动摘要件撤掉、我们也不装配——两种状态全栈都只有一个摘要件。
+    _mw_excl = frozenset({"SummarizationMiddleware"}) if not _on("summarization") else frozenset()
     _registered_keys = []
     if _model_provider and _model_id and ":" not in _model_id:
         _key = f"{_model_provider}:{_model_id}"
-        register_harness_profile(_key, HarnessProfile(excluded_tools=_excluded, excluded_middleware={"SummarizationMiddleware"}))
+        register_harness_profile(_key, HarnessProfile(excluded_tools=_excluded, excluded_middleware=_mw_excl))
         _registered_keys.append(_key)
         # 同时注册大小写变体（防 DB 存 DeepSeek-V4-Flash 但模型返回 deepseek-v4-flash）
         _key_lower = f"{_model_provider}:{_model_id.lower()}"
         if _key_lower != _key:
-            register_harness_profile(_key_lower, HarnessProfile(excluded_tools=_excluded, excluded_middleware={"SummarizationMiddleware"}))
+            register_harness_profile(_key_lower, HarnessProfile(excluded_tools=_excluded, excluded_middleware=_mw_excl))
             _registered_keys.append(_key_lower)
     elif _model_id:
         # fallback: 只有 identifier（含冒号或无 provider）
-        register_harness_profile(_model_id, HarnessProfile(excluded_tools=_excluded, excluded_middleware={"SummarizationMiddleware"}))
+        register_harness_profile(_model_id, HarnessProfile(excluded_tools=_excluded, excluded_middleware=_mw_excl))
         _registered_keys.append(_model_id)
-    logger.info(f"[HarnessProfile] 已注册 {len(_registered_keys)} 个 key: {_registered_keys}：排除 grep/glob/write_file/edit_file/execute")
+    logger.info(f"[HarnessProfile] 已注册 {len(_registered_keys)} 个 key: {_registered_keys}：排除 grep/glob/write_file/edit_file/execute"
+                f"{' + SummarizationMiddleware(开关关)' if _mw_excl else ''}")
 
     # v3.2 下一步判断闸门（feature flag）：TUPU_DECISION_GATE=1 时装配，
     # 工具调用前强校验同轮"下一步判断"(已知/判断/因此)+真实工具名+一轮单工具；
@@ -989,53 +995,25 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     else:
         logger.warning("[DecisionGate] 下一步判断闸门未启用 (TUPU_DECISION_GATE 未设为 1)：工具调用前不强制「已知/判断/因此」")
 
-    # M1（融合设计 §三）：显式保守摘要 —— 替代 v3.5 的全局摘要默认函数 monkey-patch
-    # （曾临时替换该函数为 3 万 token trigger/保留 10 条/截断 15 条）。
-    # 现改为显式构造 SummarizationMiddleware（子类化使名称区别于基类，配合 profile
-    # excluded_middleware={"SummarizationMiddleware"} 精确丢弃框架自动追加的默认阈值件）
-    # + SummarizationToolMiddleware 提供 compact_conversation 手动压缩工具。
+    # M1（批13-AB1 摘要回退官方默认）：官方工厂 create_summarization_middleware 双件套，
+    # 替代自研保守阈值摘要件（30k/10/15 + 批5-C3 观测钩子——
+    # 摘要历史触发 0 次，无账可记，钩子随之退役）。
+    # 同名替换机制：工厂实例 .name="SummarizationMiddleware"（框架公开别名），与框架自动追加的
+    # 默认阈值件同名 -> graph.py 拼接机原地替换（我们的工厂件顶掉自动件），全程不需要排除栏。
+    # 风险登记（复盘条件，见《摘要官方化回退与站点技能化详细实施设计》§1.3）：
+    # 170k(无 profile 固定默认) > DeepSeek 真实窗口 -> 主动压缩可能永不触发；
+    # 保护=官方 ContextOverflowError 应急路（超限拒绝->压缩->重试）。复盘触发：
+    # ①日志出现超限重试 ②会话普遍>100k token ③13-G 数据显示长会话常态化——
+    # 届时为模型补 profile(max_input_tokens) 使工厂自适应 85%，不再自定义阈值。
     from deepagents.middleware.summarization import (
-        SummarizationMiddleware,
+        create_summarization_middleware,
         SummarizationToolMiddleware,
     )
-
-    class _TupuSummarizationMiddleware(SummarizationMiddleware):
-        """保守阈值摘要中间件（30k token trigger / 保留 10 条 / 参数截断 15 条）。
-
-        子类化：`AgentMiddleware.name` 默认取 `__class__.__name__`，故本实例名
-        `_TupuSummarizationMiddleware` 不等于基类名 `SummarizationMiddleware`，
-        profile 的 excluded_middleware={"SummarizationMiddleware"}（字符串按 name 精确匹配）
-        只会丢弃框架自动追加的默认阈值件，本实例存活。
-        """
-
-        def __init__(self, model, backend):
-            super().__init__(
-                model=model,
-                backend=backend,
-                trigger=("tokens", 30000),
-                keep=("messages", 10),
-                truncate_args_settings={"trigger": ("messages", 15), "keep": ("messages", 15)},
-            )
-
-        def _should_summarize(self, messages, total_tokens):
-            # 批5-C3：摘要触发即 DeepSeek 前缀缓存失效点（bust）——记治理事件使「缓存被摘要打碎」可观测；
-            # trigger 30k 维持不变（保守化既定决策）。
-            _hit = super()._should_summarize(messages, total_tokens)
-            if _hit:
-                try:
-                    from app.services.skill_governance import get_governance
-                    get_governance().record_policy(
-                        "context.summarized", "_summ_", "_summ_",
-                        f"tokens={total_tokens}（批5-C3：摘要触发=前缀缓存失效点）")
-                except Exception:
-                    pass
-            return _hit
-
-    _summ_mw = _TupuSummarizationMiddleware(model, backend)
     if _on("summarization"):
-        middleware_list.append(_summ_mw)
-        middleware_list.append(SummarizationToolMiddleware(_summ_mw))
-        logger.info("[Summarization] 显式保守摘要中间件已装配（30k/10/15，替代 monkey-patch）+ compact_conversation 工具")
+        _summ_mw = create_summarization_middleware(model, backend)   # 官方工厂(默认参数,无 profile: 170k/6/20-20)
+        middleware_list.append(_summ_mw)                              # .name 与框架自动件同名 -> 原地替换
+        middleware_list.append(SummarizationToolMiddleware(_summ_mw))  # 官方手动压缩件(compact_conversation)
+        logger.info("[Summarization] 官方默认摘要件已装配(工厂默认阈值)+compact_conversation 工具")
     else:
         logger.warning("[Capability] summarization 已关闭：不装配自动摘要件（长会话可能触达上下文上限）")
 
@@ -1119,6 +1097,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         manifest_items["subagent_specs"] = [s["name"] for s in (_subagents or [])]
         manifest_items["response_format_installed"] = _response_format is not None
         manifest_items["store_installed"] = _store is not None
+        # 批13-AB1：摘要装配模式（探针断言用）——"official_factory"=官方工厂双件套同名替换
+        manifest_items["summarization_mode"] = "official_factory" if _on("summarization") else "disabled"
         # 批13-J 收尾（问题二）：装配清单记实际排除名单（探针据此断言黑名单真生效 + 抓框架升级改工具名漂移）
         try:
             from app.services import capability_config as _cc2

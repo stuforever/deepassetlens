@@ -69,13 +69,17 @@ class TestCacheObservability:
 
         assert _extract_usage(_Resp()) is None
 
-    def test_summarization_governance_event_wired(self):
-        """批5-C3：摘要触发记治理事件（源码接线检查，防回归丢失可观测点）"""
+    def test_summarization_official_factory_wired(self):
+        """批13-AB1：摘要回退官方工厂（源码接线检查）——自研类/观测钩子退役，工厂双件套+排除栏条件化在位"""
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "..", "app", "services", "tupu_deepagent.py"), encoding="utf-8") as f:
             src = f.read()
-        assert "context.summarized" in src
-        assert "_should_summarize" in src
+        assert "create_summarization_middleware(model, backend)" in src
+        assert "SummarizationToolMiddleware(_summ_mw)" in src
+        assert "_TupuSummarizationMiddleware" not in src  # 自研类已删
+        assert "_should_summarize" not in src  # 批5-C3 观测钩子随类退役（摘要历史触发 0 次，无账可记）
+        # 排除栏条件化：开关开=空集（同名替换）、关={"SummarizationMiddleware"}（执行器）
+        assert '_mw_excl = frozenset({"SummarizationMiddleware"}) if not _on("summarization") else frozenset()' in src
 
     def test_tool_order_fixed(self):
         """批5-C2：MCP 工具装配按名排序（源码接线检查）"""
