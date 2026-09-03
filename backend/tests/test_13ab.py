@@ -158,3 +158,51 @@ class TestAB4ResultRef:
         assert 'manifest_items["data_summary_mode"] = "tool_ref"' in src
         assert "class DataSummaryMiddleware" not in src  # 站已删
         assert "_dispatch_data_result" not in src
+
+
+class TestAB3RubricMode:
+    """批13-AB3 评分 mode 化：rubric.params.mode 二选一（skill_prompt 默认/middleware 保留）。"""
+
+    def test_validate_params_非法mode拒绝(self):
+        """mode 枚举校验：非法值返回拒绝原因（API 转 400 不落库）；合法值/缺省放行。"""
+        from app.services.capability_config import validate_params
+        assert validate_params("rubric", {"mode": "bogus"}) is not None
+        assert validate_params("rubric", {"mode": "skill_prompt"}) is None
+        assert validate_params("rubric", {"mode": "middleware"}) is None
+        assert validate_params("rubric", {"enabled": True}) is None  # 不更新 mode 时放行
+
+    def test_装配源码接线(self):
+        src = _agent_src()
+        assert "RUBRIC_SELF_CHECK_PROMPT = " in src
+        assert "def _rubric_effective_mode()" in src                       # 模块级统一口径
+        assert '_rubric_mode = _rubric_effective_mode()' in src            # 装配区统一读
+        assert 'if _rubric_mode == "middleware":' in src                   # middleware 保留路径
+        assert 'manifest_items["rubric_mode"]' in src
+
+    def test_自检段注入条件(self, monkeypatch):
+        """mode=skill_prompt（默认）注入自检段；middleware 不注入；AGENTS.md §六常驻等效。"""
+        import app.services.tupu_deepagent as td
+        monkeypatch.setattr(td, "_rubric_effective_mode", lambda: "skill_prompt")
+        p1 = td._build_dynamic_system_prompt("locate")
+        assert "交付前自检" in p1
+        monkeypatch.setattr(td, "_rubric_effective_mode", lambda: "middleware")
+        p2 = td._build_dynamic_system_prompt("locate")
+        assert "交付前自检" not in p2  # middleware 模式由独立 grader 评分，不重复注入
+        monkeypatch.setattr(td, "_rubric_effective_mode", lambda: "disabled")
+        assert "交付前自检" not in td._build_dynamic_system_prompt("locate")
+
+    def test_rubric_effective_mode_缺省与禁用(self, monkeypatch):
+        """_rubric_effective_mode 口径：env 禁用=disabled；配置读崩 fail-open=skill_prompt。"""
+        import app.services.tupu_deepagent as td
+        monkeypatch.setenv("TUPU_RUBRIC_DISABLED", "1")
+        assert td._rubric_effective_mode() == "disabled"
+        monkeypatch.setenv("TUPU_RUBRIC_DISABLED", "0")
+        m = td._rubric_effective_mode()
+        assert m in ("skill_prompt", "middleware", "disabled")  # 真实 DB 配置下三态其一
+
+    def test_AGENTS_md自检节在位(self):
+        from pathlib import Path
+        p = Path(__file__).resolve().parent.parent / "data" / "memory" / "AGENTS.md"
+        md = p.read_text(encoding="utf-8")
+        assert "六、交付前自检（13-AB）" in md
+        assert "样本结论与全量结论区分" in md

@@ -322,6 +322,35 @@ _DATA_QUERY_TOOLS = frozenset({
     "execute_api_sql",      # DuckDB API 联邦（多源SQL）
 })
 
+# 批13-AB3：skill_prompt 模式的自检段（评分站 mode 化）——注入动态系统提示词。
+# 与 AGENTS.md §六常驻纪律同文等效（belt+suspenders）：middleware 模式由独立 grader 评分不注入。
+RUBRIC_SELF_CHECK_PROMPT = """
+## 交付前自检（不合格自行重写后再交）
+1. 每个数值可追溯到某次工具返回（row_count/聚合值），禁止编造或心算；
+2. 表名与 search_entities/list_tables 返回的物理表名完全一致；
+3. 结论与数据口径一致（实体表、时间范围、过滤条件已注明）；
+4. 样本结论与全量结论区分（「全部X/所有Y均Z」必须由 row_count 或 SQL 聚合提供证据）。
+"""
+
+
+def _rubric_effective_mode() -> str:
+    """批13-AB3：rubric 生效模式（模块级统一口径，提示词构建与装配区共用）。
+
+    返回 "disabled"（TUPU_RUBRIC_DISABLED=1 或能力关）/ "middleware" / "skill_prompt"（缺省）。
+    配置读崩 fail-open 用 skill_prompt（自检段常驻无害，与 AGENTS.md §六 belt+suspenders 等效）。
+    """
+    import os as _os_rm
+    if _os_rm.getenv("TUPU_RUBRIC_DISABLED", "") == "1":
+        return "disabled"
+    try:
+        from app.services.capability_config import get_policy
+        _p = get_policy("rubric") or {}
+        if not _p.get("enabled"):
+            return "disabled"
+        return (_p.get("params") or {}).get("mode", "skill_prompt")
+    except Exception:
+        return "skill_prompt"
+
 
 def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
     """构建动态 system_prompt（按技能分段注入）。
@@ -368,6 +397,10 @@ def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
     if _DECISION_GATE_ENABLED:
         parts.append(_DECISION_GATE_RULES)
     parts.append(_DATA_COMPLETENESS_RULES)
+    # 批13-AB3：评分 mode=skill_prompt 时，自检段进动态系统提示词（middleware 模式由
+    # _TupuRubricMiddleware 评分，不重复注入；rubric 关闭/禁用也不注入）。
+    if _rubric_effective_mode() == "skill_prompt":
+        parts.append(RUBRIC_SELF_CHECK_PROMPT)
     parts.append(_COMMON_RULES)
     return "\n".join(parts)
 
@@ -838,20 +871,28 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     else:
         logger.warning("[Capability] summarization 已关闭：不装配自动摘要件（长会话可能触达上下文上限）")
 
-    # M3（融合设计 §5.1）：自评闸门 RubricMiddleware —— 仅调用方传 rubric 时激活（generic 契约，
-    # scenario 不传即不激活）。grader 模型缺省会话模型；TUPU_RUBRIC_CONNECTION_ID 可指轻量连接。
-    # max_iterations=1（只评不改，grader 放弃时不篡改消息，前端按 SSE 展示）；on_evaluation 走治理+sink。
-    # TUPU_RUBRIC_DISABLED=1 时跳过装配（§6.2 eval 开/关对比度量净收益）。
+    # M3（批13-AB3 评分站 mode 化）：能力项 rubric.params.mode 二选一——
+    #   "middleware"：独立评分模型路径（_TupuRubricMiddleware，max_iterations=1，grader 温度 0.0
+    #     可用 TUPU_RUBRIC_CONNECTION_ID 指轻量连接；on_evaluation 走治理+sink）——原路径保留可切回；
+    #   "skill_prompt"（默认，用户定调）：不装配评分站，自检段 RUBRIC_SELF_CHECK_PROMPT 注入动态
+    #     系统提示词（_build_dynamic_system_prompt 同条件判断），同模型自评；代价登记见设计 §3.4。
+    # TUPU_RUBRIC_DISABLED=1 时两模式都不激活（§6.2 eval 开/关对比度量净收益）。
+    # rubric_status 口径：skill_prompt 模式下 _runtime["rubric_status"] 不写（无 grader/无豁免），
+    # 前端按「未评」展示，与 TUPU_RUBRIC_DISABLED=1 既有语义对齐——前端零改动。
     from deepagents.middleware.rubric import RubricMiddleware
     import os as _os3
-    if _os3.getenv("TUPU_RUBRIC_DISABLED", "") != "1" and _on("rubric"):
-        _rubric_conn = _os3.getenv("TUPU_RUBRIC_CONNECTION_ID", "") or connection_id
-        _rubric_model = get_chat_model(temperature=0.0, streaming=True, connection_id=_rubric_conn)
-        _rubric_mw = _TupuRubricMiddleware(model=_rubric_model, max_iterations=1,
-                                           on_evaluation=_on_rubric_evaluation)
-        middleware_list.append(_rubric_mw)
-        logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'，含批10-B'-1 clean_aggregate 豁免）"
-                    f" 实例类={type(_rubric_mw).__name__} 覆写生效={type(_rubric_mw).after_agent is not RubricMiddleware.after_agent}")
+    _rubric_mode = _rubric_effective_mode()  # 批13-AB3：模块级统一口径（disabled/middleware/skill_prompt）
+    if _rubric_mode != "disabled":
+        if _rubric_mode == "middleware":
+            _rubric_conn = _os3.getenv("TUPU_RUBRIC_CONNECTION_ID", "") or connection_id
+            _rubric_model = get_chat_model(temperature=0.0, streaming=True, connection_id=_rubric_conn)
+            _rubric_mw = _TupuRubricMiddleware(model=_rubric_model, max_iterations=1,
+                                               on_evaluation=_on_rubric_evaluation)
+            middleware_list.append(_rubric_mw)
+            logger.info(f"[Rubric] 自评闸门已装配（max_iterations=1，grader conn='{_rubric_conn}'，含批10-B'-1 clean_aggregate 豁免）"
+                        f" 实例类={type(_rubric_mw).__name__} 覆写生效={type(_rubric_mw).after_agent is not RubricMiddleware.after_agent}")
+        else:
+            logger.info("[Rubric] skill_prompt 模式：自检段注入系统提示词（middleware 路径保留可切回）")
     else:
         logger.warning("[Rubric] 跳过自评闸门装配（TUPU_RUBRIC_DISABLED=1 或 capability rubric 已关闭）")
 
@@ -922,6 +963,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         manifest_items["summarization_mode"] = "official_factory" if _on("summarization") else "disabled"
         # 批13-AB4：数据摘要模式（探针断言用）——"tool_ref"=工具端暂存+SSE result_ref 派发
         manifest_items["data_summary_mode"] = "tool_ref"
+        # 批13-AB3：评分模式（探针断言用）——skill_prompt=自检段进提示词 / middleware=独立评分站
+        manifest_items["rubric_mode"] = _rubric_mode
         # 批13-J 收尾（问题二）：装配清单记实际排除名单（探针据此断言黑名单真生效 + 抓框架升级改工具名漂移）
         try:
             from app.services import capability_config as _cc2

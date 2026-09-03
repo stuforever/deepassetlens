@@ -203,6 +203,12 @@ def validate_params(capability_id: str, params: Dict[str, Any]) -> Optional[str]
             locked = [t for t in x if t in LOCKED_TOOL_EXCLUSIONS]
             if locked:
                 return f"物理锁定工具不可排除：{sorted(locked)}（read_file/ls 为技能渐进披露命脉）"
+    if capability_id == "rubric":
+        # 批13-AB3：评分 mode 枚举校验——skill_prompt=自检段进系统提示词（默认，用户定调）；
+        # middleware=独立评分模型路径保留（可切回）。非法值 PATCH -> 400 不落库。
+        mode = params.get("mode")
+        if mode is not None and mode not in ("skill_prompt", "middleware"):
+            return "mode 非法（允许: skill_prompt / middleware）"
     return None
 
 
