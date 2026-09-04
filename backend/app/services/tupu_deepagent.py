@@ -166,8 +166,10 @@ _SQL_FLOW_RULES = """
 - 用户加了筛选条件但实体不变：跳过定位，在 SQL 加 WHERE
 """
 
-# v3.2 下一步判断闸门 feature flag：TUPU_DECISION_GATE=1 启用（灰度，默认关）
-# 启用后：system_prompt 注入"下一步判断"指令 + create_tupu_agent 装配 DecisionGateMiddleware
+# v3.2 下一步判断闸门 feature flag：批13-W W-4a 起改配置化——
+# 装配期调 capability_config.get_decision_gate_config()（TUPU_DECISION_GATE=1 环境变量保留为
+# 启动兜底；未设时以管理页 decision_gate.enabled 为准，默认关=代码基准）。
+# 本模块级常量仅保留为 env 兜底快照（供导入方兼容读取），装配判断以函数内动态读为准。
 _DECISION_GATE_ENABLED = os.getenv("TUPU_DECISION_GATE", "") == "1"
 
 # 下一步判断：模型每次调用工具前，须在同一条 AIMessage 的 content 里写明"为什么执行这一步"，
@@ -456,8 +458,15 @@ def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
         parts.append(_SQL_FLOW_RULES)
         parts.append(_KNOWLEDGE_FLOW_RULES)
 
-    if _DECISION_GATE_ENABLED:
-        parts.append(_DECISION_GATE_RULES)
+    # 批13-W W-4a：决策门提示词注入切配置源（与装配侧同函数同缓存——PATCH 后 version+1 重建
+    # Agent 保一致；TTL 5s 窗口内旧 Agent+新提示词的短暂不一致与其余能力开关同性质，登记接受）
+    try:
+        from app.services.capability_config import get_decision_gate_config as _gdc
+        if _gdc()["enabled"]:
+            parts.append(_DECISION_GATE_RULES)
+    except Exception:
+        if _DECISION_GATE_ENABLED:
+            parts.append(_DECISION_GATE_RULES)
     parts.append(_DATA_COMPLETENESS_RULES)
     # 批13-AB3：评分 mode=skill_prompt 时，自检段进动态系统提示词（middleware 模式由
     # _TupuRubricMiddleware 评分，不重复注入；rubric 关闭/禁用也不注入）。
@@ -856,9 +865,10 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     # 工具格式纠正/工具描述改写，见《装配层配置化设计》X-3 登记表）加在本注册处，不加不预支。
     _model_id = _get_model_identifier(model)
     _model_provider = _get_model_provider(model)
-    # 批13-J 收尾（问题二）：工具黑名单配置化——excluded 从 capability_policies.tool_availability 读
-    # （定稿《装配层配置化设计》W-1；管理员可调整；默认 5 件与历史硬编码完全一致=迁移零变化）；
-    # fail-safe：配置读崩 -> 默认 5 件（绝不全放开）。
+    # 批13-W W-1：工具白名单打勾制（黑名单版语义反转）——get_tool_exclusions() 内部已改白名单
+    # 换算（excluded = 红线 5 件 ∪ (勾选域 18 件 - allowed)），本侧接口形状不变零改动；
+    # fail-safe：读崩 -> 红线 5 件（安全可用态，语义登记见设计 §五.3）。
+    _cc = None
     try:
         from app.services import capability_config as _cc
         _excl_cfg = _cc.get_tool_exclusions()
@@ -884,7 +894,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         # fallback: 只有 identifier（含冒号或无 provider）
         register_harness_profile(_model_id, HarnessProfile(excluded_tools=_excluded, excluded_middleware=_mw_excl))
         _registered_keys.append(_model_id)
-    logger.info(f"[HarnessProfile] 已注册 {len(_registered_keys)} 个 key: {_registered_keys}：排除 grep/glob/write_file/edit_file/execute"
+    logger.info(f"[HarnessProfile] 已注册 {len(_registered_keys)} 个 key: {_registered_keys}："
+                f"W-1 白名单换算排除 {len(_excluded)} 件"
                 f"{' + SummarizationMiddleware(开关关)' if _mw_excl else ''}")
 
     # v3.2 下一步判断闸门（feature flag）：TUPU_DECISION_GATE=1 时装配，
@@ -906,12 +917,17 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     # 模型按 AGENTS.md §五纪律主动 search_entities 翻译，漏网 SQL 由模板守卫硬拒。
     # 批13-AB4：DataSummaryMiddleware（数据摘要运行时站）已删除——
     # 摘要逻辑下沉 mcp_server._with_result_ref（工具端截断）+ SSE 路由层 result_ref 派发。
-    if _DECISION_GATE_ENABLED:
-        from app.services.decision_gate import SCOPE_GATED_TOOLS, DecisionGateMiddleware
-        middleware_list.append(DecisionGateMiddleware(scope_gated=SCOPE_GATED_TOOLS))
-        logger.info("[DecisionGate] 下一步判断闸门已启用 (TUPU_DECISION_GATE=1)：全工具理由校验 + execute_sql 范围强校验")
+    # 批13-W W-4a/W-4b：决策门装卸与范围工具集配置化——env 兜底 or 管理页开关；scope_tools 入 params
+    _dg_cfg = _cc.get_decision_gate_config() if _cc is not None else {
+        "enabled": os.getenv("TUPU_DECISION_GATE", "") == "1",
+        "scope_tools": ["execute_sql", "execute_doris_sql", "execute_entity_api", "execute_api_sql"]}
+    if _dg_cfg["enabled"]:
+        from app.services.decision_gate import DecisionGateMiddleware
+        middleware_list.append(DecisionGateMiddleware(scope_gated=frozenset(_dg_cfg["scope_tools"])))
+        logger.info(f"[DecisionGate] 下一步判断闸门已装配（env={_dg_cfg.get('env_fallback') or '未设'}/管理页）："
+                    f"全工具理由校验 + 范围强校验 {sorted(_dg_cfg['scope_tools'])}")
     else:
-        logger.warning("[DecisionGate] 下一步判断闸门未启用 (TUPU_DECISION_GATE 未设为 1)：工具调用前不强制「已知/判断/因此」")
+        logger.warning("[DecisionGate] 下一步判断闸门未装配（env 未设=1 且管理页开关关）")
 
     # M1（批13-AB1 摘要回退官方默认）：官方工厂 create_summarization_middleware 双件套，
     # 替代自研保守阈值摘要件（30k/10/15 + 批5-C3 观测钩子——
@@ -1033,13 +1049,17 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         manifest_items["backend_mode"] = "store" if _on("filesystem_tools") else "state_only"
         manifest_items["files_hash"] = _compute_files_hash()
         manifest_items["seeded_files"] = _n_seeded
-        # 批13-J 收尾（问题二）：装配清单记实际排除名单（探针据此断言黑名单真生效 + 抓框架升级改工具名漂移）
+        # 批13-W W-1：装配清单记白名单换算后的排除清单（双向探针断言：勾了的在 Agent 工具表、
+        # 没勾的不在——换算结果即「没勾的」，红线 5 件恒在）
         try:
             from app.services import capability_config as _cc2
             manifest_items["tool_availability_installed"] = sorted(_cc2.get_tool_exclusions()["excluded"])
         except Exception:
             manifest_items["tool_availability_installed"] = sorted(
                 {"grep", "glob", "write_file", "edit_file", "execute"})
+        # 批13-W W-4：决策门装卸探针 + 参数一致性探针（params 声明==栈内实例 scope_gated）
+        manifest_items["decision_gate_installed"] = bool(_dg_cfg["enabled"])
+        manifest_items["scope_gated_installed"] = sorted(_dg_cfg["scope_tools"]) if _dg_cfg["enabled"] else []
         _ASSEMBLY_MANIFEST.clear()
         _ASSEMBLY_MANIFEST.update({
             "version": _cap_version(), "agent_key": connection_id or "__default__",

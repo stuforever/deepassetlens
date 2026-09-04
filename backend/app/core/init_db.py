@@ -104,6 +104,16 @@ def _seed_guard_policies(db: Session):
 # ---------------------------------------------------------------------------
 _CAP_DESC = lambda what, lose, remain: {"what": what, "lose": lose, "remain": remain}
 
+
+def _w1_default_allowed():
+    """W-1 白名单默认允许集（勾选域全勾=MCP 17 件+task）。本地实现防与 capability_config 循环导入。"""
+    try:
+        from ..services.query_contract import GENERIC_ALLOWED_TOOLS
+        return sorted(set(GENERIC_ALLOWED_TOOLS) | {"task"})
+    except Exception:
+        return ["task"]
+
+
 CAPABILITY_POLICY_SEED = [
     {"capability_id": "skills", "title": "技能包", "risk_level": "yellow",
      "description": _CAP_DESC("装配 SkillsMiddleware：Agent 自动发现 data/skills 下 SKILL.md 并按需读取子文件（场景剧本/参考/模板）。",
@@ -184,11 +194,17 @@ CAPABILITY_POLICY_SEED = [
      "description": _CAP_DESC("SandboxBackend 协议接入（代码执行沙箱）。",
                               "物理不可用：未接入沙箱后端，装配恒跳过。",
                               "业务问答不需要沙箱执行；数据分析走 SQL 受控链路。"), "confirm_required": True},
-    {"capability_id": "tool_availability", "title": "工具黑名单", "risk_level": "red",
-     "params": {"excluded": ["grep", "glob", "write_file", "edit_file", "execute"]},
-     "description": _CAP_DESC("HarnessProfile 工具排除名单（grep/glob/write_file/edit_file/execute，安全红线）——",
-                              "调整 excluded 会触发 version+1 重建 Agent（下个请求生效）；危险工具恢复走 🔴 风险确认。",
-                              "read_file/ls 物理锁定（技能渐进披露命脉）；子代理依赖被排除工具时交集护栏拒装配回退串行。"), "confirm_required": True},
+    {"capability_id": "tool_availability", "title": "工具白名单", "risk_level": "red",
+     "params": {"allowed": _w1_default_allowed()},
+     "description": _CAP_DESC("HarnessProfile 工具白名单打勾制（W-1 反转语义：没打勾即禁，框架升级新增工具天然免疫）——",
+                              "调整 allowed 会触发 version+1 重建 Agent（下个请求生效）；取消业务工具走 🔴 风险确认。",
+                              "read_file/ls/task 物理锁定不可取消（技能渐进披露/文件浏览/子代理命脉）；grep/glob/write_file/edit_file/execute 安全红线不在勾选域。"), "confirm_required": True},
+    {"capability_id": "decision_gate", "title": "下一步判断闸门", "risk_level": "yellow",
+     "seed_enabled": False,  # W-4a：代码基准=关（env TUPU_DECISION_GATE=1 为启动兜底；管理页可开）
+     "params": {"scope_tools": ["execute_sql", "execute_doris_sql", "execute_entity_api", "execute_api_sql"]},
+     "description": _CAP_DESC("DecisionGate 装卸开关（W-4a）+ 范围强校验工具集（W-4b）：工具调用前强制同轮「下一步判断」+数据工具客户名范围校验。",
+                              "TUPU_DECISION_GATE=1 环境变量为启动兜底（恒开）；未设环境变量时以本开关为准（默认关=代码基准）。",
+                              "scope_tools 可配置（⊆工具勾选域且非空）；SkillPolicy 站本体安全红线不可关，不在此列。"), "confirm_required": True},
 ]
 
 
@@ -212,7 +228,9 @@ def _seed_capability_policies(db: Session):
     if not db.query(CapabilityPolicy).first():
         for p in CAPABILITY_POLICY_SEED:
             db.add(CapabilityPolicy(
-                capability_id=p["capability_id"], title=p["title"], enabled=True,
+                capability_id=p["capability_id"], title=p["title"],
+                # seed_enabled=False 的能力项（如 decision_gate）种子即关——代码基准；其余默认全开
+                enabled=p.get("seed_enabled", True),
                 params=p.get("params"), risk_level=p.get("risk_level", "yellow"),
                 description=p.get("description"), confirm_required=p.get("confirm_required", True),
                 physical_blocked=p.get("physical_blocked", False),
@@ -228,7 +246,8 @@ def _seed_capability_policies(db: Session):
         if p["capability_id"] in existing_ids:
             continue
         db.add(CapabilityPolicy(
-            capability_id=p["capability_id"], title=p["title"], enabled=True,
+            capability_id=p["capability_id"], title=p["title"],
+            enabled=p.get("seed_enabled", True),  # W-4a：decision_gate 种子即关（代码基准）
             params=p.get("params"), risk_level=p.get("risk_level", "yellow"),
             description=p.get("description"), confirm_required=p.get("confirm_required", True),
             physical_blocked=p.get("physical_blocked", False),
@@ -241,6 +260,14 @@ def _seed_capability_policies(db: Session):
         logger.info(f"[CapabilitySeed] 增量补种 {added} 个能力: "
                     + ", ".join(p["capability_id"] for p in CAPABILITY_POLICY_SEED
                                 if p["capability_id"] not in existing_ids))
+    # 批13-W W-1：黑名单->白名单启动迁移（params 含旧 excluded 键 -> 换算 allowed 写回，零行为变化）
+    try:
+        from ..services.capability_config import migrate_tool_exclusions_to_allowlist
+        _n = migrate_tool_exclusions_to_allowlist(db)
+        if _n:
+            logger.info(f"[CapabilitySeed] W-1 白名单迁移完成（{_n} 行）")
+    except Exception as _mig_e:
+        logger.warning(f"[CapabilitySeed] W-1 白名单迁移跳过（不影响启动）: {_mig_e}")
 
 
 def _sync_scenario_skills(db: Session):

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -46,7 +47,9 @@ def _seed_baseline() -> List[Dict[str, Any]]:
     out = []
     for p in CAPABILITY_POLICY_SEED:
         out.append({
-            "capability_id": p["capability_id"], "title": p["title"], "enabled": True,
+            "capability_id": p["capability_id"], "title": p["title"],
+            # W-4a：seed_enabled=False 的能力项 fail-safe 也回代码基准=关（env=1 部署由环境变量兜底）
+            "enabled": p.get("seed_enabled", True),
             "params": p.get("params"), "risk_level": p.get("risk_level", "yellow"),
             "description": p.get("description"), "confirm_required": p.get("confirm_required", True),
             "physical_blocked": p.get("physical_blocked", False),
@@ -127,29 +130,141 @@ def get_policy(capability_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# 批13-J 收尾（问题二）：工具黑名单配置化——默认排除名单（安全红线，与 HarnessProfile 硬编码 5 件一致）
-DEFAULT_TOOL_EXCLUSIONS: List[str] = ["grep", "glob", "write_file", "edit_file", "execute"]
-# 物理锁定（前端灰显，不可恢复）：技能渐进披露靠 read_file/ls 活命
+# ============================================================
+# 批13-W W-1：工具白名单打勾制（黑名单版 856c7ac 的语义反转，用户 2026-08-24 定调）
+# 理由：黑名单对框架升级新增工具漏网（新名字不在名单上自动放行）；白名单天生免疫（没打勾即禁）。
+# 机制零新增：装配侧仍喂 HarnessProfile(excluded_tools=...)，本层只做「allowed -> excluded」换算。
+# ============================================================
+# 白名单勾选域 = MCP 17 件（GENERIC_ALLOWED_TOOLS）+ task（13-Z 子代理，契约层动态裁决）。
+# 装配换算公式：excluded = 红线 5 件 ∪ (勾选域 - allowed)。默认 allowed=全勾 -> excluded=红线 5 件
+# =黑名单版现状（迁移零行为变化）。
+def _w1_managed_universe() -> frozenset:
+    try:
+        from app.services.query_contract import GENERIC_ALLOWED_TOOLS
+        return frozenset(GENERIC_ALLOWED_TOOLS) | {"task"}
+    except Exception:
+        return frozenset({"task"})
+
+
+# 物理锁定三件（前端灰显不可取消；PATCH 校验强制保留）：read_file=技能渐进披露命脉，
+# ls=文件浏览（域外恒允许，HarnessProfile 从不排除），task=子代理（13-Z 点火后命根子）。
+W1_LOCKED_TOOLS: List[str] = ["read_file", "ls", "task"]
+# 安全红线 5 件（HarnessProfile 硬排除，不在勾选域——白名单不可配置它们，物理不存在勾选框）
+W1_REDLINE_EXCLUSIONS: List[str] = ["grep", "glob", "write_file", "edit_file", "execute"]
+# 批13-J 旧名保留（黑名单版兼容引用：test/旧探针读到的默认值即红线 5 件）
+DEFAULT_TOOL_EXCLUSIONS: List[str] = list(W1_REDLINE_EXCLUSIONS)
 LOCKED_TOOL_EXCLUSIONS: List[str] = ["read_file", "ls"]
 
 
-def get_tool_exclusions() -> Dict[str, List[str]]:
-    """读工具黑名单配置（capability_policies.tool_availability.params，定稿能力项名）。
+def w1_default_allowed() -> List[str]:
+    """默认允许集 = 勾选域全勾（17 MCP + task）。fail-safe 基线与种子基线同源。"""
+    return sorted(_w1_managed_universe())
 
-    返回 {"excluded": [...], "locked": [...]}。**fail-safe**：读配置异常/缺 params
-    -> 返回默认 5 件（绝不因配置读崩变成"全放开"）。locked 恒为物理锁定件（不可改）。
+
+# 批13-W W-4：DecisionGate 装卸与范围工具集的代码基准（管理页只能改当前值，基准钉死代码）
+DECISION_GATE_SCOPE_DEFAULT = ["execute_sql", "execute_doris_sql", "execute_entity_api", "execute_api_sql"]
+
+
+def get_decision_gate_config() -> Dict[str, Any]:
+    """读决策门配置（W-4a 装卸 + W-4b 范围工具集）。
+
+    enabled 语义（设计 §四迁移注意）：TUPU_DECISION_GATE=1 环境变量为启动兜底（恒开）；
+    未设环境变量时以管理页为准（decision_gate.enabled，种子基准=False=关）；
+    两者都未设=关。env=0 显式关闭不覆盖管理页开（登记：env 只表达兜底开，不表达强制关）。
+    scope_tools：params 优先（PATCH 时 validate_params 已校验 ⊆ 勾选域且非空），缺省=代码常量。
     """
-    excluded = list(DEFAULT_TOOL_EXCLUSIONS)
+    env_raw = os.getenv("TUPU_DECISION_GATE", "")
+    env_on = env_raw == "1"
+    cfg_on = False
+    scope = list(DECISION_GATE_SCOPE_DEFAULT)
+    try:
+        p = get_policy("decision_gate")
+        if p:
+            cfg_on = bool(p.get("enabled"))
+            st = (p.get("params") or {}).get("scope_tools")
+            if isinstance(st, list) and st and all(isinstance(t, str) and t for t in st):
+                scope = [t for t in st if t in _w1_managed_universe()] or list(DECISION_GATE_SCOPE_DEFAULT)
+    except Exception as e:
+        logger.error(f"[DecisionGateConfig] 读配置失败，scope 用代码常量: {e}")
+    return {"enabled": env_on or cfg_on, "scope_tools": scope, "env_fallback": env_raw}
+
+
+def get_tool_allowance() -> Dict[str, List[str]]:
+    """读白名单允许集（tool_availability.params.allowed）。
+
+    返回 {"allowed": [...], "locked": [...]}。**fail-safe 语义反转登记**（设计 §五.3）：
+    读配置异常/缺 params -> 返回默认允许集（勾选域全勾）——黑名单版读崩=默认排除 5 件，
+    白名单版读崩=默认允许 18 件；两者都是「回到安全可用态」，字面语义相反。
+    """
+    allowed = w1_default_allowed()
     try:
         p = get_policy("tool_availability")
         if p and isinstance(p.get("params"), dict):
-            x = p["params"].get("excluded")
-            if isinstance(x, list) and all(isinstance(t, str) and t for t in x):
-                # 排除名单可配置（但 locked 件永远不可出现在 excluded——物理保护）
-                excluded = [t for t in x if t not in LOCKED_TOOL_EXCLUSIONS]
+            a = p["params"].get("allowed")
+            if isinstance(a, list) and all(isinstance(t, str) and t for t in a):
+                universe = _w1_managed_universe()
+                # 锁定件强制保留（即使 params 被绕过写入漏勾，运行时也恒允许）
+                allowed = [t for t in a if t in universe] + [t for t in W1_LOCKED_TOOLS
+                                                             if t in universe and t not in a]
     except Exception as _e:
-        logger.error(f"[ToolExclusions] 读配置失败，fail-safe 用默认 5 件: {_e}")
-    return {"excluded": excluded, "locked": list(LOCKED_TOOL_EXCLUSIONS)}
+        logger.error(f"[ToolAllowance] 读白名单失败，fail-safe 全勾: {_e}")
+    return {"allowed": sorted(set(allowed)), "locked": list(W1_LOCKED_TOOLS)}
+
+
+def get_tool_exclusions() -> Dict[str, List[str]]:
+    """读工具排除清单（**白名单换算版**，接口形状与黑名单版一致——装配侧零改动）。
+
+    换算公式（设计 §二.2）：excluded = 红线 5 件 ∪ (勾选域 - allowed)。
+    默认全勾 -> excluded=红线 5 件（与黑名单版现状逐件一致=迁移零行为变化）；
+    locked 恒在 allowed（get_tool_allowance 已强制），勾选域外红线件物理不可勾。
+    """
+    try:
+        allowance = get_tool_allowance()["allowed"]
+        _excluded = set(W1_REDLINE_EXCLUSIONS) | (_w1_managed_universe() - set(allowance))
+    except Exception as _e:
+        logger.error(f"[ToolExclusions] 白名单换算失败，fail-safe 用红线 5 件: {_e}")
+        _excluded = set(W1_REDLINE_EXCLUSIONS)
+    return {"excluded": sorted(_excluded), "locked": list(W1_LOCKED_TOOLS)}
+
+
+def migrate_tool_exclusions_to_allowlist(db) -> int:
+    """启动迁移（设计 §二.2）：params 含旧 excluded 键且无 allowed -> 换算写回。
+
+    allowed = 勾选域 - excluded（锁定件强制保留）；写回删 excluded 加 allowed，
+    version+1，记 migration 事件。返回迁移行数（0=无需迁移）。迁移后默认勾选集=现状允许集=零行为变化。
+    """
+    from ..models.base import CapabilityPolicy
+    try:
+        row = db.query(CapabilityPolicy).filter(
+            CapabilityPolicy.capability_id == "tool_availability").first()
+        if row is None:
+            return 0
+        params = dict(row.params or {})
+        if "allowed" in params or "excluded" not in params:
+            return 0  # 已是白名单语义或无配置——不迁移
+        old_excluded = {t for t in params.get("excluded") or [] if isinstance(t, str)}
+        universe = _w1_managed_universe()
+        allowed = sorted(universe - old_excluded)
+        # 锁定件强制保留
+        allowed += [t for t in W1_LOCKED_TOOLS if t in universe and t not in allowed]
+        params.pop("excluded", None)
+        params["allowed"] = allowed
+        row.params = params
+        row.title = "工具白名单"
+        row.version = (row.version or 1) + 1
+        db.commit()
+        record_event("tool_availability", "migration",
+                     detail={"from": "excluded", "to": "allowed", "allowed_count": len(allowed),
+                             "old_excluded": sorted(old_excluded)}, _sync=True)
+        logger.info(f"[W1] 黑名单->白名单迁移完成: allowed {len(allowed)} 件（原 excluded {sorted(old_excluded)}）")
+        return 1
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.error(f"[W1] 迁移失败（保持旧配置不动）: {e}")
+        return 0
 
 
 def validate_params(capability_id: str, params: Dict[str, Any]) -> Optional[str]:
@@ -191,24 +306,43 @@ def validate_params(capability_id: str, params: Dict[str, Any]) -> Optional[str]
         if mp is not None and (not isinstance(mp, int) or mp < 1 or mp > 50):
             return "max_prefs 必须是 1-50 的整数"
     if capability_id == "tool_availability":
-        x = params.get("excluded")
-        if x is not None:
-            if not isinstance(x, list) or not all(isinstance(t, str) and t for t in x):
-                return "excluded 必须是工具名字符串数组"
-            registry = _global_tool_registry()
-            known = registry | set(DEFAULT_TOOL_EXCLUSIONS) | set(LOCKED_TOOL_EXCLUSIONS)
-            unknown = [t for t in x if t not in known]
+        # 批13-W W-1：白名单语义——PATCH 的是 allowed（允许集），未知名 400（设计 §二.2）。
+        a = params.get("allowed")
+        if a is not None:
+            if not isinstance(a, list) or not all(isinstance(t, str) and t for t in a):
+                return "allowed 必须是工具名字符串数组"
+            universe = _w1_managed_universe()
+            # ls 是域外恒允许件（HarnessProfile 从不排除），PATCH 里出现不拒（幂等容忍）
+            known = universe | {"ls"}
+            unknown = [t for t in a if t not in known]
             if unknown:
                 return f"未知工具名（不在注册表内）：{sorted(unknown)[:6]}"
-            locked = [t for t in x if t in LOCKED_TOOL_EXCLUSIONS]
-            if locked:
-                return f"物理锁定工具不可排除：{sorted(locked)}（read_file/ls 为技能渐进披露命脉）"
+            # 锁定件强制保留：取消 = Agent 残废（技能披露/子代理/文件浏览的命根子）
+            locked_in_universe = [t for t in W1_LOCKED_TOOLS if t in universe]
+            missing_locked = [t for t in locked_in_universe if t not in a]
+            if missing_locked:
+                return (f"物理锁定工具不可取消：{sorted(missing_locked)}"
+                        f"（read_file/task 为技能渐进披露与子代理命脉）")
+        # 旧 excluded 键不再接受 PATCH（防黑名单语义混写）：显式给 excluded 直接拒绝
+        if params.get("excluded") is not None:
+            return "excluded 已退役（W-1 白名单反转）——请改用 allowed（允许集打勾）"
     if capability_id == "rubric":
         # 批13-AB3：评分 mode 枚举校验——skill_prompt=自检段进系统提示词（默认，用户定调）；
         # middleware=独立评分模型路径保留（可切回）。非法值 PATCH -> 400 不落库。
         mode = params.get("mode")
         if mode is not None and mode not in ("skill_prompt", "middleware"):
             return "mode 非法（允许: skill_prompt / middleware）"
+    if capability_id == "decision_gate":
+        # 批13-W W-4b：范围校验工具集入 params——scope_tools 必须 ⊆ 勾选域且非空（防误传全部清空）。
+        st = params.get("scope_tools")
+        if st is not None:
+            if not isinstance(st, list) or not all(isinstance(t, str) and t for t in st):
+                return "scope_tools 必须是工具名字符串数组"
+            unknown = [t for t in st if t not in _w1_managed_universe()]
+            if unknown:
+                return f"未知工具名（不在注册表内）：{sorted(unknown)[:6]}"
+            if not st:
+                return "scope_tools 不能为空（范围强校验需至少一件；要关闭请用 decision_gate 开关）"
     return None
 
 
@@ -315,7 +449,8 @@ def reset_defaults(updated_by: Optional[str] = None) -> List[Dict[str, Any]]:
             row.updated_at = _f.now()
             row.version = (row.version or 1) + 1
             if not seed.get("physical_blocked", False):
-                row.enabled = True
+                # W-4a：seed_enabled=False 的能力项（decision_gate）reset 回代码基准=关
+                row.enabled = seed.get("seed_enabled", True)
                 row.close_reason = None
         db.commit()
         rows = db.query(CapabilityPolicy).all()
