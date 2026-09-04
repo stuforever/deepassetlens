@@ -25,6 +25,7 @@ except ImportError:
     from typing_extensions import NotRequired
 
 import operator
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -268,8 +269,13 @@ def _get_model_provider(model) -> str:
     return None
 
 
+@lru_cache(maxsize=32)
 def _load_skill_md(skill_name: str) -> str:
     """读取 SKILL.md 文件内容（去掉 frontmatter），并解析 ⟦实体中文名⟧ -> 物理表名。
+
+    批13-G 件1：加 @lru_cache（模块加载解析缓存——文件运行期只读，缓存安全）；
+    路径查找扩展 scenarios/ 子目录（场景剧本 distribution-overload 等在
+    data/skills/scenarios/ 下，此前只查平铺目录，场景剧本永远读空）。
 
     SKILL.md 中用 ⟦中文名⟧ 引用实体（如 ⟦用电户⟧），运行时自动从元数据解析为物理表名（如 cms20_elec_cons_cust）。
     这样 SKILL.md 不含硬编码表名，表名变更只需改元数据。
@@ -283,15 +289,19 @@ def _load_skill_md(skill_name: str) -> str:
     if not skill_name:
         return ""
     from pathlib import Path as _Path
-    skill_md = _Path(__file__).resolve().parent.parent.parent / "data" / "skills" / skill_name / "SKILL.md"
+    _skills_dir = _Path(__file__).resolve().parent.parent.parent / "data" / "skills"
+    skill_md = _skills_dir / "scenarios" / skill_name / "SKILL.md"
+    if not skill_md.exists():
+        skill_md = _skills_dir / skill_name / "SKILL.md"
     if not skill_md.exists():
         # 子技能路由降级：distribution-overload-impact -> distribution-overload（共享同一份 SKILL.md）
         for suffix in ("-impact", "-power", "-link", "-verdict"):
             if skill_name.endswith(suffix):
                 base = skill_name[:-len(suffix)]
-                base_md = _Path(__file__).resolve().parent.parent.parent / "data" / "skills" / base / "SKILL.md"
-                if base_md.exists():
-                    skill_md = base_md
+                skill_md = _skills_dir / "scenarios" / base / "SKILL.md"
+                if not skill_md.exists():
+                    skill_md = _skills_dir / base / "SKILL.md"
+                if skill_md.exists():
                     break
         if not skill_md.exists():
             return ""

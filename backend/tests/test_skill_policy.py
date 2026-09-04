@@ -86,9 +86,10 @@ class TestForbiddenAndAllowedTools:
         out = _run(policy, relationship_contract, _tc("list_tables", {}))
         assert "不在本步骤允许范围" in out.content
 
-    def test_read_file_allowed(self, policy, relationship_contract):
+    def test_read_file_blocked_in_scenario(self, policy, relationship_contract):
+        """批13-G 件1：场景契约剧本手册已预载——read_file 移出白名单，SkillPolicy 拦截。"""
         out = _run(policy, relationship_contract, _tc("read_file", {"file_path": "/skills/scenarios/distribution-overload/SKILL.md"}))
-        assert out == json.dumps({"ok": True}) or out.content == json.dumps({"ok": True})
+        assert "SkillPolicy" in out.content or "不在本步骤允许范围" in out.content
 
 
 class TestEngineFirst:

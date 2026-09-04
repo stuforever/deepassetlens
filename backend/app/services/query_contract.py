@@ -152,6 +152,13 @@ class QueryContract:
         # skill_policy 复合校验 caps.subagents.enabled）。
         forbidden = [t for t in ABSOLUTE_FORBIDDEN_TOOLS
                      if t not in c.allowed_tools and not (t == "task" and c.allow_subagents)]
+        # 批13-G 件1 收口：场景契约剧本手册已随契约消息预载（_load_skill_md lru_cache），
+        # read_file 读技能文件成为纯浪费轮——场景路径禁止 read_file（SkillPolicy 硬拦，
+        # 与剧本手册段「无需 read_file」文案双保险）。generic 契约不受影响（自主模式仍可读）。
+        if route_type == "scenario" and "read_file" in c.allowed_tools:
+            c.allowed_tools.remove("read_file")
+            if "read_file" not in forbidden:
+                forbidden.append("read_file")
         c.forbidden_tools = forbidden
         return c
 

@@ -483,7 +483,8 @@ def build_entity_hint_block(db: Session, question: str, top: int = 3,
                 break
     except Exception as _e:
         logger.warning(f"[实体预解析] 子串扫描失败（跳过）: {_e}")
-    # 2) 无子串命中：退回向量检索（弱）
+    # 2) 无子串命中：退回向量检索（弱）——批13-G 件2：相似度阈值过滤（防低相似错挂，
+    #    对齐 13-H 混合检索 0.6 阈值；13-M 错挂事故教训：宁缺勿错，无高相似候选则不预解析）
     if not _picked:
         try:
             from app.services.entity_attr_vector_service import search_entity_vectors
@@ -491,7 +492,8 @@ def build_entity_hint_block(db: Session, question: str, top: int = 3,
         except Exception as _e2:
             logger.warning(f"[实体预解析] 向量检索失败（跳过）: {_e2}")
             _hits = []
-        _picked = [(h.get("name") or "", h.get("code") or "", float(h.get("score") or 0)) for h in _hits[:top]]
+        _picked = [(h.get("name") or "", h.get("code") or "", float(h.get("score") or 0))
+                   for h in _hits if float(h.get("score") or 0) >= 0.6][:top]
     if not _picked:
         return ""
     lines = [

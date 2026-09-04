@@ -28,9 +28,10 @@ class TestFromStep:
         assert relationship_contract.template_ids
         assert any("step1_household_transformer.sql" in t for t in relationship_contract.template_ids)
 
-    def test_read_file_always_allowed(self, relationship_contract):
-        """模型须读 SKILL.md 与步骤模板，read_file 是永久只读能力。"""
-        assert "read_file" in relationship_contract.allowed_tools
+    def test_read_file_scenario_preloaded_blocked(self, relationship_contract):
+        """批13-G 件1：场景契约剧本手册随契约消息预载——read_file 移出场景白名单（省读文件轮）。"""
+        assert "read_file" not in relationship_contract.allowed_tools
+        assert "read_file" in relationship_contract.forbidden_tools
 
     def test_absolute_forbidden_never_allowed(self, relationship_contract):
         for t in ABSOLUTE_FORBIDDEN_TOOLS:
@@ -61,7 +62,7 @@ class TestEngineLock:
         assert "execute_sql" not in relationship_contract.allowed_tools
         assert "execute_api_sql" not in relationship_contract.allowed_tools
         assert "execute_entity_api" not in relationship_contract.allowed_tools
-        assert "read_file" in relationship_contract.allowed_tools  # 非数据工具保留
+        assert "read_file" not in relationship_contract.allowed_tools  # 批13-G：场景禁读技能文件（手册已预载）
 
     def test_lock_engine_duckdb(self, relationship_contract):
         relationship_contract.lock_engine("duckdb", "api 联邦")

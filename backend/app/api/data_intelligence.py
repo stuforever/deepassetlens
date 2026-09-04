@@ -218,6 +218,38 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
                 base += _guidance
         except Exception as _eg:
             logger.warning(f"[指引预载] 注入失败（静默跳过）: {_eg}")
+        # 批13-G 件1 剧本手册预载：场景契约的 SKILL.md 正文 + 本步骤 SQL 模板直接嵌契约消息
+        # （_load_skill_md 已 lru_cache 模块级缓存；同 skill_id+步骤同内容逐字节一致，兼容 13-I C1
+        # 契约文案模板化与 prompt 前缀缓存）——模型无需 read_file 即得 calling patterns 与模板蓝本，
+        # 省 2~4s 一轮往返；generic 契约无剧本不注入（自主模式行为不变）。
+        # 实测注记（06:43 两轮 e2e）：只嵌 SKILL.md 不够——模型仍需 read_file 读本步骤模板
+        # （stepN_*.sql），禁 read_file 后陷 search_entities 循环；模板一并预载后 read_file 才可禁。
+        try:
+            _skill_id = getattr(contract, "skill_id", "") or ""
+            if _skill_id and getattr(contract, "route_type", "") == "scenario":
+                from app.services.tupu_deepagent import _load_skill_md
+                _playbook = _load_skill_md(_skill_id)
+                _tpl_blocks = []
+                _tpl_paths = [t for t in (getattr(contract, "template_ids", None) or []) if t]
+                # template_ids 形如 "{skill}:{relpath}"；取 relpath 读模板文件原文
+                for _tid in _tpl_paths:
+                    _rel = _tid.split(":", 1)[1] if ":" in _tid else _tid
+                    try:
+                        from pathlib import Path as _P
+                        _tf = (_P(__file__).resolve().parent.parent.parent / "data" / "skills" / "scenarios" / _skill_id / _rel)
+                        if not _tf.exists():
+                            _tf = _P(__file__).resolve().parent.parent.parent / "data" / "skills" / _skill_id / _rel
+                        if _tf.exists():
+                            _tpl_blocks.append(f"### 模板 {_rel}\n```sql\n{_tf.read_text('utf-8').strip()}\n```")
+                    except Exception:
+                        continue
+                if _playbook or _tpl_blocks:
+                    _pb = f"\n\n剧本手册（{_skill_id}，已预载，无需 read_file 技能文件）：\n{_playbook}" if _playbook else ""
+                    _tb = ("\n\n本步骤 SQL 模板（已预载，无需 read_file；构造 SQL 时以其为蓝本，"
+                           "只允许按问题改参数与条件，结构不可改）：\n" + "\n\n".join(_tpl_blocks)) if _tpl_blocks else ""
+                    base += _pb + _tb
+        except Exception as _sp:
+            logger.warning(f"[剧本手册预载] 注入失败（静默跳过）: {_sp}")
     return base
 
 

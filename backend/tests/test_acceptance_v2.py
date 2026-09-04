@@ -60,12 +60,14 @@ class TestAcceptance:
         assert r.skill_id == "distribution-overload"
         assert r.workflow_step == "relationship"
 
-    # 2) 白名单工具：batch_entity_source_mode + 数据工具 + read_file
+    # 2) 白名单工具：batch_entity_source_mode + 数据工具（批13-G：read_file 移出场景白名单——
+    #    剧本手册已随契约消息预载，读技能文件是纯浪费轮）
     def test_acceptance_02_whitelist(self, relationship_contract):
         assert "batch_entity_source_mode" in relationship_contract.allowed_tools
         for t in ("execute_sql", "execute_doris_sql", "execute_api_sql"):
             assert t in relationship_contract.allowed_tools
-        assert "read_file" in relationship_contract.allowed_tools
+        assert "read_file" not in relationship_contract.allowed_tools
+        assert "read_file" in relationship_contract.forbidden_tools
 
     # 3) task / 自由 Shell / 模板外 SQL 被拒
     def test_acceptance_03_forbidden_rejected(self, policy, relationship_contract):
