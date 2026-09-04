@@ -13,7 +13,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Badge, Button, Card, Col, Drawer, Form, Input, InputNumber, List, message,
+  Alert, Badge, Button, Card, Checkbox, Col, Drawer, Form, Input, InputNumber, List, message,
   Modal, Popconfirm, Row, Select, Space, Spin, Switch, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
@@ -21,11 +21,69 @@ import {
   SettingOutlined, HistoryOutlined, ReloadOutlined, DownloadOutlined, InfoCircleOutlined,
   LockOutlined,
 } from '@ant-design/icons';
-import { guardsApi, capabilitiesApi, type GuardItem, type GuardEventItem, type GuardDescription, type CapabilityItem, type SubagentSpec } from '../services/api';
+import { guardsApi, capabilitiesApi, type GuardItem, type GuardEventItem, type GuardDescription, type CapabilityItem, type SubagentSpec, type AssemblyManifest } from '../services/api';
 import { PageShell, StatusTag, DataTableShell, DrawerFooter } from '../components/shell';
 import { tokens } from '../theme/tokens';
 
 const { Text, Paragraph } = Typography;
+
+/**
+ * 批13-W 十步 Tab 改版（用户 2026-09-04 定调，终版设计 §三）：
+ * 每项配置挂到它实际影响的装配步骤（deepagents graph.py 十步），教学即运维。
+ * 守卫 Tab 保留独立——运行期裁决（PATCH→TTL 5s 热生效）与装配期（PATCH→version+1→缓存键变→重装配）
+ * 是两条生效链路，不并入十步。
+ */
+const STEP_TITLES: Record<number, string> = {
+  0: '全局 · 缓存与版本',
+  1: '步1 · 模型与档案',
+  2: '步2 · 体检',
+  3: '步3 · 工具说明书',
+  4: '步4 · 文件柜',
+  5: '步5 · 小弟',
+  6: '步6 · 主栈',
+  7: '步7 · 筛与拼',
+  8: '步8/9 · 状态与查白',
+  10: '步10 · 出厂',
+};
+
+const CAP_STEP_MAP: Record<string, number> = {
+  approval_track: 0,      // 版本键成分（缓存键 c{ver}），归全局
+  prompt_caching: 0,      // 全局装配特性（Anthropic 专属，当前物理锁定）
+  filesystem_tools: 4,    // 文件柜：CompositeBackend+StoreBackend 路由
+  store: 4,               // 长期记忆库
+  subagents: 5,           // 小弟：task 委派+规格编辑器
+  skills: 6,              // 主栈：技能站
+  memory: 6,              // 主栈：记忆
+  permissions: 6,         // 主栈：文件权限规则
+  debug: 6,               // 主栈：调试
+  patch_tool_calls: 6,    // 框架自动件（🔒锁定灰显）
+  message_eviction: 6,    // 框架自动件（🔒锁定灰显）
+  summarization: 7,       // 筛与拼：摘要排除栏条件化
+  tool_availability: 7,   // 筛与拼：W-1 白名单打勾
+  decision_gate: 7,       // 筛与拼：检查站卡（W-4a 装卸+W-4b scope_tools）
+  response_format: 10,    // 出厂：结构化最终交付
+  rubric: 10,             // 出厂：评分 mode（skill_prompt 自检段注入步10 系统提示词）
+};
+
+/** 十步教学文案（与装配机制同源知识；框架升级时需人工核对——设计 §五.4 漂移风险登记） */
+const STEP_TEACH: Record<number, { teach: string; reason: string }> = {
+  1: {
+    teach: '步1 装配模型档案：从连接池取当前连接的模型实例，注册 HarnessProfile（key 双保险：openai:DeepSeek-V4-Flash + 小写变体），档案里的 excluded_tools 决定步7 的工具排除结算。',
+    reason: '模型实例来自 LLM 配置页管理的连接（改连接走 LLM 配置页，不在此改）；档案排除清单由步7 白名单换算产生，此处只读。',
+  },
+  2: {
+    teach: '步2 体检保护名单 {FilesystemMiddleware, SubAgentMiddleware}：文件工具与权限的娘家、task 委派的娘家。保护名单内的站不可被排除栏排除。',
+    reason: '保护名单是框架安全机制（防止排除栏误杀文件/子代理能力），无配置面——动了它文件工具或 task 就会静默失效。',
+  },
+  3: {
+    teach: '步3 工具说明书（description 改写）：改写栏三次消费点=调用者工具（kg_api 家族）/文件工具（read_file/ls）/task 工具。当前无改写项（X-3 缓议不实施）。',
+    reason: '改写项按 YAGNI 缓议（X-3）：没有真实行为偏差证据前不预支适配代码；将来适配加在 tupu_deepagent 注册处。',
+  },
+  8: {
+    teach: '步8/9 状态与查白：各中间件小抽屉收编状态汇总（步8），排除栏覆盖结算（步9）——查「该撤的撤没撤」：白名单换算后的排除清单在步9 一次性生效于 Agent 工具表。',
+    reason: '这两步是框架内的状态结算过程（无外部可配项）；结算结果看 manifest 探针（tool_availability_installed 记录换算后的排除清单）。',
+  },
+};
 
 const RISK_META: Record<string, { color: string; label: string }> = {
   red: { color: 'red', label: '高风险' },
@@ -59,7 +117,7 @@ const ACTION_META: Record<string, { label: string; preset: 'success' | 'warning'
  * subagents 卡特殊：🔴 徽标 + 参数区=规格编辑器（specs JSON + max_concurrent 步进 + 校验按钮）。
  * 关闭确认风险分级与 Tab1 同款（🔴双 Modal+必填理由 / 🟡单 Modal / 🟢直接切）。
  */
-const CapabilityPanel: React.FC = () => {
+const CapabilityPanel: React.FC<{ stepFilter?: number }> = ({ stepFilter }) => {
   const [items, setItems] = useState<CapabilityItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [capVersion, setCapVersion] = useState(0);
@@ -82,6 +140,7 @@ const CapabilityPanel: React.FC = () => {
   const [eventsTotal, setEventsTotal] = useState(0);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsPage, setEventsPage] = useState(1);
+  const [toolMf, setToolMf] = useState<AssemblyManifest | null>(null);
   const eventsSize = 20;
 
   const load = useCallback(async () => {
@@ -94,7 +153,15 @@ const CapabilityPanel: React.FC = () => {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // 批13-W：manifest（勾选域全集/锁定集）——ToolChecklistParam 数据源
+  const loadMf = useCallback(async () => {
+    try {
+      const res = await capabilitiesApi.manifest();
+      setToolMf(res.data as AssemblyManifest);
+    } catch { /* http 拦截器已提示 */ }
+  }, []);
+
+  useEffect(() => { load(); loadMf(); }, [load, loadMf]);
 
   const toggle = async (item: CapabilityItem, next: boolean, reason?: string) => {
     setTogglingId(item.capability_id);
@@ -274,11 +341,15 @@ const CapabilityPanel: React.FC = () => {
     );
   };
 
-  const switchable = items.filter(i => !i.physical_blocked);
-  const locked = items.filter(i => i.physical_blocked);
+  // 批13-W 十步 Tab：stepFilter 有值时只渲染该步的能力项（教学即运维）；无 filter=全局视图
+  const steped = (list: CapabilityItem[]) =>
+    stepFilter == null ? list : list.filter(i => (CAP_STEP_MAP[i.capability_id] ?? 6) === stepFilter);
+  const switchable = steped(items.filter(i => !i.physical_blocked));
+  const locked = steped(items.filter(i => i.physical_blocked));
 
   return (
     <div style={{ overflow: 'auto', flex: 1, minHeight: 0, paddingBottom: 24 }}>
+      {stepFilter == null && (
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col>
           <Popconfirm title="恢复全部默认（能力回基线，下一问重建 Agent）？" onConfirm={resetDefaults}>
@@ -297,6 +368,7 @@ const CapabilityPanel: React.FC = () => {
           <Text type="secondary" style={{ fontSize: 12 }}>能力版本 v{capVersion}</Text>
         </Col>
       </Row>
+      )}
 
       {probeResult ? (
         <Alert
@@ -433,7 +505,14 @@ const CapabilityPanel: React.FC = () => {
               </Form.Item>
             </Form>
           </Space>
-        ) : paramTarget ? (
+        ) : (paramTarget?.capability_id === 'tool_availability' || paramTarget?.capability_id === 'decision_gate') && toolMf ? (
+  <ToolChecklistParam
+    target={paramTarget}
+    universe={toolMf.tool_universe}
+    locked={toolMf.tool_locked}
+    onDone={async () => { setParamTarget(null); await load(); }}
+  />
+) : paramTarget ? (
           <Form form={paramForm} layout="vertical">
             {Object.entries(paramTarget.params || {}).map(([k, v]) => {
               if (typeof v === 'number') {
@@ -480,6 +559,153 @@ const CapabilityPanel: React.FC = () => {
           }}
         />
       </Drawer>
+    </div>
+  );
+};
+
+/**
+ * ToolChecklistParam（批13-W W-1/W-4）：工具打勾参数编辑器（参数 Drawer 内 tool_availability /
+ * decision_gate 特判渲染）。数据源=manifest 端点的装配期勾选域全集（新框架工具自动落未勾选态，
+ * 白名单语义天然免疫）；tool_availability 的锁定件（∩勾选域）灰显不可取消。
+ */
+const ToolChecklistParam: React.FC<{
+  target: CapabilityItem;
+  universe: string[];
+  locked: string[];
+  onDone: () => Promise<void>;
+}> = ({ target, universe, locked, onDone }) => {
+  const isAllowlist = target.capability_id === 'tool_availability';
+  const paramKey = isAllowlist ? 'allowed' : 'scope_tools';
+  const [checked, setChecked] = useState<string[]>(
+    Array.isArray(target.params?.[paramKey]) ? (target.params?.[paramKey] as string[]) : [],
+  );
+  const [saving, setSaving] = useState(false);
+  // 白名单锁定件强制保留（运行时也兜底，前端灰显只是第一道）
+  const hardLocked = isAllowlist ? locked.filter(t => universe.includes(t)) : [];
+  const options = universe.map(u => ({ label: u, value: u, disabled: hardLocked.includes(u) }));
+  const offUniverse = universe.filter(u => !checked.includes(u));
+
+  const save = async () => {
+    if (isAllowlist && offUniverse.length > 0) {
+      // 🔴 语义：取消域内工具 = 排除清单变化 = 下一问重建。风险确认走 PATCH 前本 Modal。
+      Modal.confirm({
+        title: `取消 ${offUniverse.length} 件工具的勾选？`,
+        content: `将取消：${offUniverse.join('、')}。这些工具下一问起从 Agent 工具表移除（取消业务工具属 🔴 高风险操作）。`,
+        okText: '确认取消勾选', okButtonProps: { danger: true },
+        onOk: doSave,
+      });
+      return;
+    }
+    await doSave();
+  };
+  const doSave = async () => {
+    setSaving(true);
+    try {
+      await capabilitiesApi.update(target.capability_id, { params: { [paramKey]: checked }, confirm: true });
+      message.success(`已更新「${target.title}」（下一问按新配置重建 Agent）`);
+      await onDone();
+    } catch { /* http 拦截器已提示 */ }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <Alert
+        type="info" showIcon style={{ marginBottom: 12 }}
+        message={isAllowlist ? '白名单打勾制（W-1）：没打勾即禁' : '范围强校验工具集（W-4b）'}
+        description={isAllowlist
+          ? '勾选=允许进入 Agent 工具表；取消=排除（装配换算 excluded=红线件∪(勾选域-allowed)）。框架升级新增工具自动落未勾选态（白名单天然免疫漏网）。锁定件灰显不可取消。'
+          : '勾选的工具在决策门开启时做客户名范围强校验（须 ⊆ 可信范围）；理由校验（已知/判断/因此）对全部工具恒生效。'}
+      />
+      <Checkbox.Group
+        style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+        options={options}
+        value={checked}
+        onChange={(v) => setChecked(v as string[])}
+      />
+      <Button type="primary" size="small" style={{ marginTop: 12 }} loading={saving} onClick={save}>
+        保存（version+1，下一问重建）
+      </Button>
+    </div>
+  );
+};
+
+/**
+ * Tab0Panel（批13-W 十步 Tab0）：装配 manifest 总览——四 mode 字段+缓存键成分+探针记录+白名单勾选域。
+ * 只读总览；下方挂全局能力卡（approval_track/prompt_caching，CAP_STEP_MAP 归 0）。
+ */
+const Tab0Panel: React.FC = () => {
+  const [mf, setMf] = useState<AssemblyManifest | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const res = await capabilitiesApi.manifest();
+      setMf(res.data as AssemblyManifest);
+    } catch { /* http 拦截器已提示 */ }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const it = mf?.items || {};
+  const modeRows: Array<[string, unknown, string]> = [
+    ['summarization_mode（摘要模式）', it.summarization_mode, '官方工厂双件套=official_factory / 关闭=disabled'],
+    ['data_summary_mode（数据摘要模式）', it.data_summary_mode, '工具端暂存+SSE result_ref 派发（13-AB4）'],
+    ['rubric_mode（评分模式）', it.rubric_mode, 'skill_prompt=自检段进提示词 / middleware=独立评分站'],
+    ['backend_mode（后端模式）', it.backend_mode, 'store=官方 StoreBackend 路由（13-Y）'],
+  ];
+  return (
+    <div style={{ overflow: 'auto', flex: 1, minHeight: 0, paddingBottom: 24 }}>
+      <Alert
+        type="info" showIcon style={{ marginBottom: 12 }}
+        message="缓存键四成分：{连接}#g{守卫ver}#c{能力ver}#f{files_hash}"
+        description={`任一成分变化 → 缓存失配 → 下一问重装配（LRU 保留 2 版）。当前能力版本 v${mf?.capability_version ?? '-'}，agent_key=${mf?.agent_key || '-'}。配置 PATCH 只走「改当前值」：默认值=代码常量（审计锚点），reset-defaults 回代码基准。`}
+      />
+      <Card size="small" style={{ marginBottom: 12 }} title="装配 manifest 总览（最近一次装配实证）">
+        {modeRows.map(([k, v, note]) => (
+          <Row key={k} align="middle" gutter={12} style={{ padding: '4px 0', borderBottom: `1px dashed ${tokens.colors.border}` }}>
+            <Col flex="220px"><Text type="secondary" style={{ fontSize: 12 }}>{k}</Text></Col>
+            <Col flex="140px"><Tag color={v === 'disabled' ? 'orange' : 'green'}>{String(v ?? '-')}</Tag></Col>
+            <Col flex="auto"><Text type="secondary" style={{ fontSize: 11 }}>{note}</Text></Col>
+          </Row>
+        ))}
+        <Row align="middle" gutter={12} style={{ padding: '4px 0' }}>
+          <Col flex="220px"><Text type="secondary" style={{ fontSize: 12 }}>tool_availability_installed（白名单换算排除清单）</Text></Col>
+          <Col flex="auto"><Text style={{ fontSize: 12 }}>{Array.isArray(it.tool_availability_installed) ? (it.tool_availability_installed as string[]).join('、') : '-'}</Text></Col>
+        </Row>
+        <Row align="middle" gutter={12} style={{ padding: '4px 0' }}>
+          <Col flex="220px"><Text type="secondary" style={{ fontSize: 12 }}>decision_gate_installed / scope_gated_installed</Text></Col>
+          <Col flex="auto"><Text style={{ fontSize: 12 }}>{String(it.decision_gate_installed ?? '-')} / {(it.scope_gated_installed as string[])?.join('、') || '-'}</Text></Col>
+        </Row>
+        <Row align="middle" gutter={12} style={{ padding: '4px 0' }}>
+          <Col flex="220px"><Text type="secondary" style={{ fontSize: 12 }}>files_hash / seeded_files（13-Y）</Text></Col>
+          <Col flex="auto"><Text style={{ fontSize: 12 }}>{String(it.files_hash ?? '-')} / {String(it.seeded_files ?? '-')}</Text></Col>
+        </Row>
+      </Card>
+      <Card size="small" style={{ marginBottom: 12, background: tokens.colors.bgContent, borderColor: tokens.colors.border }} title={
+        <Space><InfoCircleOutlined /><Text type="secondary" style={{ fontWeight: 600 }}>白名单勾选域（装配期全集，{mf?.tool_universe.length ?? '-'} 件）</Text></Space>
+      }>
+        <Text type="secondary" style={{ fontSize: 11 }}>{mf?.generics_note}</Text>
+        <div style={{ marginTop: 6 }}>
+          {(mf?.tool_universe || []).map(t => {
+            const isLocked = (mf?.tool_locked || []).includes(t);
+            return <Tag key={t} style={{ marginBottom: 4 }} color={isLocked ? 'gold' : 'default'}>{isLocked ? '🔒 ' : ''}{t}</Tag>;
+          })}
+        </div>
+      </Card>
+      <CapabilityPanel stepFilter={0} />
+    </div>
+  );
+};
+
+/** TeachPanel（批13-W）：只读教学页——头部一句话教学+底部「本步不可配置原因」（教学即运维纪律）。 */
+const TeachPanel: React.FC<{ step: number }> = ({ step }) => {
+  const t = STEP_TEACH[step];
+  if (!t) return <Alert type="warning" message={`步${step} 教学内容待补`} />;
+  return (
+    <div style={{ overflow: 'auto', flex: 1, minHeight: 0, paddingBottom: 24 }}>
+      <Alert type="info" showIcon message={`${STEP_TITLES[step]}（只读教学）`} description={t.teach} style={{ marginBottom: 12 }} />
+      <Card size="small" style={{ background: tokens.colors.bgContent, borderColor: tokens.colors.border }} title={
+        <Space><LockOutlined style={{ color: tokens.colors.textSecondary }} /><Text type="secondary" style={{ fontWeight: 600 }}>本步不可配置原因</Text></Space>
+      }>
+        <Text type="secondary" style={{ fontSize: 12 }}>{t.reason}</Text>
+      </Card>
     </div>
   );
 };
@@ -910,19 +1136,24 @@ const SecurityControlCenter: React.FC = () => {
   );
 
   return (
-    <PageShell title="安全控制中心" description="Tab1 五类守卫+审批轨 · Tab2 能力开关（DeepAgents 原生能力 / subagents 受限启用）">
+    <PageShell title="安全控制中心" description="按装配十步组织（批13-W 终版）：配置挂实际影响的装配步骤，教学即运维；守卫是运行期裁决（热生效）独立保留">
       <Tabs
-        defaultActiveKey="guards"
+        defaultActiveKey="tab0"
         style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         items={[
+          { key: 'tab0', label: STEP_TITLES[0], children: <Tab0Panel /> },
+          { key: 'guards', label: '守卫（运行期）', children: guardsTab },
+          { key: 'step1', label: STEP_TITLES[1], children: <TeachPanel step={1} /> },
+          { key: 'step2', label: STEP_TITLES[2], children: <TeachPanel step={2} /> },
+          { key: 'step3', label: STEP_TITLES[3], children: <TeachPanel step={3} /> },
+          { key: 'step4', label: STEP_TITLES[4], children: <CapabilityPanel stepFilter={4} /> },
+          { key: 'step5', label: STEP_TITLES[5], children: <CapabilityPanel stepFilter={5} /> },
+          { key: 'step6', label: STEP_TITLES[6], children: <CapabilityPanel stepFilter={6} /> },
+          { key: 'step7', label: STEP_TITLES[7], children: <CapabilityPanel stepFilter={7} /> },
+          { key: 'step89', label: STEP_TITLES[8], children: <TeachPanel step={8} /> },
+          { key: 'step10', label: STEP_TITLES[10], children: <CapabilityPanel stepFilter={10} /> },
           {
-            key: 'guards',
-            label: '安全控制',
-            children: guardsTab,
-          },
-          {
-            key: 'capabilities',
-            label: '能力开关',
+            key: 'allcaps', label: '全部能力（平铺）',
             children: <CapabilityPanel />,
           },
         ]}

@@ -6,6 +6,7 @@
   POST /api/capabilities/{id}/probe     -> 探针执行（写 events）
   GET  /api/capabilities/events         -> 分页（含 task_invoke 审计流）
   POST /api/capabilities/reset-defaults -> 全部回基线
+  GET  /api/capabilities/manifest       -> 装配清单总览（批13-W Tab0：四 mode/缓存键成分/探针/白名单勾选域全集）
 
 权限：非 admin 只读，写操作 403。
 """
@@ -23,6 +24,30 @@ from app.services import capability_config, capability_probes
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/capabilities", tags=["capabilities"])
+
+
+@router.get("/manifest")
+def assembly_manifest(request: Request):
+    """装配清单总览（批13-W Tab0 数据源）：manifest items + 缓存键四成分 + 白名单勾选域/锁定集。
+
+    只读；所有登录用户可读（教学页与 Tab0 渲染用）。缓存键四成分=连接#g守卫ver#c能力ver#f{files_hash}。
+    """
+    get_current_user(request)
+    from app.services.tupu_deepagent import _ASSEMBLY_MANIFEST
+    m = dict(_ASSEMBLY_MANIFEST or {})
+    universe = sorted(capability_config._w1_managed_universe())
+    from app.services.query_contract import GENERIC_ALLOWED_TOOLS
+    # 勾选域全集以装配期静态注册表为基（框架文件工具/红线件物理不在域内，白名单不可及）
+    return {
+        "items": m.get("items", {}),
+        "version": m.get("version", 0),
+        "agent_key": m.get("agent_key", ""),
+        "capability_version": capability_config.get_version(),
+        "tool_universe": universe,
+        "tool_locked": list(capability_config.W1_LOCKED_TOOLS),
+        "tool_default_allowed": capability_config.w1_default_allowed(),
+        "generics_note": f"MCP 注册 {len(GENERIC_ALLOWED_TOOLS)} 件（含 read_file）+ task = 勾选域 {len(universe)} 件",
+    }
 
 
 def _require_admin(request: Request):

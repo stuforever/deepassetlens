@@ -103,7 +103,13 @@ def get_policies(force: bool = False) -> List[Dict[str, Any]]:
 
 
 def get_version() -> int:
-    """全局能力版本号 = max(version)。查库异常返回 0。"""
+    """全局能力版本号（缓存键 #c 成分）。
+
+    批13-W 修正：max(version) -> sum(version)。原 max 语义有缺陷——PATCH 非"当前最大行"
+    （如 skills/subagents 早期推到 v13 后）时 max 不动 → 缓存键不变 → Agent 永不重建，
+    白名单/决策门配置静默失效（W-1 e2e 实测暴露）。sum 对任意行 PATCH 必变化，满足
+    「PATCH → version+1 → 缓存键变 → 重装配」的生效链定调。查库异常返回 0。
+    """
     try:
         from app.models.base import CapabilityPolicy
         db = _db()
@@ -111,7 +117,7 @@ def get_version() -> int:
             v = db.query(CapabilityPolicy.version).all()
         finally:
             db.close()
-        return max([x[0] for x in v], default=0) or 0
+        return sum([x[0] for x in v if x[0]]) or 0
     except Exception:
         return 0
 

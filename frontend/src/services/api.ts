@@ -547,8 +547,21 @@ export interface CapabilityItem {
   version: number;
 }
 
+/** 批13-W Tab0：装配清单总览（GET /capabilities/manifest） */
+export interface AssemblyManifest {
+  items: Record<string, unknown>;
+  version: number;
+  agent_key: string;
+  capability_version: number;
+  tool_universe: string[];
+  tool_locked: string[];
+  tool_default_allowed: string[];
+  generics_note: string;
+}
+
 export const capabilitiesApi = {
   list: (config?: AxiosRequestConfig) => guardsClient.get('/capabilities', config),
+  manifest: (config?: AxiosRequestConfig) => guardsClient.get('/capabilities/manifest', config),
   update: (capabilityId: string, body: { enabled?: boolean; params?: Record<string, unknown>; confirm?: boolean; close_reason?: string }, config?: AxiosRequestConfig) =>
     guardsClient.patch(`/capabilities/${capabilityId}`, body, config),
   probe: (capabilityId: string, config?: AxiosRequestConfig) =>
