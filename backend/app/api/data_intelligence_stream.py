@@ -380,6 +380,9 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                     if etype == "on_chat_model_end":
                         out = data.get("output")
                         _rid = ev.get("run_id", "")
+                        # 批13-I C4 缓存观测改走 llm_client callback（on_llm_end LLMResult 完整
+                        # usage）——事件流的 out 对象 usage 细节被裁剪（itd=None/tu={} 实测），
+                        # 此处不再探测（2026-09-04 三落点实测后定案）。
                         # 取并清理 round 状态（完全以 round_states 为准，不用全局缓冲）
                         _rs = _round_states.pop(_rid, None)
                         _accumulated = _rs["accumulated"] if _rs else ""

@@ -17,6 +17,68 @@ from typing import Any, Dict, List, Optional, Iterator
 
 logger = logging.getLogger(__name__)
 
+# 批13-I C4：最近一次 LLM 调用的前缀缓存观测（EngineQueryLog.execute 出口读取落库附列）。
+# 语义=进程内最近一次 LLM 调用的缓存态（模块级单值；并发请求可能混采——观测基线用途可接受，
+# 诚实登记）。不用 contextvar：langchain astream 的模型调用在子任务里 set 对父任务不可见
+# （asyncio contextvar 单向复制，2026-09-04 实测 set 后 execute 出口读仍 None）。
+_LAST_LLM_CACHE: Dict[str, Any] = {"cache_hit_tokens": None, "cache_miss_tokens": None}
+
+
+def get_last_llm_cache() -> Optional[Dict[str, Any]]:
+    """读最近一次 LLM 调用缓存态（execute 落库点用；None=未透传/未发生）。"""
+    try:
+        v = dict(_LAST_LLM_CACHE)
+        return v if v.get("cache_hit_tokens") is not None else None
+    except Exception:
+        return None
+
+
+class _CacheCollectorHandler:
+    """批13-I C4：on_llm_end 缓存观测采集器（鸭子类型 callback，不依赖 langchain 基类导入时序）。
+
+    数据源按优先级：generation.message.usage_metadata.input_token_details.cache_read
+    （langchain 标准化形态，state 实证有值 2026-09-04）> llm_output.token_usage 原始字段
+    （prompt_cache_hit_tokens / prompt_tokens_details.cached_tokens）。
+    事件流（astream_events on_chat_model_end）的 out 对象 usage 细节被裁剪（itd=None、
+    token_usage={}，双落点实测均空），故走 callback 的 LLMResult——generation.message 是
+    完整 AIMessage（state 同源对象）。
+    """
+
+    def on_llm_end(self, response, **kwargs) -> None:
+        try:
+            hit = miss = None
+            gens = getattr(response, "generations", None) or []
+            for gen_batch in gens:
+                for gen in (gen_batch or []):
+                    msg = getattr(gen, "message", None)
+                    um = getattr(msg, "usage_metadata", None)
+                    itd = getattr(um, "input_token_details", None) if um is not None else None
+                    if itd and hasattr(itd, "get") and itd.get("cache_read") is not None:
+                        hit = int(itd.get("cache_read"))
+                        pt = getattr(um, "input_tokens", None)
+                        miss = int(pt) - hit if pt is not None else None
+                        break
+                if hit is not None:
+                    break
+            if hit is None:
+                lo = getattr(response, "llm_output", None) or {}
+                tu = lo.get("token_usage") or {}
+                if isinstance(tu, dict):
+                    hit = tu.get("prompt_cache_hit_tokens")
+                    if hit is None:
+                        ptd = tu.get("prompt_tokens_details") or {}
+                        hit = ptd.get("cached_tokens") if isinstance(ptd, dict) else None
+                    miss = tu.get("prompt_cache_miss_tokens")
+            if hit is not None:
+                _LAST_LLM_CACHE["cache_hit_tokens"] = int(hit)
+                _LAST_LLM_CACHE["cache_miss_tokens"] = int(miss) if miss is not None else None
+                logger.info(f"[13-I][cache] hit={hit} miss={_LAST_LLM_CACHE['cache_miss_tokens']}")
+        except Exception:
+            pass
+
+
+_CACHE_COLLECTOR = _CacheCollectorHandler()
+
 
 def resolve_connection_api_key(api_key: Optional[str]) -> str:
     """解析 API Key，支持 ${ENV_VAR} 占位符"""
@@ -225,6 +287,10 @@ def build_chat_model(
         "timeout": tmo,
         "streaming": streaming,
         "http_client": http_client,
+        # 批13-I C4：缓存观测 callback 未挂载——实测疑引入流式回归（e2e 217s 超时两连），
+        # 观测单值由 _CacheCollectorHandler 保留（handler 定义+落库点在位），通道问题登记：
+        # 事件流 itd/token_usage 双裁剪 + contextvar 子任务隔离 + callbacks 挂载回归，
+        # 待 13-D Step3 拆 translator 时在稳定点接入或升级 langchain 后复测（设计允许降级 TTFT）。
     }
     # extra_payload（如 thinking.type=disabled）透传给 OpenAI API
     if extra_payload:
@@ -279,6 +345,15 @@ def _extract_usage(resp) -> Optional[Dict[str, Any]]:
                 "prompt_tokens": getattr(meta, "input_tokens", None),
                 "completion_tokens": getattr(meta, "output_tokens", None),
             })
+            # 批13-I C4：langchain 标准化落点——usage_metadata.input_token_details.cache_read
+            # （DeepSeek 网关实测透传此形态，2026-09-04 e2e 日志实证 input_token_details={'cache_read': 8192}）
+            itd = getattr(meta, "input_token_details", None) or {}
+            try:
+                cr = itd.get("cache_read") if hasattr(itd, "get") else getattr(itd, "cache_read", None)
+            except Exception:
+                cr = None
+            if cr is not None and "cache_hit_tokens" not in out:
+                out["cache_hit_tokens"] = int(cr)
         # 批5-C4：前缀缓存命中字段探测（多落点兜底）
         for _src_name in ("additional_kwargs", "response_metadata"):
             src = getattr(resp, _src_name, None) or {}
@@ -310,12 +385,16 @@ def _extract_usage(resp) -> Optional[Dict[str, Any]]:
 
 
 def _log_cache_usage(usage: Optional[Dict[str, Any]], conn_name: str) -> None:
-    """批5-C4：命中字段存在时打日志（观测口径）；不存在静默（=未透传，降级 TTFT 观测）。"""
+    """批5-C4：命中字段存在时打日志（观测口径）；不存在静默（=未透传，降级 TTFT 观测）。
+    批13-I C4：同时写入 contextvar 桥（EngineQueryLog.execute 出口落库附列用）。"""
     try:
         if usage and usage.get("cache_hit_tokens") is not None:
             logger.info(
                 f"[llm_client][prefix-cache] conn={conn_name} hit={usage.get('cache_hit_tokens')} "
                 f"miss={usage.get('cache_miss_tokens')} prompt={usage.get('prompt_tokens')}")
+            # 批13-I C4：写观测单值（execute 出口读走落库）
+            _LAST_LLM_CACHE["cache_hit_tokens"] = usage.get("cache_hit_tokens")
+            _LAST_LLM_CACHE["cache_miss_tokens"] = usage.get("cache_miss_tokens")
     except Exception:
         pass
 

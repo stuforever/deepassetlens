@@ -866,6 +866,10 @@ class EngineQueryLog(Base):
     status = Column(String(16), nullable=False, default="ok")   # ok | error
     error_class = Column(String(32), nullable=True)     # 批1 错误分类
     direct_pipeline = Column(Boolean, nullable=True, default=False)  # 批9：模板直出管道标记（直通率/兜底率看板）
+    # 批13-I C4：LLM 前缀缓存观测（contextvar 桥：llm_client 探测 -> execute 出口附列）。
+    # nullable：LLM 未透传缓存字段时为 NULL（降级 TTFT 基线，设计允许）。
+    cache_hit_tokens = Column(Integer, nullable=True)
+    cache_miss_tokens = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

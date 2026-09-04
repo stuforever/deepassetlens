@@ -29,8 +29,14 @@ def _sql_hash(sql: str) -> str:
 def record_query_log(engine: str, sql: str, rows_returned: int = 0, duration_ms: int = 0,
                      status: str = "ok", error_class: Optional[str] = None,
                      run_id: Optional[str] = None, direct_pipeline: bool = False) -> None:
-    """落一条查询日志（best-effort，异常吞掉不影响主流程）。批9：direct_pipeline 直通标记。"""
+    """落一条查询日志（best-effort，异常吞掉不影响主流程）。批9：direct_pipeline 直通标记。
+    批13-I C4：附列 LLM 前缀缓存观测（contextvar 桥读最近一次 LLM 调用缓存态；None=未透传）。"""
     try:
+        try:
+            from app.services.llm_client import get_last_llm_cache as _glc
+            _cache = _glc() or {}
+        except Exception:
+            _cache = {}
         from app.models.base import EngineQueryLog
         from app.core.database import SessionLocal
         db = SessionLocal()
@@ -41,6 +47,8 @@ def record_query_log(engine: str, sql: str, rows_returned: int = 0, duration_ms:
                 rows_returned=int(rows_returned or 0), duration_ms=int(duration_ms or 0),
                 status=status, error_class=error_class,
                 direct_pipeline=bool(direct_pipeline),
+                cache_hit_tokens=_cache.get("cache_hit_tokens"),
+                cache_miss_tokens=_cache.get("cache_miss_tokens"),
             ))
             db.commit()
         finally:
