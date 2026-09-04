@@ -229,10 +229,14 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
 # prefix 完全一致），include_router 合并后的最终路径与拆分前逐条相同；
 # 下方 re-export 保持 `from app.api.data_intelligence import X` 对外符号不变（tests 依赖）。
 # ---------------------------------------------------------------------------
-from .data_intelligence_stream import (  # noqa: F401 -- re-export
-    router as _stream_router,
-    chat_freeplan_stream,
-)
+# 批13-D Step3：stream 挂载改惰性——endpoint.py 需要本模块的 ChatRequest（运行时注解），
+# 顶层 import 会成环（data_intelligence → stream → endpoint → data_intelligence 未初始化完）。
+# 惰性点在模块体尾部：ChatRequest（L48）已定义，endpoint 导入安全。URL/符号保持不变。
+def _mount_stream_router() -> None:
+    from .data_intelligence_stream import router as _stream_router
+    router.include_router(_stream_router)
+
+
 from .data_intelligence_misc import (  # noqa: F401 -- re-export
     router as _misc_router,
     RoutePreviewRequest,
@@ -244,5 +248,5 @@ from .data_intelligence_misc import (  # noqa: F401 -- re-export
     clear_freeplan_memory,
 )
 
-router.include_router(_stream_router)
+_mount_stream_router()
 router.include_router(_misc_router)

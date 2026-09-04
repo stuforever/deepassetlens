@@ -242,7 +242,7 @@ class TestG2SSEWiring:
         """stream 自定义事件白名单含 correction.attempt（SSE 实时可见）。"""
         from pathlib import Path
 
-        p = Path(__file__).resolve().parent.parent / "app" / "api" / "data_intelligence_stream.py"
+        p = Path(__file__).resolve().parent.parent / "app" / "api" / "freeplan" / "endpoint.py"
         src = p.read_text(encoding="utf-8")
         assert '"correction.attempt"' in src
         assert 'elif _cname == "correction.attempt":' in src

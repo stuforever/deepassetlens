@@ -4,7 +4,7 @@ import os
 import pytest
 
 _STREAM_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "..", "app", "api", "data_intelligence_stream.py")
+                            "..", "app", "api", "freeplan", "endpoint.py")
 _DEEPAGENT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "..", "app", "services", "tupu_deepagent.py")
 

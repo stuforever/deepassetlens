@@ -15,7 +15,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 
-STREAM_SRC = open(os.path.join(os.path.dirname(__file__), "..", "app", "api", "data_intelligence_stream.py"),
+STREAM_SRC = open(os.path.join(os.path.dirname(__file__), "..", "app", "api", "freeplan", "endpoint.py"),
                   encoding="utf-8").read()
 PREP_SRC = open(os.path.join(os.path.dirname(__file__), "..", "app", "api", "freeplan", "prep.py"),
                 encoding="utf-8").read()

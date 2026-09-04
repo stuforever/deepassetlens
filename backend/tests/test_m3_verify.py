@@ -46,7 +46,7 @@ class TestM3RubricAssembly:
         assert "on_evaluation=_on_rubric_evaluation" in src
 
     def test_stream注入rubric到调用状态(self):
-        p = Path(__file__).resolve().parent.parent / "app" / "api" / "data_intelligence_stream.py"
+        p = Path(__file__).resolve().parent.parent / "app" / "api" / "freeplan" / "endpoint.py"
         src = p.read_text(encoding="utf-8")
         assert 'if _contract is not None and _contract.rubric:' in src
         assert '_inv_state["rubric"] = _contract.rubric' in src
@@ -126,7 +126,7 @@ class TestM3G7SSE:
     def test_stream含rubric与query_verified事件(self):
         """批13-D：事件帧经 freeplan.sse.sse_frames 统一生成（拆分后锚点迁移）。"""
         base = Path(__file__).resolve().parent.parent / "app"
-        src = (base / "api" / "data_intelligence_stream.py").read_text(encoding="utf-8")
+        src = (base / "api" / "freeplan" / "endpoint.py").read_text(encoding="utf-8")
         dsrc = (base / "api" / "freeplan" / "delivery.py").read_text(encoding="utf-8")
         # 帧触发点仍在 stream（sse_frames 调用），证据/自评载荷构建在 delivery
         assert 'sse_frames("query_verified"' in src
@@ -137,7 +137,7 @@ class TestM3G7SSE:
     def test_final含evidence与confidence(self):
         """批13-D：evidence 聚合 + 置信度三级逻辑迁移至 freeplan.delivery.build_evidence。"""
         base = Path(__file__).resolve().parent.parent / "app"
-        src = (base / "api" / "data_intelligence_stream.py").read_text(encoding="utf-8")
+        src = (base / "api" / "freeplan" / "endpoint.py").read_text(encoding="utf-8")
         dsrc = (base / "api" / "freeplan" / "delivery.py").read_text(encoding="utf-8")
         assert "_ev = build_evidence(" in src
         assert '_evidence = _ev["evidence"]' in src
