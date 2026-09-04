@@ -82,7 +82,8 @@ class TestForbiddenAndAllowedTools:
 
     def test_out_of_allowed_tool_blocked(self, policy, relationship_contract):
         # execute 是禁用工具；用一个既不在允许集也不在禁用集的工具名
-        out = _run(policy, relationship_contract, _tc("search_entities", {}))
+        # （批13-M 后 search_entities 已入场景 allowed_tools 作定位兜底，载体换 list_tables）
+        out = _run(policy, relationship_contract, _tc("list_tables", {}))
         assert "不在本步骤允许范围" in out.content
 
     def test_read_file_allowed(self, policy, relationship_contract):

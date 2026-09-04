@@ -15,6 +15,11 @@ x_tupu:
   # 护栏1 复合条件：本声明 AND caps.subagents.enabled（能力开关仍是总闸）；其他剧本未声明默认拒绝。
   allow_subagents: true
 
+  # 批13-M 定位优先（用户定调：先定位、找不到再搜索）：定位类工具入步骤 allowed_tools，
+  # 跨业务域取数前先 validate_l2/fetch_subgraph 确认实体归属（防凭 entity_aliases/记忆猜表
+  # 导致错挂业务域，如「业扩表」案例）；L0 金标直通不受影响（直通 SQL 自带表，跳过定位）。
+  locate_first: true
+
   triggers:
     any:
       - 户变关系
@@ -79,6 +84,10 @@ x_tupu:
         - execute_api_sql
         - execute_entity_api
         - execute_sql
+        - fetch_l1_l2_tree
+        - validate_l2
+        - fetch_subgraph
+        - search_entities
       required_slots: []
       templates:
         - templates/step1_household_transformer.sql
@@ -101,6 +110,10 @@ x_tupu:
         - execute_api_sql
         - execute_entity_api
         - execute_sql
+        - fetch_l1_l2_tree
+        - validate_l2
+        - fetch_subgraph
+        - search_entities
       templates:
         - templates/step1_household_transformer.sql
         - templates/step1_household_transformer_elec.sql
@@ -119,6 +132,10 @@ x_tupu:
         - execute_api_sql
         - execute_entity_api
         - execute_sql
+        - fetch_l1_l2_tree
+        - validate_l2
+        - fetch_subgraph
+        - search_entities
       templates:
         - templates/step3_load_ratio.sql
       required_slots: []
@@ -127,6 +144,13 @@ x_tupu:
 
 # 配电变压器重过载分析（场景剧本·三步模块化）
 
+> **实体定位顺序（批13-M 定位优先，用户定调：先定位、找不到再搜索）**：
+> ① 契约已预解析实体（带来源标注）→ validate_l2/fetch_subgraph 确认后直接用；
+> ② 问题可锚定业务域（明示台区/客户/线路/计量点等业务域，或上轮 L2 上下文）→ 先 validate_l2 → fetch_subgraph(l2_id) 从子图选实体——**跨业务域取数前必须定位确认**，禁止凭 entity_aliases 或记忆猜表（防错挂业务域，如「业扩表」案例）；
+> ③ 定位失败（L2 下无该实体 / 无业务域线索）→ search_entities 混合检索兜底；
+> ④ 仍失败 → fetch_l1_l2_tree 层级树请用户选择。
+> **L0 直通豁免**：金标锚定命中的直通题 SQL 自带表，跳过定位直接执行（回归 <4s 红线）。
+>
 > **执行流程（场景剧本优先，跳过通用定位流程）**：本剧本已含完整 SQL 模板（表名、列名、JOIN 关系、码值字典均已核对一致）。
 > **执行前必查数据源模式**：本剧本涉及的表名即为 entity_code。调一次 `batch_entity_source_mode(entity_codes)` 批量查询 SQL 涉及的**所有表**模式，按返回的 `recommended_tool` 选工具（铁律，不可切换）。**只调一次批量接口**，不要逐表查询：
 > - **表名 3 段命名铁律**：模板中 `⟦别名⟧` 一律翻译为 `x_tupu.entity_aliases` 给出的**完整表名（含 `pg_tupu.public.` 前缀）**，`FROM pg_tupu.public.cms20_adj_volt_dev`；**禁止写裸表名**（裸表名在默认 catalog 下 Unknown table，前端实测 2026-08-21）。
@@ -135,7 +159,7 @@ x_tupu:
 > - `recommended_tool=execute_entity_api`（单表 api_integration）-> `execute_entity_api(entity_code, filters)`
 > - `recommended_tool=execute_sql`（未绑 catalog 的物理表，兜底）-> `execute_sql(sql, entity_code)`（传主表 entity_code）
 > - **兜底降级**：若 `execute_doris_sql` 报 `Unknown table`/`Unknown catalog`（表未纳管 catalog），可降级 `execute_sql(sql, entity_code)` 物理直连重试一次。
-> 无需调 search_entities / fetch_join_expr / validate_safe_sql / fetch_l1_l2_tree / fetch_subgraph / validate_attributes--这些是未命中剧本时的定位流程，剧本已覆盖。仅当 SQL 执行报列名错误时，调 search_entities 排查。
+> 无需调 fetch_join_expr / validate_safe_sql / validate_attributes（剧本已覆盖其职责）；定位类工具（fetch_l1_l2_tree/validate_l2/fetch_subgraph）按上方「实体定位顺序」在跨业务域取数前使用，`search_entities` 仅作定位失败兜底或列名排查（2026-08-25 批13-M 改写：原「一律无需定位」与定位优先定调冲突，已按四步顺序修订）。
 > **列名/表名以元数据为准**：SQL 模板中的列名已与 `kg_entities` 元数据核对一致（三方核对：技能↔元数据↔PG 全部匹配），**直接使用模板即可**。用户改了实体属性后，若 SQL 执行报列名错误，调 `kg_api(action=search_entities, params={"entity_code":"<表名>"})` 确认正确列名后修改重试。
 >
 > **空结果处理铁律（2026-08-24 前端实测「哪些台区过载」暴露后补）**：判定 SQL 执行成功（无 error）但返回 0 行时，**这就是最终答案**——如实作答「查询时段内无重载/过载台区」，并提示用户可指定日期缩小范围（模板含 `【动态】AND pw.date='YYYYMMDD'` 注释位）。**禁止**因结果为空而换工具、换引擎、改写 SQL 结构重试：

@@ -78,6 +78,16 @@ _CONTRACT_ENGINE_UNCONFIRMED = ("尚未确认 —— 先调用 batch_entity_sour
 _CONTRACT_STOP_DEFAULT = "拿到查询结果即停止"
 _CONTRACT_OUTPUT_SUFFIX = (" —— 完整明细由前端查询结果表唯一展示，最终回答禁止输出 Markdown 明细表，"
                            "只写结论/发现/风险/建议")
+# 批13-M 定位优先（用户定调：先定位、找不到再搜索）：locate_first 契约追加的标准作业段。
+# 固定文案进骨架（同场景逐字节一致，批5-C1 前缀缓存前提）；仅 locate_first=True 的场景注入，
+# 直通/预解析快捷路径契约不注入（防误伤）。
+_CONTRACT_LOCATE_ORDER = (
+    "- 实体定位顺序（先定位、找不到再搜索）："
+    "①契约已预解析实体→validate_l2/fetch_subgraph 确认后直接用；"
+    "②问题可锚定业务域→先 validate_l2 再 fetch_subgraph(l2_id) 从子图选实体（跨业务域取数前必须定位确认）；"
+    "③定位失败→search_entities 混合检索兜底；④仍失败→fetch_l1_l2_tree 层级树请用户选择。"
+    "金标直通豁免（直通 SQL 自带表，跳过定位）。"
+)
 
 
 def _build_contract_system_message(contract, question: str = "", precomputed_bundle: dict | None = None) -> str:
@@ -105,6 +115,9 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
         f"- 终止条件：{'；'.join(contract.stop_when) or _CONTRACT_STOP_DEFAULT}",
         f"- 输出模式：{contract.output_mode}{_CONTRACT_OUTPUT_SUFFIX}",
     ]
+    # 批13-M：locate_first 场景追加实体定位顺序段（固定文案进骨架，同场景逐字节一致）
+    if getattr(contract, "locate_first", False):
+        lines.append(_CONTRACT_LOCATE_ORDER)
     base = "\n".join(lines)
     # S1（L1）：聚合分布意图 -> 追加受控指令（路由层标记，结构层要求聚合视图）
     agg = getattr(contract, "aggregate_intent", None)

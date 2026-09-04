@@ -137,6 +137,7 @@ class SkillRouter:
             output_mode=step.output_mode or (skill.output or {}).get("mode") or (skill.output or {}).get("output_mode"),
             required_entities=skill.required_entity_codes(),
             allow_subagents=bool(getattr(skill, "allow_subagents", False)),  # 批13-Q 护栏1 数据化
+            locate_first=bool(getattr(skill, "locate_first", False)),  # 批13-M 定位优先数据化
         )
         return RouteResult(
             route_type="scenario", skill_id=skill.name, workflow_step=step.id,
@@ -224,6 +225,7 @@ class SkillRouter:
             output_mode=chosen.output_mode or (skill.output or {}).get("mode") or (skill.output or {}).get("output_mode"),
             required_entities=skill.required_entity_codes(),
             allow_subagents=bool(getattr(skill, "allow_subagents", False)),  # 批13-Q 护栏1 数据化
+            locate_first=bool(getattr(skill, "locate_first", False)),  # 批13-M 定位优先数据化
         )
         return RouteResult(
             route_type="scenario", skill_id=skill.name, workflow_step=chosen.id,

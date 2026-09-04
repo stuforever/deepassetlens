@@ -99,7 +99,8 @@ class SkillDefinition:
     multi_engine: bool = False                                    # 批4：多数据源逐源分发（引擎不唯一）
     template_mode: str = "scenario_extensible"                    # P0-2：模板校验分级（strict/extensible/generic）
     required_sources: List[Dict[str, str]] = field(default_factory=list)  # 评审P1-1：多引擎必达数据源 [{entity, role}]
-    allow_subagents: bool = False                                 # 批13-Q 护栏1：SKILL.md x_tupu.allow_subagents: true 数据化开
+    allow_subagents: bool = False                                 # 批13-Q 护栏1：SKILL.md x_tupu.allow
+    locate_first: bool = False                                    # 批13-M 定位优先：SKILL.md x_tupu.locate_first_subagents: true 数据化开
 
     def to_dict(self) -> dict:
         return {
@@ -331,6 +332,7 @@ class SkillCatalog:
             template_mode=str(x_tupu.get("template_mode") or "scenario_extensible"),
             required_sources=[dict(s) for s in (x_tupu.get("required_sources") or []) if isinstance(s, dict)],
             allow_subagents=bool(x_tupu.get("allow_subagents", False)),  # 批13-Q 护栏1 数据化
+            locate_first=bool(x_tupu.get("locate_first", False)),  # 批13-M 定位优先数据化
             steps=steps,
         )
 

@@ -85,7 +85,7 @@ x_tupu:
 - **指定项目**（用户给项目编号 pspid 或项目名）-> 过滤到该项目下的 WBS
 
 ## 执行优先级（重要，覆盖通用问数流程）
-本剧本涉及的实体已明确（`dim_ps_wbs_budget`/`dim_ps_wbs_cost`/`dim_ps_project_def`），**直接从「取数步骤」开始**，跳过 locate 定位（fetch_l1_l2_tree/validate_l2/fetch_subgraph/validate_attributes/search_entities 等一律不调）。
+本剧本涉及的实体已由契约预解析（`dim_ps_wbs_budget`/`dim_ps_wbs_cost`/`dim_ps_project_def`，带 entity_aliases 来源标注）——按实体定位标准顺序（批13-M）步骤①：预解析实体直接从「取数步骤」开始，无需定位轮次；仅当取数报实体/列名错误时，按步骤③用 search_entities 兜底排查（2026-08-25 措辞对齐定位优先定调，预解析快捷路径不受影响）。
 预算与成本分属两个数据源，**必须先确认数据源模式**：调 `batch_entity_source_mode(["dim_ps_wbs_budget", "dim_ps_wbs_cost"])` 一次确认两源（也可 `get_entity_source_mode` 逐实体）；预算(api_integration)->execute_entity_api，成本(sql_integration)->execute_doris_sql。**不要用 execute_sql**（多源数据查不到）。两份数据取回后按 wbs_element 关联算超成本，**不要在 SQL 里跨源 JOIN**。
 
 ## 涉及数据（多源，必须按数据源模式分发执行）

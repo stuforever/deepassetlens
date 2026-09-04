@@ -47,6 +47,8 @@ _SQL_TOOLS = frozenset({"execute_sql", "execute_doris_sql", "execute_api_sql"})
 
 # 批1：受控降级只放行这两个只读定位工具（重定位真实表名）
 _DEGRADATION_TOOLS = frozenset({"search_entities", "list_tables"})
+# 批13-M 定位优先：locate 类工具集（定位顺序判据用——validate_l2/fetch_subgraph/fetch_l1_l2_tree）
+_LOCATE_TOOLS = frozenset({"validate_l2", "fetch_subgraph", "fetch_l1_l2_tree"})
 # 触发降级的 error_class（表/catalog 不存在/语法类 -> 允许一次重定位）
 _DEGRADATION_TRIGGERS = frozenset({"TABLE_MISSING", "SYNTAX"})
 # G2（融合设计 §4.3）：可纠错 error_class（计数闸门计入）；上限 2 次，超限直接终止出失败卡
@@ -184,6 +186,15 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                                  detail={"reason": "契约未声明 allow_subagents", "step": contract.workflow_step})
                 return ("task 子代理委派未获准：当前步骤契约未声明 allow_subagents"
                         "（场景默认禁委派，SKILL.md x_tupu.allow_subagents: true 可显式开）")
+        # 批13-M 定位优先 policy 提示（warn 不拦截）：locate_first 契约下调 search_entities 且本轮
+        # 无任何 locate 类调用 -> 记治理事件（locate_order_warn），放行不阻断（防误伤兜底/纠错路径；
+        # 直通与预解析契约不标记 locate_first，天然豁免）。
+        if tool_name == "search_entities" and getattr(contract, "locate_first", False) \
+                and not contract._runtime.get("locate_used"):
+            from app.services import capability_config as _cc2
+            _cc2.record_event("skill_policy", "locate_order_warn",
+                              detail={"reason": "search_entities 先于 locate 类工具（定位顺序提示）",
+                                      "step": contract.workflow_step})
         # 安全控制中心接线：能力控制（capability）关闭时跳过工具白名单/禁用检查（管理员显式操作）
         from app.services import guard_config as _gc
         _cap_on = _gc.guard_enabled("capability")
@@ -348,6 +359,9 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     # ------------------------------------------------------------------
     def _postcheck(self, contract: QueryContract, tool_name: str, result, request) -> None:
         out_str = _result_text(result)
+        # 批13-M 定位优先：locate 类工具成功调用 -> 标记 locate_used（守卫 warn 的「本轮已定位」判据）
+        if tool_name in _LOCATE_TOOLS:
+            contract._runtime["locate_used"] = True
         # S1（L2）：执行类工具从 tool_call 参数取 SQL 兜底（结果文本不可解析时仍能判定聚合退化）
         _sql_hint = ""
         try:

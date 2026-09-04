@@ -94,6 +94,9 @@ class QueryContract:
     # 批13-Q 护栏1：task 委派复合条件（contract.allow_subagents AND caps.subagents.enabled 才放行）。
     # generic/探索默认 True，场景默认 False；SKILL.md x_tupu.allow_subagents: true 数据化显式开。
     allow_subagents: bool = False
+    # 批13-M 定位优先：SKILL.md x_tupu.locate_first: true 数据化声明——契约消息追加「实体定位
+    # 顺序」标准作业段 + 守卫对 search_entities 首跳给 policy 级 warn（不拦截，防误伤直通）。
+    locate_first: bool = False
     _runtime: Dict[str, Any] = field(default_factory=dict)         # {engine_locked, result_obtained, violations, confirmed_engines, ...}
 
     # ------------------------------------------------------------------
@@ -107,7 +110,8 @@ class QueryContract:
                   forbid_markdown_detail_table: bool = True,
                   output_mode: Optional[str] = None,
                   required_entities: Optional[List[str]] = None,
-                  allow_subagents: bool = False) -> "QueryContract":
+                  allow_subagents: bool = False,
+                  locate_first: bool = False) -> "QueryContract":
         """按 Skill 定义 + 命中步骤构造契约。step 为 skill_catalog.StepDefinition。
 
         output_mode 优先级：显式参数 > 步骤级 step.output_mode > 类默认 single_result_table。
@@ -135,6 +139,7 @@ class QueryContract:
             forbid_markdown_detail_table=forbid_markdown_detail_table,
             required_entities=[str(e) for e in (required_entities or []) if e],
             allow_subagents=allow_subagents,
+            locate_first=locate_first,
             _runtime={
                 "engine_locked": False, "result_obtained": False, "violations": 0,
                 "confirmed_engines": [],
@@ -343,6 +348,7 @@ class QueryContract:
             "clarify_required": self.clarify_required,  # S2：歧义需澄清（路由层标记）
             "multi_engine": self.multi_engine,
             "forbid_markdown_detail_table": self.forbid_markdown_detail_table,
+            "locate_first": self.locate_first,  # 批13-M：定位优先声明（守卫 warn+契约消息段开关）
             "confirmed_engines": list(self._runtime.get("confirmed_engines") or []),
             "entity_engine_map": dict(self.entity_engine_map),
             "result_by_engine": dict(self._runtime.get("result_by_engine") or {}),
