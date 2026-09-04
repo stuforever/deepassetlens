@@ -88,6 +88,18 @@ _CONTRACT_LOCATE_ORDER = (
     "③定位失败→search_entities 混合检索兜底；④仍失败→fetch_l1_l2_tree 层级树请用户选择。"
     "金标直通豁免（直通 SQL 自带表，跳过定位）。"
 )
+# 批13-L 分型精简（尾部生成提速）：COUNT 型（row_count 单值）答案走 CountAnswer 极简形态——
+# 一句结论+口径注 ≈150 字，生成 token 骤降（设计目标 8s→2-3s）。判定源复用 intent_classifier
+# 的 is_count_intent（批9 直通判定同源）；直通管道天然走模板已是极简形态不经过本段。
+# 实施调和：设计原文「CountAnswer 为 response_format 条件选择」——实测 response_format 是
+# create_deep_agent 装配期静态参数（运行时不可按题条件化，框架边界），以契约指令条件化等效
+# 落地（约束的是生成内容形态，提速机制相同：生成 token 数下降）。
+_CONTRACT_COUNT_ANSWER = (
+    "- CountAnswer 极简格式（计数型问题专用）：最终答案只写两句——一句结论（含具体数值，"
+    "如「共 3 户用电客户」）+ 一句口径注（统计口径/时间范围/数据源，如「口径：在用电客户，"
+    "截至当前」），合计不超过 150 字；禁止输出关键发现/风险/建议等四段展开；"
+    "answer_type 使用 aggregation。"
+)
 
 
 def _build_contract_system_message(contract, question: str = "", precomputed_bundle: dict | None = None) -> str:
@@ -118,6 +130,13 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
     # 批13-M：locate_first 场景追加实体定位顺序段（固定文案进骨架，同场景逐字节一致）
     if getattr(contract, "locate_first", False):
         lines.append(_CONTRACT_LOCATE_ORDER)
+    # 批13-L：COUNT 型问题追加极简答案指令（判定源复用 intent_classifier.is_count_intent）。
+    # 仅 generic 契约注入：场景契约有自己的输出协议（final_sections+模板牢笼），COUNT 题命中
+    # 场景时存在「要数量 vs 模板结构冻结」的结构性冲突（2026-08-25 e2e 实测 reasoning 打结），
+    # 强注极简段会加剧冲突——场景 COUNT 出口留待模板层扩展（已知边界登记）。
+    from app.services.intent_classifier import is_count_intent
+    if question and is_count_intent(question) and getattr(contract, "route_type", "") != "scenario":
+        lines.append(_CONTRACT_COUNT_ANSWER)
     base = "\n".join(lines)
     # S1（L1）：聚合分布意图 -> 追加受控指令（路由层标记，结构层要求聚合视图）
     agg = getattr(contract, "aggregate_intent", None)
