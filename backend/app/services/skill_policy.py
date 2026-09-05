@@ -57,6 +57,22 @@ _DEGRADATION_TRIGGERS = frozenset({"TABLE_MISSING", "SYNTAX"})
 _CORRECTION_LIMIT = 2
 _AGGREGATE_CORRECTION_LIMIT = 3
 _CORRECTABLE_CLASSES = frozenset({"TABLE_MISSING", "CATALOG_MISSING", "SYNTAX", "TIMEOUT", "AGGREGATE_DEGRADED"})
+# P0-COUNT 死循环修复（2026-09-05）：定位类工具预算闸门 + 同参去重。
+# 缺口背景（13-L 收口登记）：执行类工具有 G2 纠错计数闸门，但 search_entities/batch 等
+# 定位类工具**零预算零去重**——generic COUNT 题实测同参 search×28+batch×12 交替 163s 打结，
+# 任何防线都未触发。两级拦截：
+#   L1 同参去重：同工具同参数第二次调用直接拒（确定性工具同参必同果，重试纯浪费轮）；
+#   L2 总预算：定位类累计调用超阈值拒绝并注入「立即前进」强指令（数据工具不受影响）。
+_LOCATE_BUDGET_TOOLS = frozenset({
+    "search_entities", "batch_entity_source_mode", "get_entity_source_mode",
+    "validate_l2", "fetch_subgraph", "fetch_l1_l2_tree",
+})
+# L1 同参去重范围（收窄于预算池）：源模式确认两件（batch/get）是**状态机推进工具**——
+# 同壳参数合法（逐实体确认推进 confirmed_engines 集合，test_skill_policy 增量确认场景），
+# 不做同参去重；纯检索类同参必同果才去重。
+_LOCATE_DEDUP_TOOLS = frozenset({"search_entities", "validate_l2", "fetch_subgraph", "fetch_l1_l2_tree"})
+_LOCATE_BUDGET_DEFAULT = int(os.getenv("TUPU_LOCATE_BUDGET", "8"))
+_LOCATE_BUDGET_SCENARIO = int(os.getenv("TUPU_LOCATE_BUDGET_SCENARIO", "14"))
 # S5（HITL v2）：表/catalog 不存在 -> 由「自动降级一次」升级为「interrupt 请求人审」；
 # 仅这两类（唯一许可降级）走人审；SYNTAX 仍走自动纠错（无定位语义）。
 _HITL_TRIGGERS = frozenset({"TABLE_MISSING", "CATALOG_MISSING"})
@@ -66,8 +82,7 @@ _HITL_TIMEOUT = float(os.getenv("TUPU_HITL_TIMEOUT", "180"))
 # 由 SkillPolicy 在 agent 循环内注册并 await，恢复端点按 interrupt_id 解析（跨 HTTP 请求共享）。
 _HITL_INTERRUPTS: Dict[str, asyncio.Future] = {}
 # G2：error_class -> 结构化纠错指引（ToolMessage 附加 correction 字段，模型据此自纠）
-_CORRECTION_GUIDES = {
-    "TABLE_MISSING": "表 {t} 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
+_CORRECTION_GUIDES = {    "TABLE_MISSING": "表 {t} 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
     "CATALOG_MISSING": "表/catalog 不存在。调用 search_entities 重新定位实体，或 list_tables 查真实表名后修正重试。",
     "SYNTAX": "SQL 报错（语法/列名错误）。调用 validate_attributes 校验列名后修正重试。",
     "TIMEOUT": "查询超时。移除 ORDER BY / 增加 LIMIT / 确认可否命中预聚合加速表。",
@@ -199,6 +214,11 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         from app.services import guard_config as _gc
         _cap_on = _gc.guard_enabled("capability")
         _eng_on = _gc.guard_enabled("engine_lock")
+        # 1a) P0-COUNT 定位预算闸门（不受 capability 开关影响——死循环防护与能力开关正交）：
+        #     L1 同参去重 + L2 总预算。只拦定位类工具，数据/回答路径不受影响。
+        violation = self._locate_budget_check(contract, tool_name, request)
+        if violation is not None:
+            return violation
         # 2) 禁用工具（绝对禁止 + 契约禁止）
         if _cap_on and tool_name in contract.forbidden_tools:
             return f"调用禁用工具 {tool_name}（契约禁止: {sorted(contract.forbidden_tools)}）"
@@ -256,6 +276,44 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                                       detail={"tool": tool_name, "reason": chk.reason[:200],
                                               "step": contract.workflow_step})
                     return f"SQL 未通过模板校验: {chk.reason}"
+        return None
+
+    def _locate_budget_check(self, contract: QueryContract, tool_name: str, request) -> Optional[str]:
+        """P0-COUNT 死循环修复：定位类工具两级预算闸门。
+
+        L1 同参去重：同工具同参数第二次调用拒绝（确定性检索同参必同果）；
+        L2 总预算：定位类累计超过阈值（generic 8 / 场景 14，环境变量可调）拒绝，
+        注入「基于已获信息立即执行查询或回答」的强指令。
+
+        记账在 contract._runtime["locate_calls"]（本请求内）；被拒调用不计数。
+        返回 violation 文本（_do_reject 走既有拒绝/治理/事件链），None=放行。
+        """
+        if tool_name not in _LOCATE_BUDGET_TOOLS:
+            return None
+        import hashlib as _hl
+        runtime = contract._runtime
+        # L1 同参去重（仅纯检索类；源模式确认两件是状态机推进工具豁免）
+        if tool_name in _LOCATE_DEDUP_TOOLS:
+            try:
+                _args = json.dumps(request.tool_call.get("args") or {}, sort_keys=True, ensure_ascii=False, default=str)
+            except Exception:
+                _args = str(request.tool_call.get("args"))
+            sig = f"{tool_name}:{_hl.sha1(_args.encode('utf-8')).hexdigest()[:10]}"
+            seen = runtime.setdefault("locate_call_sigs", {})
+            if sig in seen:
+                prev_n = seen[sig]
+                return (f"定位调用与第 {prev_n} 次完全相同（同工具同参数），结果不会变化，已拦截。"
+                        f"请勿重复定位：基于已获定位信息立即执行数据查询（batch 已确认引擎），或直接基于已有信息回答用户。")
+            seen[sig] = int(runtime.get("locate_calls", 0)) + 1
+        # L2 总预算
+        total = int(runtime.get("locate_calls", 0))
+        budget = _LOCATE_BUDGET_SCENARIO if contract.route_type == "scenario" else _LOCATE_BUDGET_DEFAULT
+        if total >= budget:
+            return (f"定位预算已耗尽（{total}/{budget} 次）。停止一切定位类调用："
+                    f"用已确认的引擎与已知表名立即执行数据查询，或基于已有信息直接回答；"
+                    f"无法回答时如实说明定位信息不足。")
+        # 放行并记账
+        runtime["locate_calls"] = total + 1
         return None
 
     async def _check_sql_against_templates(self, contract: QueryContract, sql: str, request=None):
