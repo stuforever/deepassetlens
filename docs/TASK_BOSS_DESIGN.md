@@ -1,5 +1,7 @@
 # 数据智能对话 - 任务节点与老板状态机设计
 
+> **⚠️ SUPERSEDED（2026-09-06 批14-F 勾销）**：本文件的 LangGraph 老板状态机整体设计已被 deepagents vNext 架构（skill_router + 模板牢笼 + 直通管道）取代，仅作历史设计存档。§9 后续工作六项不再是待办：route_intent 已由 skill_router 承接、SQL 拼装执行已由模板牢笼+引擎锁定承接、状态持久化由 deepagents 原生 session/thread 承接。现行设计文档：《问数智能体vNext最终设计文档_实施定稿_20260824》。
+
 > 与 [ENTITY_RELATIONSHIP_MODEL.md](ENTITY_RELATIONSHIP_MODEL.md) 配套。本文档描述 8 个任务节点、9 个技能、LangGraph 老板状态机的协同设计。
 
 ## 1. 总体架构
