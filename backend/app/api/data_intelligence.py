@@ -131,12 +131,22 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
     if getattr(contract, "locate_first", False):
         lines.append(_CONTRACT_LOCATE_ORDER)
     # 批13-L：COUNT 型问题追加极简答案指令（判定源复用 intent_classifier.is_count_intent）。
-    # 仅 generic 契约注入：场景契约有自己的输出协议（final_sections+模板牢笼），COUNT 题命中
-    # 场景时存在「要数量 vs 模板结构冻结」的结构性冲突（2026-08-25 e2e 实测 reasoning 打结），
-    # 强注极简段会加剧冲突——场景 COUNT 出口留待模板层扩展（已知边界登记）。
+    # 仅 generic 契约注入泛化极简段：场景契约有自己的输出协议（final_sections+模板牢笼），COUNT 题命中
+    # 场景时存在「要数量 vs 模板结构冻结」的结构性冲突（2026-08-25 e2e 实测 reasoning 打结）。
+    # 批14-A（2026-09-05）：场景 COUNT 出口改由**模板层**承载（step2_count_overload.sql 注册进
+    # overload 步骤+SKILL.md COUNT 例外条款）；此处补 B 方案指路注入（设计 §1.4）——引用具体模板 id
+    # 的定向指令（指路不破笼，非 13-L 泛化极简段），e2e 实测模型两轮均未稳定自选 COUNT 模板/停轮征询后启用。
     from app.services.intent_classifier import is_count_intent
-    if question and is_count_intent(question) and getattr(contract, "route_type", "") != "scenario":
-        lines.append(_CONTRACT_COUNT_ANSWER)
+    if question and is_count_intent(question):
+        if getattr(contract, "route_type", "") == "scenario":
+            _count_tpls = [t for t in (getattr(contract, "template_ids", None) or []) if "count" in str(t)]
+            if _count_tpls:
+                lines.append(
+                    f"- 本问题为计数型：直接使用模板 {', '.join(_count_tpls)} 派生单行聚合查询出数"
+                    "（禁止自行改写为明细形态再数）；答案只输出一句结论（含具体数值）+一句口径注，"
+                    "合计 ≤150 字，不展开结论/发现/风险/建议四段。")
+        else:
+            lines.append(_CONTRACT_COUNT_ANSWER)
     base = "\n".join(lines)
     # S1（L1）：聚合分布意图 -> 追加受控指令（路由层标记，结构层要求聚合视图）
     agg = getattr(contract, "aggregate_intent", None)

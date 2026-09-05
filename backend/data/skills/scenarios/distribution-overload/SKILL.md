@@ -119,6 +119,7 @@ x_tupu:
         - templates/step1_household_transformer_elec.sql
         - templates/step1_household_transformer_gen.sql
         - templates/step2_power_aggregation.sql
+        - templates/step2_count_overload.sql
       required_slots: []
       allowed_next:
         - load_ratio
@@ -194,6 +195,7 @@ x_tupu:
 |--------|------|-------------|-----------|
 | 户变关系 | 第1步 | 只问**用电户**: `/skills/scenarios/distribution-overload/templates/step1_household_transformer_elec.sql`；只问**发电户**: `.../step1_household_transformer_gen.sql`；问**两者/泛问**（如"所有户变关系"）: `.../step1_household_transformer.sql`（UNION 全量）| `/skills/scenarios/distribution-overload/reference/scope_cte.md`（限客户时）|
 | 重载/过载/负载率 | 1+2 | step1 + `/skills/scenarios/distribution-overload/templates/step2_power_aggregation.sql` | `/skills/scenarios/distribution-overload/reference/rules.md`（口径）|
+| 统计/多少/几个/数量类（如"统计重过载台区数量"、"有多少个台区重过载"） | 第2步 COUNT | `/skills/scenarios/distribution-overload/templates/step2_count_overload.sql`（单行四列计数，勿用明细模板） | `/skills/scenarios/distribution-overload/reference/rules.md`（口径）|
 | 连续N天重过载 | 1+2扩展 | step1 + `/skills/scenarios/distribution-overload/templates/step2b_continuous_days.sql` | `.../reference/rules.md` |
 | 负载占有率/倒排 | 1+2+3 | step1 + step2 + `/skills/scenarios/distribution-overload/templates/step3_load_ratio.sql` | `.../reference/rules.md` |
 | 任何步（用户带过滤条件） | - | - | `/skills/scenarios/distribution-overload/reference/dynamic_filters.md` |
@@ -243,6 +245,8 @@ x_tupu:
 
 | 客户类型 | 负荷类型 | 客户编号 | 客户名称 | 台区编号 | 配变列表 | 台区总容量 | 达标点数 | 平均负载(kW) | 负载占有率(%) |
 |---|---|---|---|---|---|---|---|---|---|
+
+**COUNT 例外条款（问法级，优先于下方四段模板）**：COUNT 类问法（用户问数量/多少/几个，如"统计重过载台区数量"）**不适用四段输出**——使用 `templates/step2_count_overload.sql` 单行计数模板，只输出一句结论（含具体数值，如"重过载台区共 N 个，其中过载 X 个、重载 Y 个"）+ 一句口径注（阈值口径/时间范围/数据源），合计 ≤150 字；不展开结论/发现/风险/建议四段。
 
 **一句话结论**：共 X 个台区（单路 Y 个、多路 Z 个），用电负载重载 A 台、过载 B 台；上网负载重载 C 台、过载 D 台；负载占有率最高用户 W（占有率 V%，达标点 N 个），为该台区重过载主因。其中连续多天重过载 M 个台区（最长持续 K 天，起止 [起始]~[结束]）。另有 E 个台区发电负荷较高（自发自用），发电负荷仅参考不计入配电重过载统计。若用户指定了日期/状态，结论注明"基于[日期][状态]数据统计"。
 
