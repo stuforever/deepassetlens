@@ -371,20 +371,29 @@ class QueryContract:
 # 批2-E：指引预载（省 read_file 技能轮）
 # ----------------------------------------------------------------------
 # 规则意图分类命中 sql-query/SKILL.md 对应小节，摘录 5-8 行注入契约消息，
-# 模型直接参考无需 read_file(/skills/sql-query/...)。模块加载时解析一次并缓存。
+# 模型直接参考无需 read_file(/skills/sql-query/...)。
+# 批15 件2（2026-09-06）：首次解析后缓存改为**指纹感知缓存**——每调用 stat 一次
+# (mtime_ns, size)，指纹不变命中缓存（现状行为），文件变则重新解析（改 SKILL.md
+# 不重启下次请求生效）。global 名保留（backend/scripts/_b2_debug.py 导入兼容）。
 _SKILL_SQL_QUERY_PATH = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "skills", "sql-query", "SKILL.md"))
 _GUIDANCE_SECTIONS: Optional[Dict[str, str]] = None
+_GUIDANCE_SIG: Optional[tuple] = None   # (mtime_ns, size) 上次解析时的文件指纹
 # 批6-R2：意图词表收拢至 intent_classifier 单模块（路由/指引预载/模板直出三处共用同一套判定）；
 # 此处保留别名兼容既有引用。
 from app.services.intent_classifier import GUIDANCE_RULES as _GUIDANCE_RULES  # noqa: E402
 
 
 def _load_guidance_sections() -> Dict[str, str]:
-    """解析 sql-query/SKILL.md，按 `### ` 小节切分缓存（标题 -> 小节正文）。"""
-    global _GUIDANCE_SECTIONS
-    if _GUIDANCE_SECTIONS is not None:
-        return _GUIDANCE_SECTIONS
+    """解析 sql-query/SKILL.md，按 `### ` 小节切分缓存（标题 -> 小节正文，批15 件2 指纹感知）。"""
+    global _GUIDANCE_SECTIONS, _GUIDANCE_SIG
+    try:
+        st = os.stat(_SKILL_SQL_QUERY_PATH)
+        sig = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return _GUIDANCE_SECTIONS or {}          # 文件消失：沿用旧值（容错语义与现状一致）
+    if _GUIDANCE_SECTIONS is not None and _GUIDANCE_SIG == sig:
+        return _GUIDANCE_SECTIONS                 # 未变：命中（现状行为）
     sections: Dict[str, str] = {}
     try:
         with open(_SKILL_SQL_QUERY_PATH, encoding="utf-8") as f:
@@ -403,7 +412,9 @@ def _load_guidance_sections() -> Dict[str, str]:
             sections[cur] = "\n".join(buf)
     except Exception as _e:
         logger.warning(f"[指引预载] SKILL.md 解析失败: {_e}")
+        return _GUIDANCE_SECTIONS or sections     # 解析失败：旧值优先，sig 不写下次重试
     _GUIDANCE_SECTIONS = sections
+    _GUIDANCE_SIG = sig
     return sections
 
 

@@ -269,13 +269,20 @@ def _get_model_provider(model) -> str:
     return None
 
 
-@lru_cache(maxsize=32)
 def _load_skill_md(skill_name: str) -> str:
     """读取 SKILL.md 文件内容（去掉 frontmatter），并解析 ⟦实体中文名⟧ -> 物理表名。
 
-    批13-G 件1：加 @lru_cache（模块加载解析缓存——文件运行期只读，缓存安全）；
+    批13-G 件1：加 @lru_cache（模块加载解析缓存）；
     路径查找扩展 scenarios/ 子目录（场景剧本 distribution-overload 等在
     data/skills/scenarios/ 下，此前只查平铺目录，场景剧本永远读空）。
+
+    批15 件1（2026-09-06）：拆两层改指纹键缓存——外层只做路径解析+stat 指纹，
+    内层 _load_skill_md_cached 键=(resolved_path, mtime_ns, size)。文件变→指纹变→
+    新缓存条目（改 SKILL.md 不重启下次请求生效，兑现 13-Y「改剧本=下次请求重装配」
+    的文本缓存侧）；文件不变→同条目同一字符串对象（test_13g `is` 同一性保持绿，
+    13-I C1 前缀缓存逐字节一致契约保住）；键用 resolved_path 后子技能降级五个名字
+    共享一条缓存。信号族对齐 _compute_files_hash（mtime+size 触发 Agent 全量重装配），
+    粒度严格更细（st_mtime_ns 100ns vs 秒级）。签名零变化（生产调用点/单测零改动）。
 
     SKILL.md 中用 ⟦中文名⟧ 引用实体（如 ⟦用电户⟧），运行时自动从元数据解析为物理表名（如 cms20_elec_cons_cust）。
     这样 SKILL.md 不含硬编码表名，表名变更只需改元数据。
@@ -305,7 +312,14 @@ def _load_skill_md(skill_name: str) -> str:
                     break
         if not skill_md.exists():
             return ""
-    content = skill_md.read_text("utf-8")
+    st = skill_md.stat()
+    return _load_skill_md_cached(str(skill_md), st.st_mtime_ns, st.st_size)
+
+
+@lru_cache(maxsize=32)
+def _load_skill_md_cached(path: str, mtime_ns: int, size: int) -> str:
+    """读文件+去 frontmatter+⟦⟧解析，键=(路径, mtime_ns, size)——批15 件1 指纹键（见外层 docstring）。"""
+    content = Path(path).read_text("utf-8")
     # 去掉 YAML frontmatter（---...---）
     if content.startswith("---"):
         end = content.find("---", 3)
