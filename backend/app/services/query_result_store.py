@@ -4,11 +4,14 @@
 淘汰：TTL 10min + 上限 64 条，双淘汰（取用时惰性清扫+每 put 触发）。
 安全：uuid4 不可猜；同进程内存（跨会话需猜中 uuid，登记接受）。
 """
+import os
 import time
 import uuid
 
-_RESULT_TTL = 600   # 10 分钟
-_MAX_ENTRIES = 64
+# 批14-C：TTL/容量 env 旋钮（设计 §3.1）——默认值不变=零行为变化；TTL=5 的 e2e 剧本
+# （设短 TTL 重启→提问→等过期→断言降级提示）据此可测，勾销 AB-4 豁免登记第一条。
+_RESULT_TTL = int(os.getenv("TUPU_QRS_TTL_SECONDS", "600"))   # 10 分钟
+_MAX_ENTRIES = int(os.getenv("TUPU_QRS_CAP", "64"))
 _store: dict[str, tuple[float, dict]] = {}
 
 
