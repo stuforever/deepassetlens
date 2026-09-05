@@ -1,0 +1,346 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "问项目成本 · 流转时序",
+    "output": "项目成本问答时序.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1680,
+      840
+    ],
+    "views": [
+      {
+        "id": "prep-stage",
+        "label": "提问与路由",
+        "focus": [
+          "user",
+          "fe",
+          "sse",
+          "agent"
+        ],
+        "note": "问题进 prep 准备段，路由命中 project-lifecycle-cost 多引擎剧本"
+      },
+      {
+        "id": "dual-source",
+        "label": "双源取数",
+        "focus": [
+          "agent",
+          "gate",
+          "mcp",
+          "store"
+        ],
+        "note": "先确认数据源模式，再按引擎取预算（API 源）与成本（Doris）"
+      },
+      {
+        "id": "terminate-answer",
+        "label": "终止与回推",
+        "focus": [
+          "agent",
+          "gate",
+          "sse",
+          "fe",
+          "user"
+        ],
+        "note": "两源取齐触发复合终止，答案按 wbs_element 关联后回推前端"
+      }
+    ],
+    "column_fit": "spread"
+  },
+  "participants": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "用户",
+      "sublabel": "浏览器"
+    },
+    {
+      "id": "fe",
+      "type": "frontend",
+      "label": "React 前端",
+      "sublabel": ":23000"
+    },
+    {
+      "id": "sse",
+      "type": "backend",
+      "label": "SSE 端点",
+      "sublabel": ":28000"
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "DeepAgent 图",
+      "sublabel": "模型循环·DeepSeek"
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "海关链",
+      "sublabel": "契约站+决策门"
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP 工具层",
+      "sublabel": "17 工具"
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "数据源",
+      "sublabel": "API 源 + Doris"
+    }
+  ],
+  "segments": [
+    {
+      "from": 165,
+      "to": 252,
+      "label": "提问 · 路由 · 契约"
+    },
+    {
+      "from": 268,
+      "to": 620,
+      "label": "双源取数（海关逐次校验）"
+    },
+    {
+      "from": 636,
+      "to": 748,
+      "label": "关联作答 · 回推"
+    }
+  ],
+  "messages": [
+    {
+      "id": "ask",
+      "from": "user",
+      "to": "fe",
+      "y": 178,
+      "label": "问项目成本",
+      "variant": "emphasis"
+    },
+    {
+      "id": "post",
+      "from": "fe",
+      "to": "sse",
+      "y": 208,
+      "label": "POST freeplan/stream",
+      "variant": "emphasis"
+    },
+    {
+      "id": "stream-in",
+      "from": "sse",
+      "to": "agent",
+      "y": 238,
+      "label": "astream_events v2",
+      "variant": "emphasis",
+      "note": "prep：路由命中 project-lifecycle-cost，注入多引擎契约"
+    },
+    {
+      "id": "mode-call",
+      "from": "agent",
+      "to": "gate",
+      "y": 278,
+      "label": "batch_entity_source_mode",
+      "variant": "security",
+      "note": "下一步判断：先确认两源数据模式"
+    },
+    {
+      "id": "mode-pass",
+      "from": "gate",
+      "to": "mcp",
+      "y": 306,
+      "label": "校验放行",
+      "variant": "security"
+    },
+    {
+      "id": "mode-query",
+      "from": "mcp",
+      "to": "store",
+      "y": 334,
+      "label": "查两源 source_mode"
+    },
+    {
+      "id": "mode-ret",
+      "from": "store",
+      "to": "mcp",
+      "y": 362,
+      "label": "预算→API · 成本→Doris",
+      "variant": "return"
+    },
+    {
+      "id": "budget-call",
+      "from": "agent",
+      "to": "gate",
+      "y": 398,
+      "label": "execute_entity_api",
+      "variant": "security",
+      "note": "取预算 dim_ps_wbs_budget（禁 execute_sql）"
+    },
+    {
+      "id": "budget-pass",
+      "from": "gate",
+      "to": "mcp",
+      "y": 426,
+      "label": "引擎一致·放行",
+      "variant": "security"
+    },
+    {
+      "id": "budget-query",
+      "from": "mcp",
+      "to": "store",
+      "y": 454,
+      "label": "API 源取预算"
+    },
+    {
+      "id": "budget-ret",
+      "from": "store",
+      "to": "mcp",
+      "y": 482,
+      "label": "预算行 + result_ref",
+      "variant": "return",
+      "note": "模型只见样本 10 行+row_count"
+    },
+    {
+      "id": "cost-call",
+      "from": "agent",
+      "to": "gate",
+      "y": 518,
+      "label": "execute_doris_sql",
+      "variant": "security",
+      "note": "取成本 dim_ps_wbs_cost（wbs_element/actual_cost/variance）"
+    },
+    {
+      "id": "cost-pass",
+      "from": "gate",
+      "to": "mcp",
+      "y": 546,
+      "label": "引擎一致·放行",
+      "variant": "security"
+    },
+    {
+      "id": "cost-query",
+      "from": "mcp",
+      "to": "store",
+      "y": 574,
+      "label": "Doris 取成本"
+    },
+    {
+      "id": "cost-ret",
+      "from": "store",
+      "to": "mcp",
+      "y": 602,
+      "label": "成本行 + result_ref",
+      "variant": "return"
+    },
+    {
+      "id": "again-call",
+      "from": "agent",
+      "to": "gate",
+      "y": 638,
+      "label": "再查数据工具？",
+      "variant": "security",
+      "note": "模型试图继续检索"
+    },
+    {
+      "id": "again-reject",
+      "from": "gate",
+      "to": "agent",
+      "y": 666,
+      "label": "拒绝 · 两源已取齐",
+      "variant": "security",
+      "note": "多引擎复合终止：预算+成本取到即禁重复检索"
+    },
+    {
+      "id": "final-in",
+      "from": "agent",
+      "to": "sse",
+      "y": 690,
+      "label": "最终答案（按 wbs_element 关联）",
+      "variant": "return",
+      "note": "跨源 JOIN 禁止，由答案层对齐"
+    },
+    {
+      "id": "final-out",
+      "from": "sse",
+      "to": "fe",
+      "y": 712,
+      "label": "sql_result · final · done",
+      "variant": "emphasis",
+      "note": "表格全量按 result_ref 派发"
+    },
+    {
+      "id": "render",
+      "from": "fe",
+      "to": "user",
+      "y": 735,
+      "label": "渲染判定表",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "fe",
+      "from": 171,
+      "to": 743,
+      "type": "frontend"
+    },
+    {
+      "participant": "sse",
+      "from": 200,
+      "to": 716,
+      "type": "backend"
+    },
+    {
+      "participant": "agent",
+      "from": 232,
+      "to": 698,
+      "type": "backend"
+    },
+    {
+      "participant": "gate",
+      "from": 272,
+      "to": 676,
+      "type": "security"
+    },
+    {
+      "participant": "mcp",
+      "from": 302,
+      "to": 616,
+      "type": "backend"
+    },
+    {
+      "participant": "store",
+      "from": 328,
+      "to": 612,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "主链路",
+      "items": [
+        "路由命中 project-lifecycle-cost 多引擎剧本，注入契约",
+        "先 batch_entity_source_mode 确认双源，再按引擎取数",
+        "预算走 API 源（execute_entity_api），成本走 Doris（execute_doris_sql）"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "海关防线",
+      "items": [
+        "每次工具调用过契约站：白名单/引擎一致性/多引擎逐源确认",
+        "模型试图继续检索被拒：两源取齐触发复合终止（stop_reached）",
+        "禁 execute_sql 混用（多源查不到）——剧本铁律由海关执行"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "答案与回推",
+      "items": [
+        "两源结果由答案层按 wbs_element 关联，禁止 SQL 跨源 JOIN",
+        "预算执行率/超支/超预算在答案内计算（actual_cost 对 total_budget）",
+        "前端表格走 result_ref 全量派发，模型只看 10 行样本"
+      ]
+    }
+  ]
+}

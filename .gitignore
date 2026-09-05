@@ -147,3 +147,10 @@ backend/_snapshot_colalign/
 
 # === 引擎 parquet 落盘缓存（运行时产物，不入库）===
 backend/data/duckdb_cache/
+
+# === 会话运行日志噪音（2026-09-05 清理）：后端/前端启动重定向输出与 commit 草稿 ===
+backend/backend_out*.txt
+frontend/frontend_out*.txt
+frontend/frontend_start*.txt
+gitmsg_*.txt
+.omo/

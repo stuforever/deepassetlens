@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "DeepAssetLens 运行时架构",
+    "output": "运行时架构.html",
+    "quality_profile": "showcase",
+    "viewBox": [1680, 840],
+    "views": [
+      {
+        "id": "main-path",
+        "label": "请求主路径",
+        "focus": ["fe", "sse", "prep", "graph", "gate", "mcp", "store"],
+        "note": "一次提问的完整旅程：前端到 SSE 端点，prep 准备后进 DeepAgent 图，海关放行工具取数"
+      },
+      {
+        "id": "assembly",
+        "label": "装配与缓存",
+        "focus": ["asm", "prep", "graph"],
+        "note": "缓存未命中才重跑十步装配；单例缓存键含守卫/能力/文件哈希四成分"
+      },
+      {
+        "id": "data-return",
+        "label": "数据回推",
+        "focus": ["mcp", "qrs", "sse", "fe"],
+        "note": "查询结果全量暂存 result_ref，SSE 端点取回派发前端表格，模型只见 10 行样本"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "fe",
+      "type": "frontend",
+      "label": "React 前端",
+      "sublabel": "dev :23000",
+      "pos": [30, 360],
+      "size": [130, 64]
+    },
+    {
+      "id": "sse",
+      "type": "backend",
+      "label": "SSE 流式端点",
+      "sublabel": "FastAPI :28000",
+      "tag": "freeplan/stream",
+      "pos": [290, 360],
+      "size": [140, 64]
+    },
+    {
+      "id": "prep",
+      "type": "backend",
+      "label": "prep 准备段",
+      "sublabel": "路由·金标·契约",
+      "pos": [510, 360],
+      "size": [130, 64]
+    },
+    {
+      "id": "asm",
+      "type": "backend",
+      "label": "Agent 装配器",
+      "sublabel": "十步装配·单例缓存",
+      "pos": [510, 150],
+      "size": [140, 64]
+    },
+    {
+      "id": "graph",
+      "type": "backend",
+      "label": "DeepAgent 图",
+      "sublabel": "model↔tools 循环",
+      "tag": "recursion 9999",
+      "pos": [730, 360],
+      "size": [140, 64]
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "海关链",
+      "sublabel": "契约站+决策门",
+      "tag": "awrap_tool_call",
+      "pos": [950, 360],
+      "size": [130, 64]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP 工具层",
+      "sublabel": "17 工具·/mcp/sse 自环",
+      "pos": [1170, 360],
+      "size": [130, 64]
+    },
+    {
+      "id": "qrs",
+      "type": "database",
+      "label": "结果暂存柜",
+      "sublabel": "query_result_store·内存",
+      "tag": "TTL 10min·上限 64",
+      "pos": [1170, 560],
+      "size": [140, 64]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "DeepSeek-V4-Flash",
+      "sublabel": "火山方舟·OpenAI 兼容",
+      "pos": [730, 700],
+      "size": [160, 64]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "数据存储集群",
+      "sublabel": "MySQL 主库+能力库",
+      "tag": "PG/ES/Neo4j/Doris/Qdrant",
+      "pos": [1440, 360],
+      "size": [150, 64]
+    },
+    {
+      "id": "sso",
+      "type": "external",
+      "label": "Authentik",
+      "sublabel": "SSO/RBAC :9100",
+      "pos": [1440, 150],
+      "size": [130, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "信任边界 · 应用进程 FastAPI :28000（可信代码区）",
+      "wraps": ["sse", "prep", "asm", "graph", "gate", "mcp", "qrs"]
+    },
+    {
+      "kind": "region",
+      "label": "Docker 基础设施区（可信内网）",
+      "wraps": ["store", "sso"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "fe-to-sse",
+      "from": "fe",
+      "to": "sse",
+      "label": "freeplan/stream",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "sse-to-fe",
+      "from": "sse",
+      "to": "fe",
+      "label": "SSE 回推帧",
+      "fromSide": "bottom",
+      "toSide": "bottom"
+    },
+    {
+      "id": "sse-to-prep",
+      "from": "sse",
+      "to": "prep",
+      "label": "问题+thread_id",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "id": "prep-to-graph",
+      "from": "prep",
+      "to": "graph",
+      "label": "astream_events v2",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "id": "prep-to-asm",
+      "from": "prep",
+      "to": "asm",
+      "label": "缓存未命中·十步重装",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "asm-to-graph",
+      "from": "asm",
+      "to": "graph",
+      "label": "单例交付",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "graph-to-llm",
+      "from": "graph",
+      "to": "llm",
+      "label": "OpenAI 兼容流式",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "graph-to-gate",
+      "from": "graph",
+      "to": "gate",
+      "label": "每次工具调用",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "id": "gate-to-mcp",
+      "from": "gate",
+      "to": "mcp",
+      "label": "校验放行",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "mcp-to-store",
+      "from": "mcp",
+      "to": "store",
+      "label": "SELECT/实体 API",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "mcp-to-qrs",
+      "from": "mcp",
+      "to": "qrs",
+      "label": "result_ref 全量暂存",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "qrs-to-sse",
+      "from": "qrs",
+      "to": "sse",
+      "label": "sql_result 全量派发",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [[1240, 790], [360, 790]]
+    },
+    {
+      "id": "fe-to-sso",
+      "from": "fe",
+      "to": "sso",
+      "label": "SSO 登录（现 anonymous）",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "主请求链路",
+      "items": [
+        "前端 23000 → SSE 端点 28000 → prep 准备段 → DeepAgent 图",
+        "图内 model↔tools 循环：海关链校验放行后由 MCP 工具取数",
+        "LLM 调用越过应用边界直达火山方舟"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "信任边界",
+      "items": [
+        "应用进程 FastAPI 28000 内全部可信代码：装配器/图/海关/工具层/暂存柜",
+        "Docker 内网：六库存储集群与 Authentik，仅应用进程可达",
+        "LLM 为唯一外部云依赖，OpenAI 兼容协议接入"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "关键机制",
+      "items": [
+        "单例缓存键 conn#g{守卫}#c{能力}#f{文件哈希}，未命中才重跑十步装配",
+        "大结果全量进暂存柜，SSE 按 result_ref 派发前端，模型只见 10 行样本"
+      ]
+    }
+  ]
+}
