@@ -15,6 +15,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Iterator
 
+from langchain_core.callbacks import BaseCallbackHandler
+
 logger = logging.getLogger(__name__)
 
 # 批13-I C4：最近一次 LLM 调用的前缀缓存观测（EngineQueryLog.execute 出口读取落库附列）。
@@ -33,9 +35,13 @@ def get_last_llm_cache() -> Optional[Dict[str, Any]]:
         return None
 
 
-class _CacheCollectorHandler:
-    """批13-I C4：on_llm_end 缓存观测采集器（鸭子类型 callback，不依赖 langchain 基类导入时序）。
+class _CacheCollectorHandler(BaseCallbackHandler):
+    """批13-I C4：on_llm_end 缓存观测采集器。
 
+    批14-B 通道①修正（2026-09-05）：ChatOpenAI 构造期 kwargs["callbacks"] 会过 pydantic
+    is_instance_of[BaseCallbackHandler] 校验——鸭子类型实例被拒（ValidationError，诊断脚本
+    _diag_14b 实证，这就是当年 217s「流式回归」的另一半真相：通道①从未成功挂载过）。
+    改继承 langchain_core.callbacks.BaseCallbackHandler（方法签名兼容，无循环导入）。
     数据源按优先级：generation.message.usage_metadata.input_token_details.cache_read
     （langchain 标准化形态，state 实证有值 2026-09-04）> llm_output.token_usage 原始字段
     （prompt_cache_hit_tokens / prompt_tokens_details.cached_tokens）。
@@ -52,10 +58,15 @@ class _CacheCollectorHandler:
                 for gen in (gen_batch or []):
                     msg = getattr(gen, "message", None)
                     um = getattr(msg, "usage_metadata", None)
-                    itd = getattr(um, "input_token_details", None) if um is not None else None
+                    # usage_metadata 实测为 dict（langchain 标准化）——dict/对象双形态兼容
+                    def _uget(o, k):
+                        if o is None:
+                            return None
+                        return o.get(k) if isinstance(o, dict) else getattr(o, k, None)
+                    itd = _uget(um, "input_token_details")
                     if itd and hasattr(itd, "get") and itd.get("cache_read") is not None:
                         hit = int(itd.get("cache_read"))
-                        pt = getattr(um, "input_tokens", None)
+                        pt = _uget(um, "input_tokens")
                         miss = int(pt) - hit if pt is not None else None
                         break
                 if hit is not None:
@@ -291,7 +302,15 @@ def build_chat_model(
         # 观测单值由 _CacheCollectorHandler 保留（handler 定义+落库点在位），通道问题登记：
         # 事件流 itd/token_usage 双裁剪 + contextvar 子任务隔离 + callbacks 挂载回归，
         # 待 13-D Step3 拆 translator 时在稳定点接入或升级 langchain 后复测（设计允许降级 TTFT）。
+        # 批14-B 通道①（2026-09-05，设计 §2.2）：217s 回归已翻案（UTF8 环境问题非 callbacks），
+        # 通道②（请求期 config callbacks）实测零采集（langgraph 未传播到 chat model run），
+        # 改构造期挂载：ChatOpenAI kwargs callbacks——切 env 需重启后端（重启必带 PYTHONUTF8=1）。
     }
+    try:
+        if os.getenv("TUPU_LLM_CACHE_OBS") == "1":
+            kwargs["callbacks"] = [_CACHE_COLLECTOR]
+    except Exception:
+        pass
     # extra_payload（如 thinking.type=disabled）透传给 OpenAI API
     if extra_payload:
         kwargs["extra_body"] = extra_payload

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Optional
 
 from fastapi import Request
@@ -84,6 +85,17 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 req=req, agent=agent, memory_thread_id=_memory_thread_id, prep_timing=_prep_timing)
             # 局部别名保持后续段变量名不变（后续引用零改动）
             config = _prep.config
+            # 批14-B 通道②（设计 §2.2）：请求期 config 级 callbacks 挂缓存观测采集器——
+            # langgraph 标准传播（config callbacks 到达图内 chat model run 的 on_llm_end），
+            # 零装配耦合（不动 Agent 单例），回滚=关 env TUPU_LLM_CACHE_OBS。
+            try:
+                if os.getenv("TUPU_LLM_CACHE_OBS") == "1":
+                    from app.services.llm_client import _CACHE_COLLECTOR as _cc14b
+                    _cbs = config.setdefault("callbacks", [])
+                    if _cc14b not in _cbs:
+                        _cbs.append(_cc14b)
+            except Exception as _cache_obs_e:
+                logger.warning(f"[14-B] 缓存观测挂载失败（不影响主链路）: {_cache_obs_e}")
             _route = _prep.route
             _contract = _prep.contract
             _effective_question = _prep.effective_question
