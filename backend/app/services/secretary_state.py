@@ -216,32 +216,36 @@ class SecretaryState(BaseModel):
         return self.task_snapshots[task_name]
 
     def _create_snapshot(self, task_name: str) -> TaskSnapshot:
-        from app.services.tasks.entity_location import EntityLocationSnapshot
-        from app.services.tasks.relation_location import RelationLocationSnapshot
-        from app.services.tasks.lineage_location import LineageLocationSnapshot
-        from app.services.tasks.sql_assembly import SqlAssemblySnapshot
-        from app.services.tasks.sql_execution import SqlExecutionSnapshot
-        from app.services.tasks.exploration import ExplorationSnapshot
-
-        creators: Dict[str, Any] = {
-            "属性定位": AttributeLocationSnapshot,
-            "实体定位": EntityLocationSnapshot,
-            "关系定位": RelationLocationSnapshot,
-            "溯源定位": LineageLocationSnapshot,
-            "SQL 拼装": SqlAssemblySnapshot,
-            "SQL 执行": SqlExecutionSnapshot,
-            "探索": ExplorationSnapshot,
-        }
+        # 批A3 覆盖补全发现（2026-09-06）：app.services.tasks 包不在仓库（老板状态机时代遗留），
+        # 六个快照类导入全崩 ModuleNotFoundError——get_snapshot 一调即炸（潜伏死雷，生产链
+        # skill_runnable 只用安全面未触发）。修复：导入容错降级——ImportError 的类跳过，
+        # creators 只收录可用类，未收录任务名落 TaskSnapshot 兜底（降级语义对齐 subagent_specs）。
+        creators: Dict[str, Any] = {"属性定位": AttributeLocationSnapshot}
+        import importlib as _il
+        for mod_name, cls_name, key in (
+            ("entity_location", "EntityLocationSnapshot", "实体定位"),
+            ("relation_location", "RelationLocationSnapshot", "关系定位"),
+            ("lineage_location", "LineageLocationSnapshot", "溯源定位"),
+            ("sql_assembly", "SqlAssemblySnapshot", "SQL 拼装"),
+            ("sql_execution", "SqlExecutionSnapshot", "SQL 执行"),
+            ("exploration", "ExplorationSnapshot", "探索"),
+        ):
+            try:
+                creators[key] = getattr(_il.import_module(f"app.services.tasks.{mod_name}"), cls_name)
+            except Exception:
+                continue  # tasks 包缺失：该任务名落 TaskSnapshot 兜底
         cls = creators.get(task_name, TaskSnapshot)
         return cls(task_name=task_name)
 
     def restore_snapshot_from_dict(self, task_name: str, snap_dict: Dict[str, Any]) -> TaskSnapshot:
         """从 dict 重建任务快照"""
-        from app.services.tasks.entity_location import EntityLocationSnapshot
-        cls_for_name = {
-            "属性定位": AttributeLocationSnapshot,
-            "实体定位": EntityLocationSnapshot,
-        }
+        cls_for_name: Dict[str, Any] = {"属性定位": AttributeLocationSnapshot}
+        try:
+            import importlib as _il
+            cls_for_name["实体定位"] = getattr(
+                _il.import_module("app.services.tasks.entity_location"), "EntityLocationSnapshot")
+        except Exception:
+            pass  # tasks 包缺失：实体定位落 TaskSnapshot 兜底
         cls = cls_for_name.get(task_name, TaskSnapshot)
         try:
             snap = cls(task_name=task_name)
