@@ -32,11 +32,14 @@ class DirectPipelineError(Exception):
 def evaluate_direct_eligibility(contract: Any, question: str) -> Optional[Dict[str, Any]]:
     """路由后、Agent 前的直通判定（纯规则，静默不满足返回 None）。
 
-    条件（设计 §2.5；批13-C 切源 golden_hits）：route_type=generic 且 golden_hits 最高分 ≥0.95
+    条件（设计 §2.5；批13-C 切源 golden_hits；批16-A 路由门放开 scenario）：
+    route_type∈(generic, scenario) 且 golden_hits 最高分 ≥0.95
     且 intent_classifier=count 类 且 无动态条件（日期/编号/比较词）
     且 金标 sql 非空（命中行本就来自 enabled 且有 SQL 单源——DB 层过滤 + Qdrant payload 过滤）。
+    安全链四件套不变：来源可信/validate_safe_sql（SELECT-only+强制 LIMIT）/模板白名单渲染/失败回退 Agent。
     """
-    if contract is None or getattr(contract, "route_type", "") != "generic":
+    # 批16-A：路由门 generic-only → {generic, scenario}（scene COUNT 题收敛主改动，spec §五.2）
+    if contract is None or getattr(contract, "route_type", "") not in ("generic", "scenario"):
         return None
     if getattr(contract, "clarify_required", False):
         return None

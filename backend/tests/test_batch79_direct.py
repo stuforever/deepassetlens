@@ -121,11 +121,14 @@ class TestDirectEligibility:
         from app.services.direct_pipeline import evaluate_direct_eligibility
         assert evaluate_direct_eligibility(_generic_contract_with_hit(), "统计用电客户中数量大于100的有几个") is None
 
-    def test_scenario_route_not_eligible(self):
+    def test_scenario_route_eligible_after_16a(self):
+        """批16-A 行为变更：路由门放开 scenario（scene COUNT 题收敛）——原「scenario 不直通」
+        断言随批16-A 失效；新契约：scenario + COUNT + 金标命中 → 与 generic 同门槛直通。"""
         from app.services.direct_pipeline import evaluate_direct_eligibility
         c = _generic_contract_with_hit()
         c.route_type = "scenario"
-        assert evaluate_direct_eligibility(c, "统计用电客户数量") is None
+        plan = evaluate_direct_eligibility(c, "统计用电客户数量")
+        assert plan is not None and plan["engine"] == "doris"
 
     def test_empty_sql_or_api_engine_not_eligible(self):
         from app.services.direct_pipeline import evaluate_direct_eligibility
