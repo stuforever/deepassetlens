@@ -29,6 +29,34 @@ from app.core.database import get_db
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+@router.post("/dev-login")
+def dev_login():
+    """开发模式直连签发（仅 ENABLE_AUTH=0；M02 金标准对齐——spec §五端点缺失补实现）。
+    变异锚点：ENABLE_AUTH 判定删除 → 生产可直连签发（安全洞）。
+    ENABLE_AUTH=0 时返回 dev token + 匿名 admin 用户上下文（供开发脚本/调试工具链）；
+    ENABLE_AUTH=1 时 403 自证（spec §九 dev-login 仅限开发）。"""
+    if ENABLE_AUTH:
+        raise HTTPException(status_code=403, detail="dev-login 仅限开发模式（ENABLE_AUTH=0）")
+    # dev token：`dev.<用户名>` 形态（ENABLE_AUTH=0 下中间件短路不验签，作调试身份标记）
+    import base64
+    dev_user = os.environ.get("TUPU_DEV_USER", "anonymous")
+    token = "dev." + base64.b64encode(dev_user.encode("utf-8")).decode("ascii")
+    return {
+        "code": 200,
+        "data": {
+            "token": token,
+            "token_type": "Bearer",
+            "user": {
+                "sub": dev_user,
+                "username": dev_user,
+                "roles": ["admin"],   # 关闭 auth 时按 admin 处理（同 _ANONYMOUS 语义）
+                "is_anonymous": True,
+                "groups": [],
+            },
+        },
+    }
+
+
 @router.get("/config")
 def auth_config():
     """OIDC 公开配置（前端登录跳转用）。"""
