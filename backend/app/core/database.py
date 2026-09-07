@@ -17,7 +17,14 @@ engine = create_engine(
     pool_size=10,
     max_overflow=20,
 )
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,   # M01 金标准对齐（spec §五「独立 session 执行」）：commit 后不 expire，
+                              # TaskWorker expunge 后 detached 实例可安全读已加载列——否则 _execute_task
+                              # 首次访问 task.task_code 即 DetachedInstanceError（调度执行体从未真正跑过）
+    bind=engine,
+)
 
 
 def ensure_schema_compatibility():
