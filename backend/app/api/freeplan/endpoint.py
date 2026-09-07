@@ -171,7 +171,9 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             # ===== 批9 模板直出管道 v1：路由后 Agent 前判定（问五）=====
             # sim≥0.95 且 count 类且无动态条件 -> 绕过 Agent 直接执行验证 SQL（0 LLM 轮，目标 2~4s）；
             # 执行报错自动回退完整 Agent 路径（用户无感，只是变慢）；与批2-C 首选计划分层共存。
-            if _contract is not None and getattr(_route, "route_type", "") == "generic":
+            # 批16-A：外门与 evaluate_direct_eligibility 内门同步放开 scenario（实施发现第二道门：
+            # plan 原记「一处条件」漏计此处——e2e 暴露，COUNT 场景题曾仍走 Agent 工作流）。
+            if _contract is not None and getattr(_route, "route_type", "") in ("generic", "scenario"):
                 _dp_plan = None
                 try:
                     from app.services.direct_pipeline import evaluate_direct_eligibility
