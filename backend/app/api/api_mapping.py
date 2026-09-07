@@ -265,11 +265,28 @@ def list_entity_api_mappings(entity_id: Optional[str] = Query(None), db: Session
     return {"code": 200, "data": [_serialize_mapping(m) for m in items], "count": len(items)}
 
 
+def _validate_pseudo_sql_no_where(pseudo_sql: Optional[str]) -> None:
+    """M07 金标准对齐：spec §八.2——pseudo_sql 模板禁含 WHERE 子句（过滤由调用期
+    build_sql_with_filters 动态拼装），模板含 WHERE 会与动态过滤冲突/构成注入面。
+    变异锚点：本校验删除 → 含 WHERE 的模板破坏安全边界。"""
+    if not pseudo_sql or not pseudo_sql.strip():
+        return
+    # 词法级检测（不执行）：剔除字符串字面量后匹配独立 WHERE 关键字
+    import re
+    stripped = re.sub(r"'([^']|'')*'", "''", pseudo_sql)  # 字符串字面量占位
+    if re.search(r"\bWHERE\b", stripped, flags=re.IGNORECASE):
+        raise HTTPException(
+            status_code=400,
+            detail="pseudo_sql 模板不允许包含 WHERE 子句（过滤条件由调用期动态下推，spec §八.2）",
+        )
+
+
 @router.post("/entity-api-mappings")
 def create_entity_api_mapping(payload: EntityApiMappingCreate, db: Session = Depends(get_db)):
     existing = db.query(EntityApiMapping).filter(EntityApiMapping.entity_id == payload.entity_id).first()
     if existing:
         raise HTTPException(status_code=400, detail="该对象已存在API映射，请编辑而非新增")
+    _validate_pseudo_sql_no_where(payload.pseudo_sql)
     m = EntityApiMapping(
         name=payload.name, entity_id=payload.entity_id, api_endpoint_ids=payload.api_endpoint_ids,
         field_mappings=payload.field_mappings, pseudo_sql=payload.pseudo_sql, description=payload.description,
@@ -312,6 +329,8 @@ def update_entity_api_mapping(m_id: str, payload: EntityApiMappingUpdate, db: Se
     m = db.query(EntityApiMapping).filter(EntityApiMapping.id == m_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="对象API映射不存在")
+    if payload.pseudo_sql is not None:
+        _validate_pseudo_sql_no_where(payload.pseudo_sql)
     data = payload.dict(exclude_unset=True)
     for k, v in data.items():
         setattr(m, k, v)
