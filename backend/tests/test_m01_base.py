@@ -14,17 +14,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # 验收标准映射（M01 spec §七，2026-09-08 测试补全）：
 # §七.1 冷启动 83 表/5 类种子/重启幂等/可登录可管理 → test_init_db_idempotent +
 #       test_schema_compat_idempotent（本文件）；可登录可管理 → test_m02_auth.py
-#       既有权限链/dev-login 测；冷启动 83 表建 → test_full_create_all_83_tables（本次补，本文件）
-# §七.2 外部依赖全断降级 → 缺口（本次补：test_lifespan_degrades_external_deps_down，本文件）
-# §七.3 ENABLE_AUTH=1 且缺安全三件套 fail-fast → 缺口（本次补：
-#       test_failfast_missing_security_triplet，本文件；test_m02_auth.py 既有测为
-#       端点级 dev-login 门，非启动 fail-fast，不构成 §七.3 锚定）
+#       既有权限链/dev-login 测；冷启动 83 表建 → test_full_create_all_83_tables_no_conflict（本次补，本文件）
+# §七.2 外部依赖全断降级 → test_lifespan_degrades_external_deps_down（本次补，本文件）
+# §七.3 ENABLE_AUTH=1 且缺安全三件套 fail-fast → test_failfast_missing_security_triplet
+#       （本次补，本文件；test_m02_auth.py 既有测为端点级 dev-login 门，
+#       非启动 fail-fast，不构成 §七.3 锚定）
 # §七.4 TaskWorker 优先级/重试上限/周期钩子 → test_task_worker_priority_consumption +
 #       test_periodic_hook_interval（本文件）+ test_retry_semantics_bounded
-#       （test_m14_scheduler.py，源码级）；重试上限行为级 → 缺口（本次补：
-#       test_task_worker_retry_cap，本文件）
-# §七.5 全表 create_all 无冲突/模型注册集中 main.py → 缺口（本次补：
-#       test_full_create_all_83_tables，本文件）
+#       （test_m14_scheduler.py，源码级）；重试上限行为级 → test_task_worker_retry_cap（本次补，本文件）
+# §七.5 全表 create_all 无冲突/模型注册集中 main.py → test_full_create_all_83_tables_no_conflict（本次补，本文件）
 # ---------------------------------------------------------------------------
 
 import pytest  # noqa: E402
