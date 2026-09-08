@@ -70,9 +70,11 @@ def create_concept(concept: ConceptCreate, db: Session = Depends(get_db)):
     data["system_names"] = _normalize_system_names(data.get("system_names")) if concept.level == 3 else None
     if not data.get("area_index"):
         if concept.level in [0, 1]:
-            # 根下新增顶层节点默认同序递增
-            max_area = db.query(Concept).filter(Concept.level == concept.level).count()
-            data["area_index"] = max_area + 1
+            # 根下新增顶层节点默认同序递增（spec §二/§七.1：同级 max+1——删除后不复用空位，防撞号）
+            max_area = db.query(func.max(Concept.area_index)).filter(
+                Concept.level == concept.level
+            ).scalar()
+            data["area_index"] = (max_area or 0) + 1
         else:
             parent = db.query(Concept).filter(Concept.id == data.get("parent_id")).first()
             data["area_index"] = parent.area_index if parent else 1
