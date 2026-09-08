@@ -204,6 +204,7 @@ def test_endpoint(ep_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         return {"code": 500, "data": {"error": str(e)}}
     # 批2：采样定 dtype 写入 columns（仅对未显式设 dtype 的列；数值 SUM 从此正确）
+    # JSON 列内 dict 原地改不触发 SQLAlchemy 脏标记，须整列重赋值才会持久化
     sugg = result.get("dtype_suggestions") or {}
     if sugg and isinstance(ep.columns, list):
         changed = False
@@ -212,6 +213,11 @@ def test_endpoint(ep_id: str, db: Session = Depends(get_db)):
                 col["dtype"] = sugg[col["name"]]
                 changed = True
         if changed:
+            # JSON 列内 dict 原地改会同时污染 SQLAlchemy 的提交快照（同一 list 对象），
+            # 之后任何含 dtype 的新赋值都与被污染旧值相等 → 净变更为零 → commit 空转。
+            # 须用 flag_modified 显式标记脏才会发出 UPDATE（探针实证）。
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(ep, "columns")
             db.commit()
             db.refresh(ep)
     result["dtype_suggestions"] = sugg

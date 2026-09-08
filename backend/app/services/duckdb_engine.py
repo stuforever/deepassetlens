@@ -559,7 +559,7 @@ def _call_api(meta: Dict[str, Any], filters: Dict[str, Any], use_cache: bool = T
         info["snapshot_at"] = time.time()
     else:
         info["source"] = "api"
-    if warnings and info.get("warnings"):
+    if warnings is not None and info.get("warnings"):
         warnings.extend(info["warnings"])
     return df, info
 
