@@ -87,6 +87,8 @@ Checkpointer：AsyncSqliteSaver（data/deepagent_checkpoints.db）——HITL/记
 **偏差登记**：
 | 日期 | 差异 | 处置 |
 |---|---|---|
+| 2026-09-08 | 批次核验通过（验证-对齐主路径）：capability_config 锚点与 spec §九对齐（红线 W1_REDLINE_EXCLUSIONS 5 件/锁定 W1_LOCKED_TOOLS 3 件含 task/换算公式 L229/DecisionGate 基准四件/评分枚举校验）；补测 10 条全绿（白名单换算 excluded=红线∪(勾选域−allowed) 默认全勾=红线 5 件+locked 三件展示/cap_enabled 未知名 True 登记语义/DecisionGate 基准四件/rubric mode 非法值拒/_DATA_QUERY_TOOLS/FinalDelivery+FinalFinding pydantic/SQL 纠错双函数/files_hash 稳定/capabilities 6 端点 manifest+probe+events+reset） | plan 任务 1-4 验证-对齐完成；真装配（DeepAgent 实例/三因子缓存重建/fail-safe 回退）依赖框架与 LLM 留联测；rubric M20 联测留批次 4 |
+| 2026-09-08 | 测试锚点：get_tool_exclusions 返回形状为 `{excluded:[...],locked:[read_file,ls,task]}` 单层双键（spec §四文字「锁定件前端灰显、PATCH 强制保留」对应 locked 键展示——锁定语义在 get_tool_allowance 侧强制） | 测试按真实形状锚定；LOCKED_TOOL_EXCLUSIONS 模块常量（L162）=read_file/ls 而 W1_LOCKED_TOOLS 含 task——以 W1_LOCKED_TOOLS 为锁定全集 |
 | —— | —— | —— |
 
 ## 九、证据锚点
