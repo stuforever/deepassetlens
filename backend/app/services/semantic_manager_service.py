@@ -26,7 +26,7 @@ def create_time_norm(db: Session, word: str, time_code: str):
 
 
 def update_time_norm(db: Session, item_id: str, word: str = None, time_code: str = None):
-    item = db.query(SemanticTimeNorm).filter(SemanticTimeNorm.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticTimeNorm).filter(SemanticTimeNorm.id == str(uuid.UUID(item_id))).first()
     if not item:
         return None
     if word is not None:
@@ -39,7 +39,7 @@ def update_time_norm(db: Session, item_id: str, word: str = None, time_code: str
 
 
 def delete_time_norm(db: Session, item_id: str):
-    item = db.query(SemanticTimeNorm).filter(SemanticTimeNorm.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticTimeNorm).filter(SemanticTimeNorm.id == str(uuid.UUID(item_id))).first()
     if not item:
         return False
     db.delete(item)
@@ -68,7 +68,7 @@ def create_time_cypher_map(db: Session, time_code: str, cypher_expr: str):
 
 
 def update_time_cypher_map(db: Session, item_id: str, time_code: str = None, cypher_expr: str = None):
-    item = db.query(SemanticTimeCypherMap).filter(SemanticTimeCypherMap.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticTimeCypherMap).filter(SemanticTimeCypherMap.id == str(uuid.UUID(item_id))).first()
     if not item:
         return None
     if time_code is not None:
@@ -81,7 +81,7 @@ def update_time_cypher_map(db: Session, item_id: str, time_code: str = None, cyp
 
 
 def delete_time_cypher_map(db: Session, item_id: str):
-    item = db.query(SemanticTimeCypherMap).filter(SemanticTimeCypherMap.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticTimeCypherMap).filter(SemanticTimeCypherMap.id == str(uuid.UUID(item_id))).first()
     if not item:
         return False
     db.delete(item)
@@ -107,7 +107,7 @@ def create_intent_norm(db: Session, word: str, standard: str):
 
 
 def update_intent_norm(db: Session, item_id: str, word: str = None, standard: str = None):
-    item = db.query(SemanticIntentNorm).filter(SemanticIntentNorm.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticIntentNorm).filter(SemanticIntentNorm.id == str(uuid.UUID(item_id))).first()
     if not item:
         return None
     if word is not None:
@@ -120,7 +120,7 @@ def update_intent_norm(db: Session, item_id: str, word: str = None, standard: st
 
 
 def delete_intent_norm(db: Session, item_id: str):
-    item = db.query(SemanticIntentNorm).filter(SemanticIntentNorm.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticIntentNorm).filter(SemanticIntentNorm.id == str(uuid.UUID(item_id))).first()
     if not item:
         return False
     db.delete(item)
@@ -146,7 +146,7 @@ def create_explode_norm(db: Session, phrase: str, agg_hint: str, time_field: str
 
 
 def update_explode_norm(db: Session, item_id: str, phrase: str = None, agg_hint: str = None, time_field: str = None):
-    item = db.query(SemanticExplodeNorm).filter(SemanticExplodeNorm.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticExplodeNorm).filter(SemanticExplodeNorm.id == str(uuid.UUID(item_id))).first()
     if not item:
         return None
     if phrase is not None:
@@ -161,7 +161,7 @@ def update_explode_norm(db: Session, item_id: str, phrase: str = None, agg_hint:
 
 
 def delete_explode_norm(db: Session, item_id: str):
-    item = db.query(SemanticExplodeNorm).filter(SemanticExplodeNorm.id == uuid.UUID(item_id)).first()
+    item = db.query(SemanticExplodeNorm).filter(SemanticExplodeNorm.id == str(uuid.UUID(item_id))).first()
     if not item:
         return False
     db.delete(item)
@@ -417,7 +417,7 @@ def create_cypher_template(db: Session, template_name: str, template_text: str, 
 
 
 def update_cypher_template(db: Session, item_id: str, template_name: str = None, template_text: str = None, description: str = None):
-    item = db.query(CypherTemplate).filter(CypherTemplate.id == uuid.UUID(item_id)).first()
+    item = db.query(CypherTemplate).filter(CypherTemplate.id == str(uuid.UUID(item_id))).first()
     if not item:
         return None
     if template_name is not None:
@@ -432,7 +432,7 @@ def update_cypher_template(db: Session, item_id: str, template_name: str = None,
 
 
 def delete_cypher_template(db: Session, item_id: str):
-    item = db.query(CypherTemplate).filter(CypherTemplate.id == uuid.UUID(item_id)).first()
+    item = db.query(CypherTemplate).filter(CypherTemplate.id == str(uuid.UUID(item_id))).first()
     if not item:
         return False
     db.delete(item)
@@ -458,7 +458,7 @@ def create_graph_schema(db: Session, field_name: str, field_type: str = "node", 
 
 
 def update_graph_schema(db: Session, item_id: str, field_name: str = None, field_type: str = None, description: str = None):
-    item = db.query(GraphSchema).filter(GraphSchema.id == uuid.UUID(item_id)).first()
+    item = db.query(GraphSchema).filter(GraphSchema.id == str(uuid.UUID(item_id))).first()
     if not item:
         return None
     if field_name is not None:
@@ -473,7 +473,7 @@ def update_graph_schema(db: Session, item_id: str, field_name: str = None, field
 
 
 def delete_graph_schema(db: Session, item_id: str):
-    item = db.query(GraphSchema).filter(GraphSchema.id == uuid.UUID(item_id)).first()
+    item = db.query(GraphSchema).filter(GraphSchema.id == str(uuid.UUID(item_id))).first()
     if not item:
         return False
     db.delete(item)

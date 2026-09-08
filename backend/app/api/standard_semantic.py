@@ -316,8 +316,9 @@ def list_stop_words_api(db: Session = Depends(get_db)):
             {
                 "id": str(i.id),
                 "word": i.word,
-                "word_type": i.word_type,
-                "priority": i.priority,
+                "category": i.category,
+                "enabled": bool(i.enabled),
+                "description": i.description,
                 "created_at": i.created_at.isoformat() if i.created_at else None,
             }
             for i in items
@@ -328,11 +329,11 @@ def list_stop_words_api(db: Session = Depends(get_db)):
 @router.post("/standard-semantics/stop-words")
 def create_stop_word_api(payload: dict, db: Session = Depends(get_db)):
     word = payload.get("word")
-    word_type = payload.get("word_type", "通用")
-    priority = payload.get("priority", 0)
+    category = payload.get("category", "filler")
+    description = payload.get("description")
     if not word:
         raise HTTPException(status_code=400, detail="word is required")
-    item = CommonStopWord(word=word, word_type=word_type, priority=priority)
+    item = CommonStopWord(word=word, category=category, description=description)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -366,13 +367,13 @@ class GraphSchemaCreateRequest(BaseModel):
 def list_cypher_templates_api(db: Session = Depends(get_db)):
     from ..services.semantic_manager_service import list_cypher_templates
     items = list_cypher_templates(db)
-    return {"code": 200, "data": [{"id": str(i.id), "template_name": i.template_name, "cypher_pattern": i.cypher_pattern, "description": i.description} for i in items]}
+    return {"code": 200, "data": [{"id": str(i.id), "template_name": i.template_name, "cypher_pattern": i.template_text, "description": i.description} for i in items]}
 
 
 @router.post("/nl2cypher/cypher-templates")
 def create_cypher_template_api(payload: CypherTemplateCreateRequest, db: Session = Depends(get_db)):
     from ..services.semantic_manager_service import create_cypher_template
-    item, exists = create_cypher_template(db, template_name=payload.template_name, cypher_pattern=payload.cypher_pattern, description=payload.description)
+    item, exists = create_cypher_template(db, template_name=payload.template_name, template_text=payload.cypher_pattern, description=payload.description)
     if exists:
         return {"code": 409, "data": {"id": str(item.id), "message": "模板已存在"}}
     return {"code": 200, "data": {"id": str(item.id), "template_name": item.template_name}}

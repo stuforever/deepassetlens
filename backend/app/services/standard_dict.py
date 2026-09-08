@@ -30,7 +30,7 @@ def create_standard_dict(db: Session, non_standard: str, standard: str, category
 
 
 def update_standard_dict(db: Session, item_id: str, non_standard: str = None, standard: str = None, category: str = None, enabled: bool = None, description: str = None):
-    item = db.query(StandardDict).filter(StandardDict.id == uuid.UUID(item_id)).first()
+    item = db.query(StandardDict).filter(StandardDict.id == str(uuid.UUID(item_id))).first()
     if not item:
         return None
     if non_standard is not None:
@@ -49,7 +49,7 @@ def update_standard_dict(db: Session, item_id: str, non_standard: str = None, st
 
 
 def delete_standard_dict(db: Session, item_id: str):
-    item = db.query(StandardDict).filter(StandardDict.id == uuid.UUID(item_id)).first()
+    item = db.query(StandardDict).filter(StandardDict.id == str(uuid.UUID(item_id))).first()
     if not item:
         return False
     db.delete(item)

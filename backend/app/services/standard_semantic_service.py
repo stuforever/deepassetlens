@@ -379,6 +379,7 @@ def vectorize_terms(
         if not vec or len(vec) == 0:
             t.vector_status = "failed"
             t.last_error = "Empty embedding"
+            t.retry_count = (t.retry_count or 0) + 1
             failed_count += 1
             continue
         try:
@@ -413,6 +414,7 @@ def vectorize_terms(
         except Exception as e:
             t.vector_status = "failed"
             t.last_error = str(e)[:500]
+            t.retry_count = (t.retry_count or 0) + 1
             failed_count += 1
 
     qdrant_result: Dict[str, Any] = {}
@@ -437,6 +439,7 @@ def vectorize_terms(
             for t in qdrant_terms:
                 t.vector_status = "failed"
                 t.last_error = err
+                t.retry_count = (t.retry_count or 0) + 1
             failed_count += len(qdrant_terms)
             qdrant_result = {"ok": False, "error": err}
 
