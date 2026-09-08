@@ -70,6 +70,8 @@
 **偏差登记**：
 | 日期 | 差异 | 处置 |
 |---|---|---|
+| 2026-09-08 | 批次核验通过（验证-对齐主路径）：doris_config 8 端点+engine_health 三探针/_PROBES 注册表/TTL 60/锁/probe·snapshot·invalidate 与 spec §九锚点逐一对齐；两表列契约全对（单例默认 port 9030/catalog 三型含 es P4 列）；补测 7 条全绿（单例默认值/catalog 列契约/默认行构建/jdbc·es 参数校验矩阵 400/重名 400/探针 TTL 缓存+force 穿透/snapshot 三引擎汇总） | plan 任务 1-4 验证-对齐完成；Doris 侧真值操作（建/探/刷/删 catalog 真连接）与 M06/M21 联测留批次 4 |
+| 2026-09-08 | 测试锚点：_PROBES 注册表模块加载时绑定函数引用——monkeypatch 须 patch 字典值（setitem）而非模块属性 | 测试按实现结构锚定（注册表为加载期常量属合理设计，非缺陷） |
 | —— | —— | —— |
 
 ## 九、证据锚点
