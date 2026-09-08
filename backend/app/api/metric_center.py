@@ -617,6 +617,9 @@ def submit_metric(metric_id: str, payload: WorkflowActionRequest, db: Session = 
     m = db.query(Metric).filter(Metric.id == mid).first()
     if not m:
         raise HTTPException(status_code=404, detail="指标不存在")
+    # M10 金标准对齐：spec §三审批状态机——非法迁移 400（draft 才可 submit）
+    if (m.status or "").strip() not in ("draft", ""):
+        raise HTTPException(status_code=400, detail=f"非法状态迁移：submit 要求 draft，当前 {m.status}")
     m.status = "reviewing"
     db.commit()
     _snapshot_and_store(db, m, payload.operator, "submit")
@@ -629,6 +632,9 @@ def approve_metric(metric_id: str, payload: WorkflowActionRequest, db: Session =
     m = db.query(Metric).filter(Metric.id == mid).first()
     if not m:
         raise HTTPException(status_code=404, detail="指标不存在")
+    # M10 金标准对齐：reviewing 才可 approve
+    if (m.status or "").strip() != "reviewing":
+        raise HTTPException(status_code=400, detail=f"非法状态迁移：approve 要求 reviewing，当前 {m.status}")
     m.status = "approved"
     m.reviewer_user = payload.operator
     db.commit()
@@ -642,6 +648,9 @@ def reject_metric(metric_id: str, payload: WorkflowActionRequest, db: Session = 
     m = db.query(Metric).filter(Metric.id == mid).first()
     if not m:
         raise HTTPException(status_code=404, detail="指标不存在")
+    # M10 金标准对齐：reviewing 才可 reject（回 draft 附原因）
+    if (m.status or "").strip() != "reviewing":
+        raise HTTPException(status_code=400, detail=f"非法状态迁移：reject 要求 reviewing，当前 {m.status}")
     m.status = "draft"
     db.commit()
     db.add(
@@ -663,6 +672,9 @@ def publish_metric(metric_id: str, payload: WorkflowActionRequest, db: Session =
     m = db.query(Metric).filter(Metric.id == mid).first()
     if not m:
         raise HTTPException(status_code=404, detail="指标不存在")
+    # M10 金标准对齐：approved 才可 publish（防 draft/approved 前态直发）
+    if (m.status or "").strip() != "approved":
+        raise HTTPException(status_code=400, detail=f"非法状态迁移：publish 要求 approved，当前 {m.status}")
     m.status = "published"
     m.search_text = _build_search_text(m, db)
     db.commit()
