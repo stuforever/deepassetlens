@@ -122,3 +122,89 @@ def test_batch_merges_exact_like_vector():
     r = out["results"][0]
     for key in ("entities", "fields", "hit", "log"):
         assert key in r  # 与单查返回同构（含 fields）+ 批量自有 hit/miss 状态
+
+
+# ---------------------------------------------------------------------------
+# 任务 3：单查接缓存 + 失效接线
+# ---------------------------------------------------------------------------
+
+def test_single_query_cache_roundtrip(monkeypatch):
+    """_kg_search_entities 二次同查走缓存：向量/embedding 不再被调（spec 件①：
+    重复查询 ms 级）。变异锚点：单查顶部没接 cache_lookup → embed 被再次调 → 红。"""
+    _clear_lookup_cache()
+    from app.services import kg_action_handlers as kah
+    calls = {"n": 0}
+    def _fake_embed(db, texts, model_name=None):
+        calls["n"] += 1
+        return [[0.1] * 8 for _ in texts]
+    import app.services.semantic_retrieval as sr
+    monkeypatch.setattr(sr, "embed_texts", _fake_embed)
+    q = {"keyword": "缓存往返测试实体xyz"}
+    r1 = kah._kg_search_entities(dict(q), "00:00:01")
+    n_after_first = calls["n"]
+    r2 = kah._kg_search_entities(dict(q), "00:00:02")
+    assert calls["n"] == n_after_first          # 二次同查零 embedding
+    assert r2.get("cache_hit") is True
+
+
+def test_invalidate_wired_in_write_endpoints():
+    """写端点接线（spec 件①失效）：8 个写端点源码均含 invalidate 调用（plan 计 9 系
+    把 upload_source_fields 与「Excel/CSV 字段导入端点」重复计——实测两者同一端点，
+    upload.py 实为 4 个）。变异锚点：任一写端点漏接线 → 对应源码断言红。"""
+    import inspect
+    from app.api import entity_relation_manage as erm, upload as up
+    erm_src = inspect.getsource(erm)
+    for fn in ("create_entity_relation_item", "update_entity_relation_item",
+               "delete_entity_relation_item", "import_entity_relations_excel"):
+        assert "invalidate_entity_lookup_cache" in erm_src
+    up_src = inspect.getsource(up)
+    for fn in ("upload_source_fields", "create_source_field", "update_source_field",
+               "delete_source_field"):
+        assert "invalidate_entity_lookup_cache" in up_src
+
+
+def test_batch_vector_hit_fact_enriched(monkeypatch):
+    """控制者授权追加（任务 3）：_fact 事实源补齐修复——批量向量命中实体的 entities 行
+    en_name/description 从 kg_entities 补齐（与单查向量路径「事实源补齐」同构承诺）。
+    变异锚点：归组输出不读 _fact（只写不读死数据）→ 断言红。"""
+    _clear_lookup_cache()
+    from app.core.database import SessionLocal
+    from sqlalchemy import text
+    from app.services import kg_action_handlers as kah
+    import app.services.semantic_retrieval as sr
+    cid, code, kw = "t3-fact-fix-concept", "T3_FACT_FIX_ENT", "任务三向量事实源锚定词xyz"
+    db = SessionLocal()
+    try:
+        db.execute(text("DELETE FROM kg_entities WHERE entity_code = :c"), {"c": code})
+        db.execute(text("DELETE FROM kg_concepts WHERE id = :i"), {"i": cid})
+        db.execute(text(
+            "INSERT INTO kg_concepts (id, name, level, area_index, sort_order) "
+            "VALUES (:i, :n, 1, 1, 9999)"), {"i": cid, "n": "任务3事实源测试概念"})
+        db.execute(text(
+            "INSERT INTO kg_entities (id, concept_id, entity_code, entity_name, entity_en_name, "
+            "description, is_main_table, source_mode, sort_order) "
+            "VALUES (:i, :cid, :c, :n, :en, :d, 0, 'physical_table', 9999)"),
+            {"i": "t3-fact-fix-entity", "cid": cid, "c": code, "n": "任务3事实源测试实体",
+             "en": "t3_fact_fix_entity", "d": "任务3事实源补齐锚点描述"})
+        db.commit()
+
+        def _fake_embed(db_, texts, model_name=None):
+            return [[0.1] * 8 for _ in texts]
+        monkeypatch.setattr(sr, "embed_texts", _fake_embed)
+        monkeypatch.setattr(kah, "search_entity_vectors",
+                            lambda q, top_k=10, db=None, vec=None:
+                            [{"code": code, "name": "任务3事实源测试实体", "score": 0.9}])
+        out = kah._kg_search_entities_batch({"keywords": [kw]}, "00:00:00")
+        r = out["results"][0]
+        vec_rows = [e for e in r["entities"] if e["entity_code"] == code]
+        assert vec_rows, "向量命中实体未出现在 batch 结果"
+        e = vec_rows[0]
+        assert e["entity_en_name"] == "t3_fact_fix_entity"   # 修复前为空串 → 红
+        assert e["description"] == "任务3事实源补齐锚点描述"   # 修复前为空串 → 红
+    finally:
+        db.execute(text("DELETE FROM kg_entities WHERE entity_code = :c"), {"c": code})
+        db.execute(text("DELETE FROM kg_concepts WHERE id = :i"), {"i": cid})
+        db.commit()
+        db.close()
+        from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+        invalidate_entity_lookup_cache()

@@ -155,6 +155,8 @@ async def upload_source_fields(
             db.add(record)
 
         db.commit()
+        from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+        invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
         return {"message": "Success", "imported_count": len(imported_records), "cleared_existing": clear_existing}
     except ValueError as ve:
         # 自定义的业务异常抛出 400，让前端明确显示
@@ -228,6 +230,8 @@ def create_source_field(field_data: SourceFieldCreate, db: Session = Depends(get
     record = SourceFieldImport(**field_data.dict())
     db.add(record)
     db.commit()
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
     db.refresh(record)
     return {"code": 200, "data": record}
 
@@ -242,6 +246,8 @@ def update_source_field(field_id: str, field_data: SourceFieldUpdate, db: Sessio
         setattr(record, key, value)
         
     db.commit()
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
     db.refresh(record)
     return {"code": 200, "data": record}
 
@@ -253,4 +259,6 @@ def delete_source_field(field_id: str, db: Session = Depends(get_db)):
     
     db.delete(record)
     db.commit()
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
     return {"code": 200, "message": "Success"}

@@ -326,6 +326,12 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
     from sqlalchemy import text
     keyword = (body.get("keyword") or "").strip()
     entity_code = (body.get("entity_code") or "").strip()
+    # 件①（2026-09-09）：缓存命中直返（零向量零重查）；读写失败降级直查（cache 层内兜）
+    from app.services.entity_lookup_cache import cache_lookup, cache_store
+    _ck, _kind = (entity_code, "entity_code") if entity_code else (keyword, "keyword")
+    _cached = cache_lookup(_ck, _kind) if _ck else None
+    if _cached is not None:
+        return {**_cached, "cache_hit": True}
     db = SessionLocal()
     try:
         if entity_code:
@@ -338,8 +344,10 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
             if not row:
                 return {"entity_code": entity_code, "attributes": [], "error": "实体不存在"}
             attrs = _entity_attrs(row[4])
-            return {"entity_code": row[0], "entity_name": row[1] or "", "entity_en_name": row[2] or "",
-                    "description": row[3] or "", "attributes": attrs,
+            _hit = {"entity_code": row[0], "entity_name": row[1] or "", "entity_en_name": row[2] or "",
+                    "description": row[3] or "", "attributes": attrs}
+            cache_store(entity_code, "entity_code", _hit)   # 件①回写（剔除 log）
+            return {**_hit,
                     "log": f"[{_ts}] 查实体「{entity_code}」数据字典：共 {len(attrs)} 个属性（物理表名: {row[2] or '未知'}）"}
         elif keyword:
             # 批8 三级融合检索：①精确（entity_code/en_name 全等，直返）→ ②LIKE（现状保留）
@@ -369,11 +377,13 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
                     "SELECT DISTINCT table_en, table_cn, field_en, field_cn "
                     "FROM kg_source_field_imports WHERE field_cn LIKE :kw OR field_en LIKE :kw OR table_cn LIKE :kw LIMIT 20"
                 ), {"kw": f"%{keyword}%"}).fetchall()
-                return {
+                _hit = {
                     "entities": entities,
                     "fields": [{"table_en": r[0], "table_cn": r[1] or "", "field_en": r[2], "field_cn": r[3] or ""} for r in field_rows],
-                    "log": f"[{_ts}] 搜实体/字段「{keyword}」：精确命中 {len(entities)} 个实体",
                 }
+                cache_store(keyword, "keyword", _hit)   # 件①回写（剔除 log）
+                return {**_hit,
+                        "log": f"[{_ts}] 搜实体/字段「{keyword}」：精确命中 {len(entities)} 个实体"}
             # ② 关键词 LIKE（现状逻辑保留）
             rows = db.execute(text(
                 "SELECT entity_code, entity_name, entity_en_name, description FROM kg_entities "
@@ -423,16 +433,18 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
             _mt_counts = {}
             for e in entities:
                 _mt_counts[e["match_type"]] = _mt_counts.get(e["match_type"], 0) + 1
-            return {
+            _hit = {
                 "entities": entities,
                 "fields": [
                     {"table_en": r[0], "table_cn": r[1] or "", "field_en": r[2], "field_cn": r[3] or ""}
                     for r in field_rows
                 ],
-                "log": (f"[{_ts}] 搜实体/字段「{keyword}」：命中 {len(entities)} 个实体"
-                        f"（exact={_mt_counts.get('exact', 0)}/like={_mt_counts.get('like', 0)}"
-                        f"/vector={_mt_counts.get('vector', 0)}）、{len(field_rows)} 个源字段"),
             }
+            cache_store(keyword, "keyword", _hit)   # 件①回写（剔除 log）
+            return {**_hit,
+                    "log": (f"[{_ts}] 搜实体/字段「{keyword}」：命中 {len(entities)} 个实体"
+                            f"（exact={_mt_counts.get('exact', 0)}/like={_mt_counts.get('like', 0)}"
+                            f"/vector={_mt_counts.get('vector', 0)}）、{len(field_rows)} 个源字段")}
         else:
             rows = db.execute(text(
                 "SELECT entity_code, entity_name, entity_en_name FROM kg_entities ORDER BY sort_order LIMIT 50"
@@ -511,6 +523,7 @@ def _kg_search_entities_batch(body: dict, _ts: str) -> dict:
                         kw_rows.setdefault(kw, []).append(r)
         # ── ③未命中（SQL 零行）keywords：收拢一次 embedding 数组调用 + Qdrant ──
         vec_kw = [kw for kw in miss_kw if not kw_rows.get(kw)]
+        _fact = {}   # 事实源补齐表（code→kg_entities 行）；向量段异常时保持空 dict，输出段安全降级
         if vec_kw:
             import os as _os_b2
             # 单查同款阈值（设计预估 0.6；实测 bge 中文短查询对「配电变压器*台账」最高仅 ~0.50，
@@ -537,7 +550,6 @@ def _kg_search_entities_batch(body: dict, _ts: str) -> dict:
                             kw_rows.setdefault(_owning_kw(vec_kw, variants, i), []).append(
                                 (h.get("code") or "", h.get("name") or "", "", None))
                 # 事实源补齐：向量命中的实体从 MySQL 批量取全字段（一次往返）
-                _fact = {}
                 _codes = {r[0] for rows_ in kw_rows.values() for r in rows_ if r[0]}
                 if _codes:
                     for r in db.execute(text(
@@ -552,8 +564,14 @@ def _kg_search_entities_batch(body: dict, _ts: str) -> dict:
             if any(r.get("keyword") == kw for r in results):
                 continue
             rows_ = kw_rows.get(kw) or []
-            entities = [{"entity_code": r[0], "entity_name": r[1] or "", "entity_en_name": r[2] or "",
-                         "description": (r[3] or "") if r[3] else "", "match_type": "batch"} for r in rows_[:20]]
+            entities = []
+            for _r in rows_[:20]:
+                # 件②修复（2026-09-09 任务 3 授权）：向量 4 元组 (code,name,"",None) 从 _fact 补齐 en_name/description
+                _f = _fact.get(_r[0]) if _r[0] else None
+                if _f is not None and _r[3] is None:
+                    _r = _f
+                entities.append({"entity_code": _r[0], "entity_name": _r[1] or "", "entity_en_name": _r[2] or "",
+                                 "description": _r[3] or "", "match_type": "batch"})
             fr = db.execute(text(
                 "SELECT DISTINCT table_en, table_cn, field_en, field_cn FROM kg_source_field_imports "
                 "WHERE field_cn LIKE :kw OR field_en LIKE :kw OR table_cn LIKE :kw LIMIT 20"

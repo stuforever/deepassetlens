@@ -458,6 +458,8 @@ def create_entity_relation_item(payload: RelationManagerUpsert, db: Session = De
     relation = EntityRelation(**_relation_payload(payload, source_entity, target_entity))
     db.add(relation)
     db.commit()
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
     db.refresh(relation)
     return {"code": 200, "message": "success", "data": {"id": str(relation.id)}}
 
@@ -505,6 +507,8 @@ def update_entity_relation_item(relation_id: str, payload: RelationManagerUpsert
     for key, value in _relation_payload(payload, source_entity, target_entity).items():
         setattr(db_relation, key, value)
     db.commit()
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
     return {"code": 200, "message": "success"}
 
 
@@ -516,6 +520,8 @@ def delete_entity_relation_item(relation_id: str, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Relation not found")
     db.delete(db_relation)
     db.commit()
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
     return {"code": 200, "message": "success"}
 
 
@@ -644,6 +650,8 @@ async def import_entity_relations_excel(file: UploadFile = File(...), db: Sessio
             skipped_rows.append(f"第{idx + 2}行: {str(exc)}")
 
     db.commit()
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()   # 件①：实体/元数据写后全表清空（失败不阻断）
     return {
         "code": 200,
         "message": "success",

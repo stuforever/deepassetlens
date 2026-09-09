@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*-
 """test_batch8_hybrid.py - 批8 search_entities 三级融合检索单测"""
+import pytest
+
 from app.services.kg_action_handlers import dispatch_kg_action
+
+
+@pytest.fixture(autouse=True)
+def _clear_lookup_cache_batch8():
+    """件①缓存接线（2026-09-09 任务 3）后的测试卫生：search_entities 单查会回写
+    kg_entity_lookup_cache，同 keyword 跨测串扰（本文件 test_like_hits 与
+    test_qdrant_down 同用「用电客户」，前者缓存命中含 vector 行会污染后者的
+    降级断言）。每测前置清空，恢复缓存接线前的隔离语义。"""
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()
+    yield
 
 
 class TestSynonymExpansion:
