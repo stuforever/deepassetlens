@@ -145,22 +145,22 @@ def test_single_query_cache_roundtrip(monkeypatch):
     r2 = kah._kg_search_entities(dict(q), "00:00:02")
     assert calls["n"] == n_after_first          # 二次同查零 embedding
     assert r2.get("cache_hit") is True
+    _clear_lookup_cache()                       # 收口（任务 6）：残留缓存行防跨文件串扰
 
 
 def test_invalidate_wired_in_write_endpoints():
     """写端点接线（spec 件①失效）：8 个写端点源码均含 invalidate 调用（plan 计 9 系
     把 upload_source_fields 与「Excel/CSV 字段导入端点」重复计——实测两者同一端点，
-    upload.py 实为 4 个）。变异锚点：任一写端点漏接线 → 对应源码断言红。"""
+    upload.py 实为 4 个）。变异锚点：任一写端点漏接线 → 该函数源码断言红
+    （inspect.getsource 逐函数断言——2026-09-09 任务 6 收口：整文件断言无法定位漏接线端点）。"""
     import inspect
     from app.api import entity_relation_manage as erm, upload as up
-    erm_src = inspect.getsource(erm)
     for fn in ("create_entity_relation_item", "update_entity_relation_item",
                "delete_entity_relation_item", "import_entity_relations_excel"):
-        assert "invalidate_entity_lookup_cache" in erm_src
-    up_src = inspect.getsource(up)
+        assert "invalidate_entity_lookup_cache" in inspect.getsource(getattr(erm, fn)), fn
     for fn in ("upload_source_fields", "create_source_field", "update_source_field",
                "delete_source_field"):
-        assert "invalidate_entity_lookup_cache" in up_src
+        assert "invalidate_entity_lookup_cache" in inspect.getsource(getattr(up, fn)), fn
 
 
 def test_batch_vector_hit_fact_enriched(monkeypatch):
@@ -273,3 +273,29 @@ def test_skill_md_step0_and_qualifier():
     assert "⓪" in md and "scenario_strict 剧本且 entity_aliases 覆盖模板全部" in md
     assert "（本条适用于 generic 流与未预解析场景）" in md
     assert md.count("- search_entities_batch") >= 3     # 三步骤各一列
+
+
+# ---------------------------------------------------------------------------
+# 任务 6 收口：渲染层注入断言（件③ data_intelligence 补测）
+# ---------------------------------------------------------------------------
+
+def test_render_injects_preparse_sections():
+    """渲染注入（件③ data_intelligence._build_contract_system_message）：全覆盖契约注入
+    【模板已预解析】+表名清单+直接使用指令；缺口契约注入【模板预解析缺口】+一次批量补齐指令。
+    变异锚点：渲染层漏读 resolved_templates/preparse_gaps → 对应注入段消失 → 红。
+    （任务 6 收口补测：任务 4 审查 Minor-3——渲染段原仅手动冒烟覆盖。）"""
+    from app.services.skill_router import route_user_input
+    from app.api.data_intelligence import _build_contract_system_message
+    _q = "查询重过载台区"
+    r = route_user_input(_q)                            # 全覆盖预解析接管（任务 4 锚定）
+    msg = _build_contract_system_message(r.contract, _q)   # 注入段在 if question: 内（金标锚定段后），必须传 question
+    assert "【模板已预解析】" in msg
+    assert "直接使用，无需定位确认" in msg
+    # 缺口态：契约拷贝后置空 resolved/置缺口清单（组装期字段测试直构——渲染层只读契约字段）
+    import copy
+    c2 = copy.deepcopy(r.contract)
+    c2.resolved_templates = {}
+    c2.preparse_gaps = ["缺口占位符X"]
+    msg2 = _build_contract_system_message(c2, _q)
+    assert "【模板预解析缺口】" in msg2
+    assert "缺口占位符X" in msg2 and "search_entities_batch(keywords=" in msg2
