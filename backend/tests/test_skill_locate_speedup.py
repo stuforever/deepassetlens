@@ -65,3 +65,60 @@ def test_cache_degrades_on_error(monkeypatch):
     assert elc.cache_lookup("任意", "keyword") is None   # 降级 None
     elc.cache_store("任意", "keyword", {"x": 1})          # 降级不抛
     elc.invalidate_entity_lookup_cache()                  # 降级不抛
+
+
+# ---------------------------------------------------------------------------
+# 任务 2：件② 批量动作（一批 SQL + 一次 embedding 数组调用）
+# ---------------------------------------------------------------------------
+
+def _clear_lookup_cache():
+    # 测试前置隔离（plan 三测逐字落之外的最小偏离，仅测试卫生）：件② 批量 handler 会
+    # cache_store 回写——不清缓存则本文件 -k batch 复跑时缓存命中（embed 计数=0/
+    # cache 项无 log）假红。生产路径不受影响；全量跑时任务 1 的 invalidate 测试已前置清空。
+    from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
+    invalidate_entity_lookup_cache()
+
+
+def test_batch_single_embedding_gateway_call(monkeypatch):
+    """未命中 keywords 收拢一次 embed_texts 数组调用（spec §三 件②核心断言：
+    mock 网关计数=1）。变异锚点：batch 退回逐 variant 串行 embed → 计数>1 → 红。"""
+    _clear_lookup_cache()
+    from app.services import kg_action_handlers as kah
+    calls = {"n": 0}
+    def _fake_embed(db, texts, model_name=None):
+        calls["n"] += 1
+        return [[0.1] * 8 for _ in texts]
+    import app.services.semantic_retrieval as sr
+    monkeypatch.setattr(sr, "embed_texts", _fake_embed)
+    monkeypatch.setattr(kah, "search_entity_vectors", lambda q, top_k=10, db=None, vec=None: [])
+    out = kah._kg_search_entities_batch(
+        {"keywords": ["绝不存在的甲实体", "绝不存在的乙实体", "绝不存在的丙实体"]}, "00:00:00")
+    assert calls["n"] == 1                      # 唯一断言核心：一次网关调用
+    assert len(out["results"]) == 3             # 逐项 hit/miss 返回
+    assert all(r.get("hit") is False for r in out["results"])
+
+
+def test_batch_registered_everywhere():
+    """注册面五处（spec §三 件②注册面）：handler 字典/MCP/白名单/定位族×2。
+    变异锚点：任一处漏注册 → 对应断言红。"""
+    from app.services.kg_action_handlers import _KG_ACTION_HANDLERS
+    from app.services.query_contract import GENERIC_ALLOWED_TOOLS
+    from app.services.skill_policy import _LOCATE_BUDGET_TOOLS, _LOCATE_DEDUP_TOOLS
+    assert "search_entities_batch" in _KG_ACTION_HANDLERS
+    assert "search_entities_batch" in GENERIC_ALLOWED_TOOLS
+    assert "search_entities_batch" in _LOCATE_BUDGET_TOOLS   # batch 计 1 次定位
+    assert "search_entities_batch" in _LOCATE_DEDUP_TOOLS     # 同参去重（确定性工具）
+    import inspect
+    import app.mcp_server as mcp
+    assert "search_entities_batch" in inspect.getsource(mcp)
+
+
+def test_batch_merges_exact_like_vector():
+    """三层合并语义（spec §三 件②）：精确>LIKE>向量逐项归组、每项与单查同构。
+    变异锚点：归组错列（keyword 拿到别的 keyword 结果）→ 红。"""
+    _clear_lookup_cache()
+    from app.services.kg_action_handlers import _kg_search_entities_batch
+    out = _kg_search_entities_batch({"keywords": ["台区"]}, "00:00:00")
+    r = out["results"][0]
+    for key in ("entities", "fields", "hit", "log"):
+        assert key in r  # 与单查返回同构（含 fields）+ 批量自有 hit/miss 状态

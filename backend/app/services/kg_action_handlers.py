@@ -9,6 +9,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# 件②（2026-09-09 剧本定位提速）：批量定位的向量召回通道提升到模块级——
+# test monkeypatch 目标=本模块属性（kah.search_entity_vectors），批量 handler 经模块全局
+# 名字调用（运行时解析，patch 生效）；单查保持函数内 import 原样（行为零变化）。
+# entity_attr_vector_service 模块级仅 logging/time/uuid/typing/sqlalchemy.orm，无重副作用无环。
+from app.services.entity_attr_vector_service import search_entity_vectors  # noqa: E402
+
 # v3.5: 无 entity_code 时，从 SQL FROM 子句提取主表名（反查实体配置的 source_mode/data_source_id）
 # 支持 WITH CTE -> ... FROM main_table 和直接 FROM main_table
 # 不处理子查询别名（取第一个 FROM 后的裸表名，已覆盖场景剧本的 SQL 模板模式）
@@ -288,11 +294,36 @@ def _kg_search_concepts(body: dict, _ts: str) -> dict:
     finally:
         db.close()
 
+def _entity_attrs(props) -> list:
+    """properties_schema（str/JSON 列/None 兼容）-> 属性字典列表。
+
+    件②（2026-09-09）：从 _kg_search_entities 单查体内原样搬移的纯函数（单查行为零变化），
+    批量 entity_codes 命中路径复用同一解析。"""
+    import json as _json2
+    if isinstance(props, str):
+        try: props = _json2.loads(props)
+        except Exception: props = []
+    attrs = []
+    if isinstance(props, list):
+        for p in props:
+            if isinstance(p, dict):
+                # properties_schema 结构: {name(=PG物理列名), type, cnName(中文名), description, isPrimaryKey}
+                col_name = str(p.get("name") or p.get("attribute_code") or "")
+                attrs.append({
+                    "column_name": col_name,
+                    "column_cn": str(p.get("cnName") or p.get("attribute_name") or ""),
+                    "data_type": str(p.get("type") or ""),
+                    "is_pk": bool(p.get("isPrimaryKey") or False),
+                    # 兼容旧字段名
+                    "attribute_code": col_name,
+                    "attribute_name": str(p.get("cnName") or p.get("name") or ""),
+                })
+    return attrs
+
 def _kg_search_entities(body: dict, _ts: str) -> dict:
     # 搜实体/字段（find-entity 技能用）
     from app.core.database import SessionLocal
     from sqlalchemy import text
-    import json as _json2
     keyword = (body.get("keyword") or "").strip()
     entity_code = (body.get("entity_code") or "").strip()
     db = SessionLocal()
@@ -306,25 +337,7 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
             ), {"code": entity_code}).fetchone()
             if not row:
                 return {"entity_code": entity_code, "attributes": [], "error": "实体不存在"}
-            props = row[4]
-            if isinstance(props, str):
-                try: props = _json2.loads(props)
-                except Exception: props = []
-            attrs = []
-            if isinstance(props, list):
-                for p in props:
-                    if isinstance(p, dict):
-                        # properties_schema 结构: {name(=PG物理列名), type, cnName(中文名), description, isPrimaryKey}
-                        col_name = str(p.get("name") or p.get("attribute_code") or "")
-                        attrs.append({
-                            "column_name": col_name,
-                            "column_cn": str(p.get("cnName") or p.get("attribute_name") or ""),
-                            "data_type": str(p.get("type") or ""),
-                            "is_pk": bool(p.get("isPrimaryKey") or False),
-                            # 兼容旧字段名
-                            "attribute_code": col_name,
-                            "attribute_name": str(p.get("cnName") or p.get("name") or ""),
-                        })
+            attrs = _entity_attrs(row[4])
             return {"entity_code": row[0], "entity_name": row[1] or "", "entity_en_name": row[2] or "",
                     "description": row[3] or "", "attributes": attrs,
                     "log": f"[{_ts}] 查实体「{entity_code}」数据字典：共 {len(attrs)} 个属性（物理表名: {row[2] or '未知'}）"}
@@ -426,6 +439,135 @@ def _kg_search_entities(body: dict, _ts: str) -> dict:
             )).fetchall()
             return {"entities": [{"entity_code": r[0], "entity_name": r[1] or "", "entity_en_name": r[2] or ""} for r in rows],
                     "log": f"[{_ts}] 列出全部实体：共 {len(rows)} 个"}
+    finally:
+        db.close()
+
+def _owning_kw(vec_kw, variants, i):
+    """件②向量归组：variants[i] 的归属原始 keyword。
+
+    variants 为 (kw, variant) 二元组列表（plan L421 括注的最简实现），首元即归属；
+    越界兜底按 vec_kw 轮转（防御调用方索引漂移，正常枚举不会触达）。"""
+    if 0 <= i < len(variants):
+        return variants[i][0]
+    return vec_kw[i % len(vec_kw)] if vec_kw else ""
+
+def _kg_search_entities_batch(body: dict, _ts: str) -> dict:
+    """件②（2026-09-09 spec §三）：一次查完一批实体——输入 {"keywords": [...],
+    "entity_codes": [...]}，输出逐项结果数组（每项与 search_entities 单查返回同构，
+    含 hit/miss）。三层合并：①缓存（件①）②精确+LIKE 合并一批 SQL 一次连接查回
+    ③未命中 keywords 收拢一次 embed_texts 数组网关调用 + 逐向量 Qdrant 检索
+    （vec 复用批7-E1 通道，免二次 embedding）。降级：数组调用失败→逐 variant
+    串行（恢复现状行为）；不入 scope_gated（只读定位类）。
+    """
+    from app.core.database import SessionLocal
+    from sqlalchemy import text, bindparam
+    from app.services.entity_lookup_cache import cache_lookup, cache_store
+    keywords = [str(k).strip() for k in (body.get("keywords") or []) if str(k).strip()]
+    entity_codes = [str(c).strip() for c in (body.get("entity_codes") or []) if str(c).strip()]
+    results, miss_kw = [], []
+    db = SessionLocal()
+    try:
+        # ── entity_codes：一批 SQL 精确查（entity_code/en_name 双匹配，单次往返）──
+        if entity_codes:
+            rows = db.execute(text(
+                "SELECT entity_code, entity_name, entity_en_name, description, properties_schema "
+                "FROM kg_entities WHERE entity_code IN :cs OR entity_en_name IN :cs"
+            ).bindparams(bindparam("cs", expanding=True)), {"cs": entity_codes}).fetchall()
+            by_code = {(r[0] or "").lower(): r for r in rows}
+            by_code.update({(r[2] or "").lower(): r for r in rows})
+            for c in entity_codes:
+                r = by_code.get(c.lower())
+                if r is None:
+                    results.append({"entity_code": c, "attributes": [], "hit": False,
+                                    "error": "实体不存在",
+                                    "log": f"[{_ts}] batch 查「{c}」：未命中"})
+                else:
+                    results.append({"entity_code": r[0], "entity_name": r[1] or "",
+                                    "entity_en_name": r[2] or "", "description": r[3] or "",
+                                    "attributes": _entity_attrs(r[4]), "hit": True,
+                                    "log": f"[{_ts}] batch 查「{c}」：命中数据字典"})
+        # ── keywords：①缓存命中直返（零向量零重查）──
+        for kw in keywords:
+            cached = cache_lookup(kw, "keyword")
+            if cached is not None:
+                results.append({"keyword": kw, **cached, "hit": True, "cache_hit": True})
+            else:
+                miss_kw.append(kw)
+        # ── ②精确+LIKE 合并一批 SQL（每关键词一块 OR，单连接查回后本地归组）──
+        kw_rows = {}
+        if miss_kw:
+            conds, params = [], {}
+            for i, kw in enumerate(miss_kw):
+                conds.append(f"(entity_code = :k{i} OR entity_en_name = :k{i} "
+                             f"OR entity_code LIKE :p{i} OR entity_name LIKE :p{i} "
+                             f"OR description LIKE :p{i} OR entity_en_name LIKE :p{i})")
+                params[f"k{i}"] = kw
+                params[f"p{i}"] = f"%{kw}%"
+            for r in db.execute(text(
+                    "SELECT entity_code, entity_name, entity_en_name, description FROM kg_entities "
+                    "WHERE " + " OR ".join(conds) + " ORDER BY sort_order LIMIT 200"), params).fetchall():
+                for kw in miss_kw:
+                    if (r[0] == kw or r[2] == kw or any(kw in (r[j] or "") for j in (0, 1, 2, 3))):
+                        kw_rows.setdefault(kw, []).append(r)
+        # ── ③未命中（SQL 零行）keywords：收拢一次 embedding 数组调用 + Qdrant ──
+        vec_kw = [kw for kw in miss_kw if not kw_rows.get(kw)]
+        if vec_kw:
+            import os as _os_b2
+            # 单查同款阈值（设计预估 0.6；实测 bge 中文短查询对「配电变压器*台账」最高仅 ~0.50，
+            # 默认放宽至 0.48，env 可调）
+            _VEC_THRESHOLD = float(_os_b2.getenv("TUPU_VECTOR_RECALL_THRESHOLD", "0.48"))
+            try:
+                from app.services.hybrid_retrieval import expand_synonyms_for_query
+                # (kw, variant) 二元组：variant 归属随构造记录（_owning_kw 取首元归组）
+                variants = [(kw, v) for kw in vec_kw
+                            for v in (expand_synonyms_for_query(kw)[:6] or [kw])]
+                vectors = None
+                try:
+                    from app.services.semantic_retrieval import embed_texts
+                    vectors = embed_texts(db, [v for _, v in variants])  # 唯一一次数组网关调用
+                except Exception as _ge:
+                    logger.warning(f"[search_entities_batch] 数组 embedding 失败（降级逐个串行）: {_ge}")
+                for i, (_, v) in enumerate(variants):
+                    if vectors is not None and i < len(vectors) and vectors[i]:
+                        hits = search_entity_vectors(v, top_k=10, db=db, vec=vectors[i])
+                    else:                                     # 降级：逐个串行（现状行为）
+                        hits = search_entity_vectors(v, top_k=10, db=db)
+                    for h in hits:
+                        if float(h.get("score") or 0) >= _VEC_THRESHOLD:
+                            kw_rows.setdefault(_owning_kw(vec_kw, variants, i), []).append(
+                                (h.get("code") or "", h.get("name") or "", "", None))
+                # 事实源补齐：向量命中的实体从 MySQL 批量取全字段（一次往返）
+                _fact = {}
+                _codes = {r[0] for rows_ in kw_rows.values() for r in rows_ if r[0]}
+                if _codes:
+                    for r in db.execute(text(
+                            "SELECT entity_code, entity_name, entity_en_name, description "
+                            "FROM kg_entities WHERE entity_code IN :cs"
+                    ).bindparams(bindparam("cs", expanding=True)), {"cs": list(_codes)}).fetchall():
+                        _fact[r[0]] = r
+            except Exception as _ve:
+                logger.warning(f"[search_entities_batch] 向量召回失败（降级 SQL 结果）: {_ve}")
+        # ── 归组输出 + 回写缓存（每项与单查同构：entities/fields/log + hit）──
+        for kw in keywords:
+            if any(r.get("keyword") == kw for r in results):
+                continue
+            rows_ = kw_rows.get(kw) or []
+            entities = [{"entity_code": r[0], "entity_name": r[1] or "", "entity_en_name": r[2] or "",
+                         "description": (r[3] or "") if r[3] else "", "match_type": "batch"} for r in rows_[:20]]
+            fr = db.execute(text(
+                "SELECT DISTINCT table_en, table_cn, field_en, field_cn FROM kg_source_field_imports "
+                "WHERE field_cn LIKE :kw OR field_en LIKE :kw OR table_cn LIKE :kw LIMIT 20"
+            ), {"kw": f"%{kw}%"}).fetchall() if kw else []
+            item = {"keyword": kw, "entities": entities,
+                    "fields": [{"table_en": r[0], "table_cn": r[1] or "", "field_en": r[2],
+                                "field_cn": r[3] or ""} for r in fr],
+                    "hit": bool(rows_ or fr),
+                    "log": f"[{_ts}] batch「{kw}」：{len(entities)} 实体/{len(fr)} 字段"}
+            cache_store(kw, "keyword", {k: v for k, v in item.items() if k != "log"})
+            results.append(item)
+        return {"results": results,
+                "log": f"[{_ts}] search_entities_batch：keywords {len(keywords)}"
+                       f"（缓存命中 {len(keywords) - len(miss_kw)}）/entity_codes {len(entity_codes)}"}
     finally:
         db.close()
 
@@ -837,6 +979,7 @@ _KG_ACTION_HANDLERS = {
     "execute_sql": _kg_execute_sql,
     "search_concepts": _kg_search_concepts,
     "search_entities": _kg_search_entities,
+    "search_entities_batch": _kg_search_entities_batch,
     "get_entity_relations": _kg_get_entity_relations,
     "list_tables": _kg_list_tables,
     "get_entity_source_mode": _kg_get_entity_source_mode,

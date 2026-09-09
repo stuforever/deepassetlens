@@ -138,6 +138,14 @@ def search_entities(keyword: str = "", entity_code: str = "") -> dict:
 
 
 @mcp.tool()
+def search_entities_batch(keywords: list = None, entity_codes: list = None) -> dict:
+    """一次批量定位实体（spec 2026-09-09 件②）：keywords/entity_codes 逐项返回（含 hit/miss），
+    未命中自动走一次向量召回合并。"""
+    return dispatch_kg_action("search_entities_batch",
+                              {"keywords": keywords or [], "entity_codes": entity_codes or []})
+
+
+@mcp.tool()
 def get_entity_relations(entity_code: str = "") -> dict:
     """查实体关联关系（含物理表名）。entity_code 为空则返回全部关系。"""
     return dispatch_kg_action("get_entity_relations", {"entity_code": entity_code})

@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 GENERIC_ALLOWED_TOOLS = frozenset({
     # 定位类（只读元数据）
     "fetch_l1_l2_tree", "validate_l2", "fetch_subgraph",
-    "search_entities", "search_concepts", "get_entity_relations", "list_tables",
+    "search_entities", "search_entities_batch", "search_concepts", "get_entity_relations", "list_tables",
     # 校验类（只读）
     "validate_attributes", "fetch_join_expr", "validate_safe_sql",
     # 取样类（只读，G3：分类/状态/类型列写 WHERE 前先取真实枚举值）

@@ -64,13 +64,13 @@ _CORRECTABLE_CLASSES = frozenset({"TABLE_MISSING", "CATALOG_MISSING", "SYNTAX", 
 #   L1 同参去重：同工具同参数第二次调用直接拒（确定性工具同参必同果，重试纯浪费轮）；
 #   L2 总预算：定位类累计调用超阈值拒绝并注入「立即前进」强指令（数据工具不受影响）。
 _LOCATE_BUDGET_TOOLS = frozenset({
-    "search_entities", "batch_entity_source_mode", "get_entity_source_mode",
+    "search_entities", "search_entities_batch", "batch_entity_source_mode", "get_entity_source_mode",
     "validate_l2", "fetch_subgraph", "fetch_l1_l2_tree",
 })
 # L1 同参去重范围（收窄于预算池）：源模式确认两件（batch/get）是**状态机推进工具**——
 # 同壳参数合法（逐实体确认推进 confirmed_engines 集合，test_skill_policy 增量确认场景），
 # 不做同参去重；纯检索类同参必同果才去重。
-_LOCATE_DEDUP_TOOLS = frozenset({"search_entities", "validate_l2", "fetch_subgraph", "fetch_l1_l2_tree"})
+_LOCATE_DEDUP_TOOLS = frozenset({"search_entities", "search_entities_batch", "validate_l2", "fetch_subgraph", "fetch_l1_l2_tree"})
 _LOCATE_BUDGET_DEFAULT = int(os.getenv("TUPU_LOCATE_BUDGET", "8"))
 _LOCATE_BUDGET_SCENARIO = int(os.getenv("TUPU_LOCATE_BUDGET_SCENARIO", "14"))
 # S5（HITL v2）：表/catalog 不存在 -> 由「自动降级一次」升级为「interrupt 请求人审」；

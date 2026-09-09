@@ -157,7 +157,7 @@ CAPABILITY_POLICY_SEED = [
      "params": {"specs": [{"name": "entity_locator",
                            "description": "按业务域并行定位实体表，返回候选清单（code/name/引擎/置信度）",
                            "prompt": "只做实体定位与校验，不做 SQL 拼装，不做跨域推断，不超出给定工具。",
-                           "tools": ["search_entities", "fetch_l1_l2_tree", "validate_l2", "fetch_subgraph"]}],
+                           "tools": ["search_entities", "search_entities_batch", "fetch_l1_l2_tree", "validate_l2", "fetch_subgraph"]}],
                 "max_concurrent": 2},
      "description": _CAP_DESC("装配 task 委派工具与声明式子代理规格（与父代理同栈共享守卫链）；工具集=全局白名单子集。",
                               "委派面扩大（并发上下文隔离的子代理），靠四护栏约束：契约 allow_subagents 复合条件/继承守卫/白名单窄化/全程审计。",
@@ -260,6 +260,58 @@ def _seed_capability_policies(db: Session):
         logger.info(f"[CapabilitySeed] 增量补种 {added} 个能力: "
                     + ", ".join(p["capability_id"] for p in CAPABILITY_POLICY_SEED
                                 if p["capability_id"] not in existing_ids))
+    # 件②（2026-09-09 剧本定位提速）一次性同步：entity_locator 子代理 tools 增列
+    # search_entities_batch。增量补种不覆盖已有行（防吃掉管理员配置），存量库 subagents
+    # 行 params 仍是旧 specs JSON——此处仅对该行 params 内 name=entity_locator 的 spec
+    # 的 tools 缺失时增列（幂等：已含即零写入；params 为 JSON 列，ORM 读出 dict 原位改后重赋值置脏）。
+    try:
+        _sub = db.query(CapabilityPolicy).filter(
+            CapabilityPolicy.capability_id == "subagents").first()
+        if _sub is not None:
+            # deepcopy 后改再赋：JSON 列原位改同一对象再赋回自身，flush 判等会跳过该列 UPDATE
+            # （实测：version 写入而 params 不落库）。tool_availability 块的 dict() 浅拷贝同理可写。
+            import copy as _copy
+            _params = _copy.deepcopy(_sub.params) if isinstance(_sub.params, dict) else None
+            _changed = False
+            for _spec in ((_params or {}).get("specs") or []):
+                if isinstance(_spec, dict) and _spec.get("name") == "entity_locator":
+                    _tools = [t for t in (_spec.get("tools") or []) if isinstance(t, str)]
+                    if "search_entities_batch" not in _tools:
+                        _tools.append("search_entities_batch")
+                        _spec["tools"] = _tools
+                        _changed = True
+            if _changed:
+                _sub.params = _params
+                _sub.version = (_sub.version or 1) + 1
+                db.commit()
+                logger.info("[CapabilitySeed] entity_locator 子代理 tools 增列 search_entities_batch"
+                            "（件②一次性同步，version+1 触发重装配）")
+    except Exception as _loc_e:
+        db.rollback()
+        logger.warning(f"[CapabilitySeed] entity_locator tools 增列跳过（不影响启动）: {_loc_e}")
+    # 件②（2026-09-09）一次性同步②：tool_availability 白名单存量行补勾 search_entities_batch。
+    # 背景：GENERIC_ALLOWED_TOOLS 增列后，存量库该行 params.allowed 是行创建时的勾选域全勾
+    # 快照（不含后加入的工具），W-1 换算 excluded = 勾选域 - allowed 会把新工具排除——
+    # test_13w「默认全勾→excluded=红线5件」不变式实证此缺口。仅对本次新增工具名补勾
+    # （该行创建时它尚不存在，不存在管理员故意取消的情形；不做通用机制，未来新工具
+    # 默认开/关由届时决策）。幂等：已含即零写入。
+    try:
+        _ta = db.query(CapabilityPolicy).filter(
+            CapabilityPolicy.capability_id == "tool_availability").first()
+        if _ta is not None:
+            _tp = dict(_ta.params or {})
+            _allowed = _tp.get("allowed")
+            if isinstance(_allowed, list) and "search_entities_batch" not in _allowed:
+                _tp["allowed"] = sorted({t for t in _allowed if isinstance(t, str)}
+                                        | {"search_entities_batch"})
+                _ta.params = _tp
+                _ta.version = (_ta.version or 1) + 1
+                db.commit()
+                logger.info("[CapabilitySeed] tool_availability 白名单补勾 search_entities_batch"
+                            "（件②一次性同步，version+1 触发重装配）")
+    except Exception as _ta_e:
+        db.rollback()
+        logger.warning(f"[CapabilitySeed] tool_availability 补勾跳过（不影响启动）: {_ta_e}")
     # 批13-W W-1：黑名单->白名单启动迁移（params 含旧 excluded 键 -> 换算 allowed 写回，零行为变化）
     try:
         from ..services.capability_config import migrate_tool_exclusions_to_allowlist
