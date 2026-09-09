@@ -258,3 +258,18 @@ def test_preparse_degrades_and_skips():
     apply_contract_preparse(c, SimpleNamespace(
         name="x", template_mode="scenario_extensible", entity_aliases={"a": "b"}))  # 非 strict
     assert not c.resolved_templates and not c.preparse_gaps and c.locate_first is True
+
+
+# ---------------------------------------------------------------------------
+# 任务 5：件④ SKILL.md ⓪ 文案兜底
+# ---------------------------------------------------------------------------
+
+def test_skill_md_step0_and_qualifier():
+    """distribution-overload：定位顺序块首有 ⓪；「禁止凭 aliases 猜表」带限定语；
+    各步骤 allowed_tools 含 search_entities_batch。变异锚点：文案被删 → 红。"""
+    from pathlib import Path
+    md = (Path(__file__).resolve().parents[1] / "data" / "skills" / "scenarios"
+          / "distribution-overload" / "SKILL.md").read_text(encoding="utf-8")
+    assert "⓪" in md and "scenario_strict 剧本且 entity_aliases 覆盖模板全部" in md
+    assert "（本条适用于 generic 流与未预解析场景）" in md
+    assert md.count("- search_entities_batch") >= 3     # 三步骤各一列

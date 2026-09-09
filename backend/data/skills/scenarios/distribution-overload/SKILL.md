@@ -88,6 +88,7 @@ x_tupu:
         - validate_l2
         - fetch_subgraph
         - search_entities
+        - search_entities_batch
       required_slots: []
       templates:
         - templates/step1_household_transformer.sql
@@ -114,6 +115,7 @@ x_tupu:
         - validate_l2
         - fetch_subgraph
         - search_entities
+        - search_entities_batch
       templates:
         - templates/step1_household_transformer.sql
         - templates/step1_household_transformer_elec.sql
@@ -137,6 +139,7 @@ x_tupu:
         - validate_l2
         - fetch_subgraph
         - search_entities
+        - search_entities_batch
       templates:
         - templates/step3_load_ratio.sql
       required_slots: []
@@ -146,8 +149,9 @@ x_tupu:
 # 配电变压器重过载分析（场景剧本·三步模块化）
 
 > **实体定位顺序（批13-M 定位优先，用户定调：先定位、找不到再搜索）**：
+> ⓪ **scenario_strict 剧本且 entity_aliases 覆盖模板全部 ⟦⟧**：服务端已预解析注入（契约消息含已替换模板与表名清单）——直接使用+一次 batch_entity_source_mode，跳过逐个定位；仅当契约提示有未覆盖占位符时才走 ①-④（此时一次 search_entities_batch 批量补齐缺口）；
 > ① 契约已预解析实体（带来源标注）→ validate_l2/fetch_subgraph 确认后直接用；
-> ② 问题可锚定业务域（明示台区/客户/线路/计量点等业务域，或上轮 L2 上下文）→ 先 validate_l2 → fetch_subgraph(l2_id) 从子图选实体——**跨业务域取数前必须定位确认**，禁止凭 entity_aliases 或记忆猜表（防错挂业务域，如「业扩表」案例）；
+> ② 问题可锚定业务域（明示台区/客户/线路/计量点等业务域，或上轮 L2 上下文）→ 先 validate_l2 → fetch_subgraph(l2_id) 从子图选实体——**跨业务域取数前必须定位确认**，禁止凭 entity_aliases 或记忆猜表（防错挂业务域，如「业扩表」案例）（本条适用于 generic 流与未预解析场景）；
 > ③ 定位失败（L2 下无该实体 / 无业务域线索）→ search_entities 混合检索兜底；
 > ④ 仍失败 → fetch_l1_l2_tree 层级树请用户选择。
 > **L0 直通豁免**：金标锚定命中的直通题 SQL 自带表，跳过定位直接执行（回归 <4s 红线）。

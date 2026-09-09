@@ -106,9 +106,15 @@ def test_守卫首跳warn放行(policy, monkeypatch):
 
 
 def test_已定位后不再warn(policy, monkeypatch):
-    """validate_l2 后 locate_used 置位 -> search_entities 兜底不再记 warn。"""
-    r = route_user_input("查询重过载台区")
-    contract = r.contract
+    """validate_l2 后 locate_used 置位 -> search_entities 兜底不再记 warn。
+
+    审查 Minor-1（2026-09-09）修复：路由契约已被件③全覆盖预解析接管
+    （locate_first=False 天然豁免，旧夹具断言虚化恒真）——照 test_守卫首跳warn放行
+    改 from_step 直构 locate_first=True 契约，恢复「locate_used 置位后抑制 warn」
+    守护力（变异锚点：skill_policy 删 locate_used 判据 → 此测红）。"""
+    skill = get_catalog().load_skill("distribution-overload")
+    contract = QueryContract.from_step(skill.name, skill.version, skill.find_step("overload"),
+                                       locate_first=bool(getattr(skill, "locate_first", False)))
     events = []
     import app.services.capability_config as cc
     monkeypatch.setattr(cc, "record_event",
