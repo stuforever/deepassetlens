@@ -295,16 +295,17 @@ def test_task_worker_retry_cap(monkeypatch):
 
 
 def test_full_create_all_83_tables_no_conflict():
-    """全部 83 表模型可 Base.metadata.create_all 无冲突 + 注册集中在 main.py
-    （spec §七.5：模型注册集中 main.py L26-35，防循环导入；spec §三 83 表全景）。
-    变异锚点：任一模型 __tablename__ 重复/表模型被删 → 计数偏离 83；
-    main.py 移除集中导入 → 循环导入或注册不全 → 导入/计数/建表红。"""
-    import app.main as _main_mod  # 集中注册 83 模型；导入成功即无循环导入
+    """全部表模型可 Base.metadata.create_all 无冲突 + 注册集中在 main.py
+    （spec §七.5：模型注册集中 main.py L26-35，防循环导入）。
+    变异锚点：任一模型 __tablename__ 重复/表模型被删 → 计数漂移；
+    main.py 移除集中导入 → 循环导入或注册不全 → 导入/计数/建表红。
+    表数演进：83（M01 基线）→ 84（2026-09-09 剧本定位提速件① kg_entity_lookup_cache，spec §三 表 83→84）。函数名保留 M01 历史锚点字样。"""
+    import app.main as _main_mod  # 集中注册全部模型；导入成功即无循环导入
     from app.models.base import Base
     from app.core.database import engine
 
     tables = dict(Base.metadata.tables)
-    assert len(tables) == 83, f"注册表数漂移：{len(tables)} ≠ 83"
+    assert len(tables) == 84, f"注册表数漂移：{len(tables)} ≠ 84（83+2026-09-09 件①缓存表）"
     # 五个域模型文件各抽一表（spec §三 分组全景）
     for t in ("kg_concepts", "kg_task_queue", "skills", "auth_users", "kg_knowledge_base"):
         assert t in tables, f"域表缺失：{t}"

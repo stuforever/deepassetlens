@@ -92,6 +92,20 @@ class Entity(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class EntityLookupCache(Base):
+    """剧本定位提速件①（2026-09-09 spec §三）：实体查找持久化历史缓存，第 84 张表。
+    加速件非正确性件——读写失败一律降级直查（services/entity_lookup_cache.py）。"""
+    __tablename__ = "kg_entity_lookup_cache"
+
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    query_key = Column(String(255), unique=True, nullable=False, index=True)  # 归一化：NFKC/小写/去空白
+    query_kind = Column(String(20), nullable=False)                            # keyword | entity_code
+    result_json = Column(JSON, nullable=True)                                   # 与 search_entities 单查返回同构
+    hit_count = Column(Integer, nullable=False, default=1)
+    last_used_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
 class EntityRelation(Base):
     __tablename__ = "kg_entity_relations"
 
