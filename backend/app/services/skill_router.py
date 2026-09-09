@@ -139,6 +139,8 @@ class SkillRouter:
             allow_subagents=bool(getattr(skill, "allow_subagents", False)),  # 批13-Q 护栏1 数据化
             locate_first=bool(getattr(skill, "locate_first", False)),  # 批13-M 定位优先数据化
         )
+        from app.services.query_contract import apply_contract_preparse
+        apply_contract_preparse(contract, skill)   # 件③：scenario_strict 预解析（异常内部降级）
         return RouteResult(
             route_type="scenario", skill_id=skill.name, workflow_step=step.id,
             matched_rules=["conversation_context: last_skill/last_step"],
@@ -227,6 +229,8 @@ class SkillRouter:
             allow_subagents=bool(getattr(skill, "allow_subagents", False)),  # 批13-Q 护栏1 数据化
             locate_first=bool(getattr(skill, "locate_first", False)),  # 批13-M 定位优先数据化
         )
+        from app.services.query_contract import apply_contract_preparse
+        apply_contract_preparse(contract, skill)   # 件③：scenario_strict 预解析（异常内部降级）
         return RouteResult(
             route_type="scenario", skill_id=skill.name, workflow_step=chosen.id,
             matched_rules=matched_rules + ([step_hit_rule] if step_hit_rule else []),

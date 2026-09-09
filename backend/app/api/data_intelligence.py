@@ -244,6 +244,11 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
                 # template_ids 形如 "{skill}:{relpath}"；取 relpath 读模板文件原文
                 for _tid in _tpl_paths:
                     _rel = _tid.split(":", 1)[1] if ":" in _tid else _tid
+                    # 件③（2026-09-09）：契约预解析产物优先——全覆盖路径已替换文本直接嵌入，不再读盘
+                    _resolved = (getattr(contract, "resolved_templates", None) or {}).get(_tid)
+                    if _resolved:
+                        _tpl_blocks.append(f"### 模板 {_rel}（已预解析，⟦⟧ 已替换为物理表名）\n```sql\n{_resolved.strip()}\n```")
+                        continue
                     try:
                         from pathlib import Path as _P
                         _tf = (_P(__file__).resolve().parent.parent.parent / "data" / "skills" / "scenarios" / _skill_id / _rel)
@@ -258,6 +263,20 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
                     _tb = ("\n\n本步骤 SQL 模板（已预载，无需 read_file；构造 SQL 时以其为蓝本，"
                            "只允许按问题改参数与条件，结构不可改）：\n" + "\n\n".join(_tpl_blocks)) if _tpl_blocks else ""
                     base += _pb + _tb
+                # 件③（2026-09-09）：契约预解析注入——全覆盖：表名清单+直接使用指令；
+                # 缺口：缺口清单+一次批量补齐指令（模板不再逐个定位）。
+                _pre = getattr(contract, "resolved_templates", None) or {}
+                _gaps = getattr(contract, "preparse_gaps", None) or []
+                if _pre:
+                    _tables = sorted(set(contract._runtime.get("confirmed_entities") or []))
+                    base += ("\n【模板已预解析】以下表名已由服务端从 entity_aliases 解析注入"
+                             f"（含 catalog 前缀，三段名直接用）：{', '.join(_tables)}。\n"
+                             "模板已预解析，直接使用，无需定位确认——直接进入 batch_entity_source_mode "
+                             "确认源模式后执行。")
+                elif _gaps:
+                    base += (f"\n【模板预解析缺口】以下占位符未在 entity_aliases 覆盖：{', '.join(_gaps)}。"
+                             "请一次调用 search_entities_batch(keywords=[缺口清单]) 批量补齐后继续，"
+                             "不要逐个定位。")
         except Exception as _sp:
             logger.warning(f"[剧本手册预载] 注入失败（静默跳过）: {_sp}")
     return base

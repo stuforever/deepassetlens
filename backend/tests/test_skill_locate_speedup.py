@@ -208,3 +208,53 @@ def test_batch_vector_hit_fact_enriched(monkeypatch):
         db.close()
         from app.services.entity_lookup_cache import invalidate_entity_lookup_cache
         invalidate_entity_lookup_cache()
+
+
+# ---------------------------------------------------------------------------
+# 任务 4：件③ 契约预解析（三态）
+# ---------------------------------------------------------------------------
+
+def _mk_contract(template_ids):
+    from app.services.query_contract import QueryContract
+    return QueryContract(run_id="run_t", skill_id="distribution-overload", skill_version="1.0",
+                         workflow_step="relationship", template_ids=template_ids,
+                         route_type="scenario", locate_first=True,
+                         _runtime={"confirmed_entities": []})
+
+
+def test_preparse_full_coverage():
+    """全覆盖：distribution-overload 真剧本 9 别名覆盖全部 ⟦⟧（spec §三 件③）——
+    resolved_templates 非空+confirmed_entities=物理表名+locate_first=False。
+    变异锚点：locate_first 未在全覆盖路径置 False → 红。"""
+    from app.services.skill_catalog import get_catalog  # 装载函数以实现为准（plan 预留：load_skills/load_skill_definitions 实测不存在）
+    from app.services.query_contract import apply_contract_preparse
+    skill = get_catalog().load_skill("distribution-overload")
+    assert skill.template_mode == "scenario_strict" and skill.entity_aliases
+    c = _mk_contract(["distribution-overload:templates/step1_household_transformer.sql"])
+    apply_contract_preparse(c, skill)
+    assert c.resolved_templates and "⟦" not in next(iter(c.resolved_templates.values()))
+    assert c.locate_first is False
+    assert set(c._runtime["confirmed_entities"]) <= set(skill.entity_aliases.values())
+    assert not c.preparse_gaps
+
+
+def test_preparse_gap_path():
+    """缺口：别名缺一条 → preparse_gaps=缺口清单、模板不替换、locate_first 不动。"""
+    from types import SimpleNamespace
+    from app.services.query_contract import apply_contract_preparse
+    skill = SimpleNamespace(name="distribution-overload", template_mode="scenario_strict",
+                            entity_aliases={"用电户": "pg_tupu.public.dim_cst_elec_cons_cust"})  # 只留 1 条
+    c = _mk_contract(["distribution-overload:templates/step1_household_transformer.sql"])
+    apply_contract_preparse(c, skill)
+    assert c.preparse_gaps and not c.resolved_templates
+    assert c.locate_first is True     # 缺口路径不置 False（行为契约）
+
+
+def test_preparse_degrades_and_skips():
+    """非 scenario_strict/无占位符/模板读失败 → 契约原样（现状流程）。"""
+    from types import SimpleNamespace
+    from app.services.query_contract import apply_contract_preparse
+    c = _mk_contract(["distribution-overload:templates/step1_household_transformer.sql"])
+    apply_contract_preparse(c, SimpleNamespace(
+        name="x", template_mode="scenario_extensible", entity_aliases={"a": "b"}))  # 非 strict
+    assert not c.resolved_templates and not c.preparse_gaps and c.locate_first is True

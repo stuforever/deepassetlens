@@ -10,10 +10,13 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # 默认只读通用能力（未命中场景时的低权限模式工具集）
 # P0 整改（架构演进对齐）：工具层已把统一 kg_api 拆成 16 个单一职责 MCP 工具（app/mcp_server.py），
@@ -97,6 +100,9 @@ class QueryContract:
     # 批13-M 定位优先：SKILL.md x_tupu.locate_first: true 数据化声明——契约消息追加「实体定位
     # 顺序」标准作业段 + 守卫对 search_entities 首跳给 policy 级 warn（不拦截，防误伤直通）。
     locate_first: bool = False
+    # 剧本定位提速件③（2026-09-09 spec §三）：契约预解析产物（组装期一次写入，模型不可改）
+    resolved_templates: Dict[str, str] = field(default_factory=dict)  # tid -> 已替换模板文本（全覆盖路径）
+    preparse_gaps: List[str] = field(default_factory=list)          # 未覆盖占位符清单（缺口路径）
     _runtime: Dict[str, Any] = field(default_factory=dict)         # {engine_locked, result_obtained, violations, confirmed_engines, ...}
 
     # ------------------------------------------------------------------
@@ -471,3 +477,69 @@ def apply_rubric_tier(contract: QueryContract) -> None:
     if hits and max((h.get("score") or 0) for h in hits) >= EXAMPLE_ANCHOR_SIM:
         contract.rubric = None
         contract._runtime["rubric_skipped"] = "golden_anchored"
+
+
+# ----------------------------------------------------------------------
+# 剧本定位提速件③（2026-09-09 spec §三）：契约预解析。触发三查：scenario +
+# scenario_strict + 模板 ⟦⟧ ⊆ entity_aliases。全覆盖→resolve_entity_aliases()
+# 服务端替换+confirmed_entities+locate_first=False（对齐 skill_policy L204-206
+# 预解析契约豁免语义）；缺口→下发缺口清单。模板读取按文件指纹缓存（stat
+# mtime_ns+size，批15 件2 同款）——改 SKILL.md/模板不重启下次生效。
+# 降级：读失败/正则异常→现状流程+warning，不阻断。
+# ----------------------------------------------------------------------
+_TEMPLATE_TEXT_CACHE: Dict[str, tuple] = {}          # abs_path -> ((mtime_ns, size), text)
+_PREPARSE_REF_RE = __import__('re').compile(r'⟦([^⟧]+)⟧')
+
+
+def _load_template_text(path) -> Optional[str]:
+    try:
+        st = path.stat()
+        sig = (st.st_mtime_ns, st.st_size)
+        hit = _TEMPLATE_TEXT_CACHE.get(str(path))
+        if hit and hit[0] == sig:
+            return hit[1]
+        t = path.read_text("utf-8")
+        _TEMPLATE_TEXT_CACHE[str(path)] = (sig, t)
+        return t
+    except Exception as e:
+        logger.warning(f"[契约预解析] 模板读取失败（降级现状流程）: {path} {e}")
+        return None
+
+
+def apply_contract_preparse(contract: "QueryContract", skill) -> None:
+    """契约预解析（skill_router 两处 from_step 后调用；skill=SkillDefinition）。"""
+    try:
+        if getattr(contract, "route_type", "") != "scenario":
+            return
+        if getattr(skill, "template_mode", "") != "scenario_strict":
+            return
+        aliases = dict(getattr(skill, "entity_aliases", {}) or {})
+        if not aliases or not (contract.template_ids or []):
+            return
+        from pathlib import Path
+        _root = Path(__file__).resolve().parent.parent.parent / "data" / "skills"
+        tpls = {}
+        for tid in contract.template_ids:
+            rel = tid.split(":", 1)[1] if ":" in tid else tid
+            for p in (_root / "scenarios" / skill.name / rel, _root / skill.name / rel):
+                if p.exists():
+                    t = _load_template_text(p)
+                    if t is None:
+                        return                    # 读失败：整体降级现状流程
+                    tpls[tid] = t
+                    break
+        refs = set()
+        for t in tpls.values():
+            refs.update(_PREPARSE_REF_RE.findall(t))
+        if not refs:
+            return                                 # 无占位符：现状流程
+        missing = [r for r in refs if r not in aliases]
+        if missing:
+            contract.preparse_gaps = sorted(missing)   # 缺口路径：下发缺口清单
+            return
+        from app.services.template_guard import resolve_entity_aliases   # 现成函数，只复用不改
+        contract.resolved_templates = {tid: resolve_entity_aliases(t, aliases) for tid, t in tpls.items()}
+        contract._runtime["confirmed_entities"] = sorted({aliases[r] for r in refs})
+        contract.locate_first = False             # 预解析契约：locate_order_warn 天然豁免
+    except Exception as e:
+        logger.warning(f"[契约预解析] 异常（降级现状流程）: {e}")
