@@ -97,7 +97,17 @@ def test_rejected_call_not_counted():
 
 
 def test_env_budget_override(monkeypatch):
-    """环境变量 TUPU_LOCATE_BUDGET 可调（运维面板兜底）。"""
+    """环境变量 TUPU_LOCATE_BUDGET 可调（运维面板兜底）。
+
+    B-1 适配（2026-09-12 控制者授权，审查者修法）：locate_budget 能力行落库后
+    三级读取 params 压过 env（spec 规定语义），本测改锚「行缺失分支」——
+    get_policy 返 None 时 env=兜底面仍可调，断言不变（预算 2 第 3 次拒）。
+    变异锚点：行缺失分支误回落到硬编码 8 而非 env → 第 3 次放行 → 红。"""
+    monkeypatch.setattr(
+        __import__("app.services.capability_config", fromlist=["get_policy"]),
+        "get_policy",
+        lambda cid: None,
+    )
     monkeypatch.setenv("TUPU_LOCATE_BUDGET", "2")
     import importlib
     import app.services.skill_policy as sp
