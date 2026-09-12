@@ -53,7 +53,9 @@ def apply_preset(mode: str, updated_by: str = "admin") -> Dict[str, Any]:
                 stations.append({"kind": kind, "id": sid, "ok": True, "changed": True})
                 return
             except Exception as e:
-                if attempt == 2:
+                if attempt == 1:
+                    logger.warning(f"[preset] {kind}/{sid} 首试失败将重试一次: {e}")  # 瞬态错误可见（任务 3 审查 Minor-1）
+                else:
                     stations.append({"kind": kind, "id": sid, "ok": False, "error": str(e)})
 
     for sid, target in preset["guards"].items():

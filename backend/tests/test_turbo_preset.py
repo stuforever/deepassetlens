@@ -174,6 +174,9 @@ def test_preset_turbo_then_safe_state():
     pol2 = {p["guard_id"]: p["enabled"] for p in guard_config.get_policies(force=True)}
     assert all(pol2[g] is True for g in ("template", "output", "engine_lock", "approval_track",
                                           "capability", "sql_safety"))
+    # safe 收尾能力两站回位断言（任务 3 审查 Minor-2：防 capability 两站写错时被 turbo 幂等短路掩盖）
+    cap2 = {p["capability_id"]: p["enabled"] for p in capability_config.get_policies(force=True)}
+    assert cap2["decision_gate"] is True and cap2["locate_budget"] is True
 
 
 def test_preset_invalid_mode():
