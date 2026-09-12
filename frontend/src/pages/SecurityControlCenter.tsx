@@ -19,7 +19,7 @@ import {
 import {
   PoweroffOutlined, SafetyCertificateOutlined, ExperimentOutlined,
   SettingOutlined, HistoryOutlined, ReloadOutlined, DownloadOutlined, InfoCircleOutlined,
-  LockOutlined,
+  LockOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { guardsApi, capabilitiesApi, type GuardItem, type GuardEventItem, type GuardDescription, type CapabilityItem, type SubagentSpec, type AssemblyManifest } from '../services/api';
 import { PageShell, StatusTag, DataTableShell, DrawerFooter } from '../components/shell';
@@ -710,6 +710,9 @@ const TeachPanel: React.FC<{ step: number }> = ({ step }) => {
   );
 };
 
+/** 件 A/C 模式预设：加载中的预设键（plan 代码块用 ModeKey，本页原无此类型——实况最小适配；含 null=空闲） */
+type ModeKey = 'turbo' | 'safe' | null;
+
 const SecurityControlCenter: React.FC = () => {
   const [items, setItems] = useState<GuardItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -749,6 +752,58 @@ const SecurityControlCenter: React.FC = () => {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // —— 件 A/C（2026-09-12 极速模式 spec §三）：模式预设 ——
+  const [presetMode, setPresetMode] = useState<'turbo' | 'safe' | 'custom'>('custom');
+  const [presetLoading, setPresetLoading] = useState<ModeKey>(null);
+
+  const refreshPresetMode = useCallback(async () => {
+    try {
+      const [g, c] = await Promise.all([guardsApi.list(), capabilitiesApi.list()]);
+      const ge = (id: string) => g.data?.items?.find((x: any) => x.guard_id === id)?.enabled;
+      const ce = (id: string) => c.data?.items?.find((x: any) => x.capability_id === id)?.enabled;
+      const turbo = ge('template') === false && ge('output') === false && ge('engine_lock') === false
+        && ge('approval_track') === false && ge('capability') === false && ce('decision_gate') === false;
+      const safe = ge('template') === true && ge('output') === true && ge('engine_lock') === true
+        && ge('approval_track') === true && ge('capability') === true && ce('decision_gate') === true;
+      setPresetMode(turbo ? 'turbo' : safe ? 'safe' : 'custom');
+    } catch { /* 读失败显示「自定义」，不阻断页面 */ }
+  }, []);
+
+  useEffect(() => { refreshPresetMode(); }, [refreshPresetMode]);
+
+  const applyPreset = (mode: 'turbo' | 'safe') => {
+    const doApply = async () => {
+      setPresetLoading(mode);
+      try {
+        await guardsApi.preset(mode);
+        message.success(mode === 'turbo'
+          ? '已切换极速模式（后台预热中，下一问生效）'
+          : '已切换安全模式（全站回位，后台预热中）');
+        await refreshPresetMode();
+      } catch (e: any) {
+        message.error(`预设切换失败: ${e?.response?.data?.detail || e?.message || '未知错误'}`);
+      } finally { setPresetLoading(null); }
+    };
+    if (mode === 'turbo') {
+      Modal.confirm({                       // 红级确认范式：极速模式风险必须显式确认
+        title: '切换到极速模式（turbo）？',
+        width: 640,
+        content: (
+          <div style={{ lineHeight: 1.8 }}>
+            <p><b>将关闭</b>：下一步判断闸门、模板控制、输出控制、引擎锁、审批轨、工具白名单守卫；
+            <b>保留</b>：SQL 安全控制（SELECT-only+强制 LIMIT）与定位预算（死循环防护）。</p>
+            <p><b>风险账</b>（spec 2026-09-12 §三 C）：SQL 不再过模板校验（错表/错口径 SQL 会真执行）；
+            输出契约不校验、无范围声明/一轮单工具纪律、无工具白名单。</p>
+            <p>数据破坏风险≈0（引擎只读：duckdb/Doris 外部 catalog，且 sql_safety 保留）；
+            主要风险=<b>查询质量与行为不确定性</b>——零拒绝依赖模型自律（实验 2/2 成功，样本小）。</p>
+          </div>
+        ),
+        okText: '切换到极速', okButtonProps: { danger: true }, cancelText: '取消',
+        onOk: doApply,
+      });
+    } else { doApply(); }                    // 回安全=恢复防护，直接切
+  };
 
   const toggle = useCallback(async (item: GuardItem, next: boolean, reason?: string) => {
     setTogglingId(item.guard_id);
@@ -1137,6 +1192,22 @@ const SecurityControlCenter: React.FC = () => {
 
   return (
     <PageShell title="安全控制中心" description="按装配十步组织（批13-W 终版）：配置挂实际影响的装配步骤，教学即运维；守卫是运行期裁决（热生效）独立保留">
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Space size={16} wrap>
+          <SafetyCertificateOutlined />
+          <Text strong>模式预设：</Text>
+          {presetMode === 'turbo' ? <Tag color="orange">当前：极速 turbo</Tag>
+            : presetMode === 'safe' ? <Tag color="green">当前：安全 safe</Tag>
+            : <Tag>当前：自定义</Tag>}
+          <Button danger icon={<ThunderboltOutlined />} loading={presetLoading === 'turbo'}
+            onClick={() => applyPreset('turbo')}>极速模式</Button>
+          <Button type="primary" loading={presetLoading === 'safe'}
+            onClick={() => applyPreset('safe')}>安全模式</Button>
+          <Text type="secondary">
+            极速=六站关+SQL安全/定位预算保留（零拒绝提速 2.2~2.4 倍）；安全=全站回位
+          </Text>
+        </Space>
+      </Card>
       <Tabs
         defaultActiveKey="tab0"
         style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}

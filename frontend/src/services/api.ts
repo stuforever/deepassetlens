@@ -513,6 +513,8 @@ export const guardsApi = {
     guardsClient.get('/guards/events', { params, ...config }),
   resetDefaults: (config?: AxiosRequestConfig) =>
     guardsClient.post('/guards/reset-defaults', {}, config),
+  preset: (mode: 'turbo' | 'safe', config?: AxiosRequestConfig) =>
+    guardsClient.post('/guards/preset', { mode }, config),
 };
 
 // ===== 能力开关中心（批13-Q，/api/capabilities）=====
