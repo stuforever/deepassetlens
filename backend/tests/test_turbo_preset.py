@@ -85,3 +85,69 @@ def test_locate_budget_seed_row():
     from app.core.init_db import CAPABILITY_POLICY_SEED
     row = next(p for p in CAPABILITY_POLICY_SEED if p["capability_id"] == "locate_budget")
     assert row["params"] == {"generic": 8, "scenario": 14}
+
+
+# ---------------------------------------------------------------------------
+# 任务 2：件 B-2 模式锁降级（engine_lock 关=放行+warning）
+# ---------------------------------------------------------------------------
+
+class _FakeEnt:
+    source_mode = "api_integration"
+    data_source_id = None
+
+
+class _FakeQuery:
+    def __init__(self, ent): self._ent = ent
+    def filter(self, *a, **k): return self
+    def first(self): return self._ent
+
+
+class _FakeDB:
+    def query(self, *a, **k): return _FakeQuery(_FakeEnt())
+    def close(self): pass
+
+
+def _run_execute_sql():
+    from app.services.kg_action_handlers import _kg_execute_sql
+    return _kg_execute_sql({"sql": "SELECT 1", "entity_code": "api_ent"}, "00:00:00")
+
+
+def test_mode_lock_degrades_when_guard_off(monkeypatch, caplog):
+    """守卫关：不返回模式锁错误卡+记 warning（spec B-2）。
+    变异锚点：无前置守卫判断 → 仍返回模式锁 → 此测红。"""
+    import logging
+    monkeypatch.setattr("app.core.database.SessionLocal", lambda: _FakeDB())
+    from app.services import guard_config as gc
+    monkeypatch.setattr(gc, "guard_enabled", lambda gid, sub_id=None: False)
+    monkeypatch.setattr("app.services.sql_executor.build_execute_query_fn", lambda **k: None)
+    import app.services.kg_action_handlers as kah
+    with caplog.at_level(logging.WARNING):
+        out = kah._kg_execute_sql({"sql": "SELECT 1", "entity_code": "api_ent"}, "00:00:00")
+    assert "模式锁" not in (out.get("error") or "")          # 放行（走既有路径，此处执行函数桩为 None）
+    assert any("engine_lock" in r.message for r in caplog.records)  # warning 在案
+
+
+def test_mode_lock_intercepts_when_guard_on(monkeypatch):
+    """守卫开：行为与现状逐字节一致（回归锚，spec B-2）。"""
+    monkeypatch.setattr("app.core.database.SessionLocal", lambda: _FakeDB())
+    from app.services import guard_config as gc
+    monkeypatch.setattr(gc, "guard_enabled", lambda gid, sub_id=None: True)
+    import app.services.kg_action_handlers as kah
+    out = kah._kg_execute_sql({"sql": "SELECT 1", "entity_code": "api_ent"}, "00:00:00")
+    assert (out.get("error") or "").startswith("模式锁：实体 api_ent source_mode=api_integration")
+
+
+def test_mode_lock_fails_closed_on_guard_read_error(monkeypatch):
+    """读守卫失败：保持拦截（fail-closed 正确性件，spec B-2——方向与 B-1 fail-safe 开相反）。
+    变异锚点：except 分支改 fail-open（_el_on=False）→ 放行走 execute 桩 → 此测红。
+    （简报三测要求：plan 代码块仅含前两测，本测补 fail-closed 行为锚。）"""
+    monkeypatch.setattr("app.core.database.SessionLocal", lambda: _FakeDB())
+    from app.services import guard_config as gc
+
+    def _boom(gid, sub_id=None):
+        raise RuntimeError("guard store read failed")
+
+    monkeypatch.setattr(gc, "guard_enabled", _boom)
+    monkeypatch.setattr("app.services.sql_executor.build_execute_query_fn", lambda **k: None)
+    out = _run_execute_sql()
+    assert (out.get("error") or "").startswith("模式锁：实体 api_ent source_mode=api_integration")

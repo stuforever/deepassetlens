@@ -199,10 +199,21 @@ def _kg_execute_sql(body: dict, _ts: str) -> dict:
             ).first()
             if _ent:
                 if _ent.source_mode and _ent.source_mode != "physical_table":
-                    _hint_tool = "execute_entity_api" if _ent.source_mode == "api_integration" else "execute_doris_sql"
-                    _via = "SQL FROM 自动推断" if not body.get("entity_code", "") else "entity_code"
-                    return {"error": f"模式锁：实体 {entity_code_exec} source_mode={_ent.source_mode}，禁止 execute_sql，请用 {_hint_tool}",
-                            "log": f"[{_ts}] 模式守卫拦截：{entity_code_exec} 非 physical_table（{_via}），不降级不重试"}
+                    # B-2（2026-09-12 极速模式 spec §三）：模式锁接 engine_lock 守卫——
+                    # 关=warning+放行（走既有 execute 路径，data_source_id 缺失自然 TABLE_MISSING 纠错）；
+                    # 开=行为与现状逐字节一致；读守卫失败保持拦截（正确性 fail-closed）。
+                    try:
+                        from app.services import guard_config as _gc_b2
+                        _el_on = _gc_b2.guard_enabled("engine_lock")
+                    except Exception:
+                        _el_on = True
+                    if _el_on:
+                        _hint_tool = "execute_entity_api" if _ent.source_mode == "api_integration" else "execute_doris_sql"
+                        _via = "SQL FROM 自动推断" if not body.get("entity_code", "") else "entity_code"
+                        return {"error": f"模式锁：实体 {entity_code_exec} source_mode={_ent.source_mode}，禁止 execute_sql，请用 {_hint_tool}",
+                                "log": f"[{_ts}] 模式守卫拦截：{entity_code_exec} 非 physical_table（{_via}），不降级不重试"}
+                    logger.warning(f"[{_ts}] engine_lock 守卫已关：模式锁降级放行 {entity_code_exec}"
+                                   f"（source_mode={_ent.source_mode}，走既有 execute 路径）")
                 data_source_id = str(_ent.data_source_id) if _ent.data_source_id else None
         finally:
             _db_guard.close()
