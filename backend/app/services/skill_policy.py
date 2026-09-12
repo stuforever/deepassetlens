@@ -73,6 +73,24 @@ _LOCATE_BUDGET_TOOLS = frozenset({
 _LOCATE_DEDUP_TOOLS = frozenset({"search_entities", "search_entities_batch", "validate_l2", "fetch_subgraph", "fetch_l1_l2_tree"})
 _LOCATE_BUDGET_DEFAULT = int(os.getenv("TUPU_LOCATE_BUDGET", "8"))
 _LOCATE_BUDGET_SCENARIO = int(os.getenv("TUPU_LOCATE_BUDGET_SCENARIO", "14"))
+
+
+def _locate_budget_policy() -> tuple:
+    """B-1（2026-09-12 极速模式 spec §三）：定位预算接能力开关行 locate_budget。
+    返回 (enabled, generic, scenario)；读失败 fail-safe 回落环境变量默认（预算保持开）。"""
+    try:
+        from app.services import capability_config as _cc
+        row = _cc.get_policy("locate_budget")
+        if row is None:
+            return True, _LOCATE_BUDGET_DEFAULT, _LOCATE_BUDGET_SCENARIO
+        _p = row.get("params") or {}
+        return (bool(row.get("enabled", True)),
+                int(_p.get("generic") or _LOCATE_BUDGET_DEFAULT),
+                int(_p.get("scenario") or _LOCATE_BUDGET_SCENARIO))
+    except Exception:
+        return True, _LOCATE_BUDGET_DEFAULT, _LOCATE_BUDGET_SCENARIO
+
+
 # S5（HITL v2）：表/catalog 不存在 -> 由「自动降级一次」升级为「interrupt 请求人审」；
 # 仅这两类（唯一许可降级）走人审；SYNTAX 仍走自动纠错（无定位语义）。
 _HITL_TRIGGERS = frozenset({"TABLE_MISSING", "CATALOG_MISSING"})
@@ -214,7 +232,8 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         from app.services import guard_config as _gc
         _cap_on = _gc.guard_enabled("capability")
         _eng_on = _gc.guard_enabled("engine_lock")
-        # 1a) P0-COUNT 定位预算闸门（不受 capability 开关影响——死循环防护与能力开关正交）：
+        # 1a) P0-COUNT 定位预算闸门——B-1（2026-09-12）接 locate_budget 能力行：enabled=False 跳过、
+        #     params 覆盖阈值、读失败 fail-safe 开；死循环防护语义不变。
         #     L1 同参去重 + L2 总预算。只拦定位类工具，数据/回答路径不受影响。
         violation = self._locate_budget_check(contract, tool_name, request)
         if violation is not None:
@@ -290,6 +309,9 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         """
         if tool_name not in _LOCATE_BUDGET_TOOLS:
             return None
+        _lb_on, _lb_generic, _lb_scenario = _locate_budget_policy()  # B-1 接能力开关（fail-safe 开）
+        if not _lb_on:
+            return None            # locate_budget 关：跳过 L1 去重+L2 预算（检查逻辑本身零改动）
         import hashlib as _hl
         runtime = contract._runtime
         # L1 同参去重（仅纯检索类；源模式确认两件是状态机推进工具豁免）
@@ -307,7 +329,7 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             seen[sig] = int(runtime.get("locate_calls", 0)) + 1
         # L2 总预算
         total = int(runtime.get("locate_calls", 0))
-        budget = _LOCATE_BUDGET_SCENARIO if contract.route_type == "scenario" else _LOCATE_BUDGET_DEFAULT
+        budget = _lb_scenario if contract.route_type == "scenario" else _lb_generic
         if total >= budget:
             return (f"定位预算已耗尽（{total}/{budget} 次）。停止一切定位类调用："
                     f"用已确认的引擎与已知表名立即执行数据查询，或基于已有信息直接回答；"

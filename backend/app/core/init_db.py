@@ -205,6 +205,14 @@ CAPABILITY_POLICY_SEED = [
      "description": _CAP_DESC("DecisionGate 装卸开关（W-4a）+ 范围强校验工具集（W-4b）：工具调用前强制同轮「下一步判断」+数据工具客户名范围校验。",
                               "TUPU_DECISION_GATE=1 环境变量为启动兜底（恒开）；未设环境变量时以本开关为准（默认关=代码基准）。",
                               "scope_tools 可配置（⊆工具勾选域且非空）；SkillPolicy 站本体安全红线不可关，不在此列。"), "confirm_required": True},
+    {"capability_id": "locate_budget", "title": "定位预算", "risk_level": "yellow",
+     "params": {"generic": 8, "scenario": 14},
+     "description": _CAP_DESC("定位类工具两级预算闸门（L1 同参去重+L2 总预算 generic 8/场景 14，P0-COUNT 死循环防护）——"
+                              "参数可调（generic/scenario），关闭后定位类工具零预算零去重。",
+                              "关闭后死循环防护消失（generic COUNT 题曾同参 search×28+batch×12 交替 163s 打结）；"
+                              "极速模式保留开启（死循环防护非权限类）。",
+                              "环境变量 TUPU_LOCATE_BUDGET/TUPU_LOCATE_BUDGET_SCENARIO 保留为缺省兜底；"
+                              "读策略失败 fail-safe 回落环境变量默认（预算保持开）。"), "confirm_required": False},
 ]
 
 
