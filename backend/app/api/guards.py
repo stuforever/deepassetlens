@@ -3,11 +3,12 @@
 端点：
   GET  /api/guards                      -> {items:[...], global_version}
   PATCH /api/guards/{guard_id}          -> 更新后 item（红级关闭缺理由 -> 400）
+  POST /api/guards/preset               -> 一键极速/安全预设 {mode,stations,all_ok}（件 A 2026-09-12）
   POST  /api/guards/{guard_id}/probe    -> {verdict, blocked_reason|passed_reason, elapsed_ms}
   GET   /api/guards/events              -> 分页事件表（guard_id/range/page）
   POST  /api/guards/reset-defaults      -> {items:[...]}
 
-权限：所有端点经 get_current_user；非 admin -> GET 可读、PATCH/probe/reset 403。
+权限：所有端点经 get_current_user；非 admin -> GET 可读、PATCH/preset/probe/reset 403。
 """
 from __future__ import annotations
 
@@ -39,6 +40,10 @@ class GuardUpdateBody(BaseModel):
     params: Optional[Dict[str, Any]] = None
     confirm: bool = True
     close_reason: Optional[str] = None
+
+
+class PresetBody(BaseModel):
+    mode: str
 
 
 def _stats(guard_id: str) -> Dict[str, Any]:
@@ -91,6 +96,22 @@ def update_guard(guard_id: str, body: GuardUpdateBody, request: Request):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {**row, "stats": _stats(guard_id)}
+
+
+@router.post("/preset")
+async def apply_guard_preset(body: PresetBody, request: Request):
+    """件 A（2026-09-12 极速模式 spec §三）：一键极速/安全预设（7 站+切换后预热）。
+    admin 鉴权同守卫 PATCH；非法 mode -> 400；分站结果如实上报（部分生效不掩盖）。"""
+    _require_admin(request)
+    user = get_current_user(request)
+    updated_by = user.sub if user and user.sub else "admin"
+    from app.services import guard_preset
+    try:
+        out = guard_preset.apply_preset(body.mode, updated_by=updated_by)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    guard_preset.schedule_warmup()      # 切换后后台预热（19s 切换税→0，仅默认连接）
+    return out
 
 
 @router.post("/{guard_id}/probe")

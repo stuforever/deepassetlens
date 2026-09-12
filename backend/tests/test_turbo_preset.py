@@ -151,3 +151,62 @@ def test_mode_lock_fails_closed_on_guard_read_error(monkeypatch):
     monkeypatch.setattr("app.services.sql_executor.build_execute_query_fn", lambda **k: None)
     out = _run_execute_sql()
     assert (out.get("error") or "").startswith("模式锁：实体 api_ent source_mode=api_integration")
+
+
+# ---------------------------------------------------------------------------
+# 任务 3：件 A 预设服务+预热
+# ---------------------------------------------------------------------------
+
+def test_preset_turbo_then_safe_state():
+    """turbo 后六关二保留（sql_safety/locate_budget 开）；safe 后全站回位（spec §三表/§六）。
+    变异锚点：组合表错一站 → 对应断言红。测试后恢复 safe（现场零污染）。"""
+    from app.services import guard_preset, guard_config, capability_config
+    out = guard_preset.apply_preset("turbo", updated_by="test")
+    assert out["all_ok"] is True
+    pol = {p["guard_id"]: p["enabled"] for p in guard_config.get_policies(force=True)}
+    assert pol["template"] is False and pol["output"] is False and pol["engine_lock"] is False
+    assert pol["approval_track"] is False and pol["capability"] is False
+    assert pol["sql_safety"] is True                                   # 保留开
+    cap = {p["capability_id"]: p["enabled"] for p in capability_config.get_policies(force=True)}
+    assert cap["decision_gate"] is False and cap["locate_budget"] is True   # 保留开
+    out2 = guard_preset.apply_preset("safe", updated_by="test")        # 收尾恢复
+    assert out2["all_ok"] is True
+    pol2 = {p["guard_id"]: p["enabled"] for p in guard_config.get_policies(force=True)}
+    assert all(pol2[g] is True for g in ("template", "output", "engine_lock", "approval_track",
+                                          "capability", "sql_safety"))
+
+
+def test_preset_invalid_mode():
+    """非法 mode -> ValueError（端点层转 400，spec §五）。"""
+    from app.services import guard_preset
+    with pytest.raises(ValueError):
+        guard_preset.apply_preset("fast", updated_by="test")
+
+
+def test_preset_idempotent_second_call_skips():
+    """幂等：目标态已一致跳过（changed=False，少 bump 少重建）。"""
+    from app.services import guard_preset
+    guard_preset.apply_preset("safe", updated_by="test")
+    out = guard_preset.apply_preset("safe", updated_by="test")
+    assert out["all_ok"] and all(s["changed"] is False for s in out["stations"])
+
+
+@pytest.mark.asyncio
+async def test_warmup_runs_and_silent_fail(monkeypatch):
+    """预热：sleep 后调 get_tupu_agent("")一次；失败静默（spec §三 A/§五）。"""
+    import asyncio
+    from app.services import guard_preset
+    calls = {"n": 0}
+    async def _fake_agent(key):
+        calls["n"] += 1
+    async def _no_sleep(s):
+        pass
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    import app.services.tupu_deepagent as td
+    monkeypatch.setattr(td, "get_tupu_agent", _fake_agent)
+    await guard_preset.warmup_default_agent()
+    assert calls["n"] == 1
+    async def _boom(key):
+        raise RuntimeError("gateway down")
+    monkeypatch.setattr(td, "get_tupu_agent", _boom)
+    await guard_preset.warmup_default_agent()      # 失败静默不抛
