@@ -20,6 +20,8 @@ const { Text } = Typography;
 
 export type SqlResultData = {
   columns?: string[];
+  /** 明细表头中英双显（2026-09-12）：与 columns 等长的中文属性名列表，空串/缺失=该列回退单行英文 */
+  columns_cn?: string[];
   rows?: any[];
   row_count?: number;
   sql?: string;
@@ -70,13 +72,19 @@ const SqlResultTable: React.FC<SqlResultTableProps> = ({ data }) => {
     return data.columns.map((col, i) => {
       const t = colTypeIcon(col, i, data.rows || []);
       const isNum = t.cls === 'dal-num';
+      const cn = ((data.columns_cn || [])[i] || '').trim();
       return {
         title: (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: isNum ? 'flex-end' : 'flex-start', width: '100%' }}>
             <Tooltip title={`${t.tip}列`}>
               <span className={t.cls} style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.textTertiary }}>{t.icon}</span>
             </Tooltip>
-            {col}
+            {cn ? (
+              <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                <span style={{ fontWeight: 600 }}>{cn}</span>
+                <span style={{ fontSize: 11, fontWeight: 400, color: tokens.colors.textTertiary }}>{col}</span>
+              </span>
+            ) : col}
           </span>
         ),
         dataIndex: `c${i}`,

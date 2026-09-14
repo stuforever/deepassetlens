@@ -91,3 +91,34 @@ describe('S3a 图表渲染冒烟（jsdom 替代浏览器直测）', () => {
     unmount(root);
   });
 });
+
+describe('明细表头中英双显（2026-09-12 用户需求）', () => {
+  test('columns_cn 有值 -> 表头中文主行 + 英文技术名次行同现', () => {
+    const data: SqlResultData = {
+      columns: ['wbs_element', 'objnr'],
+      columns_cn: ['WBS元素', '对象编号'],
+      rows: [['元素A', 'PD1'], ['元素B', 'PD2']],
+      row_count: 2,
+    };
+    const { container, root } = renderInto(<SqlResultTable data={data} />);
+    const text = container.textContent || '';
+    expect(text).toContain('WBS元素');       // 中文主行
+    expect(text).toContain('对象编号');
+    expect(text).toContain('wbs_element');  // 英文次行保留
+    expect(text).toContain('objnr');
+    unmount(root);
+  });
+
+  test('无 columns_cn / 映射缺失 -> 回退单行英文现状（不渲染空行）', () => {
+    const data: SqlResultData = {
+      columns: ['wbs_element', '重过载台区数'],
+      rows: [['元素A', 3], ['元素B', 5]],
+      row_count: 2,
+    };
+    const { container, root } = renderInto(<SqlResultTable data={data} />);
+    const text = container.textContent || '';
+    expect(text).toContain('wbs_element');
+    expect(text).toContain('重过载台区数');
+    unmount(root);
+  });
+});
