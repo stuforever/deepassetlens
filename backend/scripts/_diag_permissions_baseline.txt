@@ -1,0 +1,4 @@
+﻿872: from deepagents.middleware.filesystem import FilesystemPermission
+874: FilesystemPermission(operations=["read"], paths=["/skills/**"], mode="allow"),
+875: FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
+876: FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
