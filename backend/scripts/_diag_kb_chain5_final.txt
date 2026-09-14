@@ -1,0 +1,7 @@
+建: 200
+type列: indexed
+传: 200
+vectorize: 200 2
+search: 200 2 0.10819058
+reconcile: 200 1 []
+DELETE: 200
