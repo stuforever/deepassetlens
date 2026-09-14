@@ -1,0 +1,5 @@
+053292cd-3af6-40d7-a995-b8ade1179a3e glm-flash chat
+0a211476-4c82-466e-9030-44c01d92fa86 glm-embedding-default embedding
+7440b018-9a82-4906-afde-38a5128dcc9b 3agent chat
+aad99847-2d85-4dd5-a18a-23b183920b27 4agent chat
+fb5bd879-2095-469e-a220-f9f72764e1b1 deepseek官方 chat1078 passed / 6 deselected（②批7 终态实测, 2026-09-15）
