@@ -1,0 +1,10 @@
+﻿=== kb0r ===
+{"code":200,"data":{"id":"945fa9d0-1d15-4ac1-baf9-a2539cab9311","name":"④基线存照KB","description":"批0全链存照","collection_name":"kb_945fa9d01d154ac1baf9a253","doc_count":0,"vector_count":0,"status":"ready","error_msg":null,"created_at":"2026-09-15T00:42:29"},"message":"知识库「④基线存照KB」已创建"}
+=== kb1r ===
+{"code":200,"data":{"id":"0db01df4-a505-4c30-ad38-7ad9caef4334","kb_id":"945fa9d0-1d15-4ac1-baf9-a2539cab9311","filename":"kbdoc.md","file_size":108,"chunk_count":0,"status":"pending","error_msg":null,"created_at":"2026-09-15T00:42:31"},"message":"文档「kbdoc.md」已上传"}
+=== kb2r ===
+{"code":200,"data":{"vector_count":1,"doc_count":1,"docs":[{"id":"0db01df4-a505-4c30-ad38-7ad9caef4334","kb_id":"945fa9d0-1d15-4ac1-baf9-a2539cab9311","filename":"kbdoc.md","file_size":108,"chunk_count":1,"status":"vectorized","error_msg":null,"created_at":"2026-09-15T00:42:31"}]},"message":"向量化完成：1 个分块"}
+=== kb3r ===
+{"code":200,"data":{"query":"测试文档","matches":[{"score":0.16439898,"text":"# 文档知识库基线存照（④批0）\n这是测试文档第一段，用于验证分块与检索。","filename":"kbdoc.md","chunk_idx":0}],"count":1}}
+=== 基线 KB id: 945fa9d0-1d15-4ac1-baf9-a2539cab9311 ===
+{"code":200,"message":"知识库已删除"}
