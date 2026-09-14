@@ -239,6 +239,14 @@ async def lifespan(app: FastAPI):
         logger.info("[startup] capabilities 列确保完成（③模型目录化）")
     except Exception as _cap_err:
         logger.warning(f"[startup] capabilities 列迁移异常（不阻启动）: {_cap_err}")
+    # ⑤批1（spec §二 Runbook 步骤1）：教学引擎 PG 四表（幂等；失败不阻启动——教学工具
+    # 面返回可读错误，L1/L2/L3 记忆不受影响）。
+    try:
+        from app.services.learning.pg import ensure_tables
+        ensure_tables()
+        logger.info("[startup] learning PG 四表确保完成（⑤教学引擎）")
+    except Exception as _pg_err:
+        logger.warning(f"[startup] learning PG 四表迁移异常（不阻启动）: {_pg_err}")
     # 记忆插槽②批2（spec §九步骤2）：AGENTS.md 受控搬迁（warmup 前；fail-fast——等值前提
     # 被破坏时宁可不起）+ wenshu 记忆树骨架/RAW_MD 预创建（失败不阻启动）。
     from app.services.memory_tree_backend import _migrate_agents_md
