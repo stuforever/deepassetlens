@@ -58,7 +58,8 @@ class MemoryTreeBackend:
         self._legacy = [p for p in _mem["legacy_paths"]]
         self._writable = {s["path"] for s in _mem["slots"]
                           if s.get("type") == "RAW_MD" and s.get("writer") == "agent_edit"}
-        self._slot_by_path = {s["path"]: s for s in _mem["slots"]}
+        # 批7 实证修正 #7：L2/L3 槽无 path 键（仅 RAW_MD 有）——s["path"] 直接 KeyError
+        self._slot_by_path = {s["path"]: s for s in _mem["slots"] if s.get("path")}
 
     def _roots(self):
         rt = _current_runtime()
