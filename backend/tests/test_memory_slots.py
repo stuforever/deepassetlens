@@ -68,3 +68,62 @@ def test_injection_list_order():
         "legacy_paths": ["/memory/AGENTS.md"]}
     assert injection_list(mem) == \
         ["/memory/AGENTS.md", "/memory/L2/chat.md", "/memory/偏好.md"]  # L2 走规范路径
+
+
+# ---------------------------------------------------------------------------
+# 批 2：per-user 根 + MemoryTreeBackend 三分支 + AGENTS.md 搬迁
+# ---------------------------------------------------------------------------
+
+def test_memory_roots_per_user():
+    """expert_paths 扩 per-user（spec §八）：专家根/用户根落 backend/data/memory 下。"""
+    from app.services.expert_paths import memory_expert_root, memory_user_root
+    assert memory_expert_root("wenshu").as_posix().endswith("data/memory/wenshu")
+    assert memory_user_root("wenshu", "anonymous").as_posix().endswith("data/memory/wenshu/anonymous")
+
+
+def test_memory_tree_backend_three_branches(tmp_path, monkeypatch):
+    """三分支（spec §五/§十二风险4，硬约束）：双根读/单根写（专家根拒）/越界拒。
+    变异锚点：任一分支语义破 → 红。"""
+    from app.services import memory_tree_backend as mtb
+    _e = tmp_path / "wenshu"; _u = _e / "alice"
+    _u.mkdir(parents=True); (_e / "AGENTS.md").write_text("手册", encoding="utf-8")
+    (_u / "偏好.md").write_text("旧", encoding="utf-8")
+    monkeypatch.setattr(mtb, "memory_expert_root", lambda e: _e)
+    monkeypatch.setattr(mtb, "memory_user_root", lambda e, u: _u)
+    card = {"expert_id": "wenshu", "memory": {"slots": [
+        {"slot": "偏好", "type": "RAW_MD", "path": "/memory/偏好.md",
+         "writer": "agent_edit", "read": "注入", "order": 4}], "legacy_paths": []}}
+    b = mtb.MemoryTreeBackend("wenshu", card)
+    # 结果对象全 @dataclass（deepagents.backends.protocol 实测，含 __post_init__）——
+    # 属性访问 r.error/r.file_data（计划 R2 第3条「纯 dict 键访问」误诊，实证修正）。
+    r = b.read("/memory/AGENTS.md")                       # 分支1：双根读（用户根 miss→专家根）
+    assert (r.file_data or {}).get("content") == "手册"
+    r2 = b.read("/memory/偏好.md")                        # 分支1：用户根命中
+    assert not r2.error
+    w = b.write("/memory/AGENTS.md", "篡改")              # 分支2：专家根（手册）写即拒
+    assert w.error                                         # 手册防改第二道锁
+    w2 = b.write("/memory/偏好.md", "新内容")              # 分支2：用户根写成功+备份轮转
+    assert not w2.error
+    assert (_u / "偏好.md").read_text(encoding="utf-8") == "新内容"
+    assert any(((_u / "backup").glob("*/偏好.md")))         # 写前备份已轮转
+    w3 = b.write("/memory/未声明.md", "x")                 # 分支3：越界（卡外）拒
+    assert w3.error
+    w4 = b.write("/etc/passwd", "x")                       # 分支3：树外拒
+    assert w4.error
+
+
+def test_migrate_agents_md_idempotent(tmp_path, monkeypatch):
+    """AGENTS.md 受控搬迁（spec §九步骤2/F1）：搬→校验和逐字节→旧位 .bak；幂等重跑跳过。
+    变异锚点：搬迁改内容一字节/漏 .bak/不幂等 → 红。"""
+    import hashlib
+    from app.services import memory_tree_backend as mtb
+    _plat = tmp_path / "memory"; _plat.mkdir()
+    (_plat / "AGENTS.md").write_bytes("纪律树内容逐字节".encode("utf-8"))
+    monkeypatch.setattr(mtb, "_MEMORY_ROOT", _plat)
+    src = _plat / "AGENTS.md"; dst = _plat / "wenshu" / "AGENTS.md"
+    mtb._migrate_agents_md()
+    assert dst.exists() and hashlib.sha256(dst.read_bytes()).hexdigest() == \
+        hashlib.sha256("纪律树内容逐字节".encode()).hexdigest()   # 逐字节
+    assert (_plat / "AGENTS.md.bak").exists()                    # 旧位留 .bak
+    mtb._migrate_agents_md()                                     # 幂等：目标在+校验同→跳过零写
+    assert dst.read_text(encoding="utf-8") == "纪律树内容逐字节"

@@ -226,6 +226,16 @@ async def lifespan(app: FastAPI):
         _migrate_checkpoint_thread_ids()
     except Exception as _mig_err:
         logger.warning(f"[startup] checkpoint 迁移异常（不阻启动）: {_mig_err}")
+    # 记忆插槽②批2（spec §九步骤2）：AGENTS.md 受控搬迁（warmup 前；fail-fast——等值前提
+    # 被破坏时宁可不起）+ wenshu 记忆树骨架/RAW_MD 预创建（失败不阻启动）。
+    from app.services.memory_tree_backend import _migrate_agents_md
+    _migrate_agents_md()
+    try:
+        from app.services.memory_tree_backend import ensure_dirs
+        from app.services import expert_config as _ec
+        ensure_dirs("wenshu", _ec.get_card("wenshu"))
+    except Exception as _ensure_err:
+        logger.warning(f"[startup] 记忆树骨架创建异常（不阻启动）: {_ensure_err}")
     # F3-fix: 生产安全检查已移到 lifespan 最开头（fail-fast，在任何初始化之前）
     yield
     # Shutdown

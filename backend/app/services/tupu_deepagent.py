@@ -894,10 +894,14 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
             _n_seeded += _seed_files(_files_store, _FILES_NS_MEMORY, _r)
         _routes = {f"/{_p}/": StoreBackend(store=_files_store, namespace=lambda _rt, _ns=_FILES_NS_SKILLS: _ns)
                    for _p in [seg for s in ((card or {}).get("skills") or []) for seg in [str(s).strip("/")] if seg]}
-        _routes.update({f"/{_p}/": StoreBackend(store=_files_store, namespace=lambda _rt, _ns=_FILES_NS_MEMORY: _ns)
-                        # 记忆插槽②批1：memory 已归一为 {slots, legacy_paths}——路由段与注入列表同源
-                        # （injection_list：wenshu 无 slots → legacy 路径列表，等值①现状）
-                        for _p in [seg for m in _mem_inject_list(card or {}) for seg in [str(m).strip("/").split("/")[0]] if seg]})
+        _routes = {f"/{_p}/": StoreBackend(store=_files_store, namespace=lambda _rt, _ns=_FILES_NS_SKILLS: _ns)
+                   for _p in [seg for s in ((card or {}).get("skills") or []) for seg in [str(s).strip("/")] if seg]}
+        # 记忆插槽②批2：/memory/ 换心脏——StoreBackend(种子式)→MemoryTreeBackend(物理树持久化，
+        # 双根读/单根写/备份/台账)。每 Agent 独立实例（装配期构造，实例零共享状态；读写落点
+        # 每次调用经 memory_runtime ContextVar 解析——「同装配、不同人」）。/skills/ 原封不动。
+        from app.services.memory_tree_backend import MemoryTreeBackend as _MTB, ensure_dirs as _ensure_dirs
+        _routes.update({"/memory/": _MTB(str((card or {}).get("expert_id") or "wenshu"), card or {})})
+        _ensure_dirs(str((card or {}).get("expert_id") or "wenshu"), card or {})  # 骨架+RAW_MD 预创建（不阻装配）
         backend = CompositeBackend(default=StateBackend(), routes=_routes)
         logger.info(f"[13-Y] StoreBackend 路由已装配（种子 {_n_seeded} 个文件，files_hash={_compute_files_hash(card)}）——运行时零磁盘")
     else:

@@ -38,3 +38,15 @@ def memory_roots(card: Dict) -> List[Path]:
     from app.services.memory_slots import normalize_memory_field
     mem = normalize_memory_field((card or {}).get("memory"))
     return _roots(mem.get("legacy_paths"))
+
+
+# ---- 记忆插槽②批2：per-user 记忆树根（spec §五/§八，②期 per-user 函数落位于此——Q4 同款单点）----
+
+def memory_expert_root(expert_id: str) -> Path:
+    """专家根（手册在此，spec §五）。"""
+    return _DATA_ROOT / "memory" / expert_id
+
+
+def memory_user_root(expert_id: str, user: str) -> Path:
+    """用户根（记忆树，spec §五）。"""
+    return _DATA_ROOT / "memory" / expert_id / (user or "anonymous")
