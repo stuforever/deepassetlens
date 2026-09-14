@@ -1,0 +1,4 @@
+﻿904: from deepagents.middleware.filesystem import FilesystemPermission
+907: FilesystemPermission(operations=["read"], paths=[f"{p}**" for p in ((card or {}).get("skills") or [])], mode="allow"),
+908: FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
+909: FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
