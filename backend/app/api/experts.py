@@ -101,8 +101,22 @@ def _validate_card_fields(body: Dict[str, Any]) -> None:
             if not rel or not (_data / rel).exists():
                 raise ValueError(f"声明路径不存在: {s}")
     for k in body.get("knowledge_sources") or []:
-        if k not in _KNOWLEDGE_WHITELIST:
-            raise ValueError(f"knowledge_sources 白名单外（①期仅 ontology_graph）: {k}")
+        if k in _KNOWLEDGE_WHITELIST:
+            continue
+        # ④批4（spec D9）：白名单扩展 kb:{id}——id 须真实存在（存在性校验=白名单纪律）
+        if str(k).startswith("kb:"):
+            from app.models.knowledge_base import KnowledgeBase
+            from app.core.database import SessionLocal as _SL
+            _kid = str(k)[3:]
+            _s = _SL()
+            try:
+                _exists = _s.query(KnowledgeBase).filter(KnowledgeBase.id == _kid).first()
+            finally:
+                _s.close()
+            if not _exists:
+                raise ValueError(f"knowledge_sources 声明的知识库不存在: {k}")
+            continue
+        raise ValueError(f"knowledge_sources 白名单外（ontology_graph 或 kb:{{id}}）: {k}")
 
 
 @router.get("")

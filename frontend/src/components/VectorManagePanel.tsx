@@ -213,7 +213,25 @@ const VectorManagePanel: React.FC = () => {
     try {
       const values = await createForm.validateFields();
       setCreating(true);
-      const res = await knowledgeBaseApi.create({ name: values.name, description: values.description });
+      // ④批4：类型分路——connected 需指针参数（url/index JSON）
+      const kbType = values.type || 'indexed';
+      let pointerParams: any = undefined;
+      if (kbType === 'connected') {
+        try {
+          pointerParams = values.pointer_params ? JSON.parse(values.pointer_params) : undefined;
+        } catch {
+          message.error('指针参数须为合法 JSON（如 {"url":"http://127.0.0.1:11200","index":"demo"}）');
+          setCreating(false);
+          return;
+        }
+      }
+      const res = await knowledgeBaseApi.create({
+        name: values.name,
+        description: values.description,
+        type: kbType,
+        rag_provider: kbType === 'connected' ? 'connected_es' : 'qdrant',
+        pointer_params: kbType === 'connected' ? (pointerParams || {}) : undefined,
+      });
       message.success(res?.data?.message || '知识库已创建');
       setCreateModalOpen(false);
       createForm.resetFields();
@@ -224,6 +242,40 @@ const VectorManagePanel: React.FC = () => {
     } finally {
       setCreating(false);
     }
+  };
+
+  // ④批4：对账/重嵌（spec D8——重嵌永远手动）
+  const handleReconcile = async (kb: any) => {
+    try {
+      const res = await knowledgeBaseApi.reconcile(kb.id);
+      const rec = res?.data?.data?.reconcile || {};
+      const stale = rec.stale || [];
+      const failed = rec.failed || [];
+      message.info(`对账完成：一致 ${rec.consistent ?? 0}，失配(需重嵌) ${stale.length}，失败 ${failed.length}`);
+      if (activeKb?.id === kb.id) openKbDetail(kb);
+      fetchKbList();
+    } catch (e: any) {
+      message.error(`对账失败: ${e?.response?.data?.detail || e?.message}`);
+    }
+  };
+
+  const handleReembed = async (kb: any) => {
+    Modal.confirm({
+      title: '重嵌失配文档',
+      content: `按当前嵌入签名重新生成「${kb.name}」中失配（stale）文档的向量？此操作会消耗嵌入额度。`,
+      okText: '重嵌',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await knowledgeBaseApi.reembed(kb.id);
+          message.success(`重嵌完成：${res?.data?.data?.reembed?.reembedded ?? 0} 个文档`);
+          if (activeKb?.id === kb.id) openKbDetail(kb);
+          fetchKbList();
+        } catch (e: any) {
+          message.error(`重嵌失败: ${e?.response?.data?.detail || e?.message}`);
+        }
+      },
+    });
   };
 
   const handleDeleteKb = async (kb: any) => {
@@ -585,6 +637,29 @@ const VectorManagePanel: React.FC = () => {
           <Form.Item name="description" label="描述">
             <Input.TextArea placeholder="可选，知识库用途说明" rows={3} maxLength={500} />
           </Form.Item>
+          {/* ④批4：类型+指针参数（connected=外部 ES 指针，不复制不重建） */}
+          <Form.Item name="type" label="类型" initialValue="indexed">
+            <Select
+              options={[
+                { value: 'indexed', label: '自建索引（上传文档→向量化）' },
+                { value: 'connected', label: '外部指针（连接既有 ES 索引）' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.type !== cur.type}>
+            {({ getFieldValue }) => getFieldValue('type') === 'connected' ? (
+              <Form.Item
+                name="pointer_params"
+                label="指针参数（JSON）"
+                rules={[{ required: true, message: '指针型必须提供 url/index' }]}
+              >
+                <Input.TextArea
+                  placeholder='{"url": "http://127.0.0.1:11200", "index": "your_index"}'
+                  rows={3}
+                />
+              </Form.Item>
+            ) : null}
+          </Form.Item>
         </Form>
       </Modal>
 
@@ -602,11 +677,20 @@ const VectorManagePanel: React.FC = () => {
               {/* 基本信息 */}
               <Card size="small" title="基本信息">
                 <Descriptions2 activeKb={activeKb} />
-                <Space style={{ marginTop: 8 }}>
-                  <Button type="primary" icon={<ThunderboltOutlined />} loading={vectorizing} onClick={handleVectorize}>
-                    向量化全部文档
-                  </Button>
-                  <Text type="secondary" style={{ fontSize: 12 }}>（全量重建：会清空旧向量后重新生成）</Text>
+                <Space style={{ marginTop: 8 }} wrap>
+                  {(activeKb.type || 'indexed') === 'indexed' && (
+                    <>
+                      <Button type="primary" icon={<ThunderboltOutlined />} loading={vectorizing} onClick={handleVectorize}>
+                        向量化全部文档
+                      </Button>
+                      <Button size="small" onClick={() => handleReconcile(activeKb)}>签名对账</Button>
+                      <Button size="small" danger onClick={() => handleReembed(activeKb)}>重嵌失配文档</Button>
+                      <Text type="secondary" style={{ fontSize: 12 }}>（全量重建：会清空旧向量后重新生成；对账标 stale 的文档在重嵌前检索照常）</Text>
+                    </>
+                  )}
+                  {(activeKb.type || 'indexed') === 'connected' && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>指针型知识库：检索实时透传外部索引，无向量化工序。</Text>
+                  )}
                 </Space>
               </Card>
 

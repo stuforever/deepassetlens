@@ -158,6 +158,14 @@ def list_tables(keyword: str = "") -> dict:
 
 
 @mcp.tool()
+def search_kb(kb_id: str, query: str, top_k: int = 6) -> dict:
+    """④（spec D9）：知识库检索——专家卡 knowledge_sources 声明 kb:{id} 后可用。
+    indexed 型=Qdrant 相似检索；connected 型=外部 ES 透传。返回 matches[{text,score,filename,chunk_idx}]。"""
+    from app.services.kb_query import kb_query
+    return kb_query(kb_id=kb_id, query=query, top_k=int(top_k or 6))
+
+
+@mcp.tool()
 def get_entity_source_mode(entity_code: str) -> dict:
     """查询实体数据源模式（physical_table/api_integration/sql_integration）。"""
     return dispatch_kg_action("get_entity_source_mode", {"entity_code": entity_code})

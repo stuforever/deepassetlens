@@ -150,7 +150,7 @@ export const vectorManageApi = {
 export const knowledgeBaseApi = {
   list: () => api.get('/knowledge-bases'),
   get: (id: string) => api.get(`/knowledge-bases/${id}`),
-  create: (data: { name: string; description?: string }) => api.post('/knowledge-bases', data),
+  create: (data: { name: string; description?: string; type?: string; rag_provider?: string; pointer_params?: Record<string, unknown> }) => api.post('/knowledge-bases', data),
   delete: (id: string) => api.delete(`/knowledge-bases/${id}`),
   upload: (id: string, file: File) => {
     const form = new FormData();
@@ -163,6 +163,9 @@ export const knowledgeBaseApi = {
   deleteDoc: (id: string, docId: string) => api.delete(`/knowledge-bases/${id}/documents/${docId}`),
   search: (id: string, query: string, top_k = 5) =>
     api.post(`/knowledge-bases/${id}/search`, { query, top_k }),
+  // ④批4：增量对账+手动重嵌（spec D8——重嵌永远手动）
+  reconcile: (id: string) => api.post(`/knowledge-bases/${id}/reconcile`),
+  reembed: (id: string) => api.post(`/knowledge-bases/${id}/reembed`),
 };
 
 export const smartSkillApi = {
