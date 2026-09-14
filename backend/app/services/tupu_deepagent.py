@@ -810,7 +810,8 @@ _FINAL_RESPONSE_FORMAT = {
 _ASSEMBLY_MANIFEST: dict = {"version": 0, "agent_key": "", "items": {}}
 # fail-safe 快照：最近一次成功装配的 caps（新配置装配失败时回退此版本）
 # 专家地基①：扩展含卡快照——回退路径连卡一起回退（spec §十）。
-_LAST_GOOD_ASSEMBLY: dict = {"caps": None, "caps_version": 0, "card": None}
+# 批6 E3 修正：改按 expert 分桶——跨专家回退=串卡（echo 会拿到 wenshu 的卡），隔离破坏。
+_LAST_GOOD_ASSEMBLY: dict = {}  # {expert_id: {"caps":…, "caps_version":…, "card":…}}
 
 
 def _narrow_mcp_tools(mcp_tools, card_tools):
@@ -1145,24 +1146,26 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_i
     except KeyError as _ke:
         raise RuntimeError(f"未知专家: {expert_id}") from _ke
     caps = {p["capability_id"]: p for p in capability_config.get_policies()}
+    _last = _LAST_GOOD_ASSEMBLY.get(expert_id) or {}  # 批6 E3：按专家取回退快照（不跨专家串卡）
     try:
         agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps, card=card)
-        _LAST_GOOD_ASSEMBLY["caps"] = caps
-        _LAST_GOOD_ASSEMBLY["caps_version"] = capability_config.get_version()
-        _LAST_GOOD_ASSEMBLY["card"] = card
+        _LAST_GOOD_ASSEMBLY[expert_id] = {"caps": caps,
+                                          "caps_version": capability_config.get_version(),
+                                          "card": card}
         return agent
     except Exception as e:
-        if _LAST_GOOD_ASSEMBLY.get("caps"):
-            logger.error(f"[Capability] 新配置装配失败，fail-safe 回退上一可用版本: {e}")
+        if _last.get("caps"):
+            logger.error(f"[Capability] 专家 {expert_id} 新配置装配失败，fail-safe 回退其上一可用版本: {e}")
             try:
                 capability_config.record_event(
                     "assembly", "fallback",
-                    detail={"reason": str(e)[:300], "failed_version": capability_config.get_version(),
-                            "fallback_version": _LAST_GOOD_ASSEMBLY.get("caps_version")},
+                    detail={"expert_id": expert_id, "reason": str(e)[:300],
+                            "failed_version": capability_config.get_version(),
+                            "fallback_version": _last.get("caps_version")},
                     updated_by="assembly", _sync=True)
                 return await _build_agent(checkpointer=checkpointer, connection_id=connection_id,
-                                          caps=_LAST_GOOD_ASSEMBLY["caps"],
-                                          card=_LAST_GOOD_ASSEMBLY.get("card"))
+                                          caps=_last["caps"],
+                                          card=_last.get("card"))
             except Exception as e2:
                 logger.error(f"[Capability] 回退装配也失败（fail-closed 阻止创建）: {e2}")
                 try:
@@ -1327,6 +1330,13 @@ async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu"):
                 )
                 _GLOBAL_AGENTS[_cache_key] = agent
                 _evict_old_agents(_cache_key)
+                # 专家地基①（D2）：专家维度 rebuild 落账——新键装配=该专家按新版本重建
+                try:
+                    _ec.record_event(expert_id, "rebuild",
+                                     detail={"new_key": _cache_key, "card_version": _ecard_ver},
+                                     updated_by="assembly")
+                except Exception:
+                    pass
                 logger.info(f"[DeepAgent] tupu ReAct agent 已创建 (key={_cache_key}), checkpoint={_CHECKPOINT_DB}")
     return _GLOBAL_AGENTS[_cache_key]
 

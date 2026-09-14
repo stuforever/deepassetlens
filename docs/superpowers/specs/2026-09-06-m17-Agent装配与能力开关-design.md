@@ -96,3 +96,6 @@ Checkpointer：AsyncSqliteSaver（data/deepagent_checkpoints.db）——HITL/记
 ## 九、证据锚点
 
 装配 `tupu_deepagent.py`：fail-safe L1098-1125（fallback/fail-closed）/三因子缓存键 L1173-1225（LRU L1151-1170/懒加载锁 L1142-1143/Checkpointer L1145-1148）/规则常量族 L86-233/build_skill_system_message L1128-1134/_seed_files·files_hash L396-441/Rubric 族 L354-394·L632-789/FinalDelivery L513-548/SQL 纠错 L550-631/_DATA_QUERY_TOOLS L345-353/决策门 env L174｜开关中心 `capability_config.py`：白名单定调 L139-146/红线 L158-163/锁定件 L155-156/DecisionGate L170-196/评分枚举 L336-340/校验 L276-353/事件 L355-382/reset L434/清理 L475｜API `api/capabilities.py` + 前端 `SecurityControlCenter.tsx` CapabilityPanel L115-660（manifest Tab0 L550-558/七步 Tabs L1149-1157/导出 L360-363）+ `api.ts` L518-572。
+
+## 增补登记（2026-09-12 专家地基①，随批回写）
+- **装配域套例**：_build_agent 按卡参数化（提示词基座 base 参/工具面窄化 _narrow_mcp_tools（空交集拒装配 fail-closed）/种子与路由按卡根/权限 allow 按卡技能路径/skills-memory 按卡）；缓存键 4→6 因子 _assembly_cache_key（+#e{expert}@{card_version}）；_ASSEMBLY_MANIFEST items +2 项（expert_id/card_version）；_compute_files_hash(card) 按卡路径派生（wenshu 与现状逐字节等值）；_LAST_GOOD_ASSEMBLY 按专家分桶回退（批6 E3 修正跨专家串卡）；LRU 按专家分组保留 2 版。

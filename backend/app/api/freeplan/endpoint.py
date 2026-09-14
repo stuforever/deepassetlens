@@ -136,7 +136,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             # 批13-AB4：_data_result_sids 防覆盖集已删（DataSummaryMiddleware 退役，sql_result 统一 on_tool_end 派发）
             # v3.1 步骤5: 关键事件持久化(flag-gated+容错); _consume_events 内 append, final/except 里 complete/fail, finally 里 close
             from app.services.run_event_sink import RunEventSink
-            _evt_sink = RunEventSink(req.user_input)
+            _evt_sink = RunEventSink(req.user_input, expert_id=req.expert_id)  # 专家地基①：观测带专家维度
 
             # v3.6 分段计时埋点：流式段五段计时（_t0 已在批13-N2 提前到生成器第一行，
             # 使 total/first_event 覆盖 prep 段）
