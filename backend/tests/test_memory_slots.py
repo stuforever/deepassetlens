@@ -219,3 +219,40 @@ def test_out_of_bounds_matrix():
     assert _allowed(rules, "write", "/skills/foo.md") is False          # ❌ /skills/**
     assert _allowed(rules, "read", "/skills/foo.md") is True            # 读技能照常
     assert _allowed(rules, "write", "/etc/passwd") is False              # ❌ 树外
+
+
+# ---------------------------------------------------------------------------
+# 批 5：consolidator（模式注册表/E2 幂等/只写 L2L3）
+# ---------------------------------------------------------------------------
+
+def test_consolidator_mode_registry():
+    """模式注册表（spec §七）：update/audit 交付；dedup/merge 显式未实现（422 素材）。
+    run_consolidation 为 async（批5 实证修正 #4：计划测试原文同步调用不会执行协程体，
+    以 asyncio.run 驱动）。"""
+    import asyncio
+    from app.services import memory_consolidator as mc
+    assert set(mc.MODES) >= {"update", "audit"}
+    with pytest.raises(mc.ModeNotImplemented):
+        asyncio.run(mc.run_consolidation("wenshu", "alice", mode="dedup", _llm=None, _trace=[]))
+
+
+def test_consolidator_idempotent_no_new_lines(tmp_path, monkeypatch):
+    """E2（spec §十二）：无新行重跑→报告「读 0 行、零写入」；只写 L2/L3 不碰 RAW_MD/trace。
+    （批5 实证修正 #5：真 wenshu 卡无 L2/L3 槽会零成本跳过——测试 mock 带槽卡。）"""
+    from app.services import memory_consolidator as mc
+    import app.services.expert_config as _ec
+    _card = {"expert_id": "wenshu", "memory": {"slots": [
+        {"slot": "会话摘要", "type": "L2_SUMMARY", "surface": "chat", "read": "注入", "order": 2}],
+        "legacy_paths": []}}
+    monkeypatch.setattr(_ec, "get_card", lambda e: _card)
+    _u = tmp_path / "wenshu" / "alice"
+    (_u / "trace" / "chat").mkdir(parents=True)
+    (_u / "L2").mkdir(); (_u / "L3").mkdir()
+    (_u / "trace" / "chat" / "d.jsonl").write_text('{"kind":"user_msg"}\n', encoding="utf-8")
+    (_u / "偏好.md").write_text("用户偏好原文", encoding="utf-8")
+    state = {"last": 0}
+    r1 = mc._consolidate_tree("wenshu", "alice", root=_u, state=state, _llm=lambda prompt: "…")
+    assert r1["read_lines"] == 1
+    r2 = mc._consolidate_tree("wenshu", "alice", root=_u, state=state, _llm=lambda prompt: "…")
+    assert r2["read_lines"] == 0 and r2["l2_written"] == 0      # 幂等：零新行零写入
+    assert (_u / "偏好.md").read_text(encoding="utf-8") == "用户偏好原文"   # RAW_MD 不碰

@@ -236,6 +236,15 @@ async def lifespan(app: FastAPI):
         ensure_dirs("wenshu", _ec.get_card("wenshu"))
     except Exception as _ensure_err:
         logger.warning(f"[startup] 记忆树骨架创建异常（不阻启动）: {_ensure_err}")
+    # 记忆插槽②批5（spec §七）：consolidator 周期扫描（默认 30 分钟，env 关不启动）。
+    import os as _os_cons
+    if _os_cons.getenv("TUPU_MEMORY_CONSOLIDATOR", "1") == "1":
+        try:
+            from app.services import memory_consolidator
+            asyncio.get_running_loop().create_task(memory_consolidator.periodic_scan())
+            logger.info("[consolidator] 周期扫描任务已挂载（默认 30 分钟）")
+        except Exception as _cons_err:
+            logger.warning(f"[startup] consolidator 任务创建失败: {_cons_err}")
     # F3-fix: 生产安全检查已移到 lifespan 最开头（fail-fast，在任何初始化之前）
     yield
     # Shutdown
