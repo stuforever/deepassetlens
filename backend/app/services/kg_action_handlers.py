@@ -275,6 +275,7 @@ def _kg_execute_sql(body: dict, _ts: str) -> dict:
                 # G4（融合设计 §5.2）：引擎侧结果验证字段
                 res["verification"] = _build_verification(res)
                 res["sql"] = current_sql
+                res["columns_cn"] = _build_columns_cn(cols, entity_code_exec)  # 表头中英双显（2026-09-12）
                 res["log"] = f"[{_ts}] SQL执行成功：返回 {row_cnt} 行数据，字段（{', '.join(cols[:6])}{'...' if len(cols) > 6 else ''}）"
                 res["sql"] = current_sql
     return res
@@ -330,6 +331,46 @@ def _entity_attrs(props) -> list:
                     "attribute_name": str(p.get("cnName") or p.get("name") or ""),
                 })
     return attrs
+
+def _build_columns_cn(columns, entity_codes=None) -> list:
+    """明细表头中英双显（2026-09-12 用户需求）：技术列名 -> 中文属性名对齐列表。
+
+    映射源 kg_entities.properties_schema.cnName（复用 _entity_attrs 解析）；三字段匹配
+    （entity_code/entity_en_name/entity_name）；entity_codes 空 → 全实体并集（多表联邦）。
+    美化件非正确性件——任何异常/实体缺失/未匹配列返空串（前端回退单行现状），永不阻断主链。"""
+    try:
+        cols = [str(c) for c in (columns or [])]
+        if not cols:
+            return []
+        if isinstance(entity_codes, (list, tuple)):
+            codes = [str(c).strip() for c in entity_codes if c and str(c).strip()]
+        elif entity_codes and str(entity_codes).strip():
+            codes = [str(entity_codes).strip()]
+        else:
+            codes = []
+        from app.core.database import SessionLocal
+        from app.models.base import Entity
+        from sqlalchemy import or_
+        db = SessionLocal()
+        try:
+            if codes:
+                rows = db.query(Entity).filter(or_(*[
+                    or_(Entity.entity_code == c, Entity.entity_en_name == c, Entity.entity_name == c)
+                    for c in codes])).all()
+            else:
+                rows = db.query(Entity).all()
+            mapping = {}
+            for _ent in rows:
+                for a in _entity_attrs(_ent.properties_schema):
+                    _col = a.get("column_name") or ""
+                    _cn = (a.get("column_cn") or "").strip()
+                    if _col and _cn and _col not in mapping:
+                        mapping[_col] = _cn
+            return [mapping.get(c, "") for c in cols]
+        finally:
+            db.close()
+    except Exception:
+        return [""] * len((columns or []))
 
 def _kg_search_entities(body: dict, _ts: str) -> dict:
     # 搜实体/字段（find-entity 技能用）
@@ -752,6 +793,7 @@ def _kg_execute_api_sql(body: dict, _ts: str) -> dict:
         result["log"] = f"[{_ts}] API联邦SQL执行成功：返回 {result.get('row_count', 0)} 行，下推表 {list(pushed.keys())}"
         result["verification"] = _build_verification(result)  # G4 引擎侧结果验证
         result["sql"] = sql_text
+        result["columns_cn"] = _build_columns_cn(result.get("columns") or [])  # 表头中英双显（多表并集，2026-09-12）
         return result
     except Exception as e:
         from app.services.engine_errors import wrap_engine_exception
@@ -796,7 +838,8 @@ def _kg_execute_entity_api(body: dict, _ts: str) -> dict:
         result = _exec_api_sql(sql, endpoints)
         pushed = result.get("pushed_down", {})
         result["log"] = f"[{_ts}] 对象「{entity_code}」API执行成功：返回 {result.get('row_count', 0)} 行，下推 {list((result.get('pushed_down') or {}).keys())}"
-        result["verification"] = _build_verification(result)  # G4 引擎侧结果验证ist(pushed.keys())}"
+        result["verification"] = _build_verification(result)  # G4 引擎侧结果验证
+        result["columns_cn"] = _build_columns_cn(result.get("columns") or [], entity_code)  # 表头中英双显（2026-09-12）ist(pushed.keys())}"
         return result
     except Exception as e:
         from app.services.engine_errors import wrap_engine_exception
@@ -855,6 +898,7 @@ def _kg_execute_doris_sql(body: dict, _ts: str) -> dict:
         _rc = result.get("row_count", 0)
         result["verification"] = _build_verification(result)  # G4 引擎侧结果验证
         result["sql"] = sql_text
+        result["columns_cn"] = _build_columns_cn(result.get("columns") or [], entity_code or None)  # 表头中英双显（2026-09-12）
         if _rc == 0:
             result["hint"] = "未查到相关数据"
             result["log"] = f"[{_ts}] Doris「{entity_code or 'inline'}」SQL执行成功：返回 0 行，已停止，不降级不重试"

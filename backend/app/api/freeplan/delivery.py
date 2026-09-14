@@ -75,6 +75,7 @@ def build_sql_result_payload(sr: Any, assembled_sql: str) -> Optional[Dict[str, 
     _rc = sr.get("row_count", 0) or len(_rows)
     return {
         "columns": sr.get("columns", []),
+        "columns_cn": sr.get("columns_cn") or [],  # 表头中英双显（2026-09-12）
         "rows": _rows,
         "row_count": _rc,
         "sql": assembled_sql or "",

@@ -635,6 +635,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                         _full = _qrs.get(_ref)
                                         if _full is not None:
                                             _payload = {"columns": _full.get("columns", []), "rows": _full.get("rows", []),
+                                                        "columns_cn": _full.get("columns_cn") or [],  # 表头中英双显（2026-09-12）
                                                         "row_count": _full.get("row_count", 0), "sql": _full.get("sql", ""),
                                                         "returned_rows": len(_full.get("rows", [])),
                                                         "preview_row_count": min(10, _full.get("row_count", 0)),
@@ -650,10 +651,10 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                                         else:
                                             logger.warning(f"[SSE] result_ref 未命中降级截断版: tool={name} ref={str(_ref)[:8]} sid={_sid}")
                                             yield f"event: sql_result\n"
-                                            yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', ''), 'returned_rows': len(parsed.get('rows', [])), 'is_preview': False, 'llm_is_preview': True, 'llm_preview_row_count': parsed.get('llm_preview_row_count', 10), 'result_available_for_ui': True, 'step_id': _sid, 'tool_name': name, 'data_snapshot_at': parsed.get('data_snapshot_at'), 'cache_sources': parsed.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
+                                            yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'columns_cn': parsed.get('columns_cn') or [], 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', ''), 'returned_rows': len(parsed.get('rows', [])), 'is_preview': False, 'llm_is_preview': True, 'llm_preview_row_count': parsed.get('llm_preview_row_count', 10), 'result_available_for_ui': True, 'step_id': _sid, 'tool_name': name, 'data_snapshot_at': parsed.get('data_snapshot_at'), 'cache_sources': parsed.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
                                     else:
                                         yield f"event: sql_result\n"
-                                        yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', ''), 'step_id': _sid, 'step_no': _sid, 'returned_rows': len(parsed.get('rows', [])), 'is_preview': False, 'llm_is_preview': parsed.get('_truncated', False), 'llm_preview_row_count': parsed.get('llm_preview_row_count', parsed.get('preview_row_count', 0)), 'result_available_for_ui': True, 'data_snapshot_at': parsed.get('data_snapshot_at'), 'cache_sources': parsed.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
+                                        yield f"data: {json.dumps({'columns': parsed.get('columns', []), 'rows': parsed.get('rows', []), 'columns_cn': parsed.get('columns_cn') or [], 'row_count': parsed.get('row_count', 0), 'sql': parsed.get('sql', ''), 'step_id': _sid, 'step_no': _sid, 'returned_rows': len(parsed.get('rows', [])), 'is_preview': False, 'llm_is_preview': parsed.get('_truncated', False), 'llm_preview_row_count': parsed.get('llm_preview_row_count', parsed.get('preview_row_count', 0)), 'result_available_for_ui': True, 'data_snapshot_at': parsed.get('data_snapshot_at'), 'cache_sources': parsed.get('cache_sources')}, ensure_ascii=False, default=str)}\n\n"
                             else:
                                 if tool_log:
                                     yield f"event: trace\n"
