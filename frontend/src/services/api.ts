@@ -598,4 +598,16 @@ export const expertsApi = {
     guardsClient.get('/experts/events', { params, ...config }),
 };
 
+// ===== 记忆管理（记忆插槽②，/api/memory——全部 admin）=====
+export const memoryApi = {
+  tree: (params: { expert_id: string; user: string; root?: string }, config?: AxiosRequestConfig) =>
+    guardsClient.get('/memory/tree', { params, ...config }),
+  file: (params: { expert_id: string; user: string; path: string; root?: string }, config?: AxiosRequestConfig) =>
+    guardsClient.get('/memory/file', { params, ...config }),
+  consolidate: (body: { expert_id: string; user: string }, config?: AxiosRequestConfig) =>
+    guardsClient.post('/memory/consolidate', body, config),
+  events: (params?: { expert_id?: string; kind?: string; limit?: number }, config?: AxiosRequestConfig) =>
+    guardsClient.get('/memory/events', { params, ...config }),
+};
+
 export default api;

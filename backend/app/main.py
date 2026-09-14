@@ -312,6 +312,8 @@ app.include_router(guards.router)  # 自带 prefix="/api/guards"（安全控制�
 app.include_router(capabilities.router)  # 自带 prefix="/api/capabilities"（能力开关中心，批13-Q）
 from app.api import experts
 app.include_router(experts.router)  # 自带 prefix="/api/experts"（专家地基①）
+from app.api import memory
+app.include_router(memory.router)  # 自带 prefix="/api/memory"（记忆插槽②）
 
 # MCP Server（业务工具标准化，deepagent 和外部 client 共用，SSE 传输 /mcp/sse）
 from app.mcp_server import mount_mcp

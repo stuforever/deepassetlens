@@ -24,6 +24,8 @@ const SecurityControlCenter = lazy(() => import(/* webpackChunkName: "security" 
 // KeepAlive 架构按页签 menuKey 渲染组件（无 <Routes>），重定向组件会被常驻挂载引发循环，故不使用重定向。
 const ExpertPortal = lazy(() => import(/* webpackChunkName: "expert-portal" */ './pages/ExpertPortal'));
 const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pages/expert/ExpertChat'));
+// 记忆插槽②批6：记忆管理页（平台管理区，admin-only）
+const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './pages/MemoryAdmin'));
 
 export type RouteConfig = {
   path: string;
@@ -55,6 +57,7 @@ export const routes: RouteConfig[] = [
   { path: '/doris-config', element: DorisConfigPage, label: 'Doris 配置', menuKey: 'doris_config' },
   { path: '/vector', element: VectorManagePanel, label: '向量管理', menuKey: 'vector_manage' },
   { path: '/llm-config', element: LLMConfigManager, label: 'LLM 配置', menuKey: 'llmconfig' },
+  { path: '/memory-admin', element: MemoryAdmin, label: '记忆管理', menuKey: 'memory_admin' },
   { path: '*', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
 ];
 

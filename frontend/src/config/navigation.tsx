@@ -92,6 +92,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
       { menuKey: 'vector_manage', label: '向量管理', path: '/vector', icon: BookOutlined },
       { menuKey: 'golden_qa', label: '金标锚定管理', path: '/golden-qa', icon: FileSearchOutlined },
+      // 记忆插槽②批6：记忆管理（平台管理区，admin-only 页）
+      { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
     ],
   },
   {
