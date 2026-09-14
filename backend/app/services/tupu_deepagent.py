@@ -1339,6 +1339,26 @@ def _evict_old_agents(current_key: str) -> None:
         logger.warning(f"[DeepAgent] LRU 回收失败（不影响运行）: {e}")
 
 
+def _capabilities_of(raw) -> dict:
+    """统一规则（spec §4.1）：缺省/NULL/损坏 ⇒ D5 默认；缺键补默认。"""
+    d5 = {"tool_call": True, "vision": False, "json_mode": False, "stream": True}
+    try:
+        caps = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(caps, dict):
+            raise ValueError("非对象")
+        return {**d5, **{k: caps[k] for k in d5 if k in caps}}
+    except Exception as e:
+        logger.warning(f"[模型目录化] capabilities 损坏或缺省，按 D5 默认处理: {e}")
+        return d5
+
+
+def _assert_tool_call_capable(conn_id, caps) -> None:
+    """门控（spec §4.2）：拒绝优于静默降级——Agent 全链依赖工具调用。"""
+    if _capabilities_of(caps).get("tool_call") is not True:
+        raise ValueError(f"连接 {conn_id} 的模型不支持工具调用，无法装配 Agent——"
+                         f"请在 LLM 配置页改用支持工具调用的连接")
+
+
 async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu"):
     """获取 tupu DeepAgent（按 connection_id + capability 版本缓存，让前端选模型/能力开关真正生效）。
 
@@ -1373,6 +1393,19 @@ async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu"):
         _fhash = _compute_files_hash(card)
     except Exception:
         _fhash = "err"
+    # ③模型目录化（spec §4.2）：装配前能力门控——连接解析后、缓存键计算前（坏连接不进缓存）。
+    # 含①卡默认连接同校验：connection_id 空串→get_llm_connection_by_id 直接 None→跳过门控
+    # （走 get_chat_model 默认连接解析，其能力位由配置页维护为 tool_call=true）。
+    if connection_id:
+        try:
+            from app.services.llm_client import get_llm_connection_by_id
+            _conn = get_llm_connection_by_id(connection_id, "chat")
+            if _conn is not None:
+                _assert_tool_call_capable(_conn.id, _conn.capabilities)
+        except ValueError:
+            raise
+        except Exception as _gate_err:
+            logger.warning(f"[模型目录化] 门控预检异常（放行交由装配兜底）: {_gate_err}")
     _cache_key = _assembly_cache_key(connection_id, _gver, _cver, _fhash, expert_id, _ecard_ver)
     if _cache_key not in _GLOBAL_AGENTS:
         async with _AGENT_INIT_LOCK:

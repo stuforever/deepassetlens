@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 import uuid
@@ -29,6 +29,17 @@ class LLMConnectionCreate(BaseModel):
     max_tokens: Optional[int] = 512
     timeout_seconds: Optional[int] = 60
     extra_config: Optional[Dict[str, Any]] = None
+    capabilities: Optional[Dict[str, bool]] = None   # ③模型目录化：能力位（白名单键）
+
+    @field_validator("capabilities")
+    @classmethod
+    def _caps_whitelist(cls, v):
+        if v is None:
+            return v
+        unknown = set(v) - {"tool_call", "vision", "json_mode", "stream"}
+        if unknown:
+            raise ValueError(f"未知能力键: {sorted(unknown)}（白名单: tool_call/vision/json_mode/stream）")
+        return v
 
 
 class LLMConnectionUpdate(BaseModel):
@@ -46,6 +57,17 @@ class LLMConnectionUpdate(BaseModel):
     max_tokens: Optional[int] = None
     timeout_seconds: Optional[int] = None
     extra_config: Optional[Dict[str, Any]] = None
+    capabilities: Optional[Dict[str, bool]] = None   # ③模型目录化：能力位（白名单键）
+
+    @field_validator("capabilities")
+    @classmethod
+    def _caps_whitelist(cls, v):
+        if v is None:
+            return v
+        unknown = set(v) - {"tool_call", "vision", "json_mode", "stream"}
+        if unknown:
+            raise ValueError(f"未知能力键: {sorted(unknown)}（白名单: tool_call/vision/json_mode/stream）")
+        return v
 
 
 class PlannerConfigUpdate(BaseModel):
@@ -89,6 +111,7 @@ def _serialize_conn(x: LLMConnectionConfig):
         "max_tokens": x.max_tokens,
         "timeout_seconds": int(x.timeout_seconds or 60),
         "extra_config": x.extra_config or {},
+        "capabilities": x.capabilities,   # ③模型目录化：能力位原样回显（None=读取端 D5 默认兜底）
         "created_at": str(x.created_at) if x.created_at else None,
     }
 
@@ -188,6 +211,7 @@ def duplicate_llm_connection(item_id: str, db: Session = Depends(get_db)):
         max_tokens=src.max_tokens,
         timeout_seconds=src.timeout_seconds,
         extra_config=src.extra_config,
+        capabilities=src.capabilities,   # ③模型目录化：复制含能力位
     )
     db.add(item)
     db.commit()
@@ -244,6 +268,32 @@ def delete_llm_connection(item_id: str, db: Session = Depends(get_db)):
     return {"code": 200, "message": "deleted"}
 
 
+def _probe_tool_call(item) -> bool:
+    """③spec §4.3：测试消息带一个 tool 定义，响应含 tool_calls 即 true（照 embedding 分支
+    raw urllib 先例，不动 call_openai_compatible_chat）。"""
+    import json as _pj
+    import urllib.request as _purl
+    api_key = resolve_connection_api_key(item.api_key)
+    if not api_key:
+        return False
+    base_url = (item.base_url or "").rstrip("/")
+    api_path = item.api_path or "/chat/completions"
+    if not api_path.startswith("/"):
+        api_path = f"/{api_path}"
+    payload = _pj.dumps({
+        "model": item.model_name,
+        "messages": [{"role": "user", "content": "请调用工具回复 pong"}],
+        "tools": [{"type": "function", "function": {"name": "ping_tool",
+                   "description": "连通性探测", "parameters": {"type": "object", "properties": {}}}}],
+        "tool_choice": "auto"}).encode("utf-8")
+    req = _purl.Request(url=f"{base_url}{api_path}", data=payload,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}, method="POST")
+    with _purl.urlopen(req, timeout=float(item.timeout_seconds or 30)) as resp:
+        body = _pj.loads(resp.read().decode("utf-8"))
+    msg = (body.get("choices") or [{}])[0].get("message") or {}
+    return bool(msg.get("tool_calls"))
+
+
 @router.post("/llm-connections/{item_id}/test")
 def test_llm_connection(item_id: str, db: Session = Depends(get_db)):
     items = db.query(LLMConnectionConfig).all()
@@ -282,7 +332,13 @@ def test_llm_connection(item_id: str, db: Session = Depends(get_db)):
             system_prompt="你是测试助手，请回答pong。",
             user_prompt="ping",
         )
-        return {"code": 200, "data": {"ok": True, "response": resp}}
+        # ③模型目录化（spec §4.3）：实测探测+声明对账（mismatch=声明≠实测，前端提示一键回填）。
+        from app.services.tupu_deepagent import _capabilities_of
+        _declared = _capabilities_of(item.capabilities).get("tool_call")
+        _detected = _probe_tool_call(item)
+        return {"code": 200, "data": {"ok": True, "response": resp,
+                "detected": {"tool_call": _detected},
+                "mismatch": bool(_detected) != bool(_declared)}}
     except Exception as e:
         import traceback as _tb
         err_detail = f"{type(e).__name__}: {e}"
@@ -345,3 +401,47 @@ def chat_with_llm_connection(item_id: str, payload: LLMChatRequest, db: Session 
         or ""
     )
     return {"code": 200, "data": {"answer": answer, "raw": resp}}
+
+
+# ===== ③模型目录化（spec §4.1/§4.3/§六）：能力位列迁移+回填端点 =====
+
+_D5_DEFAULTS = {"tool_call": True, "vision": False, "json_mode": False, "stream": True}
+
+
+def _ensure_capabilities_column(db) -> None:
+    """③（spec §六步骤1）：列+存量回填，幂等。chat→tool_call=true（在跑工具调用=既成事实）；
+    embedding→false（不装配 Agent，防误指向）。"""
+    import json as _json
+    from sqlalchemy import text
+    n = db.execute(text(
+        "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() "
+        "AND table_name='kg_llm_connection_configs' AND column_name='capabilities'")).scalar()
+    if not n:
+        db.execute(text("ALTER TABLE kg_llm_connection_configs ADD COLUMN capabilities JSON NULL"))
+        db.execute(text(
+            "UPDATE kg_llm_connection_configs SET capabilities = "
+            "CASE WHEN LOWER(TRIM(IFNULL(capability,'chat')))='embedding' THEN :e ELSE :c END"),
+            {"e": _json.dumps({**_D5_DEFAULTS, "tool_call": False}),
+             "c": _json.dumps(_D5_DEFAULTS)})
+        db.commit()
+
+
+@router.put("/llm-connections/{item_id}/capabilities")
+def backfill_capabilities(item_id: str, body: dict, db: Session = Depends(get_db)):
+    """实测回填（spec §4.3）：body=能力位字典（白名单校验复用 Update schema 语义）。
+    声明优先+实测校准——本端点只做显式回填动作，不改门控语义。"""
+    from pydantic import ValidationError
+    caps = (body or {}).get("capabilities")
+    if caps is None:
+        raise HTTPException(status_code=422, detail="capabilities 必填（能力位字典）")
+    try:
+        LLMConnectionUpdate(capabilities=caps)
+    except ValidationError as ve:
+        raise HTTPException(status_code=422, detail=str(ve.errors()[0].get("msg", "校验失败")))
+    item = db.query(LLMConnectionConfig).filter(LLMConnectionConfig.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="连接不存在")
+    item.capabilities = caps
+    db.commit()
+    db.refresh(item)
+    return {"code": 200, "data": _serialize_conn(item)}

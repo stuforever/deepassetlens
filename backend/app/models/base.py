@@ -405,6 +405,9 @@ class LLMConnectionConfig(Base):
     max_tokens = Column(Integer, nullable=True, default=512)
     timeout_seconds = Column(Integer, nullable=False, default=60)
     extra_config = Column(JSON, nullable=True)
+    # ③模型目录化（spec §4.1）：模型能力位 JSON（tool_call/vision/json_mode/stream）；
+    # 缺省/NULL/损坏读取端统一回 D5 默认（_capabilities_of）——与 capability 列（用途）语义不同。
+    capabilities = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

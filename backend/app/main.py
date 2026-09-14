@@ -226,6 +226,19 @@ async def lifespan(app: FastAPI):
         _migrate_checkpoint_thread_ids()
     except Exception as _mig_err:
         logger.warning(f"[startup] checkpoint 迁移异常（不阻启动）: {_mig_err}")
+    # ③模型目录化（spec §六步骤1）：capabilities 列+存量等值回填（chat→tool_call=true /
+    # embedding→false），幂等；失败不阻启动（列缺省时读取端 D5 统一规则兜底）。
+    try:
+        from app.core.database import SessionLocal as _SL
+        from app.services.llm_admin import _ensure_capabilities_column
+        _db = _SL()
+        try:
+            _ensure_capabilities_column(_db)
+        finally:
+            _db.close()
+        logger.info("[startup] capabilities 列确保完成（③模型目录化）")
+    except Exception as _cap_err:
+        logger.warning(f"[startup] capabilities 列迁移异常（不阻启动）: {_cap_err}")
     # 记忆插槽②批2（spec §九步骤2）：AGENTS.md 受控搬迁（warmup 前；fail-fast——等值前提
     # 被破坏时宁可不起）+ wenshu 记忆树骨架/RAW_MD 预创建（失败不阻启动）。
     from app.services.memory_tree_backend import _migrate_agents_md
