@@ -121,7 +121,9 @@ const AppTabs: React.FC<AppTabsProps> = ({
       <Suspense fallback={<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin size="large" /></div>}>
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {pageTabs.map((tab) => {
-            const route = routes.find((r) => r.menuKey === tab.menuKey);
+            // 专家地基①：动态专家页签（e:{slug}:chat）回退到 expert_chat 路由渲染（KeepAlive 无路径匹配）
+            const route = routes.find((r) => r.menuKey === tab.menuKey)
+              || (tab.menuKey.startsWith('e:') ? routes.find((r) => r.menuKey === 'expert_chat') : undefined);
             if (!route) return null;
             const Component = route.element;
             const isActive = tab.key === activeTabKey;

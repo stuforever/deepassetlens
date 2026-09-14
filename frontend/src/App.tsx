@@ -73,9 +73,17 @@ const App: React.FC = () => {
 
   // 路由变化 -> 同步页签/画布模式/激活 key
   useEffect(() => {
-    // 默认首页重定向
-    if (location.pathname === '/') {
-      navigate('/home', { replace: true });
+    // 专家地基①：/e/{slug}/chat 动态段——静态映射不覆盖，运行时分支（页签 key 沿 menuKey）
+    if (location.pathname.startsWith('/e/')) {
+      const slug = location.pathname.split('/')[2] || 'wenshu';
+      const menuKey = `e:${slug}:chat`;
+      setPageTabs((prev) => {
+        if (prev.find((t) => t.key === menuKey)) return prev;
+        const newTabs = [...prev, { key: menuKey, label: `专家 ${slug}`, menuKey }];
+        return newTabs.length > 12 ? newTabs.slice(newTabs.length - 12) : newTabs;
+      });
+      setActiveTabKey(menuKey);
+      setActiveMenuKey(menuKey);
       return;
     }
     const menuKey = pathToMenuKey[location.pathname];

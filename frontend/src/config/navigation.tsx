@@ -41,11 +41,11 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-/** 首页导航项（顶层独立项，不属任何分组） */
+/** 顶层独立项：专家门户（专家地基①——原「首页-新对话」升格为门户入口，path 指向 /） */
 export const HOME_NAV_ITEM: NavItem = {
-  menuKey: 'home',
-  label: '首页-新对话',
-  path: '/home',
+  menuKey: 'portal',
+  label: '专家门户',
+  path: '/',
   icon: SearchOutlined,
 };
 
@@ -117,7 +117,8 @@ export const MENU_LABELS: Record<string, string> = (() => {
 
 /** menuKey -> path */
 export const menuKeyToPath: Record<string, string> = (() => {
-  const out: Record<string, string> = { home: '/home' };
+  // 专家地基①：portal=/；home 保留映射（老会话侧栏点击经 /home 重定向进专家对话页）
+  const out: Record<string, string> = { home: '/home', portal: '/' };
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.menuKey] = it.path;
   }
@@ -126,7 +127,8 @@ export const menuKeyToPath: Record<string, string> = (() => {
 
 /** path -> menuKey */
 export const pathToMenuKey: Record<string, string> = (() => {
-  const out: Record<string, string> = { '/home': 'home', '/': 'home' };
+  // 专家地基①：/ → portal（专家门户）；/home → home（重定向过渡态）
+  const out: Record<string, string> = { '/home': 'home', '/': 'portal' };
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.path] = it.menuKey;
   }

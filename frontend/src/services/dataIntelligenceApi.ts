@@ -32,6 +32,8 @@ export type ChatRequestPayload = {
   format?: 'default' | 'card';
   llm_connection_id?: string;
   mode?: 'free_plan' | 'legacy';
+  /** 专家地基①：专家维度（缺省 wenshu 兜底，后端 ChatRequest 同默认） */
+  expert_id?: string;
 };
 
 export type ConversationCard = {
@@ -158,6 +160,7 @@ function _streamChat(
       format: payload.format || 'card',
       llm_connection_id: payload.llm_connection_id,
       mode: payload.mode || 'free_plan',
+      expert_id: payload.expert_id || 'wenshu',
     }),
     signal: controller.signal,
   }).then(async (resp) => {

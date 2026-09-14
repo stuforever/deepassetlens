@@ -3,7 +3,7 @@ import { MENU_LABELS } from './config/navigation';
 
 // 路由懒加载：每页独立 chunk（webpackChunkName 控制产物名）。
 // KeepAlive 语义不受影响——lazy 只影响「首次打开某页签时的模块加载」，已挂载页签不卸载。
-const FreePlanChat = lazy(() => import(/* webpackChunkName: "home" */ './pages/FreePlanChat'));
+// 注：FreePlanChat.tsx 保留为 ExpertChat 的复制基线（专家地基①后不再直接路由）。
 const GraphManager = lazy(() => import(/* webpackChunkName: "graph" */ './pages/GraphManager'));
 const MasterDataManager = lazy(() => import(/* webpackChunkName: "entity" */ './pages/MasterDataManager'));
 const ActivityManager = lazy(() => import(/* webpackChunkName: "entity" */ './pages/ActivityManager'));
@@ -20,6 +20,10 @@ const GovernanceObservatory = lazy(() => import(/* webpackChunkName: "governance
 const EngineWorkbench = lazy(() => import(/* webpackChunkName: "workbench" */ './pages/EngineWorkbench'));
 const GoldenQaManager = lazy(() => import(/* webpackChunkName: "goldenqa" */ './pages/GoldenQaManager'));
 const SecurityControlCenter = lazy(() => import(/* webpackChunkName: "security" */ './pages/SecurityControlCenter'));
+// 专家地基①：专家门户 + 专家对话。/home 与 /e/:slug/chat 同挂 ExpertChat（slug 缺省 wenshu）——
+// KeepAlive 架构按页签 menuKey 渲染组件（无 <Routes>），重定向组件会被常驻挂载引发循环，故不使用重定向。
+const ExpertPortal = lazy(() => import(/* webpackChunkName: "expert-portal" */ './pages/ExpertPortal'));
+const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pages/expert/ExpertChat'));
 
 export type RouteConfig = {
   path: string;
@@ -29,7 +33,9 @@ export type RouteConfig = {
 };
 
 export const routes: RouteConfig[] = [
-  { path: '/home', element: FreePlanChat, label: '数据资产探查', menuKey: 'home' },
+  { path: '/', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
+  { path: '/home', element: ExpertChat, label: '数据资产探查', menuKey: 'home' },
+  { path: '/e/:slug/chat', element: ExpertChat, label: '专家对话', menuKey: 'expert_chat' },
   { path: '/graph', element: GraphManager, label: '图谱管理', menuKey: 'graph' },
   { path: '/tree-model', element: GraphManager, label: '四区建模', menuKey: 'tree_model' },
   { path: '/matrix', element: GraphManager, label: '资产矩阵', menuKey: 'matrix_model' },
@@ -49,7 +55,7 @@ export const routes: RouteConfig[] = [
   { path: '/doris-config', element: DorisConfigPage, label: 'Doris 配置', menuKey: 'doris_config' },
   { path: '/vector', element: VectorManagePanel, label: '向量管理', menuKey: 'vector_manage' },
   { path: '/llm-config', element: LLMConfigManager, label: 'LLM 配置', menuKey: 'llmconfig' },
-  { path: '*', element: FreePlanChat, label: '数据资产探查', menuKey: 'home' },
+  { path: '*', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
 ];
 
 export { MENU_LABELS as menuLabels };

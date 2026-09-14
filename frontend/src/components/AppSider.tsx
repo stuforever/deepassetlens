@@ -14,8 +14,11 @@ import {
   CloseOutlined,
   EditOutlined,
   CheckOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { NAV_GROUPS, HOME_NAV_ITEM } from '../config/navigation';
+import { expertsApi } from '../services/api';
+import type { ExpertCard } from '../services/api';
 import { tokens } from '../theme/tokens';
 import { useStore } from '../store/useStore';
 
@@ -76,6 +79,17 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
     try { localStorage.setItem(OPEN_KEYS_STORAGE, JSON.stringify(openKeys)); } catch { /* ignore */ }
   }, [openKeys]);
 
+  // 专家地基①：拉启用专家卡渲染「专家」动态区（失败静默=空区，不阻导航）
+  const [expertCards, setExpertCards] = useState<ExpertCard[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await expertsApi.list({ enabled: true });
+        setExpertCards((res.data?.items as ExpertCard[]) || []);
+      } catch { /* 静默：门户自身会再拉 */ }
+    })();
+  }, []);
+
   const onOpenChange = (keys: string[]) => {
     const latest = keys.find((k) => !openKeys.includes(k));
     setOpenKeys(latest ? [latest] : []);
@@ -83,12 +97,27 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
 
   const items = useMemo(
     () => [
-      // 首页顶层项
+      // 首页顶层项（专家地基①：HOME_NAV_ITEM=专家门户）
       {
         key: HOME_NAV_ITEM.menuKey,
         icon: <HOME_NAV_ITEM.icon />,
         label: HOME_NAV_ITEM.label,
       },
+      // 专家地基①：「专家」动态区——启用卡实时渲染（menuKey e:{slug}:chat）
+      ...(expertCards.length > 0
+        ? [{
+            key: 'expert_section',
+            type: 'group' as const,
+            label: '专家',
+            children: expertCards.map((c) => ({
+              key: `e:${c.expert_id}:chat`,
+              icon: <SearchOutlined />,
+              label: c.name,
+            })),
+          }]
+        : []),
+      // 专家地基①：既有五组整体归入「平台管理」区（结构零删）
+      { key: 'platform_section', type: 'group' as const, label: '平台管理' },
       // 分组子菜单
       ...NAV_GROUPS.map((g) => ({
         key: g.key,
@@ -110,7 +139,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
         })),
       })),
     ],
-    []
+    [expertCards]
   );
 
   const handleSessionClick = (id: string) => {
