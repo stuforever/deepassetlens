@@ -52,6 +52,7 @@ class ChatRequest(BaseModel):
     format: str = Field(default="default", description="响应格式：default | card")
     llm_connection_id: Optional[str] = Field(default=None, description="指定 LLM 连接 ID（不传则用默认）")
     mode: str = Field(default="free_plan", description="对话模式：free_plan")
+    expert_id: str = Field(default="wenshu", description="专家标识（专家地基①；存量请求默认问数）")
 
 
 class ChatResponse(BaseModel):

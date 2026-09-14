@@ -1075,3 +1075,42 @@ class CapabilityEvent(Base):
     action = Column(String(16), nullable=False)
     detail = Column(JSON, nullable=True)              # {actor,reason,spec_name,duration_ms,result_digest}
     updated_by = Column(String(64), nullable=True)
+
+
+class ExpertProfile(Base):
+    """专家地基①（2026-09-12 spec §四）：专家配置卡——专家=配置实体非代码。
+
+    机制照抄 capability_config：TTL 5s 缓存 + get_version() + admin PATCH→version+1
+    + 探针断言；版本进 Agent 缓存键（#e 因子）。①期无 DELETE（只关不删，审计安全）。
+    """
+    __tablename__ = "kg_expert_profiles"
+    expert_id = Column(String(64), primary_key=True)          # 稳定 slug：URL 前缀+协同预留
+    name = Column(String(128), nullable=False)
+    tagline = Column(String(255), nullable=True)             # 门户卡片一句话人设
+    enabled = Column(Boolean, nullable=False, default=True)
+    entry_kind = Column(String(16), nullable=False, default="chat")   # ①期白名单仅 chat
+    system_prompt = Column(Text, nullable=False)             # 静态基座（动态部分代码拼装）
+    tools = Column(JSON, nullable=True)                      # 活注册表子集
+    skills = Column(JSON, nullable=True)
+    memory = Column(JSON, nullable=True)                     # ①期=文件路径列表
+    knowledge_sources = Column(JSON, nullable=True)          # ①期白名单 ["ontology_graph"]
+    llm_connection_id = Column(String(64), nullable=True)    # null=平台默认
+    icon = Column(String(64), nullable=True)
+    description = Column(String(500), nullable=True)
+    ui_config = Column(JSON, nullable=True)                  # placeholder/建议问题/欢迎语
+    updated_by = Column(String(64), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+    close_reason = Column(String(500), nullable=True)        # 关停（红级）必填
+    version = Column(Integer, nullable=False, default=1)
+
+
+class ExpertEvent(Base):
+    """专家地基①：卡生命周期账本（镜像 capability_events）。
+    action: created|updated|disabled|probe|rebuild|assembly_failed。"""
+    __tablename__ = "expert_events"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    expert_id = Column(String(64), nullable=False, index=True)
+    ts = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    action = Column(String(24), nullable=False)
+    detail = Column(JSON, nullable=True)
+    updated_by = Column(String(64), nullable=True)

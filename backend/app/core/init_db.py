@@ -330,6 +330,27 @@ def _seed_capability_policies(db: Session):
         logger.warning(f"[CapabilitySeed] W-1 白名单迁移跳过（不影响启动）: {_mig_e}")
 
 
+def _seed_expert_profiles(db: Session):
+    """专家地基①：wenshu 种子卡（不存在则种，幂等——不覆盖管理员已有配置）。"""
+    from ..models.base import ExpertProfile
+    from ..services.expert_config import default_wenshu_card
+    try:
+        if db.query(ExpertProfile).filter(ExpertProfile.expert_id == "wenshu").first() is None:
+            c = default_wenshu_card()
+            db.add(ExpertProfile(
+                expert_id=c["expert_id"], name=c["name"], tagline=c["tagline"],
+                enabled=True, entry_kind="chat", system_prompt=c["system_prompt"],
+                tools=c["tools"], skills=c["skills"], memory=c["memory"],
+                knowledge_sources=c["knowledge_sources"], llm_connection_id=None,
+                icon=c["icon"], description=c["description"], ui_config=c["ui_config"],
+                version=1))
+            db.commit()
+            logger.info("[ExpertSeed] wenshu 种子卡已落库（tools=活注册表 %d 件）" % len(c["tools"]))
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[ExpertSeed] 种子跳过（不影响启动）: {e}")
+
+
 def _sync_scenario_skills(db: Session):
     """将文件式场景剧本(scenarios/*/SKILL.md)同步到 skills 表，使其在技能管理页可见。
 
@@ -400,6 +421,9 @@ def init_db(db: Session):
 
     # 能力开关中心基线策略（批13-Q，幂等）
     _seed_capability_policies(db)
+
+    # 专家地基①：wenshu 种子卡（幂等：不存在则种）
+    _seed_expert_profiles(db)
 
     # 批13-C：金标表兼容补列（已有库缺 engine/hit_count/last_hit_at；create_all 不改已有表）
     _ensure_golden_columns(db)
