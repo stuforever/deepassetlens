@@ -588,6 +588,41 @@ def ensure_schema_compatibility():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE `kg_doris_catalog` ADD COLUMN `es_password` VARCHAR(255) NULL"))
 
+    # ④文档知识库（spec §七 Runbook 步骤1）：两表加列，幂等；存量语义等值（现网全是索引型）。
+    if "kg_knowledge_base" in table_names:
+        kb_cols = {c["name"] for c in inspector.get_columns("kg_knowledge_base")}
+        kb_alters = []
+        if "type" not in kb_cols:
+            kb_alters.append("ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'indexed'")
+        if "rag_provider" not in kb_cols:
+            kb_alters.append("ADD COLUMN `rag_provider` VARCHAR(40) NOT NULL DEFAULT 'qdrant'")
+        if "pointer_params" not in kb_cols:
+            kb_alters.append("ADD COLUMN `pointer_params` JSON NULL")
+        if "embedding_signature" not in kb_cols:
+            kb_alters.append("ADD COLUMN `embedding_signature` JSON NULL")
+        if "enabled" not in kb_cols:
+            kb_alters.append("ADD COLUMN `enabled` TINYINT(1) NOT NULL DEFAULT 1")
+        if "version" not in kb_cols:
+            kb_alters.append("ADD COLUMN `version` INT NOT NULL DEFAULT 1")
+        if kb_alters:
+            with engine.begin() as conn:
+                for alter in kb_alters:
+                    conn.execute(text(f"ALTER TABLE `kg_knowledge_base` {alter}"))
+
+    if "kg_knowledge_document" in table_names:
+        doc_cols = {c["name"] for c in inspector.get_columns("kg_knowledge_document")}
+        doc_alters = []
+        if "checksum" not in doc_cols:
+            doc_alters.append("ADD COLUMN `checksum` VARCHAR(64) NULL")
+        if "parse_cache_key" not in doc_cols:
+            doc_alters.append("ADD COLUMN `parse_cache_key` VARCHAR(128) NULL")
+        if "embedding_signature" not in doc_cols:
+            doc_alters.append("ADD COLUMN `embedding_signature` JSON NULL")
+        if doc_alters:
+            with engine.begin() as conn:
+                for alter in doc_alters:
+                    conn.execute(text(f"ALTER TABLE `kg_knowledge_document` {alter}"))
+
 
 def get_db():
     db = SessionLocal()

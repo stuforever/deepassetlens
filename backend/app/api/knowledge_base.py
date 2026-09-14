@@ -91,11 +91,29 @@ def _read_text_file(path: Path) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def _current_signature(db: Session, vector_size: int = None) -> Dict[str, Any]:
+    """④（spec D8）：签名三因子（嵌入模型名/维度/分块参数）——对账基准。"""
+    from app.services.llm_client import get_default_llm_connection
+    conn = get_default_llm_connection("embedding")
+    if vector_size is None:
+        vector_size = _get_vector_size(db)
+    return {
+        "embed_model": (conn.model_name if conn else ""),
+        "vector_size": vector_size,
+        "chunk_size": CHUNK_SIZE,
+        "chunk_overlap": CHUNK_OVERLAP,
+    }
+
+
 # ---------- Schemas ----------
 
 class KBCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    # ④批2：建库白名单（spec §七铁则）——type/rag_provider 白名单+indexed 的 pointer 必空
+    type: str = "indexed"
+    rag_provider: str = "qdrant"
+    pointer_params: Optional[Dict[str, Any]] = None
 
 
 class KBSearch(BaseModel):
@@ -126,6 +144,17 @@ def create_knowledge_base(payload: KBCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="知识库名称不能为空")
     if db.query(KnowledgeBase).filter(KnowledgeBase.name == name).first():
         raise HTTPException(status_code=400, detail="知识库名称已存在")
+    # ④批2：白名单铁则——type/rag_provider 枚举+indexed 的 pointer_params 必空
+    kb_type = (payload.type or "indexed").strip().lower()
+    provider = (payload.rag_provider or "qdrant").strip().lower()
+    if kb_type not in ("indexed", "connected"):
+        raise HTTPException(status_code=422, detail=f"type 白名单: indexed/connected（收到 {kb_type}）")
+    if provider not in ("qdrant", "connected_es"):
+        raise HTTPException(status_code=422, detail=f"rag_provider 白名单: qdrant/connected_es（收到 {provider}）")
+    if kb_type == "connected" and provider != "connected_es":
+        raise HTTPException(status_code=422, detail="connected 型当前仅支持 connected_es 指针族")
+    if kb_type == "indexed" and payload.pointer_params:
+        raise HTTPException(status_code=422, detail="indexed 型为自建索引，pointer_params 必须为空")
 
     kb_id = str(uuid.uuid4())
     collection = _collection_name(kb_id)
@@ -135,12 +164,19 @@ def create_knowledge_base(payload: KBCreate, db: Session = Depends(get_db)):
         description=payload.description,
         collection_name=collection,
         storage_dir=kb_id,
+        type=kb_type,
+        rag_provider=provider,
+        pointer_params=(payload.pointer_params or None) if kb_type == "connected" else None,
     )
     db.add(kb)
     db.commit()
     db.refresh(kb)
 
-    # 建 Qdrant collection（探测维度）
+    if kb_type == "connected":
+        # ④批2：指针型不建索引、不建磁盘目录（零复制零重建——D6）
+        return {"code": 200, "data": _kb_to_dict(kb), "message": f"知识库「{name}」已创建（connected 指针型）"}
+
+    # 建 Qdrant collection（探测维度）——indexed 专属
     try:
         client = _get_client()
         if client.healthcheck():
@@ -165,6 +201,12 @@ def delete_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
+    # ④批2（D6 指针二分）：connected 只删注册行（collection/磁盘/文档零触碰——A3）；
+    # indexed 级联照旧（m15 语义）。
+    if (kb.type or "indexed") == "connected":
+        db.delete(kb)
+        db.commit()
+        return {"code": 200, "message": "指针型知识库已删除（外部资源零触碰）"}
     collection = kb.collection_name
     # 删 Qdrant collection
     try:
@@ -193,6 +235,9 @@ async def upload_document(kb_id: str, file: UploadFile = File(...), db: Session 
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
+    # ④批2：指针型无摄入语义（后端 422 双保险——管理页入口对 connected 隐藏）
+    if (kb.type or "indexed") == "connected":
+        raise HTTPException(status_code=422, detail="指针型知识库不支持文档上传（不复制不重建）")
 
     filename = file.filename or "untitled.txt"
     ext = os.path.splitext(filename)[1].lower()
@@ -271,6 +316,9 @@ def vectorize_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
+    # ④批2：指针型无向量化工序
+    if (kb.type or "indexed") == "connected":
+        raise HTTPException(status_code=422, detail="指针型知识库无需向量化（检索实时透传外部源）")
 
     docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.kb_id == kb_id).all()
     if not docs:
@@ -287,49 +335,38 @@ def vectorize_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
 
         from app.services.semantic_retrieval import embed_texts
         vector_size = _get_vector_size(db)
-        # 全量重建：先删 collection 再建
+        # 全量重建：先删 collection 再建（m15 语义不动——抽层不抽语义，A2 对拍钉死）
         client.delete_collection(kb.collection_name)
         client.ensure_collection(kb.collection_name, vector_size=vector_size, distance="Cosine")
 
+        # ④批1：分块→嵌入→upsert 收编进 QdrantFamily（签名三因子快照同步落 KB/文档行，批 3 对账用）
+        from app.services.kb_engines.qdrant_family import QdrantFamily
+        sig = _current_signature(db, vector_size)
+        kb.embedding_signature = sig
+        fam = QdrantFamily(client=client, embed_fn=lambda batch: embed_texts(db, batch))
         total_vectors = 0
         for doc in docs:
             try:
                 text = _read_text_file(Path(doc.file_path))
-                chunks = _chunk_text(text)
-                if not chunks:
+                counts = fam.add_documents(
+                    {"id": kb.id, "embedding_signature": sig},
+                    [{"doc_id": doc.id, "filename": doc.filename, "text": text}],
+                )
+                chunk_n = counts.get(doc.id, 0)
+                doc.embedding_signature = sig
+                if not chunk_n:
                     doc.status = "error"
                     doc.error_msg = "文件内容为空"
                     doc.chunk_count = 0
                     continue
-
-                points: List[Dict[str, Any]] = []
-                for i in range(0, len(chunks), EMB_BATCH):
-                    batch = chunks[i:i + EMB_BATCH]
-                    vectors = embed_texts(db, batch)
-                    for j, vec in enumerate(vectors):
-                        chunk_idx = i + j
-                        points.append({
-                            "id": str(uuid.uuid4()),
-                            "vector": vec,
-                            "payload": {
-                                "doc_id": doc.id,
-                                "filename": doc.filename,
-                                "chunk_idx": chunk_idx,
-                                "text": batch[j],
-                            },
-                        })
-                # 分批 upsert
-                UPSERT_BATCH = 64
-                for k in range(0, len(points), UPSERT_BATCH):
-                    client.upsert_points(kb.collection_name, points[k:k + UPSERT_BATCH])
-
-                doc.chunk_count = len(chunks)
+                doc.chunk_count = chunk_n
                 doc.status = "vectorized"
                 doc.error_msg = None
-                total_vectors += len(chunks)
+                total_vectors += chunk_n
             except Exception as de:
                 doc.status = "error"
                 doc.error_msg = str(de)
+                doc.embedding_signature = sig
                 logger.warning("文档 %s 向量化失败: %s", doc.filename, de)
 
         kb.vector_count = total_vectors
@@ -365,24 +402,36 @@ def search_knowledge_base(kb_id: str, payload: KBSearch, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="查询文本不能为空")
     top_k = max(1, min(int(payload.top_k or 5), 50))
 
+    # ④批2：type 分路——connected→指针族透传（外部 ES）；indexed→Qdrant 相似检索
+    if (kb.type or "indexed") == "connected":
+        from app.services.kb_engines.connected_es import ConnectedESFamily
+        params = dict(kb.pointer_params or {})
+        fam = ConnectedESFamily(params)
+        try:
+            hits = fam.search({"id": kb.id}, query, top_k=top_k)
+        except Exception as e:
+            logger.warning("指针型检索失败: %s", e)
+            raise HTTPException(status_code=502, detail=f"外部检索源不可用: {e}")
+        matches = [
+            {"score": float(h["score"] or 0), "text": h["text"],
+             "filename": (h.get("payload") or {}).get("_index", ""), "chunk_idx": 0}
+            for h in hits
+        ]
+        return {"code": 200, "data": {"query": query, "matches": matches, "count": len(matches)}}
+
     try:
         client = _get_client()
         if not client.healthcheck():
             raise RuntimeError("qdrant_unavailable")
         from app.services.semantic_retrieval import embed_texts
-        vectors = embed_texts(db, [query])
-        if not vectors or not vectors[0]:
-            raise RuntimeError("embedding 失败")
-        hits = client.search_points(
-            kb.collection_name,
-            vectors[0],
-            top=top_k,
-            with_payload=True,
-        )
+        # ④批1：检索走 QdrantFamily（m15 语义等值——score/text/filename/chunk_idx 出参不变）
+        from app.services.kb_engines.qdrant_family import QdrantFamily
+        fam = QdrantFamily(client=client, embed_fn=lambda batch: embed_texts(db, batch))
+        hits = fam.search({"id": kb.id}, query, top_k=top_k)
         matches = [
             {
-                "score": float(h.get("score", 0)),
-                "text": (h.get("payload") or {}).get("text", ""),
+                "score": h["score"],
+                "text": h["text"],
                 "filename": (h.get("payload") or {}).get("filename", ""),
                 "chunk_idx": (h.get("payload") or {}).get("chunk_idx", 0),
             }
@@ -406,6 +455,12 @@ def _kb_to_dict(kb: KnowledgeBase, with_docs: bool = False) -> Dict[str, Any]:
         "vector_count": kb.vector_count,
         "status": kb.status,
         "error_msg": kb.error_msg,
+        # ④批1：新列出参（type/rag_provider/enabled/version/签名）
+        "type": getattr(kb, "type", None) or "indexed",
+        "rag_provider": getattr(kb, "rag_provider", None) or "qdrant",
+        "enabled": bool(getattr(kb, "enabled", True)),
+        "version": int(getattr(kb, "version", 1) or 1),
+        "embedding_signature": getattr(kb, "embedding_signature", None),
         "created_at": kb.created_at.isoformat() if kb.created_at else None,
     }
     if with_docs:
