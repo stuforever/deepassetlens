@@ -142,7 +142,10 @@ async def clear_freeplan_memory(thread_id: str, request: Request):
     from app.core.auth import get_current_user
     _current_user = get_current_user(request)
     _user_prefix = _current_user.sub if _current_user and _current_user.sub else "anonymous"
-    _memory_thread_id = f"{_user_prefix}:{thread_id}"
+    # 专家地基①（spec §八）：三段键单点收口；①期清除端点固定 wenshu 域（misc 路由属问数页面，
+    # 无 ChatRequest 上下文不可卡化——登记②期随端点卡化）
+    from app.services.expert_paths import thread_id as _expert_thread_id
+    _memory_thread_id = _expert_thread_id(_user_prefix, "wenshu", thread_id)
     try:
         from app.services.tupu_deepagent import _GLOBAL_CHECKPOINTER
         # Agent 尚未初始化 -> 无 checkpoint 可清，直接返回成功

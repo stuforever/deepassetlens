@@ -60,3 +60,50 @@ def test_chat_request_expert_id_default():
     from app.api.data_intelligence import ChatRequest
     req = ChatRequest(user_input="x")
     assert req.expert_id == "wenshu"
+
+
+# ---------------------------------------------------------------------------
+# 批 2：单点收口 + 装配参数化 + 6 因子键 + A2 对拍
+# ---------------------------------------------------------------------------
+
+def test_expert_paths_thread_id():
+    """三段键唯一构造处（spec §八）：{user}:{expert}:{thread}。
+    变异锚点：任何内联 f-string 构造漏收口 → grep 判据红（步骤 2.7）。"""
+    from app.services.expert_paths import thread_id
+    assert thread_id("admin", "wenshu", "t1") == "admin:wenshu:t1"
+
+
+def test_expert_paths_roots():
+    """roots 从卡声明路径派生：/skills/→data/skills；/memory/AGENTS.md→data/memory（等值）。"""
+    from app.services.expert_paths import skills_roots, memory_roots
+    assert str(skills_roots({"skills": ["/skills/"]})[0]).replace("\\", "/").endswith("data/skills")
+    assert str(memory_roots({"memory": ["/memory/AGENTS.md"]})[0]).replace("\\", "/").endswith("data/memory")
+
+
+def test_a2_prompt_byte_equivalence():
+    """A2 对拍（spec §十一，逐字节强约束）：builder(卡基座)==现状常量产物。
+    变异锚点：基座替换逻辑改写任何字节（含 __CURRENT_DATE__ 处理）→ 红。"""
+    from app.services.tupu_deepagent import _build_dynamic_system_prompt
+    from app.services.expert_config import default_wenshu_card
+    card = default_wenshu_card()
+    assert _build_dynamic_system_prompt(base=card["system_prompt"]) == \
+           _build_dynamic_system_prompt()
+
+
+def test_cache_key_six_factors():
+    """6 因子键：#e{expert}@{version} 追加（spec §五）。两专家同版本=两 Agent。"""
+    from app.services.tupu_deepagent import _assembly_cache_key
+    k1 = _assembly_cache_key("conn1", 3, 4, "fhash", "wenshu", 7)
+    k2 = _assembly_cache_key("conn1", 3, 4, "fhash", "echo", 7)
+    assert k1 == "conn1#g3#c4#ffhash#ewenshu@7" and k1 != k2
+
+
+def test_tools_narrowing_empty_rejects():
+    """工具窄化：空交集拒装配（fail-closed，沿 subagent_specs 惯例）。"""
+    from app.services.tupu_deepagent import _narrow_mcp_tools
+    class _T:
+        def __init__(self, n): self.name = n
+    tools = [_T("execute_sql"), _T("search_entities")]
+    assert [t.name for t in _narrow_mcp_tools(tools, {"execute_sql"})] == ["execute_sql"]
+    with pytest.raises(ValueError):
+        _narrow_mcp_tools(tools, set())                    # 空交集拒装配

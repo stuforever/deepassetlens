@@ -393,14 +393,21 @@ _FILES_NS_SKILLS = ("tupu", "skills")
 _FILES_NS_MEMORY = ("tupu", "memory")
 
 
-def _compute_files_hash() -> str:
+def _compute_files_hash(card=None) -> str:
     """技能树+纪律树新鲜度指纹：逐文件 相对路径+mtime+size 有序拼接 sha256（前16位）。
 
     任何增删改 -> hash 变 -> 缓存未命中 -> 重装配重种子。装配区与 get_tupu_agent 缓存键共用。
+    专家地基①：card 给定时按 skills_roots/memory_roots 遍历（卡声明路径派生根）；
+    None 时维持现状两根（逐字节等值）。
     """
     import hashlib as _hl
     h = _hl.sha256()
-    for root, prefix in ((_SKILLS_ROOT, "skills"), (_MEMORY_ROOT, "memory")):
+    if card is not None:
+        from app.services.expert_paths import skills_roots, memory_roots
+        _pairs = [(r, "skills") for r in skills_roots(card)] + [(r, "memory") for r in memory_roots(card)]
+    else:
+        _pairs = [(_SKILLS_ROOT, "skills"), (_MEMORY_ROOT, "memory")]
+    for root, prefix in _pairs:
         try:
             files = sorted(p for p in root.rglob("*") if p.is_file())
         except Exception:
@@ -440,7 +447,7 @@ def _seed_files(store, ns: tuple, root: Path) -> int:
     return n
 
 
-def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
+def _build_dynamic_system_prompt(skill_hint: str = "", base: str = None) -> str:
     """构建动态 system_prompt（按技能分段注入）。
 
     Plan-Execute 和 ReAct 共用此函数，技能知识统一来源 SKILL.md。
@@ -449,9 +456,11 @@ def _build_dynamic_system_prompt(skill_hint: str = "") -> str:
 
     Args:
         skill_hint: 可选技能名（如 "execute-sql" 续轮执行），为空时走自主模式
+        base: 专家地基①（spec §五）：提示词基座，缺省 _BASE_ROLE（等值现状）；
+              专家卡给定时用卡声明的静态基座逐字节替换（A2 对拍强约束）
     """
     date_str = datetime.now().strftime("%Y-%m-%d")
-    parts = [_BASE_ROLE.replace("__CURRENT_DATE__", date_str)]
+    parts = [(base if base is not None else _BASE_ROLE).replace("__CURRENT_DATE__", date_str)]
 
     # 读 SKILL.md 替代 _SKILL_HINTS 字典，与 ReAct 模式共用同一份技能知识
     skill_md_content = _load_skill_md(skill_hint)
@@ -800,11 +809,27 @@ _FINAL_RESPONSE_FORMAT = {
 # 装配清单（批13-Q 探针读）：{version, agent_key, items: {capability_id: bool(装配态)}}
 _ASSEMBLY_MANIFEST: dict = {"version": 0, "agent_key": "", "items": {}}
 # fail-safe 快照：最近一次成功装配的 caps（新配置装配失败时回退此版本）
-_LAST_GOOD_ASSEMBLY: dict = {"caps": None, "caps_version": 0}
+# 专家地基①：扩展含卡快照——回退路径连卡一起回退（spec §十）。
+_LAST_GOOD_ASSEMBLY: dict = {"caps": None, "caps_version": 0, "card": None}
 
 
-async def _build_agent(checkpointer, connection_id: str, caps: dict):
-    """按能力开关条件装配 DeepAgent（批13-Q 4.1）。失败抛异常，由 create_tupu_agent 包装器 fail-safe。"""
+def _narrow_mcp_tools(mcp_tools, card_tools):
+    """专家地基①（spec §五）：按卡窄化工具面；空交集拒装配（fail-closed）。"""
+    keep = [t for t in mcp_tools if getattr(t, "name", "") in set(card_tools or [])]
+    if not keep:
+        raise ValueError("专家卡 tools 与 MCP 注册表交集为空，拒装配（fail-closed）")
+    return keep
+
+
+def _assembly_cache_key(connection_id, gver, cver, fhash, expert_id, card_version) -> str:
+    """专家地基①（spec §五）：4→6 因子——#e{expert}@{版本}（身份@版本，两专家各自 Agent）。"""
+    return f"{connection_id or '__default__'}#g{gver}#c{cver}#f{fhash}#e{expert_id}@{card_version}"
+
+
+async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict = None):
+    """按能力开关条件装配 DeepAgent（批13-Q 4.1）。失败抛异常，由 create_tupu_agent 包装器 fail-safe。
+    专家地基①（2026-09-12 spec §五）：card=专家配置卡——提示词基座/工具面/路径/权限四类按卡参数化，
+    能力开关检查逻辑零改动（卡=装配参数，链=平台）。"""
     from deepagents import create_deep_agent
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -832,6 +857,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         mcp_tools = sorted(mcp_tools, key=lambda t: getattr(t, "name", "") or "")
     except Exception as _tse:
         logger.warning(f"[批5-C2] 工具排序失败（保持原序）: {_tse}")
+    # 专家地基①：按卡窄化工具面（批5-C2 序保留；空交集拒装配 fail-closed，spec §五）
+    mcp_tools = _narrow_mcp_tools(mcp_tools, (card or {}).get("tools"))
 
     def _cap(cid: str) -> dict:
         return caps.get(cid) or {}
@@ -848,16 +875,20 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     from langgraph.store.memory import InMemoryStore as _InMemStore
     _files_store = _InMemStore()
     if _on("filesystem_tools"):
-        _n_seeded = _seed_files(_files_store, _FILES_NS_SKILLS, _SKILLS_ROOT)
-        _n_seeded += _seed_files(_files_store, _FILES_NS_MEMORY, _MEMORY_ROOT)
-        backend = CompositeBackend(
-            default=StateBackend(),
-            routes={
-                "/skills/": StoreBackend(store=_files_store, namespace=lambda _rt: _FILES_NS_SKILLS),
-                "/memory/": StoreBackend(store=_files_store, namespace=lambda _rt: _FILES_NS_MEMORY),
-            },
-        )
-        logger.info(f"[13-Y] StoreBackend 路由已装配（种子 {_n_seeded} 个文件，files_hash={_compute_files_hash()}）——运行时零磁盘")
+        # 专家地基①：种子/路由按卡声明路径派生（wenshu 卡→data/skills+data/memory 两根，等值现状）
+        from app.services.expert_paths import skills_roots, memory_roots
+        _s_roots, _m_roots = skills_roots(card or {}), memory_roots(card or {})
+        _n_seeded = 0
+        for _r in _s_roots:
+            _n_seeded += _seed_files(_files_store, _FILES_NS_SKILLS, _r)
+        for _r in _m_roots:
+            _n_seeded += _seed_files(_files_store, _FILES_NS_MEMORY, _r)
+        _routes = {f"/{_p}/": StoreBackend(store=_files_store, namespace=lambda _rt, _ns=_FILES_NS_SKILLS: _ns)
+                   for _p in [seg for s in ((card or {}).get("skills") or []) for seg in [str(s).strip("/")] if seg]}
+        _routes.update({f"/{_p}/": StoreBackend(store=_files_store, namespace=lambda _rt, _ns=_FILES_NS_MEMORY: _ns)
+                        for _p in [seg for m in ((card or {}).get("memory") or []) for seg in [str(m).strip("/").split("/")[0]] if seg]})
+        backend = CompositeBackend(default=StateBackend(), routes=_routes)
+        logger.info(f"[13-Y] StoreBackend 路由已装配（种子 {_n_seeded} 个文件，files_hash={_compute_files_hash(card)}）——运行时零磁盘")
     else:
         _n_seeded = 0
         backend = StateBackend()
@@ -870,8 +901,9 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     permissions = None
     if _on("permissions"):
         from deepagents.middleware.filesystem import FilesystemPermission
+        # 专家地基①：allow 规则按卡技能路径（wenshu 卡→["/skills/**"] 逐字节等值现状；deny 两规零改动）
         permissions = [
-            FilesystemPermission(operations=["read"], paths=["/skills/**"], mode="allow"),
+            FilesystemPermission(operations=["read"], paths=[f"{p}**" for p in ((card or {}).get("skills") or [])], mode="allow"),
             FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
             FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
         ]
@@ -1034,15 +1066,15 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     agent = create_deep_agent(
             model=model,
             tools=mcp_tools,
-            system_prompt=_build_dynamic_system_prompt(),
+            system_prompt=_build_dynamic_system_prompt(base=(card or {}).get("system_prompt")),
             state_schema=TupuAgentState,
             context_schema=TupuAgentContext,  # F4: 原生运行时上下文（不进 checkpoint）
             response_format=_response_format,  # F5/批13-Q: 结构化最终答案（按能力开关装配）
             checkpointer=checkpointer,
             backend=backend,
             permissions=permissions,  # 批13-Q: 按能力开关装配（None=无规则约束）
-            skills=["/skills/"] if _on("skills") else None,  # 批13-Q: 按能力开关装配
-            memory=["/memory/AGENTS.md"] if _on("memory") else None,  # M2/批13-Q: 常驻纪律（按能力开关装配）
+            skills=(card or {}).get("skills") if _on("skills") else None,  # 批13-Q+专家地基①: 按卡装配
+            memory=(card or {}).get("memory") if _on("memory") else None,  # M2/批13-Q+专家地基①: 按卡装配
             subagents=_subagents,  # 批13-Q: subagents 受限启用（四护栏）
             store=_store,  # 批13-Q: 长期记忆库
             debug=_debug,  # 批13-Q: 调试模式
@@ -1071,8 +1103,11 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
         manifest_items["rubric_mode"] = _rubric_mode
         # 批13-Y：backend 模式与种子状态（探针断言用）
         manifest_items["backend_mode"] = "store" if _on("filesystem_tools") else "state_only"
-        manifest_items["files_hash"] = _compute_files_hash()
+        manifest_items["files_hash"] = _compute_files_hash(card)
         manifest_items["seeded_files"] = _n_seeded
+        # 专家地基①（2026-09-12 spec §五）：manifest +2 项——A1 等值判据允许且仅允许的新增项
+        manifest_items["expert_id"] = (card or {}).get("expert_id")
+        manifest_items["card_version"] = (card or {}).get("version")
         # 批13-W W-1：装配清单记白名单换算后的排除清单（双向探针断言：勾了的在 Agent 工具表、
         # 没勾的不在——换算结果即「没勾的」，红线 5 件恒在）
         try:
@@ -1095,18 +1130,26 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict):
     return agent
 
 
-async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
+async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_id: str = "wenshu"):
     """创建 tupu DeepAgent（业务工具走 MCP）——批13-Q fail-safe 包装器。
 
     按能力开关（capability_config）条件装配；新配置装配失败自动回退上一可用版本
     （fallback 事件+告警，配置写坏不至于全瘫）；回退也失败则 fail-closed 阻止创建（P0-1）。
+    专家地基①（2026-09-12 spec §五/§十）：读专家卡传入装配；回退路径连卡快照一起回退；
+    仍败 raise + expert_events 落 assembly_failed（行为契约）。
     """
     from app.services import capability_config
+    from app.services import expert_config as _ec
+    try:
+        card, _src = _ec.get_card(expert_id, with_source=True)
+    except KeyError as _ke:
+        raise RuntimeError(f"未知专家: {expert_id}") from _ke
     caps = {p["capability_id"]: p for p in capability_config.get_policies()}
     try:
-        agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps)
+        agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps, card=card)
         _LAST_GOOD_ASSEMBLY["caps"] = caps
         _LAST_GOOD_ASSEMBLY["caps_version"] = capability_config.get_version()
+        _LAST_GOOD_ASSEMBLY["card"] = card
         return agent
     except Exception as e:
         if _LAST_GOOD_ASSEMBLY.get("caps"):
@@ -1118,10 +1161,20 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = ""):
                             "fallback_version": _LAST_GOOD_ASSEMBLY.get("caps_version")},
                     updated_by="assembly", _sync=True)
                 return await _build_agent(checkpointer=checkpointer, connection_id=connection_id,
-                                          caps=_LAST_GOOD_ASSEMBLY["caps"])
+                                          caps=_LAST_GOOD_ASSEMBLY["caps"],
+                                          card=_LAST_GOOD_ASSEMBLY.get("card"))
             except Exception as e2:
                 logger.error(f"[Capability] 回退装配也失败（fail-closed 阻止创建）: {e2}")
+                try:
+                    _ec.record_event(expert_id, "assembly_failed",
+                                     detail={"reason": str(e2)[:300]}, updated_by="assembly")
+                except Exception:
+                    pass
                 raise
+        try:
+            _ec.record_event(expert_id, "assembly_failed", detail={"reason": str(e)[:300]}, updated_by="assembly")
+        except Exception:
+            pass
         raise
 
 
@@ -1150,32 +1203,41 @@ _CHECKPOINT_DB = os.path.join(
 
 def _evict_old_agents(current_key: str) -> None:
     """批13-Q：LRU 保留最近 2 个 capability 版本的 Agent 实例，更旧版本回收。
+    专家地基①（spec §五）：改按 expert 分组——`#e{expert}@{版本}` 段取专家身份，
+    组内按版本排，各组保留最近 2 版（防专家互相挤占）；无 #e 段的旧键归 __default__ 组。
 
-    缓存键形如 "<conn>#g{guard_ver}#c{caps_ver}"；按 caps 版本排序，保留最新 2 档。
     在跑请求持有的旧实例引用不受 dict 回收影响（Python 引用计数）。
     """
     import re as _re
     try:
-        entries = []
+        groups: dict = {}
         for k in list(_GLOBAL_AGENTS.keys()):
-            m = _re.search(r"#c(\d+)", k)
-            entries.append((int(m.group(1)) if m else 0, k))
-        versions = sorted({v for v, _ in entries}, reverse=True)
-        keep_versions = set(versions[:2])
-        for v, k in entries:
-            if v not in keep_versions and k != current_key:
-                _GLOBAL_AGENTS.pop(k, None)
-                logger.info(f"[DeepAgent] LRU 回收旧能力版本 Agent: {k}")
+            m_e = _re.search(r"#e([A-Za-z0-9_-]+)@(\d+)", k)
+            if m_e:
+                eid, ver = m_e.group(1), int(m_e.group(2))
+            else:
+                m_c = _re.search(r"#c(\d+)", k)
+                eid, ver = "__default__", (int(m_c.group(1)) if m_c else 0)
+            groups.setdefault(eid, []).append((ver, k))
+        for _eid, entries in groups.items():
+            versions = sorted({v for v, _ in entries}, reverse=True)
+            keep_versions = set(versions[:2])
+            for v, k in entries:
+                if v not in keep_versions and k != current_key:
+                    _GLOBAL_AGENTS.pop(k, None)
+                    logger.info(f"[DeepAgent] LRU 回收旧版本 Agent[{_eid}]: {k}")
     except Exception as e:
         logger.warning(f"[DeepAgent] LRU 回收失败（不影响运行）: {e}")
 
 
-async def get_tupu_agent(connection_id: str = ""):
+async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu"):
     """获取 tupu DeepAgent（按 connection_id + capability 版本缓存，让前端选模型/能力开关真正生效）。
 
     v3.6: 按 connection_id 缓存不同模型的 Agent 实例（空串用默认模型）。
     批13-Q: 缓存键并入能力版本号（<conn>#g{guard}#c{caps}）——PATCH 能力开关后 version+1 ->
     新键建新实例；旧实例 LRU 保留最近 2 个版本（在跑请求不断）；重建写 capability_events(rebuild)。
+    专家地基①（2026-09-12 spec §五）：缓存键 4→6 因子（+#e{expert}@{card_version}）；
+    装配按卡分发；files_hash 按卡路径；LRU 按专家分组。
     懒加载 + 初始化锁：首次真实请求时才创建。
     """
     global _GLOBAL_CHECKPOINTER
@@ -1191,13 +1253,18 @@ async def get_tupu_agent(connection_id: str = ""):
         _cver = _cc.get_version()
     except Exception:
         _cver = 0
+    # 专家地基①：读专家卡（版本进缓存键 #e 因子；卡读取失败 wenshu 兜底/其他专家如实上屏——get_card 语义）
+    from app.services import expert_config as _ec
+    card = _ec.get_card(expert_id)
+    _ecard_ver = card.get("version") or 1
     # 批13-Y：files_hash 并入缓存键——技能/纪律树任何增删改 -> hash 变 -> 缓存未命中 ->
     # 重装配+重种子（下次请求生效；进行中会话用旧种子，低频运维可接受，设计 §五.1）。
+    # 专家地基①：按卡路径派生根集合（wenshu 等值现状两根）。
     try:
-        _fhash = _compute_files_hash()
+        _fhash = _compute_files_hash(card)
     except Exception:
         _fhash = "err"
-    _cache_key = f"{connection_id or '__default__'}#g{_gver}#c{_cver}#f{_fhash}"
+    _cache_key = _assembly_cache_key(connection_id, _gver, _cver, _fhash, expert_id, _ecard_ver)
     if _cache_key not in _GLOBAL_AGENTS:
         async with _AGENT_INIT_LOCK:
             if _cache_key not in _GLOBAL_AGENTS:
@@ -1219,6 +1286,7 @@ async def get_tupu_agent(connection_id: str = ""):
                 agent = await create_tupu_agent(
                     checkpointer=_GLOBAL_CHECKPOINTER,
                     connection_id=connection_id or None,
+                    expert_id=expert_id,
                 )
                 _GLOBAL_AGENTS[_cache_key] = agent
                 _evict_old_agents(_cache_key)

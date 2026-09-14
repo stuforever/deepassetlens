@@ -98,13 +98,16 @@ def test_files_hash新鲜度(tmp_path, monkeypatch):
 
 
 def test_装配源码接线():
-    """manifest 三项 + 缓存键 #f 分量 + FilesystemBackend 退役 + permissions 保留。"""
+    """manifest 三项 + 缓存键 #f 分量 + FilesystemBackend 退役 + permissions 保留。
+    2026-09-12 专家地基① 锚点适配：缓存键 6 因子化（_assembly_cache_key 内 #f{fhash}）+
+    种子按卡路径派生（_seed_files(_files_store, _FILES_NS_SKILLS, _r)）——意图不变（files_hash
+    并键、skills 种子走 _seed_files），仅源码字面量随重构更新。"""
     src = _agent_src()
     assert 'manifest_items["backend_mode"] = "store"' in src
     assert 'manifest_items["files_hash"]' in src
     assert 'manifest_items["seeded_files"]' in src
-    assert "#f{_fhash}" in src
+    assert "#f{fhash}" in src                                     # 专家地基①：6 因子键内 #f 分量
     assert "FilesystemBackend(" not in src, "FilesystemBackend 实例化必须退役（注释提及无妨）"
-    assert "_seed_files(_files_store, _FILES_NS_SKILLS, _SKILLS_ROOT)" in src
+    assert "_seed_files(_files_store, _FILES_NS_SKILLS, _r)" in src  # 专家地基①：按卡根逐一种子
     # permissions 三规则保留（冗余保险带，设计改动清单#6）
     assert "拒绝写 /**" in src or "permissions" in src

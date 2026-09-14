@@ -63,15 +63,26 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
 
             # v3.5: 改用全局 Agent 单例（持久化 AsyncSqliteSaver，同 thread_id 跨请求恢复记忆）
             # 不再每请求新建 MemorySaver（旧实现无跨轮记忆）
+            # 专家地基①（spec §五/§十）：入口拦截先于装配——未知专家/已关停在装配前拒绝（SSE error）。
+            from app.services import expert_config as _expert_cfg
+            try:
+                _expert_cfg.get_card(req.expert_id)
+            except KeyError:
+                raise RuntimeError(f"未知专家: {req.expert_id}")
+            _expert_card = _expert_cfg.get_card(req.expert_id)
+            if not _expert_card.get("enabled", False):
+                raise RuntimeError(f"专家已关停: {req.expert_id}")
             from app.services.tupu_deepagent import get_tupu_agent
-            agent = await get_tupu_agent(connection_id=req.llm_connection_id or "")
+            agent = await get_tupu_agent(connection_id=req.llm_connection_id or "", expert_id=req.expert_id)
 
             # v3.6: checkpoint 按真实用户隔离（评审 P0：固定 anonymous 前缀导致跨用户串记忆）
             # 鉴权关闭时 user.sub="anonymous"；启用后用真实 OIDC sub，实现用户级隔离
             from app.core.auth import get_current_user
             _current_user = get_current_user(request)
             _user_prefix = _current_user.sub if _current_user and _current_user.sub else "anonymous"
-            _memory_thread_id = f"{_user_prefix}:{req.thread_id}"
+            # 专家地基①（spec §八）：三段键单点收口——{user}:{expert}:{thread}（expert_paths 唯一构造处）
+            from app.services.expert_paths import thread_id as _expert_thread_id
+            _memory_thread_id = _expert_thread_id(_user_prefix, req.expert_id, req.thread_id)
 
             # v3.5: 同一会话执行锁 -- 防止同 thread_id 并发请求导致 checkpoint 分叉覆盖
             _session_lock = _get_session_lock(_memory_thread_id)
