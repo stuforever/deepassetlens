@@ -5,10 +5,10 @@
 - **核实结论**（执行前取证）：前端 SqlResultTable 表头=图标+技术列名（`columns: string[]` 无中文字段）；中文属性名在 kg_entities.properties_schema.cnName（`_entity_attrs` L308 既有解析纯函数）；载荷出口三处字段白名单（endpoint.py 实时帧/delivery.py done 帧/endpoint.py 降级帧）；金标查询表头本为中文（SQL 别名），裸列查询才是英文——问题面=裸列名无中文映射。
 - **方案**：执行侧挂载 columns_cn（handler 知道 entity_code）+载荷透传+前端双行渲染；无映射回退单行现状；美化件失败降级空串不阻断主链。**mcp_server 零改动**。
 
-## 任务执行（3 任务 3 commit）
+## 任务执行（3 任务 6 commit）
 - [x] 任务 1（67e9a7a）：`_build_columns_cn` helper+四执行口接线+载荷三出口透传；TDD 4 测（映射/降级/接线/透传）先红后绿。
 - [x] 任务 2（cfd2630）：SqlResultTable 双行渲染（中文主行 600+英文次行 11px）；TDD 2 测先红后绿；jest 7 套件 56 测全绿（54+2）；tsc 基线=当前（既有 @types/jest 缺失非本批引入）。
-- [x] 任务 3（终验 commit）：e2e 实证+金标回归+主文档登记行+本账本。
+- [x] 任务 3（3da9aae 主文档登记+账本 / ed90256 截图 -f 入库 / 35fe99c 计划复选框实勾+偏差注记）：e2e 实证+金标回归+收口。
 
 ## 验证记录
 - pytest 全量：**1044 passed / 6 deselected / 214 warnings**（基线 1040+4，`--ignore=tests/test_cov_db_crud.py -o timeout=600` 口径，388s）。
@@ -25,6 +25,7 @@
 6. **后端无 reload**：__start_8000.py 无 reload 参数，改码后须重启进程（本批重启验证；旧进程 9/13 起 = 无本批代码）。
 7. **WBS 题卡 15 轮**：e2e 首跑 WBS 题 150s 内推理至第 15 轮未完成——红灯修复批已知方差形态（跨库 FeatureNotSupported 根因未修，等待用户下令修复批），与本批无关；表头验证改用稳定裸列题（台区台账）完成。
 8. **工作区不处置项维持**：根目录游离文件 `b1`、12 个 tracked ES mapping JSON 运行态修改未混入本批 commit。
+9. **计划复选框两度空转**：任务 1/2 收口时的 `-replace '- \[ \] \*\*步骤...'` 正则含 `\*\*`，而盘上计划文件复选框行本无粗体标记——replace 零命中却以为已勾（commit ②③ 的计划文件 add 均为 no-op 未察觉）；终局核对发现 13 框全空，35fe99c 实勾+偏差注记。教训：批量替换后应回读计数断言，而非默认成功。
 
 ## 红线核对
 - 端口铁律 ✓（后端 28000 单进程；前端 23000 未动）；前端无硬编码后端端口 ✓（载荷字段透传，无新 API 调用）；MCP 层零改动 ✓；Playwright headless 串行 e2e ✓（一次一题）；pytest 只升不降 ✓（1040→1044）。
