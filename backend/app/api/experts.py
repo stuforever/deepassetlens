@@ -38,7 +38,9 @@ class ExpertCardBody(BaseModel):
     system_prompt: str
     tools: List[str] = []
     skills: List[str] = []
-    memory: List[str] = []
+    # 记忆插槽②批1：形状放宽 Any——①期列表 与 ②{slots, legacy_paths} 对象两形状并存（spec §四），
+    # 合法性由 _validate_card_fields 的 normalize+五规则校验裁定（pydantic 不预拦）。
+    memory: Any = []
     knowledge_sources: List[str] = ["ontology_graph"]
     llm_connection_id: Optional[str] = None
     icon: Optional[str] = None
@@ -52,7 +54,8 @@ class ExpertPatchBody(BaseModel):
     system_prompt: Optional[str] = None
     tools: Optional[List[str]] = None
     skills: Optional[List[str]] = None
-    memory: Optional[List[str]] = None
+    # 记忆插槽②批1：同 POST——两形状并存，五规则校验在 _validate_card_fields。
+    memory: Optional[Any] = None
     knowledge_sources: Optional[List[str]] = None
     llm_connection_id: Optional[str] = None
     icon: Optional[str] = None
@@ -83,10 +86,20 @@ def _validate_card_fields(body: Dict[str, Any]) -> None:
     # "/memory/AGENTS.md"→data/memory/AGENTS.md）——计划原稿的 (data/skills/首段) 解析与 /skills/ 根路径
     # 自相矛盾（会解析成 data/skills/skills），按 spec §六「路径存在」意图修正（登记于账本）。
     _data = Path(__file__).resolve().parent.parent.parent / "data"
-    for s in (body.get("skills") or []) + (body.get("memory") or []):
+    for s in body.get("skills") or []:
         rel = str(s).strip("/")
         if not rel or not (_data / rel).exists():
             raise ValueError(f"声明路径不存在: {s}")
+    # 记忆插槽②批1：memory 两形状并存——归一（ValueError→422）+slots 五规则+legacy 逐条存在性
+    # （RAW_MD 槽文件由 agent_edit 创建，不做存在性校验）。
+    if body.get("memory") is not None:
+        from app.services.memory_slots import normalize_memory_field, validate_slots
+        _mem = normalize_memory_field(body.get("memory"))
+        validate_slots(_mem.get("slots"))
+        for s in _mem.get("legacy_paths") or []:
+            rel = str(s).strip("/")
+            if not rel or not (_data / rel).exists():
+                raise ValueError(f"声明路径不存在: {s}")
     for k in body.get("knowledge_sources") or []:
         if k not in _KNOWLEDGE_WHITELIST:
             raise ValueError(f"knowledge_sources 白名单外（①期仅 ontology_graph）: {k}")

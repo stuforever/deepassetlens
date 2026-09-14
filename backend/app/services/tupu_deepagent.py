@@ -393,6 +393,14 @@ _FILES_NS_SKILLS = ("tupu", "skills")
 _FILES_NS_MEMORY = ("tupu", "memory")
 
 
+def _mem_inject_list(card) -> list:
+    """记忆插槽②批1：memory 注入列表一处收口——归一形状（{slots, legacy_paths}）+
+    legacy 手册优先+注入槽按 order（memory_slots.injection_list）。
+    wenshu（slots=[]）→ legacy 路径列表 = ①现状逐字节等值。"""
+    from app.services.memory_slots import injection_list, normalize_memory_field
+    return injection_list(normalize_memory_field((card or {}).get("memory")))
+
+
 def _compute_files_hash(card=None) -> str:
     """技能树+纪律树新鲜度指纹：逐文件 相对路径+mtime+size 有序拼接 sha256（前16位）。
 
@@ -887,7 +895,9 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         _routes = {f"/{_p}/": StoreBackend(store=_files_store, namespace=lambda _rt, _ns=_FILES_NS_SKILLS: _ns)
                    for _p in [seg for s in ((card or {}).get("skills") or []) for seg in [str(s).strip("/")] if seg]}
         _routes.update({f"/{_p}/": StoreBackend(store=_files_store, namespace=lambda _rt, _ns=_FILES_NS_MEMORY: _ns)
-                        for _p in [seg for m in ((card or {}).get("memory") or []) for seg in [str(m).strip("/").split("/")[0]] if seg]})
+                        # 记忆插槽②批1：memory 已归一为 {slots, legacy_paths}——路由段与注入列表同源
+                        # （injection_list：wenshu 无 slots → legacy 路径列表，等值①现状）
+                        for _p in [seg for m in _mem_inject_list(card or {}) for seg in [str(m).strip("/").split("/")[0]] if seg]})
         backend = CompositeBackend(default=StateBackend(), routes=_routes)
         logger.info(f"[13-Y] StoreBackend 路由已装配（种子 {_n_seeded} 个文件，files_hash={_compute_files_hash(card)}）——运行时零磁盘")
     else:
@@ -1075,7 +1085,7 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
             backend=backend,
             permissions=permissions,  # 批13-Q: 按能力开关装配（None=无规则约束）
             skills=(card or {}).get("skills") if _on("skills") else None,  # 批13-Q+专家地基①: 按卡装配
-            memory=(card or {}).get("memory") if _on("memory") else None,  # M2/批13-Q+专家地基①: 按卡装配
+            memory=_mem_inject_list(card or {}) if _on("memory") else None,  # M2/批13-Q+①按卡+②注入列表（legacy 优先+槽按 order）
             subagents=_subagents,  # 批13-Q: subagents 受限启用（四护栏）
             store=_store,  # 批13-Q: 长期记忆库
             debug=_debug,  # 批13-Q: 调试模式

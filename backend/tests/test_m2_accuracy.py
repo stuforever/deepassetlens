@@ -73,11 +73,12 @@ class TestDA3Memory:
 
     def test_agent装配memory源(self):
         """DA-3: create_tupu_agent 源码装配 memory 纪律源（MemoryMiddleware 框架自动追加）。
-        2026-09-12 专家地基① 锚点适配：装配改按卡（memory=(card or {}).get("memory")），
-        默认值 "/memory/AGENTS.md" 移至 expert_config.default_wenshu_card()——意图不变（纪律源仍装配）。"""
+        2026-09-12 专家地基① 锚点适配：装配改按卡，默认值移至 default_wenshu_card()。
+        2026-09-12 记忆插槽② 批1 锚点适配：memory 归一形状后消费点切 _mem_inject_list 收口
+        （legacy 优先+槽按 order；wenshu slots=[] → legacy 列表=等值）——意图不变。"""
         import app.services.tupu_deepagent as mod
         import app.services.expert_config as _ec
 
         src = Path(mod.__file__).read_text(encoding="utf-8")
-        assert 'memory=(card or {}).get("memory") if _on("memory") else None' in src
-        assert _ec.default_wenshu_card()["memory"] == ["/memory/AGENTS.md"]  # wenshu 默认纪律源等值
+        assert 'memory=_mem_inject_list(card or {}) if _on("memory") else None' in src
+        assert _ec.default_wenshu_card()["memory"] == ["/memory/AGENTS.md"]  # wenshu 默认纪律源等值（①形状基线）

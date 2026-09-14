@@ -32,4 +32,9 @@ def skills_roots(card: Dict) -> List[Path]:
 
 
 def memory_roots(card: Dict) -> List[Path]:
-    return _roots(card.get("memory"))
+    """记忆插槽②批1：memory 已归一为 {slots, legacy_paths}——物理根取 legacy 声明
+    （slots 的 L2/L3 为 consolidator 虚拟落盘、RAW_MD 落记忆树=批 2 per-user 根，
+    均不经本函数）。wenshu（slots=[]）→ legacy 根 = ①现状等值。"""
+    from app.services.memory_slots import normalize_memory_field
+    mem = normalize_memory_field((card or {}).get("memory"))
+    return _roots(mem.get("legacy_paths"))

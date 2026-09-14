@@ -57,11 +57,15 @@ def _load_rows(force: bool = False) -> List[Dict[str, Any]]:
         db = SessionLocal()
         try:
             rows = db.query(ExpertProfile).all()
+            # 记忆插槽②批1：读时归一 memory 形状（①期列表→{slots, legacy_paths}，spec §四形状兼容；
+            # DB 零迁移，升级窗口两形状并存）——全部消费方从此拿归一形状。
+            from app.services.memory_slots import normalize_memory_field
             out = [{
                 "expert_id": r.expert_id, "name": r.name, "tagline": r.tagline,
                 "enabled": bool(r.enabled), "entry_kind": r.entry_kind,
                 "system_prompt": r.system_prompt or "", "tools": r.tools or [],
-                "skills": r.skills or [], "memory": r.memory or [],
+                "skills": r.skills or [],
+                "memory": normalize_memory_field(r.memory),
                 "knowledge_sources": r.knowledge_sources or [],
                 "llm_connection_id": r.llm_connection_id, "icon": r.icon,
                 "description": r.description, "ui_config": r.ui_config or {},
@@ -106,9 +110,14 @@ def get_card(expert_id: str, with_source: bool = False):
 def update_card(expert_id: str, *, updated_by: Optional[str] = None,
                 close_reason: Optional[str] = None, confirm: bool = True, **fields) -> Dict[str, Any]:
     """改卡→version+1+事件落账+清缓存。enabled=False 属红级关闭：缺 close_reason→ValueError
-    （API 层转 400，照抄 update_guard 语义）。"""
+    （API 层转 400，照抄 update_guard 语义）。memory 更新时过插槽五规则（记忆插槽②批1）。"""
     from app.models.base import ExpertProfile
     from app.core.database import SessionLocal
+    if "memory" in fields:
+        # 记忆插槽②：slots 过五规则（注册表/重复/consolidator/AGENTS.md/surface），
+        # 非法形状/规则违反 ValueError→API 422。legacy_paths 形状兼容直通（slots=[] 必过）。
+        from app.services.memory_slots import normalize_memory_field, validate_slots
+        validate_slots(normalize_memory_field(fields["memory"]).get("slots"))
     db = SessionLocal()
     try:
         row = db.query(ExpertProfile).filter(ExpertProfile.expert_id == expert_id).first()
