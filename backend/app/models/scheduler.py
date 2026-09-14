@@ -162,6 +162,8 @@ class RunEvent(Base):
     event_type = Column(String(50), nullable=False, index=True)
     event_order = Column(Integer, nullable=False)
     step_id = Column(String(100), nullable=True, index=True)
+    # 专家地基①（2026-09-12 spec §九步骤 3）：观测事件带专家维度（存量行 DEFAULT 'wenshu' 回填）
+    expert_id = Column(String(64), nullable=False, default="wenshu")
     payload = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -428,6 +428,29 @@ def init_db(db: Session):
     # 批13-C：金标表兼容补列（已有库缺 engine/hit_count/last_hit_at；create_all 不改已有表）
     _ensure_golden_columns(db)
 
+    # 专家地基①（spec §九步骤 3）：kg_run_events + expert_id 观测列（失败不阻启动）
+    _ensure_expert_column(db)
+
+
+def _ensure_expert_column(db: Session):
+    """专家地基①（spec §九步骤 3）：kg_run_events + expert_id（NOT NULL DEFAULT 'wenshu'——
+    MySQL 8 自动回填存量行，独立 UPDATE 省略；列存在则跳过，幂等）。"""
+    try:
+        from sqlalchemy import text
+        has = db.execute(text(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE "
+            "TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kg_run_events' "
+            "AND COLUMN_NAME = 'expert_id'")).scalar()
+        if not has:
+            db.execute(text(
+                "ALTER TABLE kg_run_events ADD COLUMN expert_id VARCHAR(64) "
+                "NOT NULL DEFAULT 'wenshu'"))
+            db.commit()
+            logger.info("[专家地基] kg_run_events.expert_id 列已加（存量行自动回填 wenshu）")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[专家地基] expert_id 列确保失败（观测列缺失不阻主链路）: {e}")
+
 
 def _ensure_golden_columns(db: Session):
     """批13-C：kg_golden_qa_set 增列兼容（engine/hit_count/last_hit_at）+ engine 值回填。

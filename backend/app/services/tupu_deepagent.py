@@ -1201,6 +1201,43 @@ _CHECKPOINT_DB = os.path.join(
 )
 
 
+def _migrate_checkpoint_thread_ids(db_path: str = None) -> int:
+    """专家地基①（spec §九步骤 4）：checkpoint 两段→三段键迁移。
+
+    对库内全部含 thread_id 列的表执行（实测=checkpoints+writes，langgraph 双表）；
+    检测谓词=恰含一个冒号；变换=第一个冒号后插入 'wenshu:'（首冒号插入法——
+    严禁整串拼接）；幂等（三段键两冒号不满足谓词自然跳过）；
+    try/except：失败记日志返 0，不允许打死平台（lifespan 启动期调用，服务就绪前完成）。
+    """
+    import sqlite3
+    _path = db_path or _CHECKPOINT_DB
+    _total = 0
+    try:
+        con = sqlite3.connect(_path)
+        try:
+            tables = [r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")]
+            for t in tables:
+                cols = [c[1] for c in con.execute(f"PRAGMA table_info({t})")]
+                if "thread_id" not in cols:
+                    continue
+                cur = con.execute(
+                    f"UPDATE {t} SET thread_id = "
+                    f"substr(thread_id, 1, instr(thread_id, ':')) || 'wenshu:' || "
+                    f"substr(thread_id, instr(thread_id, ':') + 1) "
+                    f"WHERE thread_id LIKE '%:%' AND thread_id NOT LIKE '%:%:%'")
+                _total += cur.rowcount
+            con.commit()
+        finally:
+            con.close()
+        if _total:
+            logger.info(f"[专家地基] checkpoint 三段键迁移完成：{_total} 行（双表合计）")
+    except Exception as e:
+        logger.warning(f"[专家地基] checkpoint 迁移失败（旧键失联但服务活，幂等可重跑）: {e}")
+        return 0
+    return _total
+
+
 def _evict_old_agents(current_key: str) -> None:
     """批13-Q：LRU 保留最近 2 个 capability 版本的 Agent 实例，更旧版本回收。
     专家地基①（spec §五）：改按 expert 分组——`#e{expert}@{版本}` 段取专家身份，

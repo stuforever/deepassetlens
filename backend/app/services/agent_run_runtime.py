@@ -98,6 +98,7 @@ def _append_event(
     event_type: str,
     payload: Optional[Dict[str, Any]] = None,
     step_id: Optional[str] = None,
+    expert_id: str = "wenshu",
 ) -> int:
     event = RunEvent(
         run_id=run.id,
@@ -105,6 +106,7 @@ def _append_event(
         event_type=event_type,
         event_order=event_order,
         step_id=step_id,
+        expert_id=expert_id,  # 专家地基①：通道就绪；①期内部调用点全走默认 wenshu（等值）
         payload=payload or {},
     )
     db.add(event)

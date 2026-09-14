@@ -219,6 +219,13 @@ async def lifespan(app: FastAPI):
         asyncio.get_running_loop().create_task(_warmup_tupu_agent())
     except Exception as _warm_task_err:
         logger.warning(f"[startup] WARNING: agent 预热任务创建失败: {_warm_task_err}")
+    # 专家地基①（spec §九步骤 4）：checkpoint 三段键迁移——启动序列内、服务就绪前完成
+    # （部署窗口单实例+此时机=迁移无并发写窗口，spec §十二.3）；失败不阻启动。
+    try:
+        from app.services.tupu_deepagent import _migrate_checkpoint_thread_ids
+        _migrate_checkpoint_thread_ids()
+    except Exception as _mig_err:
+        logger.warning(f"[startup] checkpoint 迁移异常（不阻启动）: {_mig_err}")
     # F3-fix: 生产安全检查已移到 lifespan 最开头（fail-fast，在任何初始化之前）
     yield
     # Shutdown

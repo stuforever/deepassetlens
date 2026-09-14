@@ -107,3 +107,38 @@ def test_tools_narrowing_empty_rejects():
     assert [t.name for t in _narrow_mcp_tools(tools, {"execute_sql"})] == ["execute_sql"]
     with pytest.raises(ValueError):
         _narrow_mcp_tools(tools, set())                    # 空交集拒装配
+
+
+# ---------------------------------------------------------------------------
+# 批 3：迁移（E1 前置单测）
+# ---------------------------------------------------------------------------
+
+def test_checkpoint_migration_first_colon_insert():
+    """首冒号插入法+双表+恰一冒号谓词+幂等（spec §九步骤 4，review P0）。
+    变异锚点：整串拼接（四段）/漏 writes 表/谓词含两段 → 红。"""
+    import sqlite3, tempfile, os
+    from app.services.tupu_deepagent import _migrate_checkpoint_thread_ids
+    with tempfile.TemporaryDirectory() as _d:
+        _db = os.path.join(_d, "t.db")
+        con = sqlite3.connect(_db)
+        con.executescript("""
+            CREATE TABLE checkpoints (thread_id TEXT, checkpoint_ns TEXT, checkpoint_id TEXT);
+            CREATE TABLE writes (thread_id TEXT, task_id TEXT, idx INTEGER);
+            INSERT INTO checkpoints VALUES ('anonymous:free_123', 'freeplan', 'c1');
+            INSERT INTO checkpoints VALUES ('anonymous:wenshu:free_456', 'freeplan', 'c2');
+            INSERT INTO writes VALUES ('anonymous:free_123', 't1', 0);
+            INSERT INTO writes VALUES ('anonymous:wenshu:free_456', 't1', 0);
+        """)
+        con.commit(); con.close()
+        n = _migrate_checkpoint_thread_ids(_db)          # 迁移函数接受显式 db 路径（测试注入）
+        con = sqlite3.connect(_db)
+        rows = {t: [r[0] for r in con.execute(f"SELECT DISTINCT thread_id FROM {t}")]
+                for t in ("checkpoints", "writes")}
+        con.close()
+        assert n == 2                                    # 双表各迁 1 行（已是三段的不动）
+        assert rows["checkpoints"] == ["anonymous:wenshu:free_456"] or \
+               set(rows["checkpoints"]) == {"anonymous:wenshu:free_123", "anonymous:wenshu:free_456"}
+        assert "anonymous:wenshu:free_123" in rows["writes"]       # writes 同步三段化
+        assert all(r.count(":") == 2 for t in rows for r in rows[t])   # 全三段
+        n2 = _migrate_checkpoint_thread_ids(_db)
+        assert n2 == 0                                   # 幂等：重跑零迁移

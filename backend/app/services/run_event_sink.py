@@ -45,12 +45,13 @@ class RunEventSink:
 
     SCENE = "free_plan"
 
-    def __init__(self, user_query: str = "") -> None:
+    def __init__(self, user_query: str = "", expert_id: str = "wenshu") -> None:
         self._active = False
         self._db = None
         self._run = None
         self._run_id = None  # 普通字符串, init 时锁定(避免 expire_on_commit 后 lazy load 报 DetachedInstance)
         self._order = 1
+        self._expert_id = expert_id  # 专家地基①：观测事件专家维度（spec §九步骤 3）
         if not _DECISION_GATE_ENABLED:
             return
         try:
@@ -142,6 +143,7 @@ class RunEventSink:
             event_type=event_type,
             event_order=self._order,
             step_id=step_id,
+            expert_id=self._expert_id,
             payload=payload or {},
         )
         self._db.add(event)
