@@ -171,3 +171,51 @@ def test_f_factor_excludes_trace(tmp_path, monkeypatch):
     assert h1 == h2
     (_m / "L2" / "chat.md").write_text("v2 固化后", encoding="utf-8")
     assert td._compute_files_hash(card, user="alice") != h1         # 注入槽变化→键变（正确）
+
+
+# ---------------------------------------------------------------------------
+# 批 4：权限规则卡驱动生成（D1/D2 素材）
+# ---------------------------------------------------------------------------
+
+def test_permission_rules_generation():
+    """规则序列（spec §八）：skills allow + 逐槽 read/write + deny 基座垫底；
+    wenshu slots=[] → 序列=现状三条逐字节等值（A2）。"""
+    from app.services.tupu_deepagent import _memory_permission_rules
+    wenshu = {"skills": ["/skills/"], "memory": {"slots": [], "legacy_paths": ["/memory/AGENTS.md"]}}
+    assert _memory_permission_rules(wenshu) == [
+        {"op": "read", "paths": ["/skills/**"], "mode": "allow"},
+        {"op": "read", "paths": ["/**"], "mode": "deny"},
+        {"op": "write", "paths": ["/**"], "mode": "deny"},
+    ]
+    card = {"skills": ["/skills/"], "memory": {"slots": [
+        {"slot": "偏好", "type": "RAW_MD", "path": "/memory/偏好.md",
+         "writer": "agent_edit", "read": "注入", "order": 4}], "legacy_paths": []}}
+    rules = _memory_permission_rules(card)
+    allows = [r for r in rules if r["mode"] == "allow"]
+    assert {"op": "read", "paths": ["/skills/**"], "mode": "allow"} in allows
+    assert {"op": "read", "paths": ["/memory/偏好.md"], "mode": "allow"} in allows   # edit 先读
+    assert {"op": "write", "paths": ["/memory/偏好.md"], "mode": "allow"} in allows  # 逐槽精确到文件
+    assert rules[-1] == {"op": "write", "paths": ["/**"], "mode": "deny"}            # deny 垫底
+    assert rules[-2] == {"op": "read", "paths": ["/**"], "mode": "deny"}
+
+
+def test_out_of_bounds_matrix():
+    """越界矩阵（spec §八表，D1/D2）：四行全拒；AGENTS.md 双锁（权限层规则+Backend 层各验）。
+    权限层=规则生成结果判定；Backend 层=批 2 已测。"""
+    from app.services.tupu_deepagent import _memory_permission_rules
+    def _allowed(rules, op, path):
+        for r in rules:                                  # 按序匹配，首条命中生效
+            import fnmatch
+            if op == r["op"] and any(fnmatch.fnmatch(path, p) for p in r["paths"]):
+                return r["mode"] == "allow"
+        return True                                      # 无命中默认允许（框架语义）
+    card = {"skills": ["/skills/"], "memory": {"slots": [
+        {"slot": "偏好", "type": "RAW_MD", "path": "/memory/偏好.md",
+         "writer": "agent_edit", "read": "注入", "order": 4}], "legacy_paths": []}}
+    rules = _memory_permission_rules(card)
+    assert _allowed(rules, "write", "/memory/偏好.md") is True          # ✅ 已声明
+    assert _allowed(rules, "write", "/memory/AGENTS.md") is False       # ❌ 手册（权限锁1）
+    assert _allowed(rules, "write", "/memory/未声明.md") is False       # ❌ 树内卡外
+    assert _allowed(rules, "write", "/skills/foo.md") is False          # ❌ /skills/**
+    assert _allowed(rules, "read", "/skills/foo.md") is True            # 读技能照常
+    assert _allowed(rules, "write", "/etc/passwd") is False              # ❌ 树外

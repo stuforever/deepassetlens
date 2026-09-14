@@ -401,6 +401,25 @@ def _mem_inject_list(card) -> list:
     return injection_list(normalize_memory_field((card or {}).get("memory")))
 
 
+def _memory_permission_rules(card: dict) -> list:
+    """agent_edit 槽级放行（spec §八）：allow read skills 根（①卡）+ allow read 逐 RAW_MD
+    槽（edit_file 要先读）+ allow write 仅 writer=agent_edit 槽（逐槽精确到文件）+
+    deny 基座垫底。wenshu slots=[] → 序列=现状三条逐字节等值（A2）。槽外任何路径
+    （未声明 md、/skills/、树外）落回 deny。"""
+    from app.services.memory_slots import normalize_memory_field
+    rules = [{"op": "read", "paths": [f"{p}**" for p in (card.get("skills") or ["/skills/"])],
+              "mode": "allow"}]
+    _mem = normalize_memory_field(card.get("memory"))
+    _agent_edit = [s for s in _mem["slots"]
+                   if s.get("type") == "RAW_MD" and s.get("writer") == "agent_edit"]
+    if _agent_edit:
+        rules.append({"op": "read", "paths": [s["path"] for s in _agent_edit], "mode": "allow"})
+        rules.append({"op": "write", "paths": [s["path"] for s in _agent_edit], "mode": "allow"})
+    rules.append({"op": "read", "paths": ["/**"], "mode": "deny"})
+    rules.append({"op": "write", "paths": ["/**"], "mode": "deny"})
+    return rules
+
+
 def _compute_files_hash(card=None, user: str | None = None) -> str:
     """技能树+纪律树新鲜度指纹：逐文件 相对路径+mtime+size 有序拼接 sha256（前16位）。
 
@@ -938,14 +957,14 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     #   2. 拒绝读 /**（兜底封堵：/skills/../../、/etc/passwd、.env 等全部 deny）
     #   3. 拒绝写 /**（业务问答不写文件）
     # 批13-Q：permissions 关闭 -> 不装配权限规则（backend 路由仍限制根目录，virtual_mode 防穿越仍在）。
+    # 记忆插槽②批4：规则生成收口 _memory_permission_rules（卡驱动——逐 RAW_MD agent_edit 槽
+    # 精确放行 read/write，deny 垫底；wenshu slots=[] → 三条序列逐字节等值①现状，单测锁死）。
     permissions = None
     if _on("permissions"):
         from deepagents.middleware.filesystem import FilesystemPermission
-        # 专家地基①：allow 规则按卡技能路径（wenshu 卡→["/skills/**"] 逐字节等值现状；deny 两规零改动）
         permissions = [
-            FilesystemPermission(operations=["read"], paths=[f"{p}**" for p in ((card or {}).get("skills") or [])], mode="allow"),
-            FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
-            FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
+            FilesystemPermission(operations=[r["op"]], paths=r["paths"], mode=r["mode"])
+            for r in _memory_permission_rules(card or {})
         ]
     else:
         logger.warning("[Capability] permissions 已关闭：文件工具无 allow/deny 规则（管理员显式操作）")
