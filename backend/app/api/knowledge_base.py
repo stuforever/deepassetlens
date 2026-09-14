@@ -254,6 +254,9 @@ async def upload_document(kb_id: str, file: UploadFile = File(...), db: Session 
     save_path = _kb_dir(kb_id) / save_name
     save_path.write_bytes(contents)
 
+    # ④批3：checksum+解析缓存键（sha256 文件内容——同文件不重复解析）
+    import hashlib as _hl
+    _sha = _hl.sha256(contents).hexdigest()
     doc = KnowledgeDocument(
         id=doc_id,
         kb_id=kb_id,
@@ -261,6 +264,8 @@ async def upload_document(kb_id: str, file: UploadFile = File(...), db: Session 
         file_path=str(save_path),
         file_size=len(contents),
         status="pending",
+        checksum=_sha,
+        parse_cache_key=f"sha256:{_sha[:24]}",
     )
     db.add(doc)
     kb.doc_count = (kb.doc_count or 0) + 1
@@ -347,7 +352,10 @@ def vectorize_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
         total_vectors = 0
         for doc in docs:
             try:
-                text = _read_text_file(Path(doc.file_path))
+                # ④批3：解析走 factory+cache（checksum 命中不重解析；md/txt 语义与 _read_text_file 等值）
+                from app.services.parsing.cache import parse_cached
+                _sha = doc.checksum or "no-checksum"
+                text = parse_cached(Path(doc.file_path), _sha) if doc.checksum else _read_text_file(Path(doc.file_path))
                 counts = fam.add_documents(
                     {"id": kb.id, "embedding_signature": sig},
                     [{"doc_id": doc.id, "filename": doc.filename, "text": text}],
@@ -443,6 +451,83 @@ def search_knowledge_base(kb_id: str, payload: KBSearch, db: Session = Depends(g
         raise HTTPException(status_code=500, detail=f"检索失败: {e}")
 
 
+# ---------- ④批3：增量对账+重嵌（spec D8：重嵌永远手动） ----------
+
+@router.post("/{kb_id}/reconcile")
+def reconcile_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
+    """对账（spec D8）：文档行签名快照 vs KB 级签名（嵌入模型名/维度/分块参数三因子）→
+    不一致标 stale；返回报告 {stale, failed, consistent, signature, checked_at}。
+    永不自动重嵌（成本纪律）——重嵌走 reembed 按钮。幂等（重复对账结果稳定）。"""
+    kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    if (kb.type or "indexed") == "connected":
+        raise HTTPException(status_code=422, detail="指针型知识库无对账语义（无自建索引）")
+    sig = _current_signature(db)
+    stale_list, failed_list, consistent = [], [], 0
+    for doc in kb.documents:
+        if doc.status == "error":
+            failed_list.append(doc.filename)
+        elif (doc.status == "vectorized") and (doc.embedding_signature or {}) != (sig or {}):
+            doc.status = "stale"
+            stale_list.append(doc.filename)
+        else:
+            consistent += 1
+    kb.status = "degraded" if (stale_list or failed_list) else kb.status
+    db.commit()
+    from datetime import datetime as _dt
+    return {"code": 200, "data": {
+        "kb": _kb_to_dict(kb, with_docs=True),
+        "reconcile": {"stale": stale_list, "failed": failed_list,
+                      "consistent": consistent, "signature": sig,
+                      "checked_at": _dt.now().isoformat(timespec="seconds")},
+    }}
+
+
+@router.post("/{kb_id}/reembed")
+def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
+    """重嵌（spec D8：永远手动）：stale 文档批→按当前签名全量重建该批向量→签名对齐→清洁。
+    未 reembed 时检索照常（旧索引不破坏——A4 断言）。"""
+    kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    if (kb.type or "indexed") == "connected":
+        raise HTTPException(status_code=422, detail="指针型知识库无重嵌语义")
+    sig = _current_signature(db)
+    stale_docs = [d for d in kb.documents if d.status == "stale"]
+    if not stale_docs:
+        return {"code": 200, "data": {"kb": _kb_to_dict(kb, with_docs=True),
+                "reembed": {"reembedded": 0, "message": "无 stale 文档"}}}
+    client = _get_client()
+    if not client.healthcheck():
+        raise HTTPException(status_code=502, detail="qdrant_unavailable")
+    from app.services.semantic_retrieval import embed_texts
+    from app.services.kb_engines.qdrant_family import QdrantFamily
+    fam = QdrantFamily(client=client, embed_fn=lambda batch: embed_texts(db, batch))
+    reembedded = 0
+    for doc in stale_docs:
+        try:
+            from app.services.parsing.cache import parse_cached
+            text = (parse_cached(Path(doc.file_path), doc.checksum)
+                    if doc.checksum else _read_text_file(Path(doc.file_path)))
+            counts = fam.add_documents({"id": kb.id, "embedding_signature": sig},
+                                       [{"doc_id": doc.id, "filename": doc.filename, "text": text}])
+            doc.chunk_count = counts.get(doc.id, 0)
+            doc.status = "vectorized"
+            doc.embedding_signature = sig
+            doc.error_msg = None
+            reembedded += 1
+        except Exception as de:
+            doc.status = "error"
+            doc.error_msg = str(de)
+            logger.warning("重嵌 %s 失败: %s", doc.filename, de)
+    kb.vector_count = sum(d.chunk_count or 0 for d in kb.documents if d.status == "vectorized")
+    kb.status = "ready" if not [d for d in kb.documents if d.status in ("error", "stale")] else kb.status
+    db.commit()
+    return {"code": 200, "data": {"kb": _kb_to_dict(kb, with_docs=True),
+            "reembed": {"reembedded": reembedded, "signature": sig}}}
+
+
 # ---------- 序列化 ----------
 
 def _kb_to_dict(kb: KnowledgeBase, with_docs: bool = False) -> Dict[str, Any]:
@@ -465,6 +550,30 @@ def _kb_to_dict(kb: KnowledgeBase, with_docs: bool = False) -> Dict[str, Any]:
     }
     if with_docs:
         d["documents"] = [_doc_to_dict(doc) for doc in kb.documents]
+    # ④批3：状态报告增强（签名一致性/stale+failed 清单/最后对账=文档行签名抽查）
+    if with_docs:
+        sig = getattr(kb, "embedding_signature", None)
+        d["report"] = {
+            "type": d.get("type"),
+            "rag_provider": d.get("rag_provider"),
+            "signature": sig,
+            "stale_docs": [doc["filename"] for doc in d["documents"] if doc["status"] == "stale"],
+            "failed_docs": [doc["filename"] for doc in d["documents"] if doc["status"] == "error"],
+            "signature_consistent": all(
+                (doc.get("embedding_signature") or None) == (sig or None)
+                for doc in d["documents"] if doc["status"] == "vectorized"),
+        }
+        if d.get("type") == "connected":
+            # 指针失联探测（HEAD 语义——轻量 GET）
+            params = getattr(kb, "pointer_params", None) or {}
+            try:
+                import requests as _rq
+                _r = _rq.get(f"{params.get('url', '')}", timeout=3)
+                d["report"]["reachable"] = _r.status_code < 500
+                d["report"]["checked_at"] = _r.headers.get("date")
+            except Exception as _pe:
+                d["report"]["reachable"] = False
+                d["report"]["unreachable_reason"] = str(_pe)[:120]
     return d
 
 
@@ -477,5 +586,7 @@ def _doc_to_dict(doc: KnowledgeDocument) -> Dict[str, Any]:
         "chunk_count": doc.chunk_count,
         "status": doc.status,
         "error_msg": doc.error_msg,
+        "checksum": getattr(doc, "checksum", None),          # ④批3：解析缓存键面
+        "embedding_signature": getattr(doc, "embedding_signature", None),
         "created_at": doc.created_at.isoformat() if doc.created_at else None,
     }
