@@ -401,32 +401,57 @@ def _mem_inject_list(card) -> list:
     return injection_list(normalize_memory_field((card or {}).get("memory")))
 
 
-def _compute_files_hash(card=None) -> str:
+def _compute_files_hash(card=None, user: str | None = None) -> str:
     """技能树+纪律树新鲜度指纹：逐文件 相对路径+mtime+size 有序拼接 sha256（前16位）。
 
-    任何增删改 -> hash 变 -> 缓存未命中 -> 重装配重种子。装配区与 get_tupu_agent 缓存键共用。
-    专家地基①：card 给定时按 skills_roots/memory_roots 遍历（卡声明路径派生根）；
-    None 时维持现状两根（逐字节等值）。
+    ②修正（spec §五）：memory 侧=手册（legacy_paths 物理落点）+read=注入 槽文件（per-user
+    经 ContextVar 解析），trace/*.jsonl 与 backup/ 排除——L1 每回合追加，进哈希=每问重建
+    Agent（缓存报废）。注入是装配时快照：L2/L3 固化后 f 变→下一装配注入新摘要（明示非缺陷）。
+    skills 侧行为原样（①）。装配区与 get_tupu_agent 缓存键共用。
     """
     import hashlib as _hl
+    from app.services.memory_slots import normalize_memory_field, injection_list
     h = _hl.sha256()
-    if card is not None:
-        from app.services.expert_paths import skills_roots, memory_roots
-        _pairs = [(r, "skills") for r in skills_roots(card)] + [(r, "memory") for r in memory_roots(card)]
-    else:
-        _pairs = [(_SKILLS_ROOT, "skills"), (_MEMORY_ROOT, "memory")]
-    for root, prefix in _pairs:
+    # skills 侧（原样，①行为）
+    for root, prefix in ((_SKILLS_ROOT, "skills"),):
         try:
             files = sorted(p for p in root.rglob("*") if p.is_file())
         except Exception:
             files = []
         for p in files:
             try:
-                st = p.stat()
-                rel = p.relative_to(root).as_posix()
+                st = p.stat(); rel = p.relative_to(root).as_posix()
                 h.update(f"{prefix}/{rel}|{int(st.st_mtime)}|{st.st_size};".encode("utf-8"))
             except OSError:
-                continue  # 竞态删除：跳过（下轮 hash 自然更新）
+                continue
+    if card is not None:
+        if user is None:                                 # 调用方不传→ContextVar（endpoint 已前置 set）
+            from app.services.memory_runtime import current as _cur
+            user = _cur()["user"]
+        _user = user or "anonymous"
+        from app.services.expert_paths import memory_expert_root, memory_user_root
+        eroot = memory_expert_root(card.get("expert_id") or "wenshu")
+        uref = memory_user_root(card.get("expert_id") or "wenshu", _user)
+        for vp in injection_list(normalize_memory_field(card.get("memory"))):
+            rel = vp[len("/memory/"):]
+            for root in (eroot, uref):                 # 双根（手册在专家根，槽在用户根）
+                p = root / rel
+                if p.is_file():
+                    st = p.stat()
+                    h.update(f"memory/{rel}|{int(st.st_mtime)}|{st.st_size};".encode("utf-8"))
+                    break
+    else:                                               # ①兼容路径：全 memory 根（搬迁后=手册树）
+        try:
+            files = sorted(p for p in _MEMORY_ROOT.rglob("*")
+                           if p.is_file() and "trace" not in p.parts and "backup" not in p.parts)
+        except Exception:
+            files = []
+        for p in files:
+            try:
+                st = p.stat(); rel = p.relative_to(_MEMORY_ROOT).as_posix()
+                h.update(f"memory/{rel}|{int(st.st_mtime)}|{st.st_size};".encode("utf-8"))
+            except OSError:
+                continue
     return h.hexdigest()[:16]
 
 
@@ -984,6 +1009,15 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     from app.services.skill_policy import SkillPolicyMiddleware
     middleware_list.insert(0, SkillPolicyMiddleware())
     logger.info("[SkillPolicy] 受控执行契约中间件已装配（最外层闸门，技能/步骤/模板/引擎/终止硬校验）")
+    # 记忆插槽②（spec §六）：L1 轨迹——洋葱最外层（SkillPolicy 之前；守卫拒绝也记）。
+    # wenshu slots=[] → 不装配（no-op）；manifest 记 memory_trace: active|inactive。
+    from app.services.memory_slots import normalize_memory_field
+    _l1 = [s for s in normalize_memory_field((card or {}).get("memory")).get("slots") or []
+           if s.get("type") == "L1_TRACE"]
+    if _l1:
+        from app.services.memory_trace import MemoryTraceMiddleware
+        middleware_list.insert(0, MemoryTraceMiddleware(card))
+        logger.info(f"[L1] 记忆轨迹中间件已装配（最外层，surfaces={[s.get('surface') for s in _l1]}）")
     # 批13-AB2：SkillEntityResolverMiddleware（read_file 运行时 ⟦⟧ 翻译站）已删除——
     # 模型按 AGENTS.md §五纪律主动 search_entities 翻译，漏网 SQL 由模板守卫硬拒。
     # 批13-AB4：DataSummaryMiddleware（数据摘要运行时站）已删除——
@@ -1123,6 +1157,8 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         # 专家地基①（2026-09-12 spec §五）：manifest +2 项——A1 等值判据允许且仅允许的新增项
         manifest_items["expert_id"] = (card or {}).get("expert_id")
         manifest_items["card_version"] = (card or {}).get("version")
+        # 记忆插槽②（spec §六）：L1 轨迹装配探针——wenshu slots=[] → "inactive"（②对账判据）
+        manifest_items["memory_trace"] = "active" if _l1 else "inactive"
         # 批13-W W-1：装配清单记白名单换算后的排除清单（双向探针断言：勾了的在 Agent 工具表、
         # 没勾的不在——换算结果即「没勾的」，红线 5 件恒在）
         try:

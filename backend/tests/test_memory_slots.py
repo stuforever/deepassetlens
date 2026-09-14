@@ -127,3 +127,47 @@ def test_migrate_agents_md_idempotent(tmp_path, monkeypatch):
     assert (_plat / "AGENTS.md.bak").exists()                    # 旧位留 .bak
     mtb._migrate_agents_md()                                     # 幂等：目标在+校验同→跳过零写
     assert dst.read_text(encoding="utf-8") == "纪律树内容逐字节"
+
+
+# ---------------------------------------------------------------------------
+# 批 3：L1 轨迹（永不抛错/f 因子排除/A4）
+# ---------------------------------------------------------------------------
+
+def test_trace_append_never_raises(tmp_path, monkeypatch):
+    """永不抛错（spec §六）：append 失败即吞+warning；JSONL 行含四类必需键。
+    变异锚点：异常外泄 → 红。"""
+    import json as _json
+    from app.services import memory_trace as mt
+    _f = tmp_path / "chat.jsonl"
+    monkeypatch.setattr(mt, "_trace_file", lambda e, u, s: _f)
+    mt.append_event("wenshu", "alice", "chat",
+                    {"kind": "user_msg", "payload": {"text": "你好"}})   # 正常落盘
+    assert "user_msg" in _f.read_text(encoding="utf-8")
+    def _boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(mt, "_trace_file", _boom)
+    mt.append_event("wenshu", "alice", "chat", {"kind": "user_msg"})      # 失败即吞
+    rows = [_json.loads(l) for l in _f.read_text(encoding="utf-8").splitlines()]
+    assert all({"id", "ts", "surface", "kind", "payload", "session_id", "turn_id"} <= set(r)
+              for r in rows)                                             # 七键齐
+
+
+def test_f_factor_excludes_trace(tmp_path, monkeypatch):
+    """A4 前置（spec §五 f 因子修正）：trace/*.jsonl 增删不进哈希；注入槽文件变化进哈希。
+    变异锚点：哈希含 trace → 红。"""
+    from app.services import tupu_deepagent as td
+    import app.services.expert_paths as ep
+    _m = tmp_path / "memory" / "wenshu" / "alice"
+    (_m / "trace" / "chat").mkdir(parents=True)
+    (_m / "L2").mkdir(); (_m / "L2" / "chat.md").write_text("v1", encoding="utf-8")
+    monkeypatch.setattr(ep, "memory_expert_root", lambda e: tmp_path / "memory" / e)
+    monkeypatch.setattr(ep, "memory_user_root", lambda e, u: tmp_path / "memory" / e / u)
+    card = {"expert_id": "wenshu", "memory": {"slots": [
+        {"slot": "会话摘要", "type": "L2_SUMMARY", "surface": "chat", "read": "注入", "order": 2}],
+        "legacy_paths": ["/memory/AGENTS.md"]}}
+    h1 = td._compute_files_hash(card, user="alice")
+    (_m / "trace" / "chat" / "d.jsonl").write_text('{"kind":"user_msg"}\n', encoding="utf-8")
+    h2 = td._compute_files_hash(card, user="alice")                 # trace 追加→键不变
+    assert h1 == h2
+    (_m / "L2" / "chat.md").write_text("v2 固化后", encoding="utf-8")
+    assert td._compute_files_hash(card, user="alice") != h1         # 注入槽变化→键变（正确）
