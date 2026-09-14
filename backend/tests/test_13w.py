@@ -17,9 +17,11 @@ def _fresh_cache():
 
 
 def test_默认全勾_排除清单等于红线五件():
-    """默认 allowed=勾选域全勾 -> excluded=红线 5 件=黑名单版现状（零行为变化）。"""
+    """默认 allowed=勾选域全勾 -> excluded=红线 5 件∪教学 9 件（⑤批2：教学族进
+    universe 但默认不勾——对问数面排除=wenshu 零感知的正确表达）。"""
+    from app.services.query_contract import TUTOR_TOOLS
     out = cc.get_tool_exclusions()
-    assert sorted(out["excluded"]) == sorted(cc.W1_REDLINE_EXCLUSIONS)
+    assert sorted(out["excluded"]) == sorted(set(cc.W1_REDLINE_EXCLUSIONS) | set(TUTOR_TOOLS))
     assert out["locked"] == cc.W1_LOCKED_TOOLS
 
 

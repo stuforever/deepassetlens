@@ -85,6 +85,19 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             _expert_card = _expert_cfg.get_card(req.expert_id)
             if not _expert_card.get("enabled", False):
                 raise RuntimeError(f"专家已关停: {req.expert_id}")
+
+            # ⑤b（spec §三）：surface 请求级校验+传递——有值时必须 ∈ 该卡 L1 槽声明
+            # surface 集（非法 422）；None=②原语义（全部声明 surface 落盘，wenshu 零感知）。
+            if getattr(req, "surface", None):
+                from app.services.memory_slots import normalize_memory_field as _nmm
+                _declared = [s.get("surface") or "chat" for s in
+                             _nmm(_expert_card.get("memory"))["slots"] if s.get("type") == "L1_TRACE"]
+                if req.surface not in _declared:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"surface 白名单外（卡 L1 声明: {_declared or '无'}，收到 {req.surface}）")
+                memory_runtime.update_runtime({"surface": req.surface})
+
             from app.services.tupu_deepagent import get_tupu_agent
             agent = await get_tupu_agent(connection_id=req.llm_connection_id or "", expert_id=req.expert_id)
 

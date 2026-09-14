@@ -18,10 +18,15 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# 默认只读通用能力（未命中场景时的低权限模式工具集）
-# P0 整改（架构演进对齐）：工具层已把统一 kg_api 拆成 16 个单一职责 MCP 工具（app/mcp_server.py），
-# 此处白名单必须与真实注册工具名一致，否则模型只能调白名单里不存在的幽灵工具 -> generic 模式死锁。
-# 安全不降级：ABSOLUTE_FORBIDDEN_TOOLS 仍全局硬禁；执行类仍走 validate_safe_sql / ScopeChecker / 引擎锁定。
+# ⑤批2（⑤b）：教学工具族九件——generic 模式可达（user 隔离由 ContextVar 保证）；
+# 但 **expert_config 推导 wenshu/存量卡 tools 时剔除本族**（wenshu 零感知铁律——
+# 教学工具只进 tutor 卡显式 tools，不随「全集=卡 tools」推导泄漏进问数面）。
+TUTOR_TOOLS = frozenset({
+    "fsrs_due", "fsrs_review", "mastery_query", "grade_answer", "generate_practice",
+    "select_exercises", "wrong_question_add", "wrong_question_query", "export_wrong_book",
+})
+
+# 默认只读通用能力（未命中场景时的低权限模式工具集）＝基础族 ∪ 教学族
 GENERIC_ALLOWED_TOOLS = frozenset({
     # 定位类（只读元数据）
     "fetch_l1_l2_tree", "validate_l2", "fetch_subgraph",
@@ -36,7 +41,7 @@ GENERIC_ALLOWED_TOOLS = frozenset({
     "execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api",
     # 只读技能文件（deepagents 框架工具，非 MCP）
     "read_file",
-})
+}) | TUTOR_TOOLS
 # 绝对禁止的工具（任何契约下都不可调用）
 ABSOLUTE_FORBIDDEN_TOOLS = frozenset({
     "task",        # 子 Agent

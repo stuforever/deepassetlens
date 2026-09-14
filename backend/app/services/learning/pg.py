@@ -64,6 +64,10 @@ _DDL = [
       knowledge_point_id VARCHAR(128) NOT NULL,     -- 本体图谱节点 id（批 0.3 实测字段名）
       variant_count INT NOT NULL DEFAULT 0,
       enabled BOOLEAN NOT NULL DEFAULT TRUE)""",
+    # 三索引（⑤a 列契约——due 清单/错题筛选/图谱邻接查询路径）
+    "CREATE INDEX IF NOT EXISTS idx_lrc_user_due ON learning_review_cards (user_id, due)",
+    "CREATE INDEX IF NOT EXISTS idx_lwq_user_status ON learning_wrong_questions (user_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_lmq_kp ON learning_mother_questions (knowledge_point_id)",
 ]
 
 

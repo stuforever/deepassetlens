@@ -25,6 +25,13 @@ def update_turn_id(turn_id: str) -> None:
         rt["turn_id"] = turn_id
 
 
+def update_runtime(patch: dict) -> None:
+    """⑤b（spec §三）：请求级补丁（surface 路由等）——原位合并，缺键不动。"""
+    rt = _memory_runtime.get()
+    if rt is not None:
+        rt.update(patch)
+
+
 def current() -> dict:
     rt = _memory_runtime.get()
     if rt is None:   # 异常路径缺省（spec §十一）

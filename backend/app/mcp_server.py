@@ -217,6 +217,101 @@ def sample_column_values(entity_code: str, column: str, limit: int = 50) -> dict
 
 
 # ---------------------------------------------------------------------------
+# ⑤批2（⑤b）：教学工具族九件（spec §一契约表+§二三铁律）。
+# 铁律①：参数一律不含 user_id——从 memory_runtime ContextVar 取（越权面为零）；
+# 铁律②：fsrs_review 可选 _now 注入（测试不 sleep）；
+# 铁律③：超阈值沉降走 _with_result_ref（沿①既有机制）。
+# ---------------------------------------------------------------------------
+import json as _json
+
+
+def _tutor_user() -> str:
+    from app.services.memory_runtime import current_user
+    return current_user()
+
+
+@mcp.tool()
+def fsrs_due(kind: str = "") -> str:
+    """到期复习清单（due<=now 按 due 升序，含 stability/reps）——读面。"""
+    from app.services.learning.service import due_cards
+    items = due_cards(_tutor_user(), kind=kind or None)
+    return _json.dumps({"count": len(items), "items": items}, ensure_ascii=False, default=str)
+
+
+@mcp.tool()
+def fsrs_review(item_id: str, rating: int, kind: str = "mother_question",
+                now: float | None = None) -> str:
+    """提交复习评分(1-4)→FSRS 调度→落卡+流水（engine 直写——算出来的不许模型编）。
+    ⑤b 铁律①：参数不含 user_id（从 memory_runtime ContextVar 取）；铁律②：now 可注入
+    （测试不 sleep；fastmcp 禁下划线参数——spec 的 _now 更名 now，语义不变）。"""
+    from app.services.learning.service import review_card
+    try:
+        out = review_card(_tutor_user(), kind, item_id, int(rating), now=now)
+    except ValueError as e:
+        return _json.dumps({"error": str(e)}, ensure_ascii=False)
+    return _json.dumps({"next_interval_days": out["interval_days"],
+                        "next_due_stability": out["stability"],
+                        "reps": out["reps"], "lapses": out["lapses"]}, ensure_ascii=False)
+
+
+@mcp.tool()
+def mastery_query(knowledge_point_id: str) -> str:
+    """查知识点掌握度+复习史统计（读面）——学情画像与选题权重的数据源。"""
+    from app.services.learning.service import mastery_query
+    return _json.dumps(mastery_query(_tutor_user(), knowledge_point_id),
+                       ensure_ascii=False, default=str)
+
+
+@mcp.tool()
+def grade_answer(question: str, user_answer: str, expected_answer: str = "",
+                 rubric: str = "") -> str:
+    """判分（LLM 臂）：对照预期答案/评分要点给分值+逐条评语（判分必走本工具不自评）。"""
+    from app.services.learning.tutor_llm import grade_answer_llm
+    return _json.dumps(grade_answer_llm(question, user_answer, expected_answer, rubric),
+                       ensure_ascii=False)
+
+
+@mcp.tool()
+def generate_practice(knowledge_point_id: str, band: str = "基础") -> str:
+    """生成变式练习题（LLM 臂）：band ∈ 基础|提高|挑战；返回题干+参考答案。"""
+    from app.services.learning.tutor_llm import generate_practice_llm
+    return _json.dumps(generate_practice_llm(knowledge_point_id, band), ensure_ascii=False)
+
+
+@mcp.tool()
+def select_exercises(knowledge_point_id: str, n: int = 5, band: str = "") -> str:
+    """选题+图谱邻居扩展：本知识点+前置/后继知识点入选题池（⑤b 唯一新算法语义）
+    →母题按掌握度加权（掌握度低→权高）→top-n（含变式计数）。"""
+    from app.services.learning.tutor_select import select_exercises_with_neighbors
+    return _json.dumps(select_exercises_with_neighbors(
+        _tutor_user(), knowledge_point_id, n=n, band=band or None), ensure_ascii=False)
+
+
+@mcp.tool()
+def wrong_question_add(variant_text: str, mother_question_id: str = "",
+                       error_context: str = "") -> str:
+    """错题入库（engine 写臂）：判分错误后登记变式题。返回 wq_id。"""
+    from app.services.learning.learning_dao import wrong_question_add
+    wq_id = wrong_question_add(_tutor_user(), variant_text, mother_question_id, error_context)
+    return _json.dumps({"wq_id": wq_id}, ensure_ascii=False)
+
+
+@mcp.tool()
+def wrong_question_query(status: str = "", limit: int = 20) -> str:
+    """错题列表（读面）：status ∈ open|resolved|空（全部）。仅本人错题。"""
+    from app.services.learning.learning_dao import wrong_question_query
+    items = wrong_question_query(_tutor_user(), status=status or "", limit=int(limit or 20))
+    return _json.dumps({"count": len(items), "items": items}, ensure_ascii=False, default=str)
+
+
+@mcp.tool()
+def export_wrong_book(format: str = "md") -> str:
+    """导出错题本（engine 臂）：落文件返回 result_ref（tab_export 纪律——大对象不进对话）。"""
+    from app.services.learning.tutor_export import export_wrong_book_file
+    return _json.dumps(export_wrong_book_file(_tutor_user(), format), ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
 # 挂载到 FastAPI（SSE 传输，复用 8000 端口）
 # ---------------------------------------------------------------------------
 

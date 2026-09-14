@@ -18,9 +18,11 @@ _CACHE: Dict[str, Any] = {"rows": None, "ts": 0.0, "version": None, "lock": thre
 
 def _mcp_tool_registry() -> List[str]:
     """活注册表（spec R2）：MCP 工具名全集，从 GENERIC_ALLOWED_TOOLS 派生（剔除框架件
-    read_file）——该白名单与 mcp_server 真实注册面强一致（P0 整改注释为证），文档数字仅快照。"""
-    from app.services.query_contract import GENERIC_ALLOWED_TOOLS
-    return sorted(set(GENERIC_ALLOWED_TOOLS) - {"read_file"})
+    read_file）——该白名单与 mcp_server 真实注册面强一致（P0 整改注释为证），文档数字仅快照。
+    ⑤批2：教学族（TUTOR_TOOLS）剔除——wenshu/存量卡 tools 推导不含教学工具
+    （wenshu 零感知铁律；tutor 卡 tools 显式列九件，不走本推导）。"""
+    from app.services.query_contract import GENERIC_ALLOWED_TOOLS, TUTOR_TOOLS
+    return sorted(set(GENERIC_ALLOWED_TOOLS) - {"read_file"} - TUTOR_TOOLS)
 
 
 def default_wenshu_card() -> Dict[str, Any]:

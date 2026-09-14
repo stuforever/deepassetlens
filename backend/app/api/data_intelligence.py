@@ -53,6 +53,9 @@ class ChatRequest(BaseModel):
     llm_connection_id: Optional[str] = Field(default=None, description="指定 LLM 连接 ID（不传则用默认）")
     mode: str = Field(default="free_plan", description="对话模式：free_plan")
     expert_id: str = Field(default="wenshu", description="专家标识（专家地基①；存量请求默认问数）")
+    # ⑤b（spec §三）：L1 轨迹 surface 请求级指定（练习判分→quiz）。None=②原语义
+    # （全部声明 surface 落盘——wenshu 零感知）；非法值由 endpoint 校验 422。
+    surface: Optional[str] = Field(default=None, description="L1 轨迹 surface 覆盖（须 ∈ 卡 L1 声明）")
 
 
 class ChatResponse(BaseModel):

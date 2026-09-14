@@ -13,9 +13,14 @@ from app.core.init_db import CAPABILITY_POLICY_SEED
 
 class TestToolExclusions:
     def test_默认5件(self):
-        """白名单全勾基线：换算后 excluded=红线 5 件（与黑名单版现状逐件一致=迁移零行为变化）。"""
+        """白名单全勾基线：换算后 excluded=红线 5 件∪教学 9 件（⑤批2：教学工具族注册
+        进 universe 但默认不在 allowed——对问数面排除=wenshu 零感知的正确表达）。"""
         cfg = cc.get_tool_exclusions()
-        assert sorted(cfg["excluded"]) == ["edit_file", "execute", "glob", "grep", "write_file"]
+        assert sorted(cfg["excluded"]) == sorted([
+            "edit_file", "execute", "glob", "grep", "write_file",
+            "fsrs_due", "fsrs_review", "mastery_query", "grade_answer", "generate_practice",
+            "select_exercises", "wrong_question_add", "wrong_question_query", "export_wrong_book",
+        ])
         assert "read_file" in cfg["locked"] and "ls" in cfg["locked"]
 
     def test_locked永不可入excluded(self):

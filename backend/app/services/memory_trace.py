@@ -83,7 +83,11 @@ class MemoryTraceMiddleware(AgentMiddleware[Any, Any, Any]):
     async def _emit(self, kind: str, payload: dict) -> None:
         from app.services.memory_runtime import current as _cur
         rt = _cur()
-        for s in self._surfaces:                      # 多槽声明→同事件写多份（spec §六）
+        # ⑤b（批 0.5 核验分支）：请求级 surface 指定（∈ 声明集，endpoint 已 422 校验）
+        # →只写该 surface；未指定→②原语义（全部声明 surface 同写）。
+        _req_surface = rt.get("surface")
+        surfaces = [s for s in self._surfaces if s == _req_surface] if _req_surface else self._surfaces
+        for s in surfaces:                            # 多槽声明→同事件写多份（spec §六）
             await aappend_event(rt["expert_id"], rt["user"], s,
                                 {"kind": kind, "payload": payload,
                                  "session_id": rt["session_id"], "turn_id": rt["turn_id"]})

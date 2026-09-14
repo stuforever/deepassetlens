@@ -1,63 +1,44 @@
 # -*- coding: utf-8 -*-
 """⑤（spec §四）：教学引擎函数——fsrs_review/fsrs_due/mastery_query 等的引擎臂
-（②三分离：工具=薄包装，服务=唯一引擎；MCP 工具与 /api/tutor 同源包装本模块）。"""
+（②三分离：工具=薄包装，服务=唯一引擎；MCP 工具与 /api/tutor 同源包装本模块；
+存储读写全部经 learning_dao——算法保持纯）。"""
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from sqlalchemy import text
 
 from app.services.learning import fsrs
+from app.services.learning import learning_dao as dao
 from app.services.learning.pg import pg_session
 
 
-def review_card(user_id: str, kind: str, item_id: str, rating: int) -> dict:
+def review_card(user_id: str, kind: str, item_id: str, rating: int, now: float = None) -> dict:
     """fsrs_review 的引擎（②三分离 engine 臂）：评分→FSRS 调度→落卡+流水。
-    rating ∈ 1-4（Again/Hard/Good/Easy）；kind ∈ mother_question/knowledge_point。"""
+    rating ∈ 1-4（Again/Hard/Good/Easy）；kind ∈ mother_question/knowledge_point；
+    now 可注入（⑤a 时钟纪律——测试不 sleep）。"""
     if rating not in (fsrs.AGAIN, fsrs.HARD, fsrs.GOOD, fsrs.EASY):
         raise ValueError(f"rating 白名单 1-4（收到 {rating}）")
     if kind not in ("mother_question", "knowledge_point"):
         raise ValueError(f"kind 白名单 mother_question/knowledge_point（收到 {kind}）")
-    with pg_session() as s:
-        row = s.execute(text(
-            "SELECT card_id, stability, difficulty, reps, lapses, "
-            "EXTRACT(EPOCH FROM (last_review - now())) AS last_neg, "
-            "stability AS st "
-            "FROM learning_review_cards WHERE kind=:k AND item_id=:i AND user_id=:u FOR UPDATE"),
-            {"k": kind, "i": item_id, "u": user_id}).mappings().first()
-        import time as _t
-        if row:
-            state = {"stability": row["stability"], "difficulty": row["difficulty"],
-                     "reps": row["reps"], "lapses": row["lapses"],
-                     "due": _t.time(), "last_review": _t.time() + float(row["last_neg"] or 0),
-                     "elapsed_days": 0}
-            card_id = row["card_id"]
-        else:
-            state = None
-            card_id = str(uuid.uuid4())
-        if state is None:
+    import unittest.mock as _m
+    import time as _t
+    now = now or _t.time()
+
+    state = dao.get_card(user_id, kind, item_id)
+    if state is None:
+        with _m.patch.object(fsrs, "_now", lambda: now):
             out = fsrs.new_card(rating)
-        else:
-            out = fsrs.review(state, rating)
-        s.execute(text(
-            "INSERT INTO learning_review_cards (card_id, kind, item_id, user_id, stability, "
-            "difficulty, reps, lapses, due, last_review) "
-            "VALUES (:c, :k, :i, :u, :st, :df, :rp, :lp, now() + make_interval(secs => :due_in), now()) "
-            "ON CONFLICT (kind, item_id, user_id) DO UPDATE SET stability=EXCLUDED.stability, "
-            "difficulty=EXCLUDED.difficulty, reps=EXCLUDED.reps, lapses=EXCLUDED.lapses, "
-            "due=EXCLUDED.due, last_review=now()"),
-            {"c": card_id, "k": kind, "i": item_id, "u": user_id,
-             "st": out["stability"], "df": out["difficulty"], "rp": out["reps"],
-             "lp": out["lapses"], "due_in": max(0.0, out["due"] - _t.time())})
-        s.execute(text(
-            "INSERT INTO learning_review_records (card_id, user_id, rating, scheduled_interval) "
-            "SELECT :c, :u, :r, :si WHERE EXISTS (SELECT 1 FROM learning_review_cards WHERE card_id=:c)"),
-            {"c": card_id, "u": user_id, "r": rating, "si": max(0.0, out["due"] - _t.time()) / fsrs.SECONDS_PER_DAY})
-        return {"card_id": card_id, "kind": kind, "item_id": item_id,
-                "rating": rating, "interval_days": round((out["due"] - _t.time()) / fsrs.SECONDS_PER_DAY, 1),
-                "stability": out["stability"], "difficulty": out["difficulty"],
-                "reps": out["reps"], "lapses": out["lapses"]}
+    else:
+        out = fsrs.review(state, rating)  # review 内部 now=_now()——真实时钟路径
+    card_id = dao.upsert_card(user_id, kind, item_id, out)
+    dao.append_record(card_id, user_id, rating,
+                      max(0.0, out["due"] - now) / fsrs.SECONDS_PER_DAY)
+    return {"card_id": card_id, "kind": kind, "item_id": item_id,
+            "rating": rating,
+            "interval_days": round(max(0.0, out["due"] - now) / fsrs.SECONDS_PER_DAY, 1),
+            "stability": out["stability"], "difficulty": out["difficulty"],
+            "reps": out["reps"], "lapses": out["lapses"]}
 
 
 def due_cards(user_id: str, kind: str | None = None, limit: int = 20) -> list[dict]:
