@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Divider, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography, message, Switch } from 'antd';
+import { Alert, Button, Card, Divider, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography, message, Switch } from 'antd';
 import { AppstoreAddOutlined, CopyOutlined, EditOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { llmAdminApi } from '../services/api';
 import { PageShell, StatusTag } from '../components/shell';
@@ -74,6 +74,9 @@ const LLMConfigManager: React.FC = () => {
   const [connForm] = Form.useForm();
   const [plannerForm] = Form.useForm();
   const modelList = Form.useWatch('model_list', connForm);  // 监听可用模型列表，驱动当前模型下拉选项
+  // ③模型目录化：能力筛选 + 测试探测结果（detected/mismatch → 一键回填）
+  const [capsFilter, setCapsFilter] = useState<string | null>(null);
+  const [connTest, setConnTest] = useState<{ id: string; name: string; ok: boolean; error?: string; detected?: { tool_call: boolean }; mismatch?: boolean } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -128,6 +131,11 @@ const LLMConfigManager: React.FC = () => {
       deep_timeout_seconds: 120,
       deep_reasoning_effort: 'high',
       deep_extra_body: '{}',
+      // ③模型目录化：新建缺省全不选=落 NULL（读取端 D5 默认兜底）
+      caps_tool_call: undefined,
+      caps_vision: undefined,
+      caps_json_mode: undefined,
+      caps_stream: undefined,
     });
     setConnOpen(true);
   };
@@ -141,9 +149,15 @@ const LLMConfigManager: React.FC = () => {
       ? extra.models
       : (row.model_name ? [row.model_name] : []);
     setEditingConn(row);
+    const _caps = row.capabilities || {};
     connForm.setFieldsValue({
       ...row,
       is_default: !!row.is_default,
+      // ③模型目录化：编辑回填能力位开关（NULL=全不选）
+      caps_tool_call: _caps.tool_call,
+      caps_vision: !!_caps.vision,
+      caps_json_mode: !!_caps.json_mode,
+      caps_stream: !!_caps.stream,
       model_list: models,
       model_name: row.model_name,
       extra_config: JSON.stringify(extra, null, 2),
@@ -165,8 +179,17 @@ const LLMConfigManager: React.FC = () => {
   const saveConn = async () => {
     const v = await connForm.validateFields();
     try {
+      // ③模型目录化：四位开关组装（全不选=undefined→落 NULL，读取端 D5 默认兜底）
+      const caps: Record<string, boolean> = {};
+      if (v.caps_tool_call !== undefined && v.caps_tool_call !== null) caps.tool_call = !!v.caps_tool_call;
+      if (v.caps_vision) caps.vision = true;
+      if (v.caps_json_mode) caps.json_mode = true;
+      if (v.caps_stream) caps.stream = true;
+      const _capsPayload = Object.keys(caps).length ? caps : null;
+      const { caps_tool_call: _a, caps_vision: _b, caps_json_mode: _c, caps_stream: _d, ...rest } = v;
       const payload = {
-        ...v,
+        ...rest,
+        capabilities: _capsPayload,
         extra_config: buildConnectionExtraConfig(v),
       };
       if (editingConn) {
@@ -186,6 +209,11 @@ const LLMConfigManager: React.FC = () => {
     try {
       const res = await llmAdminApi.testConnection(id);
       const data = res?.data?.data || {};
+      const row = connections.find((c: any) => c.id === id);
+      setConnTest({
+        id, name: row?.name || id, ok: !!data.ok, error: data.error,
+        detected: data.detected, mismatch: data.mismatch,
+      });
       if (data.ok) {
         message.success('连接测试成功');
       } else {
@@ -193,6 +221,21 @@ const LLMConfigManager: React.FC = () => {
       }
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '连接测试失败');
+    }
+  };
+
+  // ③模型目录化：mismatch 一键回填（实测能力位 → PUT capabilities）
+  const backfillCaps = async (id: string, detected?: { tool_call: boolean }) => {
+    if (!detected) return;
+    try {
+      await llmAdminApi.updateCapabilities(id, {
+        tool_call: detected.tool_call, vision: false, json_mode: false, stream: true,
+      });
+      message.success('能力位已按实测回填');
+      setConnTest(null);
+      loadData();
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '回填失败');
     }
   };
 
@@ -241,14 +284,60 @@ const LLMConfigManager: React.FC = () => {
             label: '大模型连接',
             children: (
               <Space direction="vertical" style={{ width: '100%' }}>
-                <Button type="primary" icon={<AppstoreAddOutlined />} onClick={openCreate}>
-                  新增连接
-                </Button>
+                <Space wrap>
+                  <Button type="primary" icon={<AppstoreAddOutlined />} onClick={openCreate}>
+                    新增连接
+                  </Button>
+                  {/* ③模型目录化：按能力位筛选（客户端过滤） */}
+                  <Select
+                    allowClear
+                    placeholder="按能力筛选"
+                    style={{ width: 180 }}
+                    value={capsFilter}
+                    onChange={setCapsFilter}
+                    options={[
+                      { value: 'tool_call', label: '支持工具调用' },
+                      { value: 'vision', label: '视觉' },
+                      { value: 'json_mode', label: 'JSON 模式' },
+                      { value: 'stream', label: '流式' },
+                    ]}
+                  />
+                </Space>
+                {connTest && (
+                  <Alert
+                    type={connTest.ok ? (connTest.mismatch ? 'warning' : 'success') : 'error'}
+                    showIcon
+                    closable
+                    onClose={() => setConnTest(null)}
+                    message={`测试连接：${connTest.name} ${connTest.ok ? '成功' : '失败'}`}
+                    description={
+                      connTest.ok ? (
+                        <Space wrap>
+                          <span>检测到工具调用：{connTest.detected?.tool_call ? '是' : '否'}</span>
+                          {connTest.mismatch && (
+                            <>
+                              <Tag color="orange">声明与实测不一致</Tag>
+                              <Button size="small" type="primary" onClick={() => backfillCaps(connTest.id, connTest.detected)}>
+                                一键回填
+                              </Button>
+                            </>
+                          )}
+                        </Space>
+                      ) : (
+                        <span>{connTest.error || '未知错误'}</span>
+                      )
+                    }
+                  />
+                )}
                 <Table
                   rowKey="id"
                   loading={loading}
-                  dataSource={connections}
-                  scroll={{ x: 2120 }}
+                  dataSource={connections.filter((c: any) => {
+                    if (!capsFilter) return true;   // ③模型目录化：能力筛选（无声明按默认规则兜底展示 tool_call）
+                    const caps = c.capabilities || { tool_call: true, vision: false, json_mode: false, stream: true };
+                    return !!caps[capsFilter];
+                  })}
+                  scroll={{ x: 2240 }}
                   columns={[
                     { title: 'ID', dataIndex: 'id', width: 240, render: (v: string) => v ? <Text copyable>{v}</Text> : '-' },
                     { title: '名称', dataIndex: 'name', width: 140 },
@@ -283,6 +372,22 @@ const LLMConfigManager: React.FC = () => {
                       ),
                     },
                     { title: '超时(秒)', dataIndex: 'timeout_seconds', width: 100, render: (v: number) => v || 60 },
+                    {
+                      // ③模型目录化：能力徽标（四位；无声明按 D5 默认规则展示）
+                      title: '能力位',
+                      width: 200,
+                      render: (_: any, row: any) => {
+                        const caps = row.capabilities || { tool_call: true, vision: false, json_mode: false, stream: true };
+                        return (
+                          <Space size={4} wrap>
+                            <Tag color={caps.tool_call ? 'green' : 'default'}>{caps.tool_call ? '工具' : '无工具'}</Tag>
+                            {caps.vision && <Tag color="blue">视觉</Tag>}
+                            {caps.json_mode && <Tag color="purple">JSON</Tag>}
+                            {caps.stream && <Tag color="cyan">流式</Tag>}
+                          </Space>
+                        );
+                      },
+                    },
                     {
                       title: '状态',
                       dataIndex: 'enabled',
@@ -414,6 +519,20 @@ const LLMConfigManager: React.FC = () => {
                 { value: 'embedding', label: 'embedding（向量化）' },
               ]}
             />
+          </Form.Item>
+          <Divider orientation="left">模型能力位（③模型目录化）</Divider>
+          <Form.Item name="caps_tool_call" label="支持工具调用（tool_call）" valuePropName="checked"
+            extra="不勾选=该连接无法装配问数 Agent（装配门控拒绝）。全部不勾=落库 NULL，读取端按默认规则（tool_call=true）兜底。">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="caps_vision" label="视觉（vision）" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="caps_json_mode" label="JSON 模式（json_mode）" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="caps_stream" label="流式（stream）" valuePropName="checked">
+            <Switch />
           </Form.Item>
           <Form.Item name="is_default" label="设为默认大模型" valuePropName="checked" initialValue={false}>
             <Switch />

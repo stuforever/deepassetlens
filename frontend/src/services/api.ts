@@ -245,6 +245,8 @@ export const llmAdminApi = {
   duplicateConnection: (id: string) => api.post(`/llm-connections/${id}/duplicate`),
   deleteConnection: (id: string) => api.delete(`/llm-connections/${id}`),
   testConnection: (id: string) => api.post(`/llm-connections/${id}/test`),
+  updateCapabilities: (id: string, capabilities: Record<string, boolean>) =>
+    api.put(`/llm-connections/${id}/capabilities`, { capabilities }),   // ③模型目录化：实测回填
   chatByConnection: (
     id: string,
     data: { messages?: Array<{ role: string; content: string }>; user_input?: string; system_prompt?: string; temperature?: number; max_tokens?: number }

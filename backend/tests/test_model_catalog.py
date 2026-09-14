@@ -35,3 +35,34 @@ def test_gate_rejects_non_tool_call():
 def test_backfill_scoped_by_purpose(tmp_path):
     """回填（D5 精确化）：chat→tool_call=true；embedding→false。SQL 层单测见 1.2 实现后回归。"""
     assert D5["tool_call"] is True
+
+
+def test_probe_tool_call_mock(monkeypatch):
+    """A3（spec §4.3）：mock 无/有 tool_calls 响应 → detected=false/true；
+    mismatch=声明≠实测。mock urllib 不发真实请求（LLM 配额无关）。"""
+    import io
+    import urllib.request
+    from app.api.llm_admin import _probe_tool_call
+
+    class _Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def _fake_urlopen(req, timeout=None):
+        body = json.loads(req.data.decode("utf-8"))
+        has_tools = "tools" in body
+        # 模型不回 tool_calls（无工具能力形态）
+        msg = {"role": "assistant", "content": "pong"}
+        if has_tools and getattr(_fake_urlopen, "_tool_call_model", False):
+            msg["tool_calls"] = [{"id": "t1", "function": {"name": "ping_tool", "arguments": "{}"}}]
+        return _Resp(json.dumps({"choices": [{"message": msg}]}).encode("utf-8"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    item = type("I", (), {"api_key": "mock-key", "base_url": "http://mock", "api_path": "/chat/completions",
+                          "model_name": "mock", "timeout_seconds": 5})()
+    assert _probe_tool_call(item) is False                    # 无 tool_calls → false
+    _fake_urlopen._tool_call_model = True
+    assert _probe_tool_call(item) is True                     # 有 tool_calls → true
