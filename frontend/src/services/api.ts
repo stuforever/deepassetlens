@@ -574,4 +574,28 @@ export const capabilitiesApi = {
     guardsClient.post('/capabilities/reset-defaults', {}, config),
 };
 
+// ===== 专家卡管理（专家地基①，/api/experts）=====
+export interface ExpertCard {
+  expert_id: string; name: string; tagline?: string | null; enabled: boolean;
+  entry_kind: string; system_prompt: string; tools: string[]; skills: string[];
+  memory: string[]; knowledge_sources: string[]; llm_connection_id?: string | null;
+  icon?: string | null; description?: string | null;
+  ui_config?: { placeholder?: string; suggestions?: string[]; welcome?: { title?: string; tagline?: string } };
+  version: number; updated_by?: string | null; updated_at?: string | null; close_reason?: string | null;
+}
+
+export const expertsApi = {
+  list: (params?: { enabled?: boolean }, config?: AxiosRequestConfig) =>
+    guardsClient.get('/experts', { params, ...config }),
+  get: (id: string, config?: AxiosRequestConfig) => guardsClient.get(`/experts/${id}`, config),
+  create: (id: string, body: Record<string, unknown>, config?: AxiosRequestConfig) =>
+    guardsClient.post(`/experts?id=${encodeURIComponent(id)}`, body, config),
+  update: (id: string, body: Record<string, unknown>, config?: AxiosRequestConfig) =>
+    guardsClient.patch(`/experts/${id}`, body, config),
+  probe: (id: string, config?: AxiosRequestConfig) =>
+    guardsClient.post(`/experts/${id}/probe`, {}, config),
+  events: (params?: { expert_id?: string; page?: number; page_size?: number }, config?: AxiosRequestConfig) =>
+    guardsClient.get('/experts/events', { params, ...config }),
+};
+
 export default api;

@@ -142,3 +142,52 @@ def test_checkpoint_migration_first_colon_insert():
         assert all(r.count(":") == 2 for t in rows for r in rows[t])   # 全三段
         n2 = _migrate_checkpoint_thread_ids(_db)
         assert n2 == 0                                   # 幂等：重跑零迁移
+
+
+# ---------------------------------------------------------------------------
+# 批 4：CRUD 校验（D1）与版本（D2）
+# ---------------------------------------------------------------------------
+
+def test_expert_validators():
+    """D1：越界 tools/skills 路径不存在/知识源非白名单/slug 非法/entry_kind 越界 → 422 素材。
+    变异锚点：任一校验缺失 → 对应断言红。"""
+    from app.api.experts import _validate_card_fields
+    _validate_card_fields({"expert_id": "echo", "name": "回声", "system_prompt": "x",
+                           "tools": ["execute_sql"], "skills": ["/skills/"],
+                           "memory": [], "knowledge_sources": ["ontology_graph"],
+                           "entry_kind": "chat"})                       # 合法基线不抛
+    with pytest.raises(ValueError):
+        _validate_card_fields({"expert_id": "echo", "name": "x", "system_prompt": "x",
+                               "tools": ["no_such_tool"], "skills": ["/skills/"],
+                               "memory": [], "knowledge_sources": ["ontology_graph"],
+                               "entry_kind": "chat"})                  # tools 越界
+    with pytest.raises(ValueError):
+        _validate_card_fields({"expert_id": "Echo!", "name": "x", "system_prompt": "x",
+                               "tools": [], "skills": ["/skills/"],
+                               "memory": [], "knowledge_sources": ["ontology_graph"],
+                               "entry_kind": "chat"})                  # slug 非法
+    with pytest.raises(ValueError):
+        _validate_card_fields({"expert_id": "echo", "name": "x", "system_prompt": "x",
+                               "tools": [], "skills": ["/skills/不存在的树/"],
+                               "memory": [], "knowledge_sources": ["ontology_graph"],
+                               "entry_kind": "chat"})                  # skills 路径不存在
+    with pytest.raises(ValueError):
+        _validate_card_fields({"expert_id": "echo", "name": "x", "system_prompt": "x",
+                               "tools": [], "skills": ["/skills/"], "memory": [],
+                               "knowledge_sources": ["web_search"], "entry_kind": "chat"})
+    with pytest.raises(ValueError):
+        _validate_card_fields({"expert_id": "echo", "name": "x", "system_prompt": "",
+                               "tools": [], "skills": ["/skills/"], "memory": [],
+                               "knowledge_sources": ["ontology_graph"], "entry_kind": "workspace"})
+
+
+def test_update_card_version_bump_and_close_reason():
+    """D2 素材+红级关停：PATCH→version+1；enabled=False 缺理由 → ValueError（API 层 400）。
+    测试卫生：改完把 tagline 还原（防污染真实种子卡展示面）。"""
+    from app.services import expert_config as ec
+    out = ec.update_card("wenshu", updated_by="test", tagline="测试改")
+    assert out["version"] >= 2
+    with pytest.raises(ValueError):
+        ec.update_card("wenshu", updated_by="test", enabled=False)     # 缺 close_reason
+    ec.update_card("wenshu", updated_by="test",
+                   tagline="一句话问数 · 受控执行 · 全程可审计")        # 还原种子值
