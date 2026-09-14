@@ -1,0 +1,6 @@
+﻿tests/test_m15_knowledge.py::test_kb_model_columns
+tests/test_m15_knowledge.py::test_kb_document_columns_and_cascade
+tests/test_m15_knowledge.py::test_collection_naming_convention
+tests/test_m15_knowledge.py::test_workorder_field_whitelist_select
+tests/test_m15_knowledge.py::test_workorder_endpoints_readonly
+tests/test_m15_knowledge.py::test_kb_router_eight_endpoints

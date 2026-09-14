@@ -1,0 +1,35 @@
+CREATE TABLE `kg_knowledge_base` (
+  `id` varchar(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `collection_name` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `storage_dir` varchar(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `doc_count` int NOT NULL,
+  `vector_count` int NOT NULL,
+  `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `error_msg` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime DEFAULT (now()),
+  `updated_at` datetime DEFAULT (now()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `collection_name` (`collection_name`),
+  KEY `idx_knowledge_base_name` (`name`),
+  KEY `ix_kg_knowledge_base_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+========================================
+CREATE TABLE `kg_knowledge_document` (
+  `id` varchar(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `kb_id` varchar(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `filename` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `file_path` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `file_size` int NOT NULL,
+  `chunk_count` int NOT NULL,
+  `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `error_msg` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime DEFAULT (now()),
+  `updated_at` datetime DEFAULT (now()),
+  PRIMARY KEY (`id`),
+  KEY `ix_kg_knowledge_document_kb_id` (`kb_id`),
+  KEY `idx_knowledge_document_kb` (`kb_id`),
+  CONSTRAINT `kg_knowledge_document_ibfk_1` FOREIGN KEY (`kb_id`) REFERENCES `kg_knowledge_base` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+========================================
