@@ -283,6 +283,20 @@ def delete_document(kb_id: str, doc_id: str, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="文档不存在")
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
+    # 删 Qdrant 向量（I5+I4，勾验撤回 2026-09-15：删除原语收编 fam.delete 消第三份裸删；
+    # fail-closed——向量删除失败**不删 DB 行**并 502 明示：行已删而向量仍可召回=幽灵向量，
+    # 且事后无从再删。qdrant 不可达同判（原实现静默跳过后照删行，同面）。磁盘文件后删
+    # ——先删盘再失败会留下「文件没了向量还在」的坏重试态）。
+    try:
+        client = _get_client()
+        if not client.healthcheck():
+            raise RuntimeError("qdrant_unavailable")
+        from app.services.kb_engines.qdrant_family import QdrantFamily
+        QdrantFamily(client=client, embed_fn=lambda batch: batch).delete(
+            {"id": (kb.id if kb else kb_id)}, doc_ids=[doc_id])
+    except Exception as e:
+        logger.warning("删文档向量失败（文档保留，fail-closed I5）: %s", e)
+        raise HTTPException(status_code=502, detail="向量删除失败，文档已保留（可重试删除）")
     # 删磁盘文件
     try:
         p = Path(doc.file_path)
@@ -290,21 +304,6 @@ def delete_document(kb_id: str, doc_id: str, db: Session = Depends(get_db)):
             p.unlink()
     except Exception:
         pass
-    # 删 Qdrant 中该文档的向量（按 payload.doc_id 过滤删除）
-    try:
-        client = _get_client()
-        if kb and client.healthcheck():
-            from qdrant_client import models
-            client._client.delete(
-                collection_name=kb.collection_name,
-                points_selector=models.FilterSelector(
-                    filter=models.Filter(
-                        must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
-                    )
-                ),
-            )
-    except Exception as e:
-        logger.warning("删文档向量失败: %s", e)
 
     db.delete(doc)
     if kb:

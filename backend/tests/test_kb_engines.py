@@ -382,6 +382,68 @@ def test_reembed_dimension_change_reembeds_all_docs(tmp_path, monkeypatch):
         db.close()
 
 
+def test_delete_document_vector_fail_keeps_row(tmp_path, monkeypatch):
+    """I5（勾验撤回条款 2026-09-15）：删文档时向量删除失败必须 fail-closed——不删 DB 行
+    （行已删而向量仍可召回=幽灵向量，且事后无从再删）；删除原语收编 fam.delete（第三份
+    裸删消解）。变异锚点：吞异常继续删行 / 回退裸 client._client.delete 无校验 → 红。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api import knowledge_base as kb_api
+    from app.api.knowledge_base import router as kb_router
+    from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+    app = FastAPI()
+    app.include_router(kb_router)
+    tc = TestClient(app, raise_server_exceptions=False)
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        db.query(KnowledgeDocument).filter_by(kb_id="kb-del1").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-del1").delete()
+        db.commit()
+        p = tmp_path / "del.md"
+        p.write_text("删除向量测试", encoding="utf-8")
+        db.add(KnowledgeBase(id="kb-del1", name="删除测", collection_name="kb_kbdel1",
+                             storage_dir="kb-del1", type="indexed", rag_provider="qdrant"))
+        db.flush()
+        db.add(KnowledgeDocument(id="d-del1", kb_id="kb-del1", filename="del.md",
+                                 file_path=str(p), status="vectorized", chunk_count=2))
+        db.commit()
+
+        boom = {"on": True}
+
+        class _FakeClient:
+            def healthcheck(self):
+                return True
+
+        class _FakeFam:
+            def __init__(self, client=None, embed_fn=None):
+                pass
+
+            def delete(self, kb, doc_ids=None):
+                if boom["on"]:
+                    raise RuntimeError("qdrant down")
+
+        monkeypatch.setattr("app.services.kb_engines.qdrant_family.QdrantFamily", _FakeFam)
+        monkeypatch.setattr(kb_api, "_get_client", lambda: _FakeClient())
+
+        r = tc.request("DELETE", "/api/v1/knowledge-bases/kb-del1/documents/d-del1")
+        assert r.status_code == 502                                          # fail-closed 明示
+        assert db.query(KnowledgeDocument).filter_by(id="d-del1").first() is not None   # 行保留
+
+        boom["on"] = False
+        r = tc.request("DELETE", "/api/v1/knowledge-bases/kb-del1/documents/d-del1")
+        assert r.status_code == 200 and r.json()["code"] == 200
+        db.commit()   # 结束本会话事务开新快照（REPEATABLE READ 下端点会话的删除对本会话可见）
+        assert db.query(KnowledgeDocument).filter_by(id="d-del1").first() is None       # 行删掉
+    finally:
+        db.query(KnowledgeDocument).filter_by(kb_id="kb-del1").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-del1").delete()
+        db.commit()
+        db.close()
+
+
 def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
     """🔴-1 回归锁：重嵌必须**先**按 doc_id 删旧点**再** add——换分块参数防新旧并存
     重复召回/vector_count 漂移；换嵌入模型防维度冲突重嵌永败。
