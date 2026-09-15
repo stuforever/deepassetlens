@@ -132,6 +132,12 @@ def build_inprocess_tutor_tools() -> list:
             _run.__signature__ = _sig.replace(parameters=_params)
             _run.__annotations__ = {p.name: p.annotation for p in _params
                                     if p.annotation is not _inspect.Parameter.empty}
+            # I-1（复审 2026-09-15）：单源一致性锁——两面同源于 _params，若未来有人只改
+            # 其一（漏注解/漏签名）装配期立即炸出，不再表现为工具面莫名回退。
+            assert set(_run.__annotations__) == {p.name for p in _params}, \
+                f"{spec['name']}: 签名/注解双源漂移（I-1）" \
+                f" annotations={sorted(_run.__annotations__)}" \
+                f" params={sorted(p.name for p in _params)}"
             _run.__name__ = str(spec["name"])
             _run.__doc__ = str(spec["description"])
             return _run

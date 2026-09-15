@@ -25,6 +25,17 @@ def _clean_users():
             c.execute(text("DELETE FROM learning_wrong_questions WHERE user_id=:u"), {"u": u})
 
 
+@pytest.fixture(autouse=True)
+def _isolated_memory_runtime():
+    """I-2（复审 2026-09-15）：ContextVar 卫生——每测前清残留、测后还原，杜绝
+    「set 不清理 / reset 不还原」把整套门禁变成靠声明序侥幸。reset 幂等，
+    与个别测试内自带的 try/finally reset 并存无害。"""
+    from app.services import memory_runtime as _rt
+    _rt.reset()
+    yield
+    _rt.reset()
+
+
 def test_registry_count_plus_nine():
     """⑤b 验收：注册表计数=基线+9（教学工具族注册实测）。"""
     from app.mcp_server import mcp
@@ -192,7 +203,9 @@ class TestTutorUserPathClosed:
         twin = {t.name: t for t in build_inprocess_tutor_tools()}["fsrs_due"]
         rt.set_runtime("tutor", "alice-twin", "s", "t")
         try:
-            out = asyncio.run(asyncio.to_thread(lambda: twin.invoke({"kind": ""})))
+            # M-3（复审 2026-09-15）：走 ainvoke（coros=None→run_in_executor=copy_context().run
+            # 的真实链路），替代 to_thread+invoke 的旁路模拟——测试名与传播链路名实相符。
+            out = asyncio.run(twin.ainvoke({"kind": ""}))
         finally:
             rt.reset()
         assert seen == ["alice-twin"], f"user 路径漂移: {seen}"   # alice 桶，非 anonymous
@@ -227,9 +240,17 @@ class TestTutorUserPathClosed:
 
     def test_twin_schema_not_empty(self):
         """P1（计划审查 2026-09-15）：(*args, **kwargs) 包装必须挂真实签名——否则
-        StructuredTool 按 inspect 推导出**空 schema**，模型面九件参数全消失。"""
-        from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools
+        StructuredTool 按 inspect 推导出**空 schema**，模型面九件参数全消失。
+        M-2（复审 2026-09-15）：从抽查三点扩为全九件与 impl 签名（剥 user）单源比对
+        （twin.args 与 SPECS impl 参数名集合逐一相等）。"""
+        import inspect as _inspect
+        from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools, SPECS
         twins = {t.name: t for t in build_inprocess_tutor_tools()}
+        for spec in SPECS:
+            _impl = spec["impl"]
+            _want = {p.name for p in _inspect.signature(_impl).parameters.values()} - {"user"}
+            _got = set(twins[str(spec["name"])].args)
+            assert _got == _want, f"schema 漂移: {spec['name']} want={sorted(_want)} got={sorted(_got)}"
         assert set(twins["fsrs_review"].args) >= {"item_id", "rating", "kind"}
         assert set(twins["fsrs_due"].args) == {"kind"}
         assert set(twins["wrong_question_add"].args) >= {"variant_text"}
