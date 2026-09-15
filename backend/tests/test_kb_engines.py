@@ -117,7 +117,17 @@ def test_reconcile_reembed_lifecycle(tmp_path, monkeypatch):
             def add_documents(self, kb, docs):
                 return {d["doc_id"]: 3 for d in docs}
         monkeypatch.setattr("app.services.kb_engines.qdrant_family.QdrantFamily", lambda **k: _FakeFam())
-        monkeypatch.setattr(kb_api, "_get_client", lambda: type("C", (), {"healthcheck": lambda s: True})())
+        # 🔴-1 契约升级：fake client 须含 _client.delete 面（删旧原语）——原 fake 缺该面，
+        # 被 fail-closed 判为删旧失败（正是审查指出的"monkeypatch 掩盖"被契约暴露）
+        class _FakeGateClient:
+            class _client:
+                @staticmethod
+                def delete(**kw):
+                    return None
+
+            def healthcheck(self):
+                return True
+        monkeypatch.setattr(kb_api, "_get_client", lambda: _FakeGateClient())
         out = kb_api.reembed_knowledge_base("kb-recon", db)
         assert out["data"]["reembed"]["reembedded"] == 1
         doc = db.query(KnowledgeDocument).filter_by(id="d1").first()
@@ -203,5 +213,118 @@ def test_reconcile_stale_matching_sig_returns_vectorized(tmp_path, monkeypatch):
         assert doc.status == "vectorized"       # 行态归位
         r2 = kb_api.reconcile_knowledge_base("kb-recon-pos", db)["data"]["reconcile"]
         assert r2["consistent"] == 1 and r2["stale"] == []   # 幂等
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# 🔴-1（审查 2026-09-15）：reembed 先按 doc_id 删旧点再嵌（防新旧并存/维度冲突）
+# ---------------------------------------------------------------------------
+
+def _mk_reembed_fixture(db, tmp_path, kb_id, doc_id):
+    """A4 同款造数：stale 文档（真 MySQL，固定 id，先清残留）。"""
+    from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    db.query(KnowledgeDocument).filter_by(kb_id=kb_id).delete()
+    db.query(KnowledgeBase).filter_by(id=kb_id).delete()
+    db.commit()
+    (tmp_path / "a.md").write_text("重嵌删旧测试", encoding="utf-8")
+    kb = KnowledgeBase(id=kb_id, name="重嵌删旧", collection_name=kb_id.replace("-", "_"),
+                       storage_dir=kb_id, type="indexed", rag_provider="qdrant",
+                       embedding_signature={"embed_model": "new-embed"})
+    db.add(kb)
+    db.flush()
+    db.add(KnowledgeDocument(id=doc_id, kb_id=kb_id, filename="a.md",
+                             file_path=str(tmp_path / "a.md"), status="stale", chunk_count=3,
+                             embedding_signature={"embed_model": "old"}))
+    db.commit()
+
+
+def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
+    """🔴-1 回归锁：重嵌必须**先**按 doc_id 删旧点**再** add——换分块参数防新旧并存
+    重复召回/vector_count 漂移；换嵌入模型防维度冲突重嵌永败。
+    变异锚点：去掉 delete 调用或调用序翻转 → 红。"""
+    from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+    from app.api import knowledge_base as kb_api
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        _mk_reembed_fixture(db, tmp_path, "kb-reemb", "d1r")
+        seq = []
+
+        class _FakeRaw:
+            def delete(self, **kw):
+                seq.append(("delete", kw))
+
+        class _FakeClient:
+            _client = _FakeRaw()
+
+            def healthcheck(self):
+                return True
+
+        class _FakeFam:
+            def __init__(self, client=None, embed_fn=None):
+                pass
+
+            def add_documents(self, kb, docs):
+                seq.append(("add", [d["doc_id"] for d in docs]))
+                return {d["doc_id"]: 2 for d in docs}
+
+        monkeypatch.setattr("app.services.kb_engines.qdrant_family.QdrantFamily", _FakeFam)
+        monkeypatch.setattr(kb_api, "_get_client", lambda: _FakeClient())
+        out = kb_api.reembed_knowledge_base("kb-reemb", db)
+        assert out["data"]["reembed"]["reembedded"] == 1
+        kinds = [s[0] for s in seq]
+        assert kinds == ["delete", "add"], f"调用序漂移: {seq}"       # 先删后嵌
+        delkw = seq[0][1]
+        assert delkw["collection_name"] == "kb_reemb"
+        assert "d1r" in str(delkw["points_selector"])                # 按本 doc_id 过滤
+        doc = db.query(KnowledgeDocument).filter_by(id="d1r").first()
+        assert doc.status == "vectorized" and doc.chunk_count == 2
+        assert db.query(KnowledgeBase).filter_by(id="kb-reemb").first().vector_count == 2
+    finally:
+        db.close()
+
+
+def test_reembed_delete_failure_fail_closed(tmp_path, monkeypatch):
+    """🔴-1：删旧失败 fail-closed——doc 标 error、**不继续 add**（绝不带旧向量嵌新点）。
+    变异锚点：吞掉删除异常继续嵌 → 红。"""
+    from app.models.knowledge_base import KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+    from app.api import knowledge_base as kb_api
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        _mk_reembed_fixture(db, tmp_path, "kb-reemb2", "d1r2")
+
+        class _FakeRaw:
+            def delete(self, **kw):
+                raise RuntimeError("qdrant down")
+
+        class _FakeClient:
+            _client = _FakeRaw()
+
+            def healthcheck(self):
+                return True
+
+        adds = []
+
+        class _FakeFam:
+            def __init__(self, client=None, embed_fn=None):
+                pass
+
+            def add_documents(self, kb, docs):
+                adds.append(docs)
+                return {d["doc_id"]: 2 for d in docs}
+
+        monkeypatch.setattr("app.services.kb_engines.qdrant_family.QdrantFamily", _FakeFam)
+        monkeypatch.setattr(kb_api, "_get_client", lambda: _FakeClient())
+        out = kb_api.reembed_knowledge_base("kb-reemb2", db)
+        assert out["data"]["reembed"]["reembedded"] == 0
+        assert adds == []                                        # 未继续 add
+        doc = db.query(KnowledgeDocument).filter_by(id="d1r2").first()
+        assert doc.status == "error" and "删旧向量失败" in (doc.error_msg or "")
     finally:
         db.close()

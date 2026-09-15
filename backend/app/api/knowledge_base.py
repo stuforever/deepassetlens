@@ -504,7 +504,7 @@ def reconcile_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
 @router.post("/{kb_id}/reembed")
 def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     """重嵌（spec D8：永远手动）：stale 文档批→按当前签名全量重建该批向量→签名对齐→清洁。
-    未 reembed 时检索照常（旧索引不破坏——A4 断言）。"""
+    先删旧点再嵌（🔴-1，审查 2026-09-15）。未 reembed 时检索照常（旧索引不破坏——A4 断言）。"""
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
@@ -527,6 +527,25 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
             from app.services.parsing.cache import parse_cached
             text = (parse_cached(Path(doc.file_path), doc.checksum)
                     if doc.checksum else _read_text_file(Path(doc.file_path)))
+            try:
+                # 🔴-1（审查 2026-09-15）：先删旧点再嵌——换分块参数防新旧并存重复召回，
+                # 换嵌入模型防维度冲突；删除失败 fail-closed（doc 标 error，不继续 add）。
+                # 原语复用 :298-305（qdrant-client FilterSelector by payload.doc_id）。
+                from qdrant_client import models as _qmodels
+                client._client.delete(
+                    collection_name=kb.collection_name,
+                    points_selector=_qmodels.FilterSelector(
+                        filter=_qmodels.Filter(
+                            must=[_qmodels.FieldCondition(key="doc_id",
+                                                          match=_qmodels.MatchValue(value=doc.id))]
+                        )
+                    ),
+                )
+            except Exception as de0:
+                doc.status = "error"
+                doc.error_msg = f"删旧向量失败（防新旧并存，fail-closed）: {de0}"
+                logger.warning("重嵌 %s 删旧失败: %s", doc.filename, de0)
+                continue
             counts = fam.add_documents({"id": kb.id, "embedding_signature": sig},
                                        [{"doc_id": doc.id, "filename": doc.filename, "text": text}])
             doc.chunk_count = counts.get(doc.id, 0)
