@@ -251,7 +251,7 @@ def fsrs_due(kind: str = "") -> str:
 def fsrs_review(item_id: str, rating: int, kind: str = "mother_question",
                 now: float | None = None) -> str:
     """提交复习评分(1-4)→FSRS 调度→落卡+流水（engine 直写——算出来的不许模型编）。
-    ⑤b 铁律①：参数不含 user_id（从 memory_runtime ContextVar 取）；铁律②：now 可注入
+    ⑤b 铁律①：参数不含 user_id（user 由运行时严格解析，🔴-4 fail-closed）；铁律②：now 可注入
     （测试不 sleep；fastmcp 禁下划线参数——spec 的 _now 更名 now，语义不变）。"""
     return _impl_fsrs_review(_tutor_user(), item_id, rating, kind=kind, now=now)
 

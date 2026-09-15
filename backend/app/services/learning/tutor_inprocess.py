@@ -81,7 +81,7 @@ SPECS: List[Dict[str, object]] = [
      "impl": _impl_fsrs_due},
     {"name": "fsrs_review",
      "description": "提交复习评分(1-4)→FSRS 调度→落卡+流水（engine 直写——算出来的不许模型编）。\n"
-                    "⑤b 铁律①：参数不含 user_id（从 memory_runtime ContextVar 取）；铁律②：now 可注入\n"
+                    "⑤b 铁律①：参数不含 user_id（user 由运行时严格解析，🔴-4 fail-closed）；铁律②：now 可注入\n"
                     "（测试不 sleep；fastmcp 禁下划线参数——spec 的 _now 更名 now，语义不变）。",
      "impl": _impl_fsrs_review},
     {"name": "mastery_query",

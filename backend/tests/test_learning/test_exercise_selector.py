@@ -25,10 +25,16 @@ class _KP:
 
 
 class _FalsyProfile:
-    """falsy 画像占位——🟡-18 语义锚触发器。"""
+    """falsy 画像占位——🟡-18 语义锚触发器。M-7（复审 2026-09-15）：补全属性面，
+    若 or 语义将来回归，失败点是清晰断言而非 AttributeError。"""
 
     def __bool__(self) -> bool:
         return False
+
+    weak_points: list = []
+    strong_points: list = []
+    due_reviews: list = []
+    kp_mastery: dict = {}
 
 
 def test_falsy_profile_triggers_rebuild(monkeypatch):
