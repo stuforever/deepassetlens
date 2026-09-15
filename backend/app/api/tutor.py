@@ -51,6 +51,35 @@ def get_profile(request: Request):
     }}
 
 
+@router.get("/chapters")
+def get_chapters(request: Request):
+    """⑤补补-3：图谱章节树列表（chapter 节点+所属教材）。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.chapter_service import chapters_list
+    items = chapters_list()
+    return {"code": 200, "data": {"items": items, "count": len(items)}}
+
+
+@router.get("/chapter/{chapter_id}/overview")
+def get_chapter_overview(chapter_id: str, request: Request):
+    """⑤补补-3：D2 语义一屏聚合（章节/知识点明细+精讲/错题/掌握度）——u 从会话取，?u= 废弃。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.chapter_service import chapter_overview
+    data = chapter_overview(chapter_id, _uid(request))
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"章节不存在: {chapter_id}")
+    return {"code": 200, "data": data}
+
+
+@router.get("/today-tasks")
+def get_today_tasks(request: Request, limit: int = 10):
+    """⑤补补-3 步骤 2：今日任务（due 到期 + weak 薄弱点选题组合——policy 语义迁移）。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.policy import today_tasks
+    items = today_tasks(_uid(request), limit=max(1, min(limit, 30)))
+    return {"code": 200, "data": {"items": items, "count": len(items)}}
+
+
 @router.get("/due")
 def get_due(request: Request, kind: str = "", limit: int = 20):
     _require_tutor_enabled(request)
