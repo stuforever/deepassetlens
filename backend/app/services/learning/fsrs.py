@@ -34,6 +34,43 @@ TARGET_RETENTION = 0.9  # schedule next review when retention drops to 90%
 SECONDS_PER_DAY = 86400.0
 
 
+def active_params() -> dict[str, Any]:
+    """A-3 调度覆写（附件四 spec §三）：tutor 卡 params.fsrs 覆写 ∪ 默认——浅合并数据源。
+
+    卡未开/无覆写/读取异常 → {}（fail-safe 全默认）。卡读自带进程内缓存，此处零额外成本。
+    算法体不动：只换 target/w 的**来源**，纯函数语义不变（显式传参仍可覆盖）。"""
+    try:
+        from app.services.expert_config import get_card
+        card = get_card("tutor") or {}
+        ov = (card.get("params") or {}).get("fsrs") or {}
+        return ov if isinstance(ov, dict) else {}
+    except Exception:
+        return {}
+
+
+def active_w() -> list[float]:
+    """生效权重：卡覆写（长度须等于默认）∪ DEFAULT_W。"""
+    ov = active_params().get("w")
+    try:
+        if ov and len(ov) == len(DEFAULT_W):
+            return [float(x) for x in ov]
+    except (TypeError, ValueError):
+        pass
+    return list(DEFAULT_W)
+
+
+def active_target() -> float:
+    """生效目标保持率：卡覆写（0.5~0.99）∪ TARGET_RETENTION。"""
+    ov = active_params().get("desired_retention")
+    try:
+        v = float(ov)
+        if 0.5 <= v <= 0.99:
+            return v
+    except (TypeError, ValueError):
+        pass
+    return TARGET_RETENTION
+
+
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
@@ -47,10 +84,10 @@ def new_card(rating: int = GOOD, w: list[float] | None = None) -> dict[str, Any]
 
     stability = w[rating-1], difficulty = w[4] - (rating-3)*w[5], clamped [1,10].
     """
-    w = w or DEFAULT_W
+    w = w or active_w()
     s = w[rating - 1]
     d = _clamp(w[4] - (rating - 3) * w[5], 1.0, 10.0)
-    interval = _next_interval(s)
+    interval = _next_interval(s, active_target())
     return {
         "stability": round(s, 4),
         "difficulty": round(d, 2),
@@ -87,7 +124,7 @@ def review(card: dict[str, Any], rating: int, w: list[float] | None = None) -> d
       - Again: S' = w[11]*S*... (stability drops, lapse++)
       - Hard/Good/Easy: S' = S * (1 + factor * exp(-w[9]*D) * (1-R) * ...)
     """
-    w = w or DEFAULT_W
+    w = w or active_w()
     now = _now()
     s = card.get("stability", 1.0)
     d = card.get("difficulty", w[4])
@@ -118,7 +155,7 @@ def review(card: dict[str, Any], rating: int, w: list[float] | None = None) -> d
         s_new = s * (1 + factor)
         s_new = max(s * 0.5, s_new)  # never drop below half on a pass
 
-    interval = _next_interval(s_new)
+    interval = _next_interval(s_new, active_target())
     return {
         "stability": round(s_new, 4),
         "difficulty": round(d_new, 2),

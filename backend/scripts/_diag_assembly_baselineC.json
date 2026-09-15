@@ -15,21 +15,20 @@
   "approval_track": true,
   "patch_tool_calls_frame": true,
   "message_eviction_frame": true,
-  "subagent_specs": [
-   "entity_locator"
-  ],
+  "subagent_specs": [],
   "response_format_installed": true,
   "store_installed": true,
   "summarization_mode": "official_factory",
   "data_summary_mode": "tool_ref",
   "rubric_mode": "skill_prompt",
   "backend_mode": "store",
-  "files_hash": "d56da628b24ddeff",
-  "seeded_files": 67,
-  "expert_id": "wenshu",
-  "card_version": 91,
-  "memory_trace": "inactive",
+  "files_hash": "514e553114e6cf76",
+  "seeded_files": 29,
+  "expert_id": "tutor",
+  "card_version": 135,
+  "memory_trace": "active",
   "tool_availability_installed": [
+   "analyze_wrong_questions",
    "edit_file",
    "execute",
    "export_wrong_book",
@@ -40,6 +39,7 @@
    "grade_answer",
    "grep",
    "mastery_query",
+   "mother_question_find_or_create",
    "select_exercises",
    "write_file",
    "wrong_question_add",
@@ -53,10 +53,11 @@
    "execute_sql"
   ]
  },
- "version": 264,
+ "version": 276,
  "agent_key": "ae9805a7-ac5a-48a3-a4d4-37916f1032ed",
- "capability_version": 266,
+ "capability_version": 276,
  "tool_universe": [
+  "analyze_wrong_questions",
   "batch_entity_source_mode",
   "execute_api_sql",
   "execute_doris_sql",
@@ -74,6 +75,7 @@
   "grade_answer",
   "list_tables",
   "mastery_query",
+  "mother_question_find_or_create",
   "read_file",
   "sample_column_values",
   "search_concepts",
@@ -93,6 +95,7 @@
   "task"
  ],
  "tool_default_allowed": [
+  "analyze_wrong_questions",
   "batch_entity_source_mode",
   "execute_api_sql",
   "execute_doris_sql",
@@ -110,6 +113,7 @@
   "grade_answer",
   "list_tables",
   "mastery_query",
+  "mother_question_find_or_create",
   "read_file",
   "sample_column_values",
   "search_concepts",
@@ -123,5 +127,5 @@
   "wrong_question_add",
   "wrong_question_query"
  ],
- "generics_note": "MCP 注册 28 件（含 read_file）+ task = 勾选域 29 件"
+ "generics_note": "MCP 注册 30 件（含 read_file）+ task = 勾选域 31 件"
 }

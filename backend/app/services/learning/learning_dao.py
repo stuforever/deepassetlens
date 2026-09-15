@@ -11,6 +11,34 @@ from sqlalchemy import text
 from .pg import pg_session
 
 
+def progress_aggregate() -> list[dict]:
+    """A-3 步骤 1（附件四 spec §三）：跨用户学情看板聚合——教师视角新面。
+
+    per user：cards 总数 / due_now 到期数 / mastery top5（retention 低前——薄弱点着色数据源）。
+    mastery 复用 learner_profile 行级语义（per-user profile 调用——学习用户数=个位数，可接受）。"""
+    now = time.time()
+    with pg_session() as s:
+        rows = s.execute(text(
+            "SELECT user_id, count(*) AS cards, "
+            "count(*) FILTER (WHERE due <= to_timestamp(:now)) AS due_now "
+            "FROM learning_review_cards GROUP BY user_id ORDER BY user_id"),
+            {"now": now}).mappings().all()
+    out: list[dict] = []
+    for r in rows:
+        uid = r["user_id"]
+        try:
+            from .learner_profile import build_learner_profile
+            prof = build_learner_profile(uid)
+            mastery = [{"knowledge_point_id": w["knowledge_point_id"],
+                        "retention": w["retention"]}
+                       for w in (prof.weak_points or [])[:5]]
+        except Exception:
+            mastery = []
+        out.append({"user_id": uid, "cards": r["cards"], "due_now": r["due_now"],
+                    "mastery": mastery})
+    return out
+
+
 def get_card(user_id: str, kind: str, item_id: str) -> Optional[dict]:
     """读态：miss 返回 None（调用方 new_card()）。"""
     with pg_session() as s:

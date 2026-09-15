@@ -76,3 +76,64 @@ def question_delete(request: Request, mq_id: str):
     if not learning_dao.mother_question_delete(mq_id):
         raise HTTPException(status_code=404, detail=f"母题不存在: {mq_id}")
     return {"code": 200, "data": {"deleted": mq_id}}
+
+
+# ---------- A-3 步骤 1：progress 跨用户学情看板 + schedule 生效 FSRS 参数 ----------
+
+@router.get("/progress")
+def progress_board(request: Request):
+    """跨用户学情看板（教师视角）→ [{user_id, cards, due_now, mastery:[{kp, retention}]}]。"""
+    _require_admin(request)
+    return {"code": 200, "data": {"items": learning_dao.progress_aggregate()}}
+
+
+def _fsrs_overrides() -> dict:
+    from ..services.learning.fsrs import active_params
+    return active_params()
+
+
+@router.get("/schedule")
+def schedule_get(request: Request):
+    """生效 FSRS 参数 = tutor 卡 params.fsrs 覆写 ∪ fsrs 默认（浅合并展示）。"""
+    _require_admin(request)
+    from ..services.learning.fsrs import DEFAULT_W, TARGET_RETENTION
+    ov = _fsrs_overrides()
+    return {"code": 200, "data": {
+        "defaults": {"desired_retention": TARGET_RETENTION, "w": DEFAULT_W},
+        "overrides": ov,
+        "effective": {"desired_retention": ov.get("desired_retention", TARGET_RETENTION),
+                      "w": ov.get("w", DEFAULT_W)},
+    }}
+
+
+class ScheduleBody(BaseModel):
+    desired_retention: Optional[float] = None      # 0.5~0.99
+    w: Optional[list[float]] = None                # 19 个 FSRS-5 权重
+
+    class Config:
+        extra = "forbid"
+
+
+@router.put("/schedule")
+def schedule_put(request: Request, body: ScheduleBody):
+    """覆写（白名单 desired_retention/w）→ 写回 tutor 卡 params.fsrs（version+1+事件留痕）。"""
+    _require_admin(request)
+    from ..services.learning.fsrs import DEFAULT_W, TARGET_RETENTION
+    from ..services.expert_config import get_card, update_card
+    if body.desired_retention is None and body.w is None:
+        raise HTTPException(status_code=422, detail="至少提供 desired_retention 或 w 之一")
+    if body.desired_retention is not None and not (0.5 <= body.desired_retention <= 0.99):
+        raise HTTPException(status_code=422, detail="desired_retention 须在 0.5~0.99")
+    if body.w is not None and len(body.w) != len(DEFAULT_W):
+        raise HTTPException(status_code=422, detail=f"w 须为 {len(DEFAULT_W)} 个 FSRS-5 权重")
+    card = get_card("tutor") or {}
+    params = dict(card.get("params") or {})
+    fsrs = dict(params.get("fsrs") or {})
+    if body.desired_retention is not None:
+        fsrs["desired_retention"] = round(body.desired_retention, 4)
+    if body.w is not None:
+        fsrs["w"] = [round(float(x), 6) for x in body.w]
+    params["fsrs"] = fsrs
+    update_card("tutor", params=params, updated_by="tutor-admin")
+    return {"code": 200, "data": {"effective": fsrs, "fallback": {
+        "desired_retention": TARGET_RETENTION, "w": DEFAULT_W}}}
