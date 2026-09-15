@@ -478,11 +478,18 @@ def reconcile_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     for doc in kb.documents:
         if doc.status == "error":
             failed_list.append(doc.filename)
-        elif (doc.status == "vectorized") and (doc.embedding_signature or {}) != (sig or {}):
-            doc.status = "stale"
-            stale_list.append(doc.filename)
-        else:
-            consistent += 1
+        elif doc.status in ("vectorized", "stale"):
+            # 🔴-3（审查 2026-09-15）：已嵌入文档按**签名失配**判定而非 status——
+            # 修复报告幂等（原实现首轮 stale 第二轮 status!=vectorized 翻转 consistent）；
+            # 签名已对齐的 stale 行态归位 vectorized（报告与行态一致）。
+            if (doc.embedding_signature or {}) != (sig or {}):
+                doc.status = "stale"
+                stale_list.append(doc.filename)
+            else:
+                if doc.status == "stale":
+                    doc.status = "vectorized"
+                consistent += 1
+        # pending 等中间态：不计入任何桶（原实现虚计 consistent）
     kb.status = "degraded" if (stale_list or failed_list) else kb.status
     db.commit()
     from datetime import datetime as _dt

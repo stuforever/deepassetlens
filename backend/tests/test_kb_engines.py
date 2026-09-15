@@ -127,3 +127,81 @@ def test_reconcile_reembed_lifecycle(tmp_path, monkeypatch):
         assert kb2.status == "ready"                              # 清洁
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# 🔴-3（审查 2026-09-15）：reconcile 报告幂等——按签名失配判定而非 status
+# ---------------------------------------------------------------------------
+
+def test_reconcile_report_idempotent(tmp_path, monkeypatch):
+    """🔴-3 回归锁：reconcile 报告幂等。首轮 stale 的文档第二轮必须仍 stale
+    （原实现按 status 判定：第二轮 status!=vectorized 翻转 consistent，"无 stale"
+    误导运维）；pending 等中间态不虚计 consistent、行态不被对账改写。
+    变异锚点：判定退回 status 绑定 → 红。"""
+    from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+    from app.api import knowledge_base as kb_api
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        db.query(KnowledgeDocument).filter_by(kb_id="kb-recon-idem").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-recon-idem").delete()
+        db.commit()
+        kb = KnowledgeBase(id="kb-recon-idem", name="对账幂等", collection_name="kb_recon_idem",
+                           storage_dir="kb-recon-idem", type="indexed", rag_provider="qdrant",
+                           embedding_signature={"embed_model": "old"})
+        db.add(kb)
+        db.flush()
+        db.add(KnowledgeDocument(id="d1i", kb_id="kb-recon-idem", filename="a.md",
+                                 file_path=str(tmp_path / "a.md"), status="vectorized",
+                                 embedding_signature={"embed_model": "old"}))
+        db.add(KnowledgeDocument(id="d2i", kb_id="kb-recon-idem", filename="b.md",
+                                 file_path=str(tmp_path / "b.md"), status="pending",
+                                 embedding_signature=None))
+        db.commit()
+        monkeypatch.setattr(kb_api, "_current_signature",
+                            lambda db, vs=None: {"embed_model": "new-embed"})
+        # 首轮：签名失配 → stale；pending 不入任何桶
+        r1 = kb_api.reconcile_knowledge_base("kb-recon-idem", db)["data"]["reconcile"]
+        assert r1["stale"] == ["a.md"] and r1["consistent"] == 0 and r1["failed"] == []
+        # 第二轮（签名未变）：仍 stale——幂等；pending 依旧不虚计
+        r2 = kb_api.reconcile_knowledge_base("kb-recon-idem", db)["data"]["reconcile"]
+        assert r2["stale"] == ["a.md"] and r2["consistent"] == 0
+        doc = db.query(KnowledgeDocument).filter_by(id="d2i").first()
+        assert doc.status == "pending"          # pending 行态不被对账改写
+    finally:
+        db.close()
+
+
+def test_reconcile_stale_matching_sig_returns_vectorized(tmp_path, monkeypatch):
+    """🔴-3：签名已对齐的 stale 行态归位 vectorized（报告与行态一致，重复对账稳定）。"""
+    from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+    from app.api import knowledge_base as kb_api
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        db.query(KnowledgeDocument).filter_by(kb_id="kb-recon-pos").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-recon-pos").delete()
+        db.commit()
+        kb = KnowledgeBase(id="kb-recon-pos", name="对账归位", collection_name="kb_recon_pos",
+                           storage_dir="kb-recon-pos", type="indexed", rag_provider="qdrant",
+                           embedding_signature={"embed_model": "new-embed"})
+        db.add(kb)
+        db.flush()
+        db.add(KnowledgeDocument(id="d1p", kb_id="kb-recon-pos", filename="a.md",
+                                 file_path=str(tmp_path / "a.md"), status="stale",
+                                 embedding_signature={"embed_model": "new-embed"}))  # 异常态：签名已对齐
+        db.commit()
+        monkeypatch.setattr(kb_api, "_current_signature",
+                            lambda db, vs=None: {"embed_model": "new-embed"})
+        r = kb_api.reconcile_knowledge_base("kb-recon-pos", db)["data"]["reconcile"]
+        assert r["consistent"] == 1 and r["stale"] == []
+        doc = db.query(KnowledgeDocument).filter_by(id="d1p").first()
+        assert doc.status == "vectorized"       # 行态归位
+        r2 = kb_api.reconcile_knowledge_base("kb-recon-pos", db)["data"]["reconcile"]
+        assert r2["consistent"] == 1 and r2["stale"] == []   # 幂等
+    finally:
+        db.close()
