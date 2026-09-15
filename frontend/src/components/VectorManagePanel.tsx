@@ -268,7 +268,17 @@ const VectorManagePanel: React.FC = () => {
       onOk: async () => {
         try {
           const res = await knowledgeBaseApi.reembed(kb.id);
-          message.success(`重嵌完成：${res?.data?.data?.reembed?.reembedded ?? 0} 个文档`);
+          // I2（复审 2026-09-15）：失败清单进响应——非全成功改 warning（不再「成功：0 个文档」）
+          const _re = res?.data?.data?.reembed;
+          const _failed: Array<{ id?: string; filename?: string; error_msg?: string }> = _re?.failed ?? [];
+          if (_failed.length > 0) {
+            message.warning(
+              `重嵌完成 ${_re?.reembedded ?? 0} 个、失败 ${_failed.length} 个（` +
+              `${_failed.map((f) => f.filename || f.id).join('、')}）——文档保持 stale，稍后可再次重嵌`,
+            );
+          } else {
+            message.success(`重嵌完成：${_re?.reembedded ?? 0} 个文档`);
+          }
           if (activeKb?.id === kb.id) openKbDetail(kb);
           fetchKbList();
         } catch (e: any) {

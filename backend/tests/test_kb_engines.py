@@ -379,12 +379,15 @@ def test_reembed_delete_failure_fail_closed(tmp_path, monkeypatch):
         adds = []
 
         class _FakeFam:
+            _boom = True   # 类属性开关（reembed 每次新建实例，实例属性会被重置）
+
             def __init__(self, client=None, embed_fn=None):
                 pass
 
             def delete(self, kb, doc_ids=None):
-                # I4：删点走 fam.delete——失败模拟在原语层（fail-closed 语义不变）
-                raise RuntimeError("qdrant down")
+                # I2：删点走 fam.delete——失败模拟在原语层（fail-closed 语义不变）
+                if _FakeFam._boom:
+                    raise RuntimeError("qdrant down")
 
             def add_documents(self, kb, docs):
                 adds.append(docs)
@@ -395,8 +398,19 @@ def test_reembed_delete_failure_fail_closed(tmp_path, monkeypatch):
         out = kb_api.reembed_knowledge_base("kb-reemb2", db)
         assert out["data"]["reembed"]["reembedded"] == 0
         assert adds == []                                        # 未继续 add
+        failed = out["data"]["reembed"]["failed"]
+        assert [f["id"] for f in failed] == ["d1r2"]             # I2：失败清单进响应
         doc = db.query(KnowledgeDocument).filter_by(id="d1r2").first()
-        assert doc.status == "error" and "删旧向量失败" in (doc.error_msg or "")
+        assert doc.status == "stale"                             # I2：保 stale（可重试）
+        assert "删旧向量失败" in (doc.error_msg or "")
+
+        # I2 重试性：删除恢复后第二次 reembed 同文档再次入候选并成功归位
+        _FakeFam._boom = False
+        out2 = kb_api.reembed_knowledge_base("kb-reemb2", db)
+        assert out2["data"]["reembed"]["reembedded"] == 1
+        assert out2["data"]["reembed"]["failed"] == []
+        doc2 = db.query(KnowledgeDocument).filter_by(id="d1r2").first()
+        assert doc2.status == "vectorized" and doc2.error_msg is None
     finally:
         db.close()
 

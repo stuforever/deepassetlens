@@ -511,10 +511,14 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     if (kb.type or "indexed") == "connected":
         raise HTTPException(status_code=422, detail="指针型知识库无重嵌语义")
     sig = _current_signature(db)
-    stale_docs = [d for d in kb.documents if d.status == "stale"]
+    # I2（复审 2026-09-15）：候选集 = stale ∪（error 且签名失配）——error 不可重试会把
+    # 一次故障变成永久缺口；签名失配的 error 文档保持重试资格（成功后归位 vectorized）。
+    stale_docs = [d for d in kb.documents
+                  if d.status == "stale"
+                  or (d.status == "error" and (d.embedding_signature or {}) != (sig or {}))]
     if not stale_docs:
         return {"code": 200, "data": {"kb": _kb_to_dict(kb, with_docs=True),
-                "reembed": {"reembedded": 0, "message": "无 stale 文档"}}}
+                "reembed": {"reembedded": 0, "failed": [], "message": "无 stale 文档"}}}
     client = _get_client()
     if not client.healthcheck():
         raise HTTPException(status_code=502, detail="qdrant_unavailable")
@@ -538,6 +542,7 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
         logger.warning("重嵌维度预检：%s 维度 %s→%s，已按新签名重建 collection",
                        _coll, _existing, _want)
     reembedded = 0
+    failed: list = []   # I2（复审 2026-09-15）：失败清单进响应（前端明示，不再「成功：0 个文档」）
     for doc in stale_docs:
         try:
             from app.services.parsing.cache import parse_cached
@@ -550,8 +555,11 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
                 # C1 预检重建后此处自然为空操作）。
                 fam.delete({"id": kb.id}, doc_ids=[doc.id])
             except Exception as de0:
-                doc.status = "error"
+                # I2：删除失败保 stale（error_msg 记因）——标 error 会失去重试资格，把一次
+                # 故障变成永久缺口；stale 文档旧点仍在（A4 语义），下次 reembed 可重试。
+                doc.status = "stale"
                 doc.error_msg = f"删旧向量失败（防新旧并存，fail-closed）: {de0}"
+                failed.append({"id": doc.id, "filename": doc.filename, "error_msg": doc.error_msg})
                 logger.warning("重嵌 %s 删旧失败: %s", doc.filename, de0)
                 continue
             counts = fam.add_documents({"id": kb.id, "embedding_signature": sig},
@@ -564,12 +572,15 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
         except Exception as de:
             doc.status = "error"
             doc.error_msg = str(de)
+            failed.append({"id": doc.id, "filename": doc.filename, "error_msg": str(de)})
             logger.warning("重嵌 %s 失败: %s", doc.filename, de)
-    kb.vector_count = sum(d.chunk_count or 0 for d in kb.documents if d.status == "vectorized")
+    # stale 文档旧点仍在 Qdrant（A4 语义：重嵌前检索照常）——向量计数应含其 chunk_count
+    kb.vector_count = sum(d.chunk_count or 0 for d in kb.documents
+                          if d.status in ("vectorized", "stale"))
     kb.status = "ready" if not [d for d in kb.documents if d.status in ("error", "stale")] else kb.status
     db.commit()
     return {"code": 200, "data": {"kb": _kb_to_dict(kb, with_docs=True),
-            "reembed": {"reembedded": reembedded, "signature": sig}}}
+            "reembed": {"reembedded": reembedded, "failed": failed, "signature": sig}}}
 
 
 # ---------- 序列化 ----------
