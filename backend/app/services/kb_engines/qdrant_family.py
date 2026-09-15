@@ -116,27 +116,22 @@ class QdrantFamily:
         ]
 
     def delete(self, kb: Dict[str, Any], doc_ids: Optional[List[str]] = None) -> None:
-        """doc_ids=None 删整库（collection 删除=m15 DELETE 语义）；否则按 payload filter 删。
-        Qdrant filter delete 语义实施实测登记：client 无 filter delete 原语时按 doc_ids
-        全量重建（读旧 payload→过滤→重写）——A2 隐藏考点，实施记录：
-        TupuQdrantClient 现有面不含 filter delete，按文档删除走「重读-过滤-重写」路径。"""
+        """doc_ids=None 删整库（collection 删除=m15 DELETE 语义）；否则按 payload.doc_id
+        FilterSelector 原语删（🔴-2，审查 2026-09-15：废弃「scroll 重读-过滤-重写」路径——
+        scroll 万点封顶/异常即 delete_collection 全清/维度硬编码 1024 三雷同拆；
+        qdrant-client 原生 filter delete，无新依赖）。"""
         client = self._client_or_default()
         name = self._collection(kb)
         if doc_ids is None:
             client.delete_collection(name)
             return
-        # 按文档删除：读全部点→过滤→清库重写（数据量=KB 级，可接受；Qdrant 原生 filter
-        # delete 在 TupuQdrantClient 封装外，不引入新依赖——登记为演进项）
-        keep: List[Dict[str, Any]] = []
-        try:
-            all_points = client.scroll_points(name, limit=10000) if hasattr(client, "scroll_points") else []
-        except Exception:
-            all_points = []
-        for p in all_points:
-            payload = (p.get("payload") if isinstance(p, dict) else getattr(p, "payload", {})) or {}
-            if payload.get("doc_id") not in set(doc_ids):
-                keep.append(p)
-        client.delete_collection(name)
-        client.ensure_collection(name, vector_size=len(keep[0]["vector"]) if keep else 1024, distance="Cosine")
-        if keep:
-            client.upsert_points(name, keep)
+        from qdrant_client import models as _qmodels
+        client._client.delete(
+            collection_name=name,
+            points_selector=_qmodels.FilterSelector(
+                filter=_qmodels.Filter(
+                    must=[_qmodels.FieldCondition(key="doc_id",
+                                                  match=_qmodels.MatchAny(any=list(doc_ids)))]
+                )
+            ),
+        )

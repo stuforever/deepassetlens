@@ -328,3 +328,58 @@ def test_reembed_delete_failure_fail_closed(tmp_path, monkeypatch):
         assert doc.status == "error" and "删旧向量失败" in (doc.error_msg or "")
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# 🔴-2（审查 2026-09-15）：QdrantFamily.delete 改 FilterSelector 原语（拆三雷）
+# ---------------------------------------------------------------------------
+
+class TestQdrantFamilyDeleteSafe:
+    """🔴-2 单测锁：按 doc_ids 删除必须走 FilterSelector 原语，废弃「scroll 重读-过滤-
+    重写」路径（scroll 万点封顶/异常即 delete_collection 全清/维度硬编码 1024 三雷同拆）。
+    变异锚点：回退 scroll 重写路径或误删整库 → 红。"""
+
+    def test_delete_by_doc_ids_uses_filter_selector(self):
+        from app.api.knowledge_base import _collection_name
+        from app.services.kb_engines.qdrant_family import QdrantFamily
+        calls = []
+
+        class _FakeRaw:
+            def delete(self, **kw):
+                calls.append(kw)
+
+        class _FakeClient:
+            _client = _FakeRaw()
+
+            def delete_collection(self, name):
+                calls.append({"delete_collection": name})
+
+            def scroll_points(self, *a, **k):
+                raise AssertionError("🔴-2：不得再走 scroll 重写路径")
+
+            def upsert_points(self, *a, **k):
+                raise AssertionError("🔴-2：不得再走重写路径")
+
+        fam = QdrantFamily(client=_FakeClient(), embed_fn=lambda batch: [[0.0]] * len(batch))
+        fam.delete({"id": "d1e1ete2xx"}, doc_ids=["d1", "d2"])
+        assert len(calls) == 1 and "delete_collection" not in calls[0]   # 恰一次原语删、不删整库
+        assert calls[0]["collection_name"] == _collection_name("d1e1ete2xx")
+        assert "d1" in str(calls[0]["points_selector"])
+        assert "d2" in str(calls[0]["points_selector"])                  # MatchAny 含两 doc_id
+
+    def test_delete_whole_collection_kept(self):
+        """doc_ids=None → delete_collection 语义不变（m15 DELETE 既有契约）。"""
+        from app.api.knowledge_base import _collection_name
+        from app.services.kb_engines.qdrant_family import QdrantFamily
+        calls = []
+
+        class _FakeClient:
+            def delete_collection(self, name):
+                calls.append(("collection", name))
+
+            def scroll_points(self, *a, **k):
+                raise AssertionError("整库删除不应触达 scroll")
+
+        fam = QdrantFamily(client=_FakeClient(), embed_fn=lambda batch: [[0.0]] * len(batch))
+        fam.delete({"id": "kb-whole"})
+        assert calls == [("collection", _collection_name("kb-whole"))]   # 恰一次整库删除、零 scroll
