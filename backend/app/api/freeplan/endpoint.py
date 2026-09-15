@@ -12,7 +12,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel as _PydanticBaseModel
 
@@ -38,6 +38,24 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
     - 全量加载 10 个任务级 SKILL.md 到虚拟文件系统
     - astream_events v2 推送
     """
+    # 🔴-5（审查 2026-09-15）：surface 白名单校验**上提至流开之前**——生成器内校验在首个
+    # yield 之后响应已 200 开流，HTTPException 到不了 422（且原处 NameError：未导入）。
+    # 未知/关停专家交由 event_iter 既有错误路径（此处跳过校验不掩蔽）。
+    if getattr(req, "surface", None):
+        try:
+            from app.services import expert_config as _ec0
+            _card0 = _ec0.get_card(req.expert_id)
+        except KeyError:
+            _card0 = None
+        if _card0 is not None and _card0.get("enabled", False):
+            from app.services.memory_slots import normalize_memory_field as _nmm0
+            _declared0 = [s.get("surface") or "chat" for s in
+                          _nmm0(_card0.get("memory"))["slots"] if s.get("type") == "L1_TRACE"]
+            if req.surface not in _declared0:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"surface 白名单外（卡 L1 声明: {_declared0 or '无'}，收到 {req.surface}）")
+
     async def event_iter():
         try:
             # 批13-N2：首个可见反馈提到编排第一行——此前首个 yield 排在全部准备之后
@@ -86,16 +104,9 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             if not _expert_card.get("enabled", False):
                 raise RuntimeError(f"专家已关停: {req.expert_id}")
 
-            # ⑤b（spec §三）：surface 请求级校验+传递——有值时必须 ∈ 该卡 L1 槽声明
-            # surface 集（非法 422）；None=②原语义（全部声明 surface 落盘，wenshu 零感知）。
+            # ⑤b（spec §三）：surface 请求级传递。🔴-5（审查 2026-09-15）：白名单校验已
+            # 上提至流开之前（本函数体前段，422 可达）；此处只保留运行时置位。
             if getattr(req, "surface", None):
-                from app.services.memory_slots import normalize_memory_field as _nmm
-                _declared = [s.get("surface") or "chat" for s in
-                             _nmm(_expert_card.get("memory"))["slots"] if s.get("type") == "L1_TRACE"]
-                if req.surface not in _declared:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=f"surface 白名单外（卡 L1 声明: {_declared or '无'}，收到 {req.surface}）")
                 memory_runtime.update_runtime({"surface": req.surface})
 
             from app.services.tupu_deepagent import get_tupu_agent

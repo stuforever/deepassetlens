@@ -151,3 +151,51 @@ def test_chat_request_contract_fields():
     from app.api.data_intelligence import ChatRequest
     fields = set(ChatRequest.model_fields.keys())
     assert {"thread_id", "user_input", "user_selection", "format", "llm_connection_id"} <= fields
+
+
+# ---------------------------------------------------------------------------
+# 🔴-5（审查 2026-09-15）：surface 422 契约——校验上提至流开之前
+# ---------------------------------------------------------------------------
+
+class TestSurfaceContract422:
+    """🔴-5 端点级锁：surface 白名单外必须 HTTP 422（而非 200 开流后 SSE error 帧）。
+    m02 判例：子 router 挂最小 FastAPI（全 app lifespan 侧超时判例规避）。
+    变异锚点：校验缩回 event_iter 生成器内 / 删 HTTPException 导入 → 红。"""
+
+    def _client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.api.data_intelligence_stream import router
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app, raise_server_exceptions=False)
+
+    @staticmethod
+    def _fake_card(monkeypatch, enabled=True):
+        from app.services import expert_config
+        monkeypatch.setattr(expert_config, "get_card", lambda eid: {
+            "expert_id": eid, "enabled": enabled,
+            "memory": {"slots": [{"type": "L1_TRACE", "surface": "chat"}],
+                       "legacy_paths": []},
+        })
+
+    def test_invalid_surface_is_http_422(self, monkeypatch):
+        self._fake_card(monkeypatch)
+        r = self._client().post(
+            "/api/data-intelligence/chat/freeplan/stream",
+            json={"user_input": "q", "expert_id": "memtest", "surface": "quiz"})
+        assert r.status_code == 422, f"期望 422，实得 {r.status_code}: {r.text[:200]}"
+        assert "白名单外" in r.text
+
+    def test_valid_surface_passes_gate(self, monkeypatch):
+        """合法 surface 过闸（非 422）；后续装配以哨兵异常截停——只验证校验面。"""
+        self._fake_card(monkeypatch)
+
+        def _boom(*a, **k):
+            raise RuntimeError("sentinel-stop")
+
+        monkeypatch.setattr("app.services.tupu_deepagent.get_tupu_agent", _boom)
+        r = self._client().post(
+            "/api/data-intelligence/chat/freeplan/stream",
+            json={"user_input": "q", "expert_id": "memtest", "surface": "chat"})
+        assert r.status_code == 200, f"合法 surface 不该被闸: {r.status_code} {r.text[:200]}"
