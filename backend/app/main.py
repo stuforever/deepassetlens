@@ -335,6 +335,8 @@ from app.api import experts
 app.include_router(experts.router)  # 自带 prefix="/api/experts"（专家地基①）
 from app.api import memory
 app.include_router(memory.router)  # 自带 prefix="/api/memory"（记忆插槽②）
+from app.api import tutor as tutor_api
+app.include_router(tutor_api.router)  # 自带 prefix="/api/tutor"（⑤批4：教学页面数据端点——user 会话取，不收 user_id）
 
 # MCP Server（业务工具标准化，deepagent 和外部 client 共用，SSE 传输 /mcp/sse）
 from app.mcp_server import mount_mcp
