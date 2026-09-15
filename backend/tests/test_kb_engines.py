@@ -648,13 +648,15 @@ def test_reconcile_reembed_endpoint_smoke(tmp_path, monkeypatch):
     app = FastAPI()
     app.include_router(kb_router)
     client = TestClient(app, raise_server_exceptions=False)
+    # create_all 前移（复审撤回批 2026-09-15 顺手项）：404 分支也要查表——
+    # 单独跑本测时若表未建，查询抛 OperationalError 变 500 而非 404。
+    Base.metadata.create_all(engine)
 
     # 404：reconcile/reembed 打不存在的 KB
     assert client.post("/api/v1/knowledge-bases/nope/reconcile").status_code == 404
     assert client.post("/api/v1/knowledge-bases/nope/reembed").status_code == 404
 
     # 422/502：造 connected 型 KB（reembed 拒绝）+ 真实 KB（qdrant 不可用 → 502）
-    Base.metadata.create_all(engine)
     db = SessionLocal()
     try:
         db.query(KnowledgeBase).filter_by(id="kb-smoke-conn").delete()

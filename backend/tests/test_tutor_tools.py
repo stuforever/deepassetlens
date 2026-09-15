@@ -233,10 +233,12 @@ class TestTutorUserPathClosed:
         twins = {t.name: t for t in build_inprocess_tutor_tools()}
         assert set(twins) == set(TUTOR_TOOLS)
         for spec in SPECS:
+            # M-4 降级项去守卫（复审撤回批 2026-09-15）：SA-R2 只读探针实证九件 getdoc
+            # 全取到（fastmcp 装饰器返回原函数）——取空即断言失败，不再静默跳过空转。
             _doc = _inspect.getdoc(getattr(_ms, str(spec["name"]))) or ""
-            if _doc:
-                assert twins[str(spec["name"])].description == _doc, \
-                    f"描述漂移: {spec['name']}"
+            assert _doc, f"{spec['name']}: mcp_server 面 getdoc 取空（描述锁空转）"
+            assert twins[str(spec["name"])].description == _doc, \
+                f"描述漂移: {spec['name']}"
 
     def test_twin_schema_not_empty(self):
         """P1（计划审查 2026-09-15）：(*args, **kwargs) 包装必须挂真实签名——否则
