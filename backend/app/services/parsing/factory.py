@@ -40,3 +40,17 @@ def _parse_docx(path: Path) -> str:
 
 
 SUPPORTED_EXT: Dict[str, str] = {".md": "markdown", ".txt": "text", ".pdf": "pdf", ".docx": "docx"}
+
+
+def parse_book_file(path: Path) -> list:
+    """⑤批3（⑤d）：book 族解析——教材文件→blocks_json 消费行（块=结构面）。
+    与 parse_file（正文检索面）分族：同一文件两面一次编译同时产出（⑤d §二）。"""
+    from .book import parse_book
+    return parse_book(path)
+
+
+def parse_book_text(text: str) -> list:
+    """⑤批3（⑤d）：文本→blocks_json 行（纯编译面——vectorize 已有正文文本时复用，
+    免二次读盘；内容特征触发判定由调用方做）。"""
+    from .book import compile_blocks
+    return compile_blocks(text)

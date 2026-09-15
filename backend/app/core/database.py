@@ -618,6 +618,9 @@ def ensure_schema_compatibility():
             doc_alters.append("ADD COLUMN `parse_cache_key` VARCHAR(128) NULL")
         if "embedding_signature" not in doc_cols:
             doc_alters.append("ADD COLUMN `embedding_signature` JSON NULL")
+        # ⑤批3（⑤d）：教材块结构列
+        if "blocks_json" not in doc_cols:
+            doc_alters.append("ADD COLUMN `blocks_json` JSON NULL")
         if doc_alters:
             with engine.begin() as conn:
                 for alter in doc_alters:

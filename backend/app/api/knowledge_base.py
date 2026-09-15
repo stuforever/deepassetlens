@@ -356,6 +356,16 @@ def vectorize_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
                 from app.services.parsing.cache import parse_cached
                 _sha = doc.checksum or "no-checksum"
                 text = parse_cached(Path(doc.file_path), _sha) if doc.checksum else _read_text_file(Path(doc.file_path))
+                # ⑤批3（⑤d）：教材块结构面（两面一次编译）——内容特征触发（⑤d 修改点仅两项，
+                # 不加 KB 配置列）：解析产物可编出结构块（quiz/flash_cards）或多章节（## ≥2）
+                # 才视为教材落 blocks_json；普通单文本不落（笔记零感知）。
+                try:
+                    from app.services.parsing.factory import parse_book_text
+                    _blocks = parse_book_text(text)
+                    if sum(1 for b in _blocks if b["type"] != "text") >= 1 or len(_blocks) >= 2:
+                        doc.blocks_json = _blocks
+                except Exception as pe:   # 编块失败不阻嵌入面（教材=增强，检索面为主）
+                    logger.warning("文档 %s 块编译失败（跳过块面）: %s", doc.filename, pe)
                 counts = fam.add_documents(
                     {"id": kb.id, "embedding_signature": sig},
                     [{"doc_id": doc.id, "filename": doc.filename, "text": text}],
@@ -578,6 +588,12 @@ def _kb_to_dict(kb: KnowledgeBase, with_docs: bool = False) -> Dict[str, Any]:
 
 
 def _doc_to_dict(doc: KnowledgeDocument) -> Dict[str, Any]:
+    # ⑤批3（⑤d）：块概要一行（块数/类型分布——H5 消费预检；明细走 blocks_json 列不进列表）
+    _blocks = getattr(doc, "blocks_json", None) or []
+    _type_dist: Dict[str, int] = {}
+    for _b in _blocks:
+        _t = str(_b.get("type", "text"))
+        _type_dist[_t] = _type_dist.get(_t, 0) + 1
     return {
         "id": doc.id,
         "kb_id": doc.kb_id,
@@ -588,5 +604,6 @@ def _doc_to_dict(doc: KnowledgeDocument) -> Dict[str, Any]:
         "error_msg": doc.error_msg,
         "checksum": getattr(doc, "checksum", None),          # ④批3：解析缓存键面
         "embedding_signature": getattr(doc, "embedding_signature", None),
+        "block_summary": {"count": len(_blocks), "types": _type_dist} if _blocks else None,
         "created_at": doc.created_at.isoformat() if doc.created_at else None,
     }

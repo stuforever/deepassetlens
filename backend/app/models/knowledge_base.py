@@ -83,6 +83,8 @@ class KnowledgeDocument(Base):
     parse_cache_key = Column(String(128), nullable=True)  # 解析器缓存键
     # 写入时的 KB 签名快照（reconcile 对账依据——计划级精确化：对账快照无处安放）
     embedding_signature = Column(JSON, nullable=True)
+    # ⑤批3（⑤d）：教材块结构（book 族解析产物缓存语义——省第五张 PG 表）
+    blocks_json = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
