@@ -490,7 +490,12 @@ def reconcile_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
                     doc.status = "vectorized"
                 consistent += 1
         # pending 等中间态：不计入任何桶（原实现虚计 consistent）
-    kb.status = "degraded" if (stale_list or failed_list) else kb.status
+    if stale_list or failed_list:
+        kb.status = "degraded"
+    elif kb.status == "degraded":
+        # I3（复审 2026-09-15）：归位后收回 degraded（stale 全消、报告全 consistent 却仍
+        # degraded 是粘滞态）；processing/error 等其余状态不动。
+        kb.status = "ready"
     db.commit()
     from datetime import datetime as _dt
     return {"code": 200, "data": {

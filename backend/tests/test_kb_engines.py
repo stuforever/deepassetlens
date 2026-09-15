@@ -198,7 +198,7 @@ def test_reconcile_stale_matching_sig_returns_vectorized(tmp_path, monkeypatch):
         db.commit()
         kb = KnowledgeBase(id="kb-recon-pos", name="对账归位", collection_name="kb_recon_pos",
                            storage_dir="kb-recon-pos", type="indexed", rag_provider="qdrant",
-                           embedding_signature={"embed_model": "new-embed"})
+                           embedding_signature={"embed_model": "new-embed"}, status="degraded")
         db.add(kb)
         db.flush()
         db.add(KnowledgeDocument(id="d1p", kb_id="kb-recon-pos", filename="a.md",
@@ -211,8 +211,11 @@ def test_reconcile_stale_matching_sig_returns_vectorized(tmp_path, monkeypatch):
         assert r["consistent"] == 1 and r["stale"] == []
         doc = db.query(KnowledgeDocument).filter_by(id="d1p").first()
         assert doc.status == "vectorized"       # 行态归位
+        kb1 = db.query(KnowledgeBase).filter_by(id="kb-recon-pos").first()
+        assert kb1.status == "ready"            # I3：归位后收回 degraded（不粘滞）
         r2 = kb_api.reconcile_knowledge_base("kb-recon-pos", db)["data"]["reconcile"]
         assert r2["consistent"] == 1 and r2["stale"] == []   # 幂等
+        assert db.query(KnowledgeBase).filter_by(id="kb-recon-pos").first().status == "ready"
     finally:
         db.close()
 
