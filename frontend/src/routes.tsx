@@ -30,6 +30,7 @@ const ExpertPortal = lazy(() => import(/* webpackChunkName: "expert-portal" */ '
 const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pages/expert/ExpertChat'));
 // 记忆插槽②批6：记忆管理页（平台管理区，admin-only）
 const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './pages/MemoryAdmin'));
+const ExpertGrants = lazy(() => import(/* webpackChunkName: "expert-grants" */ './pages/ExpertGrants'));
 // 附件四 A-1：tutor 后台首页骨架（A-2 填卡配置编辑面实体）+守卫雏形（A-4 升级 ACL 分层）
 const TutorAdminHome = lazy(() => import(/* webpackChunkName: "tutor-admin" */ './pages/tutor/admin/AdminHome'));
 // ⑤批4（⑤e）：专家自定义页——EXPERT_PAGES 注册表（①spec §七预留扩展点）实体化注入。
@@ -66,6 +67,9 @@ export const routes: RouteConfig[] = [
   { path: '/vector', element: VectorManagePanel, label: '向量管理', menuKey: 'vector_manage' },
   { path: '/llm-config', element: LLMConfigManager, label: 'LLM 配置', menuKey: 'llmconfig' },
   { path: '/memory-admin', element: MemoryAdmin, label: '记忆管理', menuKey: 'memory_admin' },
+  // ⑥-2a B-2：专家赋权管理面（平台配置层——grant 三端点复用，admin-only）
+  { path: '/expert-grants', label: '专家赋权', menuKey: 'expert_grants',
+    element: (() => <RequireAdmin><ExpertGrants /></RequireAdmin>) as any },
   // ⑤批4（⑤e）：专家自定义页（EXPERT_PAGES 首战=tutor 四页：练习/复习/错题本/学情）
   ...expertPageRoutes().map((p) => ({ path: p.path, element: p.element as any, label: p.label, menuKey: p.menuKey })),
   // 附件四 A-1：tutor 后台（守卫雏形包裹——非 admin 重定向首页）

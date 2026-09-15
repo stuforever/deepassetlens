@@ -8,6 +8,7 @@ import type { ComponentType } from 'react';
 import {
   SearchOutlined,
   ApartmentOutlined,
+  TeamOutlined,
   ShareAltOutlined,
   PartitionOutlined,
   TableOutlined,
@@ -104,6 +105,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { menuKey: 'doris_config', label: 'Doris 配置', path: '/doris-config', icon: DatabaseOutlined },
       { menuKey: 'llmconfig', label: 'LLM 配置', path: '/llm-config', icon: SettingOutlined },
       { menuKey: 'security_controls', label: '安全控制中心', path: '/security-controls', icon: PoweroffOutlined },
+      // ⑥-2a B-2：专家赋权管理面（平台配置层——附件四 §10.2 治理层位置，admin-only）
+      { menuKey: 'expert_grants', label: '专家赋权', path: '/expert-grants', icon: TeamOutlined },
     ],
   },
 ];

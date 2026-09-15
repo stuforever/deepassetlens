@@ -387,7 +387,7 @@ export const aclApi = {
   getGrants: (resourceType: string, resourceId: string, config?: AxiosRequestConfig) =>
     api.get('/auth/grants', { params: { resource_type: resourceType, resource_id: resourceId }, ...config }),
   listUsers: (config?: AxiosRequestConfig) => api.get('/auth/users', config),
-  grant: (data: { resource_type: string; resource_id: string; principal_type: string; principal_id: string; actions: string[] }, config?: AxiosRequestConfig) =>
+  grant: (data: { resource_type: string; resource_id: string; principal_type: string; principal_id: string; actions: string[]; expires_at?: string }, config?: AxiosRequestConfig) =>
     api.post('/auth/grant', data, config),
   revoke: (id: number, config?: AxiosRequestConfig) => api.delete(`/auth/grant/${id}`, config),
 };
