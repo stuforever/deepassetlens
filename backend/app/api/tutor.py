@@ -46,7 +46,10 @@ def get_due(request: Request, kind: str = "", limit: int = 20):
     import time as _t
     now = _t.time()
     for it in items:                       # 逾期天数（页面直读）
-        due = float(it.get("due") or 0)
+        due = it.get("due") or 0
+        # A6 对账修复（批0 0.1）：PG timestamptz 直出为 datetime——float(datetime) 即 500
+        # （⑤期四页为空态走查，无到期卡不进循环，故未暴露）。
+        due = float(due.timestamp()) if hasattr(due, "timestamp") else float(due or 0)
         it["overdue_days"] = round(max(0.0, now - due) / 86400.0, 2)
     return {"code": 200, "data": {"items": items, "count": len(items)}}
 
