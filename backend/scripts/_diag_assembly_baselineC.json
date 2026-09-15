@@ -27,7 +27,7 @@
   "files_hash": "d56da628b24ddeff",
   "seeded_files": 67,
   "expert_id": "wenshu",
-  "card_version": 89,
+  "card_version": 91,
   "memory_trace": "inactive",
   "tool_availability_installed": [
    "edit_file",
@@ -53,9 +53,9 @@
    "execute_sql"
   ]
  },
- "version": 262,
+ "version": 264,
  "agent_key": "ae9805a7-ac5a-48a3-a4d4-37916f1032ed",
- "capability_version": 264,
+ "capability_version": 266,
  "tool_universe": [
   "batch_entity_source_mode",
   "execute_api_sql",

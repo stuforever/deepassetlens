@@ -6,12 +6,13 @@
 import type { ComponentType } from 'react';
 import { lazy } from 'react';
 
-// ⑤e 四页（懒加载，chunk 独立）+ ⑤补补-3 自主学习页
+// ⑤e 四页（懒加载，chunk 独立）+ ⑤补补-3 自主学习页 + ⑤补补-4 精通之路页
 export const TutorPractice = lazy(() => import(/* webpackChunkName: "tutor-practice" */ '../pages/tutor/TutorPractice'));
 export const TutorWrongBook = lazy(() => import(/* webpackChunkName: "tutor-wrongbook" */ '../pages/tutor/TutorWrongBook'));
 export const TutorReview = lazy(() => import(/* webpackChunkName: "tutor-review" */ '../pages/tutor/TutorReview'));
 export const TutorProgress = lazy(() => import(/* webpackChunkName: "tutor-progress" */ '../pages/tutor/TutorProgress'));
 export const TutorLearn = lazy(() => import(/* webpackChunkName: "tutor-learn" */ '../pages/tutor/TutorLearn'));
+export const TutorPath = lazy(() => import(/* webpackChunkName: "tutor-path" */ '../pages/tutor/TutorPath'));
 
 export interface ExpertPageConfig {
   path: string;            // 完整路由（/e/{slug}/...）
@@ -23,6 +24,7 @@ export interface ExpertPageConfig {
 export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
   tutor: [
     { path: '/e/tutor/learn', element: TutorLearn, label: '自主学习', menuKey: 'e:tutor:learn' },
+    { path: '/e/tutor/path', element: TutorPath, label: '精通之路', menuKey: 'e:tutor:path' },
     { path: '/e/tutor/practice', element: TutorPractice, label: '练习', menuKey: 'e:tutor:practice' },
     { path: '/e/tutor/review', element: TutorReview, label: '复习', menuKey: 'e:tutor:review' },
     { path: '/e/tutor/wrong-book', element: TutorWrongBook, label: '错题本', menuKey: 'e:tutor:wrongbook' },

@@ -80,6 +80,14 @@ def get_today_tasks(request: Request, limit: int = 10):
     return {"code": 200, "data": {"items": items, "count": len(items)}}
 
 
+@router.get("/path")
+def get_path(request: Request):
+    """⑤补补-4：精通之路（图谱结构×PG 掌握度→模块三色——pass_threshold 0.7 语义）。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.chapter_service import path_overview
+    return {"code": 200, "data": path_overview(_uid(request))}
+
+
 @router.get("/due")
 def get_due(request: Request, kind: str = "", limit: int = 20):
     _require_tutor_enabled(request)

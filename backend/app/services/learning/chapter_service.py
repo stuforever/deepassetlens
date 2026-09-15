@@ -7,6 +7,7 @@ explanation/examples 属性}、kp -BELONGS_TO_CHAIN-> ch）；PG 面走 learning
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import text
@@ -80,4 +81,71 @@ def chapter_overview(chapter_id: str, user_id: str) -> Optional[dict]:
     }
 
 
-__all__ = ["chapters_list", "chapter_overview"]
+def path_overview(user_id: str) -> dict:
+    """⑤补补-4：精通之路数据面——图谱结构（教材→章节=模块→kp）×PG 掌握度→三色映射。
+
+    色（A4 色阶映射，计划补-4 步 2）：无卡=灰未学 / 卡存在且 retention<0.7=蓝学习中 /
+    retention≥pass_threshold(0.7)=绿已精通。
+    """
+    driver = _get_driver()
+    with driver.session() as s:
+        textbooks = s.run(
+            "MATCH (t:Category {kind:'textbook'}) RETURN t.code AS code, t.name AS name ORDER BY t.code"
+        ).data()
+        rows = s.run(
+            "MATCH (k:Category:Entity {kind:'knowledge_point'})-[:BELONGS_TO_CHAIN]->(c:Category {kind:'chapter'}) "
+            "OPTIONAL MATCH (c)-[:BELONGS_TO_CHAIN]->(t:Category {kind:'textbook'}) "
+            "RETURN k.code AS kp_code, k.name AS kp_name, c.code AS ch_code, c.name AS ch_name, "
+            "t.code AS tb_code, t.name AS tb_name ORDER BY c.code, k.code").data()
+
+    kp_codes = [r["kp_code"] for r in rows]
+    cards: dict[str, dict] = {}
+    if kp_codes:
+        with _engine.begin() as c:
+            for r in c.execute(text(
+                "SELECT item_id, stability, reps, lapses, last_review FROM learning_review_cards "
+                "WHERE user_id=:u AND kind='knowledge_point' AND item_id = ANY(:kps)"),
+                {"u": user_id, "kps": kp_codes}).mappings().all():
+                cards[r["item_id"]] = dict(r)
+
+    def _ret(stability: float, last_review) -> float:
+        if not last_review or not stability or stability <= 0:
+            return 0.0
+        t = max(0.0, (datetime.now(timezone.utc) - last_review).total_seconds() / 86400.0)
+        return float((1.0 + t / (3.0 * stability)) ** -0.5)
+
+    PASS_THRESHOLD = 0.7                       # DeepTutor LearningModule.pass_threshold 语义
+    modules: dict[str, dict] = {}
+    for r in rows:
+        m = modules.setdefault(r["ch_code"], {
+            "code": r["ch_code"], "name": r["ch_name"],
+            "textbook": r.get("tb_name") or "", "kps": [],
+        })
+        card = cards.get(r["kp_code"])
+        if card is None:
+            color, retention = "gray", 0.0
+        else:
+            retention = round(_ret(float(card.get("stability") or 0), card.get("last_review")), 4)
+            color = "green" if retention >= PASS_THRESHOLD else "blue"
+        m["kps"].append({
+            "code": r["kp_code"], "name": r["kp_name"], "color": color, "retention": retention,
+            "stability": float(card["stability"]) if card else 0.0,
+        })
+
+    # 模块级聚合色：全绿=绿（已精通）/部分有卡=蓝（学习中）/全无卡=灰（未学）
+    module_list = []
+    for m in modules.values():
+        colors = [k["color"] for k in m["kps"]]
+        m["color"] = "green" if colors and all(c == "green" for c in colors) else (
+            "blue" if any(c != "gray" for c in colors) else "gray")
+        module_list.append(m)
+    module_list.sort(key=lambda x: x["code"])
+
+    return {
+        "textbooks": [{"code": t["code"], "name": t["name"]} for t in textbooks],
+        "modules": module_list,                       # LearningModule 语义：章节=kp 组合
+        "pass_threshold": PASS_THRESHOLD,
+    }
+
+
+__all__ = ["chapters_list", "chapter_overview", "path_overview"]
