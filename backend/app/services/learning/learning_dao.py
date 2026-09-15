@@ -143,3 +143,60 @@ def mother_questions_by_kps(kps: list[str]) -> list[dict]:
             "AND knowledge_point_id = ANY(:kps)"),
             {"kps": list(kps)}).mappings().all()
     return [dict(r) for r in rows]
+
+
+# ---------- ⑤补补-1：母题 CRUD（题库 admin 端点族数据面） ----------
+
+def mother_question_create(title: str, archetype_text: str, knowledge_point_id: str) -> dict:
+    """母题入库（admin）。mq_id 缺省生成；enabled 缺省 TRUE。"""
+    import uuid
+    mq_id = f"mq-{uuid.uuid4().hex[:12]}"
+    with pg_session() as s:
+        s.execute(text(
+            "INSERT INTO learning_mother_questions "
+            "(mq_id, title, archetype_text, knowledge_point_id) "
+            "VALUES (:mid, :title, :arch, :kp)"),
+            {"mid": mq_id, "title": title, "arch": archetype_text, "kp": knowledge_point_id})
+    return {"mq_id": mq_id, "title": title, "archetype_text": archetype_text,
+            "knowledge_point_id": knowledge_point_id, "variant_count": 0, "enabled": True}
+
+
+def mother_question_update(mq_id: str, patch: dict) -> Optional[dict]:
+    """母题改（admin）——patch 白名单键集。返回改后行；不存在返回 None。"""
+    cols = {"title", "archetype_text", "knowledge_point_id", "enabled", "variant_count"}
+    fields = {k: v for k, v in patch.items() if k in cols}
+    if not fields:
+        return None
+    sets = ", ".join(f"{k} = :{k}" for k in fields)
+    fields["mid"] = mq_id
+    with pg_session() as s:
+        row = s.execute(text(
+            f"UPDATE learning_mother_questions SET {sets} WHERE mq_id = :mid "
+            "RETURNING mq_id, title, archetype_text, knowledge_point_id, variant_count, enabled"),
+            fields).mappings().first()
+    return dict(row) if row else None
+
+
+def mother_question_delete(mq_id: str) -> bool:
+    """母题删（admin，物理删——母题是管理数据，非专家卡「只关不删」语义）。"""
+    with pg_session() as s:
+        row = s.execute(text(
+            "DELETE FROM learning_mother_questions WHERE mq_id = :mid RETURNING mq_id"),
+            {"mid": mq_id}).first()
+    return row is not None
+
+
+def mother_questions_list(kp: str = "", limit: int = 100) -> list[dict]:
+    """母题清单（admin）——可选 kp 过滤（idx_lmq_kp 路径）。"""
+    with pg_session() as s:
+        if kp:
+            rows = s.execute(text(
+                "SELECT mq_id, title, archetype_text, knowledge_point_id, variant_count, enabled "
+                "FROM learning_mother_questions WHERE knowledge_point_id = :kp ORDER BY mq_id LIMIT :n"),
+                {"kp": kp, "n": limit}).mappings().all()
+        else:
+            rows = s.execute(text(
+                "SELECT mq_id, title, archetype_text, knowledge_point_id, variant_count, enabled "
+                "FROM learning_mother_questions ORDER BY mq_id LIMIT :n"),
+                {"n": limit}).mappings().all()
+    return [dict(r) for r in rows]

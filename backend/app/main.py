@@ -333,6 +333,8 @@ app.include_router(guards.router)  # 自带 prefix="/api/guards"（安全控制�
 app.include_router(capabilities.router)  # 自带 prefix="/api/capabilities"（能力开关中心，批13-Q）
 from app.api import experts
 app.include_router(experts.router)  # 自带 prefix="/api/experts"（专家地基①）
+from app.api import tutor_admin
+app.include_router(tutor_admin.router)  # 自带 prefix="/api/tutor-admin"（⑤补补-1 题库 admin CRUD）
 from app.api import memory
 app.include_router(memory.router)  # 自带 prefix="/api/memory"（记忆插槽②）
 from app.api import tutor as tutor_api
