@@ -26,6 +26,9 @@ const ExpertPortal = lazy(() => import(/* webpackChunkName: "expert-portal" */ '
 const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pages/expert/ExpertChat'));
 // 记忆插槽②批6：记忆管理页（平台管理区，admin-only）
 const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './pages/MemoryAdmin'));
+// ⑤批4（⑤e）：专家自定义页——EXPERT_PAGES 注册表（①spec §七预留扩展点）实体化注入。
+// 卡是数据页面是代码：路由静态注册，可见性由卡 enabled 决定（卡关=门户/侧栏不渲染）。
+import { expertPageRoutes } from './config/expertPages';
 
 export type RouteConfig = {
   path: string;
@@ -58,6 +61,8 @@ export const routes: RouteConfig[] = [
   { path: '/vector', element: VectorManagePanel, label: '向量管理', menuKey: 'vector_manage' },
   { path: '/llm-config', element: LLMConfigManager, label: 'LLM 配置', menuKey: 'llmconfig' },
   { path: '/memory-admin', element: MemoryAdmin, label: '记忆管理', menuKey: 'memory_admin' },
+  // ⑤批4（⑤e）：专家自定义页（EXPERT_PAGES 首战=tutor 四页：练习/复习/错题本/学情）
+  ...expertPageRoutes().map((p) => ({ path: p.path, element: p.element as any, label: p.label, menuKey: p.menuKey })),
   { path: '*', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
 ];
 

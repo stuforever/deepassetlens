@@ -18,6 +18,7 @@ import { antdThemeToken, antdComponents, tokens } from './theme/tokens';
 import UserBadge from './components/UserBadge';
 import AppSider from './components/AppSider';
 import AppTabs, { type PageTab } from './components/AppTabs';
+import { expertPageRoutes } from './config/expertPages';
 
 const { Header, Content } = Layout;
 
@@ -74,12 +75,16 @@ const App: React.FC = () => {
   // 路由变化 -> 同步页签/画布模式/激活 key
   useEffect(() => {
     // 专家地基①：/e/{slug}/chat 动态段——静态映射不覆盖，运行时分支（页签 key 沿 menuKey）
+    // ⑤批4（⑤e）：专家自定义页精确匹配（EXPERT_PAGES 注册表 menuKey= e:{slug}:{page}），
+    // 未命中才回退 chat 页签（四页与 chat 各自独立页签——KeepAlive 互不串扰）。
     if (location.pathname.startsWith('/e/')) {
       const slug = location.pathname.split('/')[2] || 'wenshu';
-      const menuKey = `e:${slug}:chat`;
+      const pageCfg = expertPageRoutes().find((p) => p.path === location.pathname);
+      const menuKey = pageCfg ? pageCfg.menuKey : `e:${slug}:chat`;
+      const label = pageCfg ? pageCfg.label : `专家 ${slug}`;
       setPageTabs((prev) => {
         if (prev.find((t) => t.key === menuKey)) return prev;
-        const newTabs = [...prev, { key: menuKey, label: `专家 ${slug}`, menuKey }];
+        const newTabs = [...prev, { key: menuKey, label, menuKey }];
         return newTabs.length > 12 ? newTabs.slice(newTabs.length - 12) : newTabs;
       });
       setActiveTabKey(menuKey);
