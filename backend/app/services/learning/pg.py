@@ -75,6 +75,32 @@ def ensure_tables() -> None:
     with _engine.begin() as c:
         for ddl in _DDL:
             c.execute(text(ddl))
+        _ensure_wrong_question_columns(c)
+
+
+def _ensure_wrong_question_columns(c=None) -> None:
+    """⑤补补-5 步骤 2（M00 +4 列）：错题管理全套扩列——幂等 ALTER，旧行新列 NULL，旧路径零感知。
+
+    question JSON（完整题结构：题干/选项/正确答案）/my_answer（我的答案——错因分析原料）/
+    error_type（concept|careless|technique——LLM 判+用户改）/source（chat|manual|practice——渠道溯源）。
+    """
+    if c is None:
+        with _engine.begin() as _c:
+            for ddl in (
+                "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS question JSON",
+                "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS my_answer TEXT",
+                "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS error_type VARCHAR(32)",
+                "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS source VARCHAR(16)",
+            ):
+                _c.execute(text(ddl))
+        return
+    for ddl in (
+        "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS question JSON",
+        "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS my_answer TEXT",
+        "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS error_type VARCHAR(32)",
+        "ALTER TABLE learning_wrong_questions ADD COLUMN IF NOT EXISTS source VARCHAR(16)",
+    ):
+        c.execute(text(ddl))
 
 
 @contextmanager

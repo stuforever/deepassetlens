@@ -230,6 +230,7 @@ import json as _json
 from app.services.learning.tutor_inprocess import (
     _impl_fsrs_due, _impl_fsrs_review, _impl_mastery_query, _impl_grade_answer,
     _impl_generate_practice, _impl_select_exercises, _impl_wrong_question_add,
+    _impl_mother_question_find_or_create, _impl_analyze_wrong_questions,
     _impl_wrong_question_query, _impl_export_wrong_book,
 )
 
@@ -285,11 +286,34 @@ def select_exercises(knowledge_point_id: str, n: int = 5, band: str = "") -> str
 
 @mcp.tool()
 def wrong_question_add(variant_text: str, mother_question_id: str = "",
-                       error_context: str = "") -> str:
-    """错题入库（engine 写臂）：判分错误后登记变式题。返回 wq_id。"""
+                       error_context: str = "", question: dict | None = None,
+                       my_answer: str = "", error_type: str = "",
+                       source: str = "practice") -> str:
+    """错题入库（engine 写臂）：判分错误后登记变式题。返回 wq_id。
+    ⑤补补-5 扩参：question（完整题结构：题干/选项/正确答案）/my_answer（我的答案）/
+    error_type（concept|careless|technique）/source（chat|manual|practice 渠道溯源）——旧调用不破。"""
     return _impl_wrong_question_add(_tutor_user(), variant_text,
                                     mother_question_id=mother_question_id,
-                                    error_context=error_context)
+                                    error_context=error_context, question=question,
+                                    my_answer=my_answer, error_type=error_type,
+                                    source=source)
+
+
+@mcp.tool()
+def mother_question_find_or_create(keywords: str, knowledge_point_id: str = "",
+                                   title: str = "", archetype_text: str = "") -> str:
+    """错题录入关联母题（⑤补 §3.2）：关键词/知识点搜母题→命中返回（含 mq_id）/未命中创建
+    （kp 标注必填其一）。参数无 user_id（ContextVar——⑤b 铁律）。"""
+    return _impl_mother_question_find_or_create(_tutor_user(), keywords,
+                                                knowledge_point_id=knowledge_point_id,
+                                                title=title, archetype_text=archetype_text)
+
+
+@mcp.tool()
+def analyze_wrong_questions() -> str:
+    """错因分析（⑤补补-5 步骤 6）：按 kp 聚合→concept/careless/technique 占比→薄弱点结论。
+    agent 可主动调用；学情页「错因分析」卡片同源。"""
+    return _impl_analyze_wrong_questions(_tutor_user())
 
 
 @mcp.tool()

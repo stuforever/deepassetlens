@@ -55,10 +55,50 @@ def _impl_select_exercises(user: str, knowledge_point_id: str, n: int = 5, band:
 
 
 def _impl_wrong_question_add(user: str, variant_text: str, mother_question_id: str = "",
-                             error_context: str = "") -> str:
+                             error_context: str = "", question: dict | None = None,
+                             my_answer: str = "", error_type: str = "",
+                             source: str = "practice") -> str:
+    """⑤补补-5 扩参（向后兼容——旧位置参数调用不破）。"""
     from app.services.learning.learning_dao import wrong_question_add
-    wq_id = wrong_question_add(user, variant_text, mother_question_id, error_context)
+    wq_id = wrong_question_add(user, variant_text, mother_question_id, error_context,
+                               question=question, my_answer=my_answer,
+                               error_type=error_type, source=source)
     return _json.dumps({"wq_id": wq_id}, ensure_ascii=False)
+
+
+def _impl_mother_question_find_or_create(user: str, keywords: str,
+                                         knowledge_point_id: str = "",
+                                         title: str = "", archetype_text: str = "") -> str:
+    """⑤补补-5 新工具数据面：关键词/知识点搜母题→命中/未命中创建（kp 必填其一）。"""
+    from app.services.learning.learning_dao import mother_question_find_or_create
+    return _json.dumps(mother_question_find_or_create(
+        keywords, knowledge_point_id=knowledge_point_id,
+        title=title, archetype_text=archetype_text), ensure_ascii=False)
+
+
+def _impl_analyze_wrong_questions(user: str) -> str:
+    """⑤补补-5 步骤 6：错因分析——按 kp 聚合→error_type 占比→薄弱点结论（结构化下限：
+    有结论+有占比结构；LLM 语义增强由人格卡在对话层完成，本工具为确定性聚合面）。"""
+    from app.services.learning.learning_dao import wrong_question_query
+    rows = wrong_question_query(user, limit=200)
+    total = len(rows)
+    by_type: dict[str, int] = {}
+    by_kp: dict[str, int] = {}
+    for r in rows:
+        et = r.get("error_type") or "unclassified"
+        by_type[et] = by_type.get(et, 0) + 1
+        kp = r.get("mother_kp") or r.get("error_context") or "未知知识点"
+        by_kp[kp] = by_kp.get(kp, 0) + 1
+    dist = {k: {"count": v, "ratio": round(v / total, 2) if total else 0.0}
+            for k, v in sorted(by_type.items(), key=lambda x: -x[1])}
+    top_type = next(iter(dist), {})
+    weak_kp = max(by_kp, key=by_kp.get) if by_kp else ""
+    conclusion = (
+        f"共 {total} 道错题；占比最高错因={top_type}（{dist.get(top_type, {}).get('ratio', 0)*100:.0f}%）；"
+        f"错题最集中知识点={weak_kp}——建议优先针对性练习与复习。"
+        if total else "暂无错题记录。")
+    return _json.dumps({"total": total, "error_type_distribution": dist,
+                        "by_kp": by_kp, "conclusion": conclusion}, ensure_ascii=False)
 
 
 def _impl_wrong_question_query(user: str, status: str = "", limit: int = 20) -> str:
@@ -78,8 +118,7 @@ def _impl_export_wrong_book(user: str, format: str = "md") -> str:
 SPECS: List[Dict[str, object]] = [
     {"name": "fsrs_due",
      "description": "到期复习清单（due<=now 按 due 升序，含 stability/reps）——读面。",
-     "impl": _impl_fsrs_due},
-    {"name": "fsrs_review",
+     "impl": _impl_fsrs_due},    {"name": "fsrs_review",
      "description": "提交复习评分(1-4)→FSRS 调度→落卡+流水（engine 直写——算出来的不许模型编）。\n"
                     "⑤b 铁律①：参数不含 user_id（user 由运行时严格解析，🔴-4 fail-closed）；铁律②：now 可注入\n"
                     "（测试不 sleep；fastmcp 禁下划线参数——spec 的 _now 更名 now，语义不变）。",
@@ -98,7 +137,9 @@ SPECS: List[Dict[str, object]] = [
                     "→母题按掌握度加权（掌握度低→权高）→top-n（含变式计数）。",
      "impl": _impl_select_exercises},
     {"name": "wrong_question_add",
-     "description": "错题入库（engine 写臂）：判分错误后登记变式题。返回 wq_id。",
+     "description": "错题入库（engine 写臂）：判分错误后登记变式题。返回 wq_id。\n"
+                    "⑤补补-5 扩参：question（完整题结构：题干/选项/正确答案）/my_answer（我的答案）/\n"
+                    "error_type（concept|careless|technique）/source（chat|manual|practice 渠道溯源）——旧调用不破。",
      "impl": _impl_wrong_question_add},
     {"name": "wrong_question_query",
      "description": "错题列表（读面）：status ∈ open|resolved|空（全部）。仅本人错题。",
@@ -106,6 +147,14 @@ SPECS: List[Dict[str, object]] = [
     {"name": "export_wrong_book",
      "description": "导出错题本（engine 臂）：落文件返回 result_ref（tab_export 纪律——大对象不进对话）。",
      "impl": _impl_export_wrong_book},
+    {"name": "mother_question_find_or_create",
+     "description": "错题录入关联母题（⑤补 §3.2）：关键词/知识点搜母题→命中返回（含 mq_id）/未命中创建\n"
+                    "（kp 标注必填其一）。参数无 user_id（ContextVar——⑤b 铁律）。",
+     "impl": _impl_mother_question_find_or_create},
+    {"name": "analyze_wrong_questions",
+     "description": "错因分析（⑤补补-5 步骤 6）：按 kp 聚合→concept/careless/technique 占比→薄弱点结论。\n"
+                    "agent 可主动调用；学情页「错因分析」卡片同源。",
+     "impl": _impl_analyze_wrong_questions},
 ]
 
 

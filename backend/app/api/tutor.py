@@ -124,15 +124,89 @@ def review_submit(payload: ReviewSubmit, request: Request):
 # ---------- 错题本 ----------
 
 @router.get("/wrong-questions")
-def wrong_questions(request: Request, status: str = "", page: int = 1, page_size: int = 20):
+def wrong_questions(request: Request, status: str = "", page: int = 1, page_size: int = 20,
+                    error_type: str = "", source: str = ""):
     _require_tutor_enabled(request)
     from app.services.learning.learning_dao import wrong_question_query
     page = max(1, page)
     page_size = max(1, min(page_size, 100))
     items = wrong_question_query(_uid(request), status=status or "",
+                                 error_type=error_type or "", source=source or "",
                                  limit=page_size * page)      # 引擎面 limit 简单分页
     return {"code": 200, "data": {"items": items[(page - 1) * page_size: page * page_size],
                                   "total": len(items), "page": page, "page_size": page_size}}
+
+
+class WrongQuestionPatch(BaseModel):
+    status: str = ""                                  # open | resolved
+    error_type: str = ""
+    my_answer: str = ""
+
+
+@router.put("/wrong-questions/{wq_id}")
+def wrong_question_update(wq_id: str, payload: WrongQuestionPatch, request: Request):
+    """⑤补补-5 步骤 5：错题编辑/状态流转（open→resolved）——仅本人。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.learning_dao import wrong_question_update
+    row = wrong_question_update(_uid(request), wq_id, payload.model_dump(exclude_none=True))
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"错题不存在: {wq_id}")
+    return {"code": 200, "data": row}
+
+
+@router.delete("/wrong-questions/{wq_id}")
+def wrong_question_delete(wq_id: str, request: Request):
+    """⑤补补-5 步骤 5：错题删除（软删——status 置 resolved + 备注迁移，或物理删）。
+
+    语义（计划步骤 5「删除（软删）」）：物理 DELETE 不留痕违背管理面可追溯，
+    采用 status 软删——本实现置 resolved + variant_text 前缀 [已删除]，详单可溯。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.learning_dao import wrong_question_soft_delete
+    if not wrong_question_soft_delete(_uid(request), wq_id):
+        raise HTTPException(status_code=404, detail=f"错题不存在: {wq_id}")
+    return {"code": 200, "data": {"deleted": wq_id}}
+
+
+@router.post("/wrong-questions")
+def wrong_question_create(payload: WrongQuestionCreate, request: Request):
+    """⑤补补-5 步骤 5：手动录入（source=manual）——知识点图谱树选择/母题搜索关联或新建。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.learning_dao import wrong_question_add, mother_question_find_or_create
+    mq_id = payload.mother_question_id
+    if not mq_id and payload.mother_keywords:
+        mq = mother_question_find_or_create(payload.mother_keywords,
+                                            knowledge_point_id=payload.knowledge_point_id or "",
+                                            title=payload.mother_title or "",
+                                            archetype_text=payload.stem)
+        mq_id = mq.get("mq_id") or ""
+    wq_id = wrong_question_add(_uid(request), payload.stem,
+                               mother_question_id=mq_id,
+                               question={"stem": payload.stem, "options": payload.options,
+                                         "correct_answer": payload.correct_answer},
+                               my_answer=payload.my_answer, error_type=payload.error_type,
+                               source="manual")
+    return {"code": 200, "data": {"wq_id": wq_id}}
+
+
+class WrongQuestionCreate(BaseModel):
+    stem: str
+    options: list[str] = []
+    correct_answer: str = ""
+    my_answer: str = ""
+    knowledge_point_id: str = ""
+    mother_question_id: str = ""
+    mother_keywords: str = ""
+    mother_title: str = ""
+    error_type: str = ""
+
+
+@router.get("/analyze-wrong-questions")
+def analyze_wrong_questions(request: Request):
+    """⑤补补-5 步骤 6：错因分析聚合面（学情页「错因分析」卡片+agent 工具同源）。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.tutor_inprocess import _impl_analyze_wrong_questions
+    import json as _json
+    return {"code": 200, "data": _json.loads(_impl_analyze_wrong_questions(_uid(request)))}
 
 
 # ---------- 学情页 ----------

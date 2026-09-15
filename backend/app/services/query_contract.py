@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 TUTOR_TOOLS = frozenset({
     "fsrs_due", "fsrs_review", "mastery_query", "grade_answer", "generate_practice",
     "select_exercises", "wrong_question_add", "wrong_question_query", "export_wrong_book",
+    "mother_question_find_or_create", "analyze_wrong_questions",   # ⑤补补-5 +2（错题全套）
 })
 
 # 默认只读通用能力（未命中场景时的低权限模式工具集）＝基础族 ∪ 教学族

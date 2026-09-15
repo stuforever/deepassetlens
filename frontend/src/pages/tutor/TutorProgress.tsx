@@ -21,6 +21,7 @@ export function masteryColor(m: number): string {
 const TutorProgress: React.FC = () => {
   const [items, setItems] = useState<MasteryItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [analysis, setAnalysis] = useState<{ total: number; error_type_distribution: Record<string, { count: number; ratio: number }>; conclusion: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -35,12 +36,20 @@ const TutorProgress: React.FC = () => {
         setLoading(false);
       }
     })();
+    (async () => {
+      try {
+        const r = await fetch('/api/tutor/analyze-wrong-questions');
+        const j = await r.json();
+        setAnalysis(j?.data || null);
+      } catch { /* 错因分析失败静默 */ }
+    })();
   }, []);
 
   const mastered = items.filter((x) => x.mastery >= 0.7).length;
 
   return (
-    <Card title="学情" extra={items.length > 0 ? <Space>已掌握 <b>{mastered}</b> / {items.length}</Space> : null} style={{ margin: 16 }}>
+    <div style={{ margin: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <Card title="学情" extra={items.length > 0 ? <Space>已掌握 <b>{mastered}</b> / {items.length}</Space> : null} style={{ borderRadius: 12 }}>
       <List
         loading={loading}
         dataSource={items}
@@ -63,6 +72,24 @@ const TutorProgress: React.FC = () => {
         )}
       />
     </Card>
+    {/* ⑤补补-5 步骤 6：错因分析卡片（analyze_wrong_questions 双面之学情页面） */}
+    <Card title="错因分析" size="small" style={{ borderRadius: 12 }}>
+      {!analysis || analysis.total === 0 ? (
+        <span style={{ color: 'var(--text-tertiary)' }}>暂无错题记录。</span>
+      ) : (
+        <div>
+          <div style={{ marginBottom: 6 }}>
+            {Object.entries(analysis.error_type_distribution).map(([k, v]) => (
+              <Tag key={k} color={k === 'concept' ? 'red' : k === 'careless' ? 'orange' : 'blue'}>
+                {k} {v.count} 条（{Math.round(v.ratio * 100)}%）
+              </Tag>
+            ))}
+          </div>
+          <span style={{ fontSize: 13 }}>{analysis.conclusion}</span>
+        </div>
+      )}
+    </Card>
+    </div>
   );
 };
 

@@ -101,26 +101,115 @@ def fsrs_review(state: dict, rating: int, now: float) -> dict:
 # ---- 错题面（⑤b wrong_question_add/query + 导出） ----
 
 def wrong_question_add(user_id: str, variant_text: str, mother_question_id: str = "",
-                       error_context: str = "") -> str:
+                       error_context: str = "", question: Optional[dict] = None,
+                       my_answer: str = "", error_type: str = "", source: str = "practice") -> str:
+    """⑤补补-5 扩参（L287 基底向后兼容——旧两参调用不破；新列全 nullable 无默认行为）。
+
+    source：chat（对话式）/manual（手动）/practice（练习自动）——渠道溯源。
+    """
+    import json as _json
     import uuid as _u
     wq_id = str(_u.uuid4())
     with pg_session() as s:
         s.execute(text(
             "INSERT INTO learning_wrong_questions (wq_id, user_id, mother_question_id, "
-            "variant_text, error_context) VALUES (:w, :u, :m, :v, :e)"),
+            "variant_text, error_context, question, my_answer, error_type, source) "
+            "VALUES (:w, :u, :m, :v, :e, CAST(:q AS JSON), :ma, :et, :src)"),
             {"w": wq_id, "u": user_id, "m": mother_question_id or "",
-             "v": variant_text, "e": error_context or ""})
+             "v": variant_text, "e": error_context or "",
+             "q": _json.dumps(question) if question else None,
+             "ma": my_answer or "", "et": error_type or "", "src": source or "practice"})
     return wq_id
 
 
-def wrong_question_query(user_id: str, status: str = "", limit: int = 20) -> list[dict]:
-    q = ("SELECT wq_id, mother_question_id, variant_text, error_context, status, "
-         "wrong_at, resolved_at FROM learning_wrong_questions WHERE user_id=:u")
+def mother_question_find_or_create(keywords: str, knowledge_point_id: str = "",
+                                   title: str = "", archetype_text: str = "") -> dict:
+    """⑤补补-5 新工具数据面：关键词/知识点搜母题→命中返回（created=False）/未命中创建
+    （kp 标注必填其一——两皆空 422 由端点层判）。返回 {mq_id, created, title, knowledge_point_id}。
+    """
+    kw = (keywords or "").strip()
+    with pg_session() as s:
+        row = None
+        if kw:
+            row = s.execute(text(
+                "SELECT mq_id, title, knowledge_point_id FROM learning_mother_questions "
+                "WHERE title ILIKE :pat OR archetype_text ILIKE :pat "
+                "ORDER BY mq_id LIMIT 1"),
+                {"pat": f"%{kw}%"}).mappings().first()
+        if row is None and knowledge_point_id:
+            row = s.execute(text(
+                "SELECT mq_id, title, knowledge_point_id FROM learning_mother_questions "
+                "WHERE knowledge_point_id=:kp ORDER BY mq_id LIMIT 1"),
+                {"kp": knowledge_point_id}).mappings().first()
+        if row is not None:
+            return {"mq_id": row["mq_id"], "created": False,
+                    "title": row["title"], "knowledge_point_id": row["knowledge_point_id"]}
+        if not knowledge_point_id:
+            return {"mq_id": "", "created": False, "title": "",
+                    "knowledge_point_id": "", "error": "kp_or_keyword_required"}
+        created = mother_question_create(
+            title=title or f"{kw}（自动）" if kw else "未命名母题（自动）",
+            archetype_text=archetype_text or f"（待补题干——关键词：{kw}）",
+            knowledge_point_id=knowledge_point_id)
+        return {"mq_id": created["mq_id"], "created": True,
+                "title": created["title"], "knowledge_point_id": knowledge_point_id}
+
+
+def wrong_question_update(user_id: str, wq_id: str, patch: dict) -> Optional[dict]:
+    """⑤补补-5 管理面：错题编辑/状态流转（仅本人——user_id 双条件）。"""
+    fields: dict = {}
+    if patch.get("status") in ("open", "resolved"):
+        fields["status"] = patch["status"]
+    if patch.get("error_type"):
+        fields["error_type"] = patch["error_type"]
+    if patch.get("my_answer"):
+        fields["my_answer"] = patch["my_answer"]
+    if not fields:
+        return None
+    if fields.get("status") == "resolved":
+        fields["resolved_at"] = "now()"
+    sets = ", ".join(f"{k} = :{k}" if k != "resolved_at" else "resolved_at = now()" for k in fields)
+    params = {k: v for k, v in fields.items() if k != "resolved_at"}
+    params.update({"w": wq_id, "u": user_id})
+    with pg_session() as s:
+        row = s.execute(text(
+            f"UPDATE learning_wrong_questions SET {sets} WHERE wq_id=:w AND user_id=:u "
+            "RETURNING wq_id, status, error_type, my_answer, resolved_at"),
+            params).mappings().first()
+    return dict(row) if row else None
+
+
+def wrong_question_soft_delete(user_id: str, wq_id: str) -> bool:
+    """⑤补补-5 管理面：软删——status 置 resolved + variant_text 前缀 [已删除]（可追溯）。"""
+    with pg_session() as s:
+        row = s.execute(text(
+            "UPDATE learning_wrong_questions SET status='resolved', resolved_at=now(), "
+            "variant_text = '[已删除] ' || variant_text "
+            "WHERE wq_id=:w AND user_id=:u AND variant_text NOT LIKE '[已删除]%' "
+            "RETURNING wq_id"),
+            {"w": wq_id, "u": user_id}).first()
+    return row is not None
+
+
+def wrong_question_query(user_id: str, status: str = "", limit: int = 20,
+                         error_type: str = "", source: str = "") -> list[dict]:
+    q = ("SELECT wq.wq_id, wq.mother_question_id, wq.variant_text, wq.error_context, wq.status, "
+         "wq.wrong_at, wq.resolved_at, wq.question, wq.my_answer, wq.error_type, wq.source, "
+         "mq.knowledge_point_id AS mother_kp "
+         "FROM learning_wrong_questions wq "
+         "LEFT JOIN learning_mother_questions mq ON mq.mq_id = wq.mother_question_id "
+         "WHERE wq.user_id=:u")
     params: dict = {"u": user_id}
     if status in ("open", "resolved"):
-        q += " AND status=:st"
+        q += " AND wq.status=:st"
         params["st"] = status
-    q += " ORDER BY wrong_at DESC LIMIT :lim"
+    if error_type:
+        q += " AND wq.error_type=:et"
+        params["et"] = error_type
+    if source:
+        q += " AND wq.source=:src"
+        params["src"] = source
+    q += " ORDER BY wq.wrong_at DESC LIMIT :lim"
     params["lim"] = max(1, min(int(limit), 100))
     with pg_session() as s:
         rows = s.execute(text(q), params).mappings().all()
