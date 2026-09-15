@@ -434,6 +434,25 @@ def init_db(db: Session):
     # 附件四 A-1：专家卡 suggestions/params 两列（已有库缺列补齐；create_all 不改已有表）
     _ensure_expert_card_columns(db)
 
+    # ⑥-2a（spec D3）：expert 资源公共语义种子（幂等）——wenshu→role viewer→use
+    # （登录兜底 viewer→全员可用）；tutor 等不种=默认私有（显式赋权才见）。
+    _seed_expert_acl(db)
+
+
+def _seed_expert_acl(db: Session):
+    from ..models.auth import ResourceACL
+    row = (db.query(ResourceACL)
+           .filter(ResourceACL.resource_type == "expert",
+                   ResourceACL.resource_id == "wenshu",
+                   ResourceACL.principal_type == "role",
+                   ResourceACL.principal_id == "viewer")
+           .first())
+    if row is None:
+        db.add(ResourceACL(resource_type="expert", resource_id="wenshu",
+                           principal_type="role", principal_id="viewer",
+                           actions=["use"], granted_by="seed"))
+        db.commit()
+
 
 def _ensure_expert_card_columns(db: Session):
     """附件四 A-1：kg_expert_profiles +suggestions/params（JSON NULL，幂等——列存在则跳过）。"""

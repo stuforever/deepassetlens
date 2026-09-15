@@ -16,7 +16,10 @@ from app.core.database import get_db
 from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/tutor", tags=["tutor"])
+# ⑥-2a 执法点③（spec D4）：专家域 API 全 router 级 use 检查（auth=0 匿名=admin 全通）。
+from app.services.expert_auth import require_expert
+router = APIRouter(prefix="/api/tutor", tags=["tutor"],
+                   dependencies=[Depends(require_expert("use", "tutor"))])
 
 
 def _uid(request: Request) -> str:

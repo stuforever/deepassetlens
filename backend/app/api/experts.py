@@ -154,9 +154,11 @@ def _validate_card_fields(body: Dict[str, Any]) -> None:
 def list_experts(request: Request, enabled: Optional[bool] = Query(None)):
     get_current_user(request)
     from app.services import expert_config
+    from app.services.expert_auth import filter_visible_experts   # ⑥-2a 执法点①
     rows = expert_config._load_rows(force=True)
     if enabled is True:
         rows = [r for r in rows if r["enabled"]]
+    rows = filter_visible_experts(request, rows)
     return {"items": rows, "global_version": expert_config.get_version()}
 
 

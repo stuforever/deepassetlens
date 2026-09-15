@@ -41,6 +41,9 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
     # 🔴-5（审查 2026-09-15）：surface 白名单校验**上提至流开之前**——生成器内校验在首个
     # yield 之后响应已 200 开流，HTTPException 到不了 422（且原处 NameError：未导入）。
     # 未知/关停专家交由 event_iter 既有错误路径（此处跳过校验不掩蔽）。
+    # ⑥-2a 执法点②（spec D4）：chat 管线入口——req.expert_id 访问检查（auth=0 全通）。
+    from app.services.expert_auth import ensure_expert_allowed as _eea0
+    _eea0(request, req.expert_id, "use")
     if getattr(req, "surface", None):
         try:
             from app.services import expert_config as _ec0
