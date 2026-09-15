@@ -127,6 +127,9 @@ def test_reconcile_reembed_lifecycle(tmp_path, monkeypatch):
 
             def healthcheck(self):
                 return True
+
+            def collection_info(self, name):
+                return None   # C1 预检面：无既有 collection → 不触发重建
         monkeypatch.setattr(kb_api, "_get_client", lambda: _FakeGateClient())
         out = kb_api.reembed_knowledge_base("kb-recon", db)
         assert out["data"]["reembed"]["reembedded"] == 1
@@ -221,22 +224,93 @@ def test_reconcile_stale_matching_sig_returns_vectorized(tmp_path, monkeypatch):
 # 🔴-1（审查 2026-09-15）：reembed 先按 doc_id 删旧点再嵌（防新旧并存/维度冲突）
 # ---------------------------------------------------------------------------
 
-def _mk_reembed_fixture(db, tmp_path, kb_id, doc_id):
+def _mk_reembed_fixture(db, tmp_path, kb_id, doc_id, kb_sig=None, doc_sig=None):
     """A4 同款造数：stale 文档（真 MySQL，固定 id，先清残留）。"""
     from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    from app.api.knowledge_base import _collection_name
     db.query(KnowledgeDocument).filter_by(kb_id=kb_id).delete()
     db.query(KnowledgeBase).filter_by(id=kb_id).delete()
     db.commit()
     (tmp_path / "a.md").write_text("重嵌删旧测试", encoding="utf-8")
-    kb = KnowledgeBase(id=kb_id, name="重嵌删旧", collection_name=kb_id.replace("-", "_"),
+    # 集合名列与生产同源（_collection_name，I4/C1 口径收敛——不再用 replace 偶然推导）
+    kb = KnowledgeBase(id=kb_id, name="重嵌删旧", collection_name=_collection_name(kb_id),
                        storage_dir=kb_id, type="indexed", rag_provider="qdrant",
-                       embedding_signature={"embed_model": "new-embed"})
+                       embedding_signature=kb_sig or {"embed_model": "new-embed"})
     db.add(kb)
     db.flush()
     db.add(KnowledgeDocument(id=doc_id, kb_id=kb_id, filename="a.md",
                              file_path=str(tmp_path / "a.md"), status="stale", chunk_count=3,
-                             embedding_signature={"embed_model": "old"}))
+                             embedding_signature=doc_sig or {"embed_model": "old"}))
     db.commit()
+
+
+def test_reembed_dimension_change_rebuilds_collection(tmp_path, monkeypatch):
+    """C1（复审 2026-09-15）：跨维度重嵌必须先按新签名 KB 级重建 collection——否则
+    删旧点成功→新维度 upsert 被 Qdrant 拒（ensure_collection 显式拒绝尺寸不一致）→
+    旧索引已丢=「失败即丢索引」回归面，且与 spec D8「维度变更→reembed→报告清洁」相悖。
+    场景：collection 维度=旧(4) / 当前签名维度=新(8)。断言：①ensure_collection 以新
+    维度调用（重建）；②文档终态 vectorized+签名对齐；③reembedded 计数正确。
+    变异锚点：去掉维度预检即红（ensure 不被调用）。"""
+    from app.api.knowledge_base import _collection_name
+    from app.models.knowledge_base import KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+    from app.api import knowledge_base as kb_api
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        _mk_reembed_fixture(
+            db, tmp_path, "kb-reemb3", "d1r3",
+            kb_sig={"embed_model": "new-embed", "vector_size": 8,
+                    "chunk_size": 500, "chunk_overlap": 50},
+            doc_sig={"embed_model": "old", "vector_size": 4})
+        ops, adds = [], []
+
+        class _FakeRaw:
+            def delete(self, **kw):
+                ops.append(("del_points", kw))
+
+        class _FakeClient:
+            _client = _FakeRaw()
+
+            def healthcheck(self):
+                return True
+
+            def collection_info(self, name):
+                return {"config": {"params": {"vectors": {"size": 4}}}}   # 旧维度
+
+            def delete_collection(self, name):
+                ops.append(("del_coll", name))
+
+            def ensure_collection(self, name, vector_size=1024, distance="Cosine", recreate=False):
+                ops.append(("ensure", name, vector_size))
+
+        class _FakeFam:
+            def __init__(self, client=None, embed_fn=None):
+                pass
+
+            def add_documents(self, kb, docs):
+                adds.append(docs)
+                return {d["doc_id"]: 2 for d in docs}
+
+        monkeypatch.setattr("app.services.kb_engines.qdrant_family.QdrantFamily", _FakeFam)
+        monkeypatch.setattr(kb_api, "_get_client", lambda: _FakeClient())
+        monkeypatch.setattr(kb_api, "_current_signature", lambda db, vs=None: {
+            "embed_model": "new-embed", "vector_size": 8,
+            "chunk_size": 500, "chunk_overlap": 50})
+        out = kb_api.reembed_knowledge_base("kb-reemb3", db)
+        assert out["data"]["reembed"]["reembedded"] == 1
+        # ① KB 级重建：删 collection+按新签名 ensure（集合名与 fam 写入口径同源）
+        assert ("del_coll", _collection_name("kb-reemb3")) in ops, f"未重建 collection: {ops}"
+        assert ("ensure", _collection_name("kb-reemb3"), 8) in ops, f"ensure 未按新维度: {ops}"
+        # ② 文档终态
+        doc = db.query(KnowledgeDocument).filter_by(id="d1r3").first()
+        assert doc.status == "vectorized"
+        assert (doc.embedding_signature or {}).get("vector_size") == 8
+        # ③ 计数
+        assert adds and adds[0][0]["doc_id"] == "d1r3"
+    finally:
+        db.close()
 
 
 def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
@@ -263,6 +337,9 @@ def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
             def healthcheck(self):
                 return True
 
+            def collection_info(self, name):
+                return None   # C1 预检面：无既有 collection → 不触发重建
+
         class _FakeFam:
             def __init__(self, client=None, embed_fn=None):
                 pass
@@ -278,7 +355,8 @@ def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
         kinds = [s[0] for s in seq]
         assert kinds == ["delete", "add"], f"调用序漂移: {seq}"       # 先删后嵌
         delkw = seq[0][1]
-        assert delkw["collection_name"] == "kb_reemb"
+        from app.api.knowledge_base import _collection_name
+        assert delkw["collection_name"] == _collection_name("kb-reemb")   # 同源口径（I4/C1）
         assert "d1r" in str(delkw["points_selector"])                # 按本 doc_id 过滤
         doc = db.query(KnowledgeDocument).filter_by(id="d1r").first()
         assert doc.status == "vectorized" and doc.chunk_count == 2
@@ -308,6 +386,9 @@ def test_reembed_delete_failure_fail_closed(tmp_path, monkeypatch):
 
             def healthcheck(self):
                 return True
+
+            def collection_info(self, name):
+                return None   # C1 预检面：无既有 collection → 不触发重建
 
         adds = []
 

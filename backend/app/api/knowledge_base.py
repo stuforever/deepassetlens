@@ -521,6 +521,22 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     from app.services.semantic_retrieval import embed_texts
     from app.services.kb_engines.qdrant_family import QdrantFamily
     fam = QdrantFamily(client=client, embed_fn=lambda batch: embed_texts(db, batch))
+    # C1（复审 2026-09-15）：维度预检——签名三因子含 vector_size（_current_signature 内部
+    # 已探测新嵌入维度），而 collection 尺寸创建即固定、封装层显式拒绝不一致
+    # （tupu_qdrant_client.py:81-85）。不预检则「删旧点成功→新维度 upsert 被拒→旧索引
+    # 已丢」，🔴-1 的 fail-closed 反而把无害失败升级为丢索引。不一致=按 KB 级先重建
+    # （等价 vectorize :344-345 语义），重建后逐文档删点自然为空操作。集合名统一走
+    # _collection_name(kb.id)（fam 写入与 KB 创建列同源，I4 收敛口径）。
+    _coll = _collection_name(kb.id)
+    _info = client.collection_info(_coll) or {}
+    _existing = (((( _info.get("config") or {}).get("params") or {}).get("vectors")) or {}).get("size") \
+        or _info.get("vector_size")
+    _want = int(sig.get("vector_size") or 0)
+    if _want and _existing and int(_existing) != _want:
+        client.delete_collection(_coll)
+        client.ensure_collection(_coll, vector_size=_want, distance="Cosine")
+        logger.warning("重嵌维度预检：%s 维度 %s→%s，已按新签名重建 collection",
+                       _coll, _existing, _want)
     reembedded = 0
     for doc in stale_docs:
         try:
