@@ -98,6 +98,27 @@ class GrantRequest(BaseModel):
     expires_at: Optional[datetime] = None
 
 
+@router.get("/check")
+def check_resource(
+    request: Request,
+    resource_type: str,
+    resource_id: str = "",
+    action: str = "use",
+):
+    """⑥-2a A-4（附件四）：轻量判定面——前端守卫消费（管体验不管安全，spec D4.4）。
+
+    返回 {allowed: bool}（不抛 403——判定本身即答案）。auth=0→匿名=admin→allowed=true。"""
+    from app.core.auth import get_current_user, check_permission as _cp
+    from app.core.database import SessionLocal as _SL
+    user = get_current_user(request)
+    db = _SL()
+    try:
+        allowed = _cp(db, user, resource_type, action, resource_id=resource_id)
+    finally:
+        db.close()
+    return {"code": 200, "data": {"allowed": allowed}}
+
+
 @router.get("/users")
 def list_users(
     db: Session = Depends(get_db),
