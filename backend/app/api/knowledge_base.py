@@ -509,43 +509,49 @@ def reconcile_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
 @router.post("/{kb_id}/reembed")
 def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
     """重嵌（spec D8：永远手动）：stale 文档批→按当前签名全量重建该批向量→签名对齐→清洁。
-    先删旧点再嵌（🔴-1，审查 2026-09-15）。未 reembed 时检索照常（旧索引不破坏——A4 断言）。"""
+    先删旧点再嵌（🔴-1，审查 2026-09-15）。常规路径未重嵌文档检索照常（A4 断言）；
+    **维度变更重建路径例外**：collection 整库清空后必须全量重嵌（C2，勾验撤回 2026-09-15
+    ——否则不在候选集的旧点文档被静默清向量）。"""
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
     if (kb.type or "indexed") == "connected":
         raise HTTPException(status_code=422, detail="指针型知识库无重嵌语义")
     sig = _current_signature(db)
-    # I2（复审 2026-09-15）：候选集 = stale ∪（error 且签名失配）——error 不可重试会把
-    # 一次故障变成永久缺口；签名失配的 error 文档保持重试资格（成功后归位 vectorized）。
-    stale_docs = [d for d in kb.documents
-                  if d.status == "stale"
-                  or (d.status == "error" and (d.embedding_signature or {}) != (sig or {}))]
-    if not stale_docs:
-        return {"code": 200, "data": {"kb": _kb_to_dict(kb, with_docs=True),
-                "reembed": {"reembedded": 0, "failed": [], "message": "无 stale 文档"}}}
     client = _get_client()
     if not client.healthcheck():
         raise HTTPException(status_code=502, detail="qdrant_unavailable")
-    from app.services.semantic_retrieval import embed_texts
-    from app.services.kb_engines.qdrant_family import QdrantFamily
-    fam = QdrantFamily(client=client, embed_fn=lambda batch: embed_texts(db, batch))
-    # C1（复审 2026-09-15）：维度预检——签名三因子含 vector_size（_current_signature 内部
-    # 已探测新嵌入维度），而 collection 尺寸创建即固定、封装层显式拒绝不一致
-    # （tupu_qdrant_client.py:81-85）。不预检则「删旧点成功→新维度 upsert 被拒→旧索引
-    # 已丢」，🔴-1 的 fail-closed 反而把无害失败升级为丢索引。不一致=按 KB 级先重建
-    # （等价 vectorize :344-345 语义），重建后逐文档删点自然为空操作。集合名统一走
-    # _collection_name(kb.id)（fam 写入与 KB 创建列同源，I4 收敛口径）。
+    # C1+I4：维度预检**前置**——签名三因子含 vector_size（_current_signature 内部已探测
+    # 新嵌入维度），collection 尺寸创建即固定、封装层显式拒绝不一致
+    # （tupu_qdrant_client.py:81-85）。不一致=按 KB 级重建（集合名 _collection_name(kb.id)
+    # 与 fam 写入/KB 创建列同源）。重建置位后候选集扩为全部文档（见下）。
     _coll = _collection_name(kb.id)
     _info = client.collection_info(_coll) or {}
     _existing = (((( _info.get("config") or {}).get("params") or {}).get("vectors")) or {}).get("size") \
         or _info.get("vector_size")
     _want = int(sig.get("vector_size") or 0)
-    if _want and _existing and int(_existing) != _want:
+    _rebuild = bool(_want and _existing and int(_existing) != _want)
+    if _rebuild:
         client.delete_collection(_coll)
         client.ensure_collection(_coll, vector_size=_want, distance="Cosine")
-        logger.warning("重嵌维度预检：%s 维度 %s→%s，已按新签名重建 collection",
+        logger.warning("重嵌维度预检：%s 维度 %s→%s，已按新签名重建 collection（本次全量重嵌）",
                        _coll, _existing, _want)
+    # I2+C2（勾验撤回 2026-09-15）：常规候选 = stale ∪（error 且签名失配）——error 不可
+    # 重试会把一次故障变成永久缺口。**维度重建路径候选 = 全部文档**：delete_collection
+    # 清空整库后，凡不在重嵌集的旧点文档向量已随库蒸发（status 仍 vectorized、检索查
+    # 不到）——只有全量重嵌是唯一正确语义（vectorize 重建后即重嵌全部文档，本端点同）。
+    if _rebuild:
+        stale_docs = list(kb.documents)
+    else:
+        stale_docs = [d for d in kb.documents
+                      if d.status == "stale"
+                      or (d.status == "error" and (d.embedding_signature or {}) != (sig or {}))]
+    if not stale_docs:
+        return {"code": 200, "data": {"kb": _kb_to_dict(kb, with_docs=True),
+                "reembed": {"reembedded": 0, "failed": [], "message": "无 stale 文档"}}}
+    from app.services.semantic_retrieval import embed_texts
+    from app.services.kb_engines.qdrant_family import QdrantFamily
+    fam = QdrantFamily(client=client, embed_fn=lambda batch: embed_texts(db, batch))
     reembedded = 0
     failed: list = []   # I2（复审 2026-09-15）：失败清单进响应（前端明示，不再「成功：0 个文档」）
     for doc in stale_docs:
@@ -579,7 +585,9 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
             doc.error_msg = str(de)
             failed.append({"id": doc.id, "filename": doc.filename, "error_msg": str(de)})
             logger.warning("重嵌 %s 失败: %s", doc.filename, de)
-    # stale 文档旧点仍在 Qdrant（A4 语义：重嵌前检索照常）——向量计数应含其 chunk_count
+    # 向量计数口径（C2 勘误，勾验撤回 2026-09-15）：常规路径 stale 旧点仍在 Qdrant
+    # （A4：重嵌前检索照常），计入 chunk_count；维度重建路径旧点已整库清空，失败文档
+    # 标 error 不计入（其向量已不存在，计入即虚计）——两口径在此合流，均不虚报。
     kb.vector_count = sum(d.chunk_count or 0 for d in kb.documents
                           if d.status in ("vectorized", "stale"))
     kb.status = "ready" if not [d for d in kb.documents if d.status in ("error", "stale")] else kb.status

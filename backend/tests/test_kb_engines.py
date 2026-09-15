@@ -310,6 +310,78 @@ def test_reembed_dimension_change_rebuilds_collection(tmp_path, monkeypatch):
         db.close()
 
 
+def test_reembed_dimension_change_reembeds_all_docs(tmp_path, monkeypatch):
+    """C2（勾验撤回条款 2026-09-15）：混合候选+维度变更——重建清空整库后必须**全量**
+    重嵌（等价 vectorize 语义）。场景：A=vectorized 旧签名（不在常规候选集）+ B=stale，
+    维度变更 4→8 → 断言 A 亦被重嵌归位。变异锚点：候选集不随重建扩 → A 的旧向量已被
+    整库清空却不再生（静默丢索引：status 仍 vectorized、检索查不到）→ 本测红。"""
+    from app.api.knowledge_base import _collection_name
+    from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+    from app.api import knowledge_base as kb_api
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        db.query(KnowledgeDocument).filter_by(kb_id="kb-reemb4").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-reemb4").delete()
+        db.commit()
+        (tmp_path / "a.md").write_text("混合候选甲", encoding="utf-8")
+        (tmp_path / "b.md").write_text("混合候选乙", encoding="utf-8")
+        db.add(KnowledgeBase(id="kb-reemb4", name="混合候选", collection_name=_collection_name("kb-reemb4"),
+                             storage_dir="kb-reemb4", type="indexed", rag_provider="qdrant",
+                             embedding_signature={"embed_model": "old", "vector_size": 4}))
+        db.flush()
+        db.add(KnowledgeDocument(id="d1ra", kb_id="kb-reemb4", filename="a.md",
+                                 file_path=str(tmp_path / "a.md"), status="vectorized", chunk_count=3,
+                                 embedding_signature={"embed_model": "old", "vector_size": 4}))
+        db.add(KnowledgeDocument(id="d1rb", kb_id="kb-reemb4", filename="b.md",
+                                 file_path=str(tmp_path / "b.md"), status="stale", chunk_count=2,
+                                 embedding_signature={"embed_model": "old", "vector_size": 4}))
+        db.commit()
+        adds = []
+
+        class _FakeClient:
+            def healthcheck(self):
+                return True
+
+            def collection_info(self, name):
+                return {"config": {"params": {"vectors": {"size": 4}}}}   # 旧维度 → 触发重建
+
+            def delete_collection(self, name):
+                pass
+
+            def ensure_collection(self, name, vector_size=1024, distance="Cosine", recreate=False):
+                pass
+
+        class _FakeFam:
+            def __init__(self, client=None, embed_fn=None):
+                pass
+
+            def delete(self, kb, doc_ids=None):
+                pass
+
+            def add_documents(self, kb, docs):
+                adds.extend(d["doc_id"] for d in docs)
+                return {d["doc_id"]: 2 for d in docs}
+
+        monkeypatch.setattr("app.services.kb_engines.qdrant_family.QdrantFamily", _FakeFam)
+        monkeypatch.setattr(kb_api, "_get_client", lambda: _FakeClient())
+        monkeypatch.setattr(kb_api, "_current_signature", lambda db, vs=None: {
+            "embed_model": "new-embed", "vector_size": 8,
+            "chunk_size": 500, "chunk_overlap": 50})
+        out = kb_api.reembed_knowledge_base("kb-reemb4", db)
+        # C2：重建路径全量重嵌——A（vectorized 旧签名、不在常规候选集）也必须重嵌归位
+        assert out["data"]["reembed"]["reembedded"] == 2
+        assert set(adds) == {"d1ra", "d1rb"}, f"重嵌集漂移: {adds}"
+        a = db.query(KnowledgeDocument).filter_by(id="d1ra").first()
+        assert a.status == "vectorized" and (a.embedding_signature or {}).get("vector_size") == 8
+        b = db.query(KnowledgeDocument).filter_by(id="d1rb").first()
+        assert b.status == "vectorized"
+    finally:
+        db.close()
+
+
 def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
     """🔴-1 回归锁：重嵌必须**先**按 doc_id 删旧点**再** add——换分块参数防新旧并存
     重复召回/vector_count 漂移；换嵌入模型防维度冲突重嵌永败。
