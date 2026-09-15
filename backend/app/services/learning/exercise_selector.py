@@ -150,7 +150,7 @@ def select_exercises(
           "summary": list[str],     # 排序原因摘要（供前端提示条）
         }
     """
-    if profile is None:
+    if not profile:   # 🟡-18 裁定：恢复 DeepTutor 原语义 `profile or build_learner_profile()`（falsy 画像重建，审查 2026-09-15）
         from app.services.learning.learner_profile import build_learner_profile  # 存储边界：tupu 侧批2落 PG 读取
         profile = build_learner_profile()
     scored = []

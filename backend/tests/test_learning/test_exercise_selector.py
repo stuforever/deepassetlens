@@ -24,6 +24,26 @@ class _KP:
         self.status = status
 
 
+class _FalsyProfile:
+    """falsy 画像占位——🟡-18 语义锚触发器。"""
+
+    def __bool__(self) -> bool:
+        return False
+
+
+def test_falsy_profile_triggers_rebuild(monkeypatch):
+    """🟡-18（审查 2026-09-15）：恢复 DeepTutor 原语义——falsy 画像重建，非 None 才复用
+    （`profile or build_learner_profile()`）。变异锚点：改回 `if profile is None:` → 红。"""
+    import app.services.learning.exercise_selector as es
+    rebuilt = _Profile({"k1": _KP("k1", "正数和负数")}, weak=["k1"])   # 重建产物（恒真值）
+    calls = []
+    monkeypatch.setattr("app.services.learning.learner_profile.build_learner_profile",
+                        lambda: calls.append(1) or rebuilt)
+    out = select_exercises([_ex("1.1 正数和负数")], profile=_FalsyProfile())
+    assert len(calls) == 1, "falsy 画像未触发重建（or 语义回退）"
+    assert out["ordered"][0]["priority"] == PRIORITY_WEAK   # 重建画像生效（弱点命中）
+
+
 class _Profile:
     def __init__(self, kp_mastery, weak=None, strong=None, due=None):
         self.kp_mastery = kp_mastery
