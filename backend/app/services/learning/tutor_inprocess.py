@@ -2,7 +2,9 @@
 """教学九工具单源 impl + 进程内 twin（🔴-4，审查 2026-09-15）。
 
 背景：九件原走 HTTP SSE 跳数（独立 ASGI 请求全新 context）→ ContextVar 恒 None →
-全部落 anonymous 共享桶（ENABLE_AUTH=1 即跨用户泄漏）。本模块把 impl 收为单源：
+将全落 anonymous 共享桶（ENABLE_AUTH=1 即跨用户泄漏）——🔴-4 改造后该面**已拆除**：
+本模块把 impl 收为单源，用户经 memory_runtime ContextVar 随请求严格解析
+（current_user_strict fail-closed，⑥-2a B-0 首测自证两请求两 user 隔离）：
   - mcp_server 九件 = 薄包装（HTTP MCP 面，fail-closed：runtime 未置位即抛）；
   - tupu_deepagent 装配面九件 = 进程内 twin（本模块构建——endpoint 已置位 runtime，
     langchain-core 1.5.2 run_in_executor=copy_context().run，executor 线程可读）。

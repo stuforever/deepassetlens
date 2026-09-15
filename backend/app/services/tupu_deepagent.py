@@ -980,10 +980,10 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         logger.warning(f"[批5-C2] 工具排序失败（保持原序）: {_tse}")
     # 专家地基①：按卡窄化工具面（批5-C2 序保留；空交集拒装配 fail-closed，spec §五）
     mcp_tools = _narrow_mcp_tools(mcp_tools, (card or {}).get("tools"))
-    # 🔴-4（审查 2026-09-15）：教学九件改进程内 twin——HTTP SSE 跳数的独立 ASGI 请求
-    # 无 ContextVar（恒 anonymous 共享桶，ENABLE_AUTH=1 即跨用户泄漏）；twin 在本进程
-    # 执行，endpoint 置位后 current_user_strict 可严格解析。九件名面/描述面与 MCP 版
-    # 逐字一致（单源 SPECS），对模型与窄化逻辑零感知。
+    # 🔴-4（审查 2026-09-15）+⑥-2a B-0（2026-09-16）：教学九件进程内 twin——共享桶已拆除
+    # （恒 anonymous 解析不复存在）：twin 在本进程执行，用户经 memory_runtime ContextVar
+    # 随请求解析（current_user_strict fail-closed，B-0 首测 test_expert_acl.py 自证隔离）。
+    # 九件名面/描述面与 MCP 版逐字一致（单源 SPECS），对模型与窄化逻辑零感知。
     from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools
     _tutor_twins = {t.name: t for t in build_inprocess_tutor_tools()}
     mcp_tools = [_tutor_twins.get(t.name, t) for t in mcp_tools]
