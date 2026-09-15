@@ -7,7 +7,9 @@ import { Navigate } from 'react-router-dom';
 import { AuthCtx } from '../auth/AuthGate';
 
 const RequireAdmin: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useContext(AuthCtx);
+  const { user, authReady } = useContext(AuthCtx);
+  // 附件四 A-2：鉴权未就绪不判定（防 user 异步加载中闪跳重定向打断 KeepAlive 挂载）
+  if (!authReady) return null;
   const roles: string[] = ((user as any)?.roles || []) as string[];
   if (!roles.includes('admin')) return <Navigate to="/" replace />;
   return <>{children}</>;

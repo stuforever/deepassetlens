@@ -13,9 +13,12 @@ import {
 export interface AuthContext {
   user: any | null;
   enableAuth: boolean;
+  // 附件四 A-2：鉴权配置是否就绪（phase==='ready'）——守卫据此区分「加载中」与「确定非 admin」，
+  // 防止 user 未就绪时闪跳重定向（admin 页被 Navigate 打断回门户）。
+  authReady: boolean;
 }
 
-export const AuthCtx = React.createContext<AuthContext>({ user: null, enableAuth: false });
+export const AuthCtx = React.createContext<AuthContext>({ user: null, enableAuth: false, authReady: false });
 
 interface Props {
   children: React.ReactNode;
@@ -101,7 +104,7 @@ const AuthGate: React.FC<Props> = ({ children }) => {
       </FullScreen>
     );
   }
-  return <AuthCtx.Provider value={{ user, enableAuth }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, enableAuth, authReady: phase === 'ready' }}>{children}</AuthCtx.Provider>;
 };
 
 const FullScreen: React.FC<{ children: React.ReactNode }> = ({ children }) => (
