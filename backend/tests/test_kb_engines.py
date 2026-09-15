@@ -494,3 +494,59 @@ class TestQdrantFamilyDeleteSafe:
         with pytest.raises(RuntimeError, match="未确认完成"):
             fam.delete({"id": "kb-i1"}, doc_ids=["x"])
         assert kw_seen.get("wait") is True          # 显式等待进原语参数
+
+
+# ---------------------------------------------------------------------------
+# T3（复审 2026-09-15）：端点级 smoke——reconcile/reembed 404/422/502 三分支
+# （子 router 挂最小 FastAPI=m02 判例，规避全 app lifespan；TestClient 不抛服务器异常）
+# ---------------------------------------------------------------------------
+
+def test_reconcile_reembed_endpoint_smoke(tmp_path, monkeypatch):
+    """端点级三分支：404 不存在 / 422 指针型无重嵌语义 / 502 qdrant 不可用。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api import knowledge_base as kb_api
+    from app.api.knowledge_base import router as kb_router
+    from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+    from app.models.base import Base
+    from app.core.database import SessionLocal, engine
+
+    app = FastAPI()
+    app.include_router(kb_router)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    # 404：reconcile/reembed 打不存在的 KB
+    assert client.post("/api/v1/knowledge-bases/nope/reconcile").status_code == 404
+    assert client.post("/api/v1/knowledge-bases/nope/reembed").status_code == 404
+
+    # 422/502：造 connected 型 KB（reembed 拒绝）+ 真实 KB（qdrant 不可用 → 502）
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        db.query(KnowledgeBase).filter_by(id="kb-smoke-conn").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-smoke-idx").delete()
+        db.commit()
+        db.add(KnowledgeBase(id="kb-smoke-conn", name="指针型", collection_name="kb_smokeconn",
+                             storage_dir="kb-smoke-conn", type="connected", rag_provider="qdrant"))
+        db.add(KnowledgeBase(id="kb-smoke-idx", name="自建型", collection_name="kb_smokeidx",
+                             storage_dir="kb-smoke-idx", type="indexed", rag_provider="qdrant"))
+        db.flush()
+        db.add(KnowledgeDocument(id="d-smoke-s", kb_id="kb-smoke-idx", filename="s.md",
+                                 file_path=str(tmp_path / "s.md"), status="stale", chunk_count=1))
+        db.commit()
+
+        r = client.post("/api/v1/knowledge-bases/kb-smoke-conn/reembed")
+        assert r.status_code == 422 and "指针型" in r.json()["detail"]
+        r = client.post("/api/v1/knowledge-bases/kb-smoke-conn/reconcile")
+        assert r.status_code == 422 and "指针型" in r.json()["detail"]
+
+        monkeypatch.setattr(kb_api, "_get_client", lambda: type("_Down", (), {
+            "healthcheck": lambda self: False})())
+        r = client.post("/api/v1/knowledge-bases/kb-smoke-idx/reembed")
+        assert r.status_code == 502 and "qdrant_unavailable" in r.json()["detail"]
+    finally:
+        db.query(KnowledgeDocument).filter_by(kb_id="kb-smoke-idx").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-smoke-conn").delete()
+        db.query(KnowledgeBase).filter_by(id="kb-smoke-idx").delete()
+        db.commit()
+        db.close()
