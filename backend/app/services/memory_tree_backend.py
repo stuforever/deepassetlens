@@ -35,15 +35,21 @@ def _safe_join(root: Path, rel: str) -> Path:
 
 
 def _virtual_rel(virtual_path: str) -> str:
-    """树内相对路径解析。兼容两形态（批2 实证修正 #2）：
+    """树内相对路径解析。兼容三形态（批2 实证修正 #2 + ②补验实证 #8）：
     - 完整虚拟路径 "/memory/AGENTS.md"（MemoryTreeBackend 直调/单测）；
     - Composite 分发的 stripped 相对路径 "AGENTS.md"（_get_backend_and_key 已去前缀——
-      composite.read/adownload_files 等全家均传 stripped_key，实测）。
-    其余绝对路径（/etc/passwd 等）= 域外，拒。"""
+      composite.read/adownload_files 等全家均传 stripped_key，实测）；
+    - 根单段绝对路径 "/偏好.md"（模型把 /memory 挂载区当虚拟根——实测 agent 真实行为）。
+      安全性：归一后仍过 _writable 白名单（未声明槽=第二道锁拒）与 legacy/手册双锁，
+      越权试探（/secret.md 等）归一后不在 _writable → 拒，防线不变。
+    其余多段绝对路径（/etc/passwd 等）= 域外，拒。"""
     p = str(virtual_path or "").strip()
     if p.startswith("/memory/"):
         return p[len("/memory/"):] or "."
     if p.startswith("/"):
+        parts = [x for x in p.split("/") if x]
+        if len(parts) == 1:
+            return parts[0]                      # 根单段 → 归一（白名单兜底）
         raise ValueError(f"MemoryTreeBackend 域外路径: {p}")
     return p or "."
 

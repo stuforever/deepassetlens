@@ -1,5 +1,7 @@
 import React, { lazy } from 'react';
 import { MENU_LABELS } from './config/navigation';
+// ⑤批4（⑤e）：专家自定义页注册表（import 在顶部——eslint import/first）。
+import { expertPageRoutes } from './config/expertPages';
 
 // 路由懒加载：每页独立 chunk（webpackChunkName 控制产物名）。
 // KeepAlive 语义不受影响——lazy 只影响「首次打开某页签时的模块加载」，已挂载页签不卸载。
@@ -28,7 +30,6 @@ const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pa
 const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './pages/MemoryAdmin'));
 // ⑤批4（⑤e）：专家自定义页——EXPERT_PAGES 注册表（①spec §七预留扩展点）实体化注入。
 // 卡是数据页面是代码：路由静态注册，可见性由卡 enabled 决定（卡关=门户/侧栏不渲染）。
-import { expertPageRoutes } from './config/expertPages';
 
 export type RouteConfig = {
   path: string;

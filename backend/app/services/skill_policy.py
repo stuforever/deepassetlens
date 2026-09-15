@@ -45,6 +45,11 @@ MAX_VIOLATIONS = 2
 # 带自由 sql 参数的执行工具（需模板校验）
 _SQL_TOOLS = frozenset({"execute_sql", "execute_doris_sql", "execute_api_sql"})
 
+# ②批补验（spec §五三重防线第二层）：记忆槽写入件名集合——卡有 RAW_MD(writer=agent_edit)
+# 槽时装配的自定义件名（write_memory_slot/edit_memory_slot）；write_file/edit_file 为
+# 兼容历史名（built-in 两件已被 HarnessProfile 按名剥离，此处保留仅防未来放宽）。
+_MEMORY_EDIT_TOOLS = frozenset({"write_memory_slot", "edit_memory_slot", "write_file", "edit_file"})
+
 # 批1：受控降级只放行这两个只读定位工具（重定位真实表名）
 _DEGRADATION_TOOLS = frozenset({"search_entities", "list_tables"})
 # 批13-M 定位优先：locate 类工具集（定位顺序判据用——validate_l2/fetch_subgraph/fetch_l1_l2_tree）
@@ -127,12 +132,17 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
 
     def __init__(self, catalog=None, dispatcher: Optional[Callable[..., Awaitable[None]]] = None,
                  max_violations: int = MAX_VIOLATIONS,
-                 allow_missing_contract: bool = False) -> None:
+                 allow_missing_contract: bool = False,
+                 agent_edit_paths: Optional[frozenset] = None) -> None:
         self._catalog = catalog or get_catalog()
         self._max_violations = max_violations
         self._dispatcher = dispatcher
         # P0-1 fail-closed：默认契约缺失即拒绝全部工具；仅显式标识的兼容/测试模式放行
         self._allow_missing_contract = allow_missing_contract
+        # ②批补验（spec §五三重防线第二层）：agent_edit 槽路径白名单——**装配期快照**
+        # （卡版本变更→Agent 重建→新快照）。不读 ContextVar：langgraph 把同步工具调用放
+        # executor 线程，ContextVars 不跨线程（②补验实证 #9）。空集=现状等值（wenshu）。
+        self._agent_edit_paths = frozenset(agent_edit_paths or ())
 
     # ------------------------------------------------------------------
     # 工具调用包装
@@ -205,6 +215,24 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     # ------------------------------------------------------------------
     # 前置校验
     # ------------------------------------------------------------------
+    def _is_agent_edit_slot_target(self, request) -> bool:
+        """②批补验（spec §五三重防线）：write_file/edit_file 目标 ∈ 装配期注入的
+        agent_edit 槽路径白名单（快照）。空集（wenshu 等无槽卡）→ False=现状等值。
+        路径三形状归一（同 memory_tree_backend._virtual_rel #8）：/memory/x、x、/x（根单段）。"""
+        if not self._agent_edit_paths:
+            return False
+        raw = str((request.tool_call.get("args") or {}).get("file_path") or "").strip()
+        if raw.startswith("/memory/"):
+            cand = raw[len("/memory/"):]
+        elif raw.startswith("/"):
+            parts = [x for x in raw.split("/") if x]
+            if len(parts) != 1:
+                return False
+            cand = parts[0]
+        else:
+            cand = raw
+        return cand.strip("/") in self._agent_edit_paths
+
     async def _precheck(self, contract: QueryContract, tool_name: str, request) -> Optional[str]:
         # 批13-Q 护栏1+4：task 委派复合条件（运行时层，不受 capability 守卫开关影响）。
         # 放行条件 = caps.subagents.enabled AND contract.allow_subagents；拒绝即写 task_reject 审计。
@@ -239,7 +267,16 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         if violation is not None:
             return violation
         # 2) 禁用工具（绝对禁止 + 契约禁止）
-        if _cap_on and tool_name in contract.forbidden_tools:
+        # ②批补验（spec §五三重防线第二层回补）：agent_edit 槽例外——记忆槽写入件
+        # （write_memory_slot/edit_memory_slot；write_file/edit_file 为兼容历史名）目标
+        # ∈ 装配期注入的 agent_edit 槽白名单时放行（越权仍由第一层 FilesystemPermission
+        # 槽级规则+第三层 MemoryTreeBackend _writable 白名单兜底）。
+        # 无槽卡（wenshu 等）→ 白名单空 → 例外永不触发=现状等值。
+        if _cap_on and tool_name in _MEMORY_EDIT_TOOLS \
+                and tool_name in contract.forbidden_tools \
+                and self._is_agent_edit_slot_target(request):
+            pass  # agent_edit 槽写入：三层防线其余两层接管，不在本层拦截
+        elif _cap_on and tool_name in contract.forbidden_tools:
             return f"调用禁用工具 {tool_name}（契约禁止: {sorted(contract.forbidden_tools)}）"
         # 2a) P1-2 多引擎复合终止：两源取齐后禁止继续检索任何数据工具（先于 allowed 检查，
         #     因为 set_stop_reached 已把全部 DATA_TOOLS 移出 allowed_tools）
@@ -252,10 +289,13 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
                 and not contract._runtime.get("degradation_consumed")):
             contract._runtime["degradation_consumed"] = True
             return None
-        # 1) 不在允许集（capability 关闭时放行）
+        # 1) 不在允许集（capability 关闭时放行；agent_edit 槽写入同上例外——三层防线其余两层接管）
         if _cap_on and not contract.allows(tool_name):
-            allowed = sorted(set(contract.allowed_tools) - set(contract.forbidden_tools))
-            return f"工具 {tool_name} 不在本步骤允许范围（允许: {allowed}）"
+            if tool_name in _MEMORY_EDIT_TOOLS and self._is_agent_edit_slot_target(request):
+                pass
+            else:
+                allowed = sorted(set(contract.allowed_tools) - set(contract.forbidden_tools))
+                return f"工具 {tool_name} 不在本步骤允许范围（允许: {allowed}）"
         # 3) 引擎一致性：数据工具必须匹配已确认引擎（单引擎锁定 / 多引擎逐源确认）
         if contract.is_data_tool(tool_name) and _eng_on:
             if contract.multi_engine:

@@ -131,6 +131,29 @@ def _build_contract_system_message(contract, question: str = "", precomputed_bun
         f"- 终止条件：{'；'.join(contract.stop_when) or _CONTRACT_STOP_DEFAULT}",
         f"- 输出模式：{contract.output_mode}{_CONTRACT_OUTPUT_SUFFIX}",
     ]
+    # ②批补验（spec §五三重防线第二层）：专家卡有 agent_edit 槽时追加例外段（二态固定文案
+    # ——同卡逐字节一致，批5-C1 前缀缓存前提不破；无槽卡不追加=wenshu 现状等值）。
+    # SkillPolicy 放行判定=装配期快照（agent_edit_paths），契约文本与运行时闸门一致。
+    try:
+        from app.services.memory_runtime import current as _cur
+        _card = None
+        try:
+            from app.services import expert_config as _ec
+            _card = _ec.get_card(_cur().get("expert_id") or "wenshu")
+        except Exception:
+            _card = None
+        if _card:
+            from app.services.memory_slots import normalize_memory_field as _nmf2
+            _ae = [str(s.get("path", "")) for s in _nmf2(_card.get("memory")).get("slots") or []
+                   if s.get("type") == "RAW_MD" and s.get("writer") == "agent_edit" and s.get("path")]
+            if _ae:
+                lines.append(
+                    "- 记忆写入例外：write_memory_slot（新文件）/edit_memory_slot（改已有片段）"
+                    "允许且仅允许写以下记忆槽文件"
+                    f"（其余路径仍禁止）：{'、'.join(sorted(_ae))}。用户要求记录偏好/画像时，"
+                    "直接调用 write_memory_slot 写入上述文件。")
+    except Exception:
+        pass
     # 批13-M：locate_first 场景追加实体定位顺序段（固定文案进骨架，同场景逐字节一致）
     if getattr(contract, "locate_first", False):
         lines.append(_CONTRACT_LOCATE_ORDER)

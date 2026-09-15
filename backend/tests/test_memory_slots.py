@@ -256,3 +256,39 @@ def test_consolidator_idempotent_no_new_lines(tmp_path, monkeypatch):
     r2 = mc._consolidate_tree("wenshu", "alice", root=_u, state=state, _llm=lambda prompt: "…")
     assert r2["read_lines"] == 0 and r2["l2_written"] == 0      # 幂等：零新行零写入
     assert (_u / "偏好.md").read_text(encoding="utf-8") == "用户偏好原文"   # RAW_MD 不碰
+
+
+# ---------------------------------------------------------------------------
+# ②补验 C1：同专家换用户 → 树互不串（spec §八 per-user 根运行语义锁）
+# ---------------------------------------------------------------------------
+
+def test_same_expert_two_users_trees_isolated(tmp_path, monkeypatch):
+    """同装配、不同人（spec §六机关）：同一 MemoryTreeBackend 实例，运行时用户
+    alice/bob 各写偏好 → 各落各树，零互串（C1 补验单测锁，2026-09-15）。
+    变异锚点：写落点退化为专家根/固定用户根 → 红。"""
+    from app.services import memory_tree_backend as mtb
+    from app.services import memory_runtime as rt
+    _e = tmp_path / "memtest"
+    _e.mkdir(parents=True)
+    monkeypatch.setattr(mtb, "memory_expert_root", lambda e: _e)
+    monkeypatch.setattr(mtb, "memory_user_root", lambda e, u: _e / u)
+    card = {"expert_id": "memtest", "memory": {"slots": [
+        {"slot": "偏好", "type": "RAW_MD", "path": "/memory/偏好.md",
+         "writer": "agent_edit", "read": "注入", "order": 4}], "legacy_paths": []}}
+    b = mtb.MemoryTreeBackend("memtest", card)          # 同一实例（同装配）
+    # alice 写
+    rt.set_runtime("memtest", "alice", "s1", "t1")
+    r1 = b.write("/memory/偏好.md", "alice偏好：简洁")
+    assert not r1.error
+    # bob 写（同实例、只换运行时用户）
+    rt.set_runtime("memtest", "bob", "s2", "t2")
+    r2 = b.write("/memory/偏好.md", "bob偏好：详尽")
+    assert not r2.error
+    # 各落各树、零互串
+    assert (_e / "alice" / "偏好.md").read_text(encoding="utf-8") == "alice偏好：简洁"
+    assert (_e / "bob" / "偏好.md").read_text(encoding="utf-8") == "bob偏好：详尽"
+    # alice 回切读：读到的仍是 alice 自己的（bob 的写入对 alice 不可见）
+    rt.set_runtime("memtest", "alice", "s1", "t3")
+    r3 = b.read("/memory/偏好.md")
+    assert (r3.file_data or {}).get("content") == "alice偏好：简洁"
+    rt.reset()

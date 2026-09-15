@@ -420,6 +420,74 @@ def _memory_permission_rules(card: dict) -> list:
     return rules
 
 
+def _agent_edit_slot_rels(card: Dict[str, Any] | None) -> frozenset:
+    """卡 RAW_MD(writer=agent_edit) 槽路径 → 相对基准集合（剥 /memory/ 前缀）。
+
+    归一基准与 SkillPolicy._is_agent_edit_slot_target 一致（实证 #11：一侧 strip("/") 保留
+    memory 段会导致例外永不命中）。空集=无槽卡（wenshu）。"""
+    try:
+        from app.services.memory_slots import normalize_memory_field
+        out = []
+        for s in normalize_memory_field((card or {}).get("memory")).get("slots") or []:
+            if s.get("type") != "RAW_MD" or s.get("writer") != "agent_edit" or not s.get("path"):
+                continue
+            p = str(s["path"]).strip()
+            out.append(p[len("/memory/"):] if p.startswith("/memory/") else p.strip("/"))
+        return frozenset(out)
+    except Exception:
+        return frozenset()
+
+
+def _card_has_agent_edit_slots(card: Dict[str, Any] | None) -> bool:
+    """卡是否有 RAW_MD(writer=agent_edit) 槽（装配追加记忆槽写入件的判据；无槽=False）。"""
+    return bool(_agent_edit_slot_rels(card))
+
+
+def _build_memory_edit_tools(mtb):
+    """②批补验（spec §五三重防线·第三层）：agent_edit 槽卡的自定义记忆槽写入件。
+
+    built-in write_file/edit_file 被 HarnessProfile excluded 物理剔除（register 对同 key
+    是 excluded **并集**语义——provider:model 全专家共享 key，先装配的无槽卡永久并回两件，
+    减法无效），且 `_ToolExclusionMiddleware` 在链路最后**按工具名**剥离（含 tools 传入的
+    自定义件）——故自定义件必须**换名**（write_memory_slot/edit_memory_slot，非剥离名单内）。
+    行为=MemoryTreeBackend.write/edit 直通（_writable 槽白名单+手册只读+备份+台账全保留），
+    本件零自制策略（如实上屏，不吞错不伪造成功）。无槽卡不构造=零变化（现状等值）。"""
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel, Field
+
+    class _WriteArgs(BaseModel):
+        file_path: str = Field(description="记忆槽文件路径，如 /memory/偏好.md")
+        content: str = Field(description="要写入的完整文件内容")
+
+    class _EditArgs(BaseModel):
+        file_path: str = Field(description="记忆槽文件路径，如 /memory/偏好.md")
+        old_string: str = Field(description="要替换的原文片段（精确匹配）")
+        new_string: str = Field(description="替换后的新片段")
+        replace_all: bool = Field(default=False, description="是否替换全部出现")
+
+    def _w(file_path: str, content: str) -> str:
+        r = mtb.write(file_path, content)
+        if getattr(r, "error", None):
+            return f"写入失败: {r.error}"
+        return f"写入成功: {getattr(r, 'path', '') or file_path}"
+
+    def _e(file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
+        r = mtb.edit(file_path, old_string, new_string, replace_all)
+        if getattr(r, "error", None):
+            return f"编辑失败: {r.error}"
+        return f"编辑成功: {getattr(r, 'path', '') or file_path}"
+
+    return [
+        StructuredTool.from_function(
+            func=_w, name="write_memory_slot", args_schema=_WriteArgs,
+            description=("写入用户记忆槽文件（仅限专家卡声明的 agent_edit 槽，如 /memory/偏好.md）。"
+                         "用户要求记住偏好/画像等长期信息时调用。")),
+        StructuredTool.from_function(
+            func=_e, name="edit_memory_slot", args_schema=_EditArgs,
+            description="编辑用户记忆槽文件（仅限 agent_edit 槽）。old_string 需与文件原文精确匹配。"),
+    ]
+
+
 def _compute_files_hash(card=None, user: str | None = None) -> str:
     """技能树+纪律树新鲜度指纹：逐文件 相对路径+mtime+size 有序拼接 sha256（前16位）。
 
@@ -945,13 +1013,23 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         # 每次调用经 memory_runtime ContextVar 解析——「同装配、不同人」）。/skills/ 原封不动。
         from app.services.memory_tree_backend import MemoryTreeBackend as _MTB, ensure_dirs as _ensure_dirs
         _routes.update({"/memory/": _MTB(str((card or {}).get("expert_id") or "wenshu"), card or {})})
+        _memory_backend = _routes["/memory/"]
         _ensure_dirs(str((card or {}).get("expert_id") or "wenshu"), card or {})  # 骨架+RAW_MD 预创建（不阻装配）
         backend = CompositeBackend(default=StateBackend(), routes=_routes)
         logger.info(f"[13-Y] StoreBackend 路由已装配（种子 {_n_seeded} 个文件，files_hash={_compute_files_hash(card)}）——运行时零磁盘")
     else:
         _n_seeded = 0
+        _memory_backend = None
         backend = StateBackend()
         logger.warning("[Capability] filesystem_tools 已关闭：backend 退化为 StateBackend（文件路由不可用）")
+    # ②批补验（spec §五三重防线·第三层）：agent_edit 槽卡追加自定义记忆槽写入件
+    # （同名替代被 excluded 的 built-in 件；additive 通道不受 union 语义影响）。
+    if _memory_backend is not None and _card_has_agent_edit_slots(card):
+        try:
+            mcp_tools = mcp_tools + _build_memory_edit_tools(_memory_backend)
+            logger.info("[MemoryEdit] agent_edit 槽卡：自定义 write_file/edit_file 已挂 tools（放行面=槽白名单）")
+        except Exception as _me:
+            logger.warning(f"[MemoryEdit] 记忆槽写入件构造失败（不阻装配）: {_me}")
     # 权限规则（按序匹配，首条命中生效，无命中默认允许）：
     #   1. 允许读 /skills/**（技能文件）
     #   2. 拒绝读 /**（兜底封堵：/skills/../../、/etc/passwd、.env 等全部 deny）
@@ -990,6 +1068,11 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         _excluded = frozenset(_excl_cfg["excluded"])
     except Exception:
         _excluded = frozenset({"grep", "glob", "write_file", "edit_file", "execute"})
+    # ②批补验注记（spec §五三重防线）：write_file/edit_file 的物理挂回**不走 excluded 减法**——
+    # deepagents register_harness_profile 对同 key 是 excluded **并集**语义（provider:model 全
+    # 专家共享同一 key，先装配的无槽卡会永久并回两件），减法无效。改为：built-in 两件保持排除
+    # （无同名冲突），卡有 agent_edit 槽时在 tools 追加**自定义记忆槽写入件**（additive，见下
+    # _build_memory_edit_tools）——放行面=槽白名单，三层防线仍完整。
     # 批13-AB1：排除栏条件化——从「常态杀默认摘要件」变为「能力开关关闭时的执行器」。
     # 开关开：官方工厂件 .name="SummarizationMiddleware" 与框架自动件同名 -> graph.py 拼接机
     #         原地替换（我们的件顶掉自动件），排除栏必须为空，否则把工厂件也排除了；
@@ -1026,7 +1109,11 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     # 具/模板外 SQL/引擎切换/结果后再查；契约由 data_intelligence 路由后经 context 注入。
     # P0-1 fail-closed：装配失败必须阻止 Agent 创建（不允许降级成只有 DecisionGate 的自由 Agent）。
     from app.services.skill_policy import SkillPolicyMiddleware
-    middleware_list.insert(0, SkillPolicyMiddleware())
+    # ②批补验（spec §五三重防线第二层）：agent_edit 槽路径**装配期快照**注入——
+    # 运行时读 ContextVar 不可行（langgraph 同步工具在 executor 线程，ContextVars 不跨线程）。
+    from app.services.memory_slots import normalize_memory_field as _nmf_sp
+    _agent_edit_paths = _agent_edit_slot_rels(card)
+    middleware_list.insert(0, SkillPolicyMiddleware(agent_edit_paths=_agent_edit_paths))
     logger.info("[SkillPolicy] 受控执行契约中间件已装配（最外层闸门，技能/步骤/模板/引擎/终止硬校验）")
     # 记忆插槽②（spec §六）：L1 轨迹——洋葱最外层（SkillPolicy 之前；守卫拒绝也记）。
     # wenshu slots=[] → 不装配（no-op）；manifest 记 memory_trace: active|inactive。
