@@ -544,19 +544,11 @@ def reembed_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
             text = (parse_cached(Path(doc.file_path), doc.checksum)
                     if doc.checksum else _read_text_file(Path(doc.file_path)))
             try:
-                # 🔴-1（审查 2026-09-15）：先删旧点再嵌——换分块参数防新旧并存重复召回，
-                # 换嵌入模型防维度冲突；删除失败 fail-closed（doc 标 error，不继续 add）。
-                # 原语复用 :298-305（qdrant-client FilterSelector by payload.doc_id）。
-                from qdrant_client import models as _qmodels
-                client._client.delete(
-                    collection_name=kb.collection_name,
-                    points_selector=_qmodels.FilterSelector(
-                        filter=_qmodels.Filter(
-                            must=[_qmodels.FieldCondition(key="doc_id",
-                                                          match=_qmodels.MatchValue(value=doc.id))]
-                        )
-                    ),
-                )
+                # 🔴-1 + I4（复审 2026-09-15）：先删旧点再嵌——删除原语收编 fam.delete
+                # （FilterSelector by payload.doc_id，与 add_documents 同一封装、同一集合名
+                # 口径 _collection_name(kb.id)，消「DB 列 vs 推导名」双源与三份重复原语；
+                # C1 预检重建后此处自然为空操作）。
+                fam.delete({"id": kb.id}, doc_ids=[doc.id])
             except Exception as de0:
                 doc.status = "error"
                 doc.error_msg = f"删旧向量失败（防新旧并存，fail-closed）: {de0}"

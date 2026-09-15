@@ -114,17 +114,14 @@ def test_reconcile_reembed_lifecycle(tmp_path, monkeypatch):
 
         # reembed：monkeypatch Family.add_documents 返回固定计数
         class _FakeFam:
+            def delete(self, kb, doc_ids=None):
+                pass   # I4：删点原语收编 fam.delete（成功=无操作）
+
             def add_documents(self, kb, docs):
                 return {d["doc_id"]: 3 for d in docs}
         monkeypatch.setattr("app.services.kb_engines.qdrant_family.QdrantFamily", lambda **k: _FakeFam())
-        # 🔴-1 契约升级：fake client 须含 _client.delete 面（删旧原语）——原 fake 缺该面，
-        # 被 fail-closed 判为删旧失败（正是审查指出的"monkeypatch 掩盖"被契约暴露）
-        class _FakeGateClient:
-            class _client:
-                @staticmethod
-                def delete(**kw):
-                    return None
 
+        class _FakeGateClient:
             def healthcheck(self):
                 return True
 
@@ -266,13 +263,7 @@ def test_reembed_dimension_change_rebuilds_collection(tmp_path, monkeypatch):
             doc_sig={"embed_model": "old", "vector_size": 4})
         ops, adds = [], []
 
-        class _FakeRaw:
-            def delete(self, **kw):
-                ops.append(("del_points", kw))
-
         class _FakeClient:
-            _client = _FakeRaw()
-
             def healthcheck(self):
                 return True
 
@@ -288,6 +279,9 @@ def test_reembed_dimension_change_rebuilds_collection(tmp_path, monkeypatch):
         class _FakeFam:
             def __init__(self, client=None, embed_fn=None):
                 pass
+
+            def delete(self, kb, doc_ids=None):
+                ops.append(("del_points", doc_ids))   # I4：原语收编 fam.delete
 
             def add_documents(self, kb, docs):
                 adds.append(docs)
@@ -327,13 +321,7 @@ def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
         _mk_reembed_fixture(db, tmp_path, "kb-reemb", "d1r")
         seq = []
 
-        class _FakeRaw:
-            def delete(self, **kw):
-                seq.append(("delete", kw))
-
         class _FakeClient:
-            _client = _FakeRaw()
-
             def healthcheck(self):
                 return True
 
@@ -343,6 +331,10 @@ def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
         class _FakeFam:
             def __init__(self, client=None, embed_fn=None):
                 pass
+
+            def delete(self, kb, doc_ids=None):
+                # I4：删除原语收编 fam.delete——记录 (kb_dict, doc_ids)
+                seq.append(("delete", kb, doc_ids))
 
             def add_documents(self, kb, docs):
                 seq.append(("add", [d["doc_id"] for d in docs]))
@@ -354,10 +346,10 @@ def test_reembed_deletes_old_points_before_add(tmp_path, monkeypatch):
         assert out["data"]["reembed"]["reembedded"] == 1
         kinds = [s[0] for s in seq]
         assert kinds == ["delete", "add"], f"调用序漂移: {seq}"       # 先删后嵌
-        delkw = seq[0][1]
-        from app.api.knowledge_base import _collection_name
-        assert delkw["collection_name"] == _collection_name("kb-reemb")   # 同源口径（I4/C1）
-        assert "d1r" in str(delkw["points_selector"])                # 按本 doc_id 过滤
+        # I4：删点走 fam.delete（同一封装/同一集合名口径）——kb id 与 doc_ids 逐项对上
+        _dkb, _ddocs = seq[0][1], seq[0][2]
+        assert _dkb.get("id") == "kb-reemb"
+        assert _ddocs == ["d1r"]
         doc = db.query(KnowledgeDocument).filter_by(id="d1r").first()
         assert doc.status == "vectorized" and doc.chunk_count == 2
         assert db.query(KnowledgeBase).filter_by(id="kb-reemb").first().vector_count == 2
@@ -377,13 +369,7 @@ def test_reembed_delete_failure_fail_closed(tmp_path, monkeypatch):
     try:
         _mk_reembed_fixture(db, tmp_path, "kb-reemb2", "d1r2")
 
-        class _FakeRaw:
-            def delete(self, **kw):
-                raise RuntimeError("qdrant down")
-
         class _FakeClient:
-            _client = _FakeRaw()
-
             def healthcheck(self):
                 return True
 
@@ -395,6 +381,10 @@ def test_reembed_delete_failure_fail_closed(tmp_path, monkeypatch):
         class _FakeFam:
             def __init__(self, client=None, embed_fn=None):
                 pass
+
+            def delete(self, kb, doc_ids=None):
+                # I4：删点走 fam.delete——失败模拟在原语层（fail-closed 语义不变）
+                raise RuntimeError("qdrant down")
 
             def add_documents(self, kb, docs):
                 adds.append(docs)
