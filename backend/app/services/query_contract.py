@@ -18,7 +18,9 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# ⑤批2（⑤b）：教学工具族九件——generic 模式可达（user 隔离由 ContextVar 保证）；
+# ⑤批2（⑤b）：教学工具族九件——generic 模式可达（user 隔离由 ContextVar 保证——
+# 🔴-4 修正 2026-09-15：装配面九件=进程内 twin，endpoint 置位后 current_user_strict
+# 严格解析；HTTP MCP 面 fail-closed。见 tutor_inprocess.py）；
 # 但 **expert_config 推导 wenshu/存量卡 tools 时剔除本族**（wenshu 零感知铁律——
 # 教学工具只进 tutor 卡显式 tools，不随「全集=卡 tools」推导泄漏进问数面）。
 TUTOR_TOOLS = frozenset({

@@ -53,7 +53,10 @@ def test_fsrs_review_math_value(_clean_users):
 
 def test_fsrs_review_now_injection(_clean_users):
     """铁律②：now 注入（due 断言不 sleep）——注入时钟走 new_card 时间轴。
-    （fastmcp 禁下划线参数——spec 的 _now 更名 now，语义不变。）"""
+    （fastmcp 禁下划线参数——spec 的 _now 更名 now，语义不变。）
+    🔴-4（审查 2026-09-15）：strict 解析——置位 runtime（原测试隐赖 anonymous 缺省）。"""
+    from app.services.memory_runtime import set_runtime
+    set_runtime("tutor", _UID_A, "s1", "t1")
     from app.mcp_server import fsrs_review
     out = json.loads(fsrs_review(**{"item_id": "mq-now", "rating": 3, "now": 1_000_000.0}))
     assert out["next_interval_days"] >= 1.0      # 公式值（注入时钟下同样成立）
@@ -121,7 +124,10 @@ def test_select_exercises_neighbor_mock(_clean_users, monkeypatch):
 
 
 def test_grade_answer_fail_closed_no_llm():
-    """LLM 臂确定性短路：空预期答案 fail-closed（不调 LLM——402 期间可测）。"""
+    """LLM 臂确定性短路：空预期答案 fail-closed（不调 LLM——402 期间可测）。
+    🔴-4（审查 2026-09-15）：strict 解析——置位 runtime（原测试隐赖 anonymous 缺省）。"""
+    from app.services.memory_runtime import set_runtime
+    set_runtime("tutor", "u-grade-nollm", "s", "t")
     from app.mcp_server import grade_answer
     out = json.loads(grade_answer(**{"question": "q", "user_answer": "a", "expected_answer": ""}))
     assert out["score"] == 0 and out["correct"] is False
@@ -164,3 +170,66 @@ def test_surface_routing_only_requested():
     assert written == ["quiz"]                    # 请求指定→只写 quiz
     asyncio.run(_run(None))
     assert sorted(written) == ["chat", "quiz"]    # 未指定→②原语义全写
+
+
+# ---------------------------------------------------------------------------
+# 🔴-4（审查 2026-09-15）：教学九工具 user 路径闭环——进程内 twin + HTTP 面 fail-closed
+# ---------------------------------------------------------------------------
+
+class TestTutorUserPathClosed:
+    """🔴-4 回归锁。变异锚点：twin 退回匿名缺省 / HTTP 面静默 anonymous /
+    装配漏替换任一件 / 包装丢真实签名（空 schema）→ 红。"""
+
+    def test_inprocess_twin_reads_user_via_executor_thread(self, monkeypatch):
+        """langchain-core 1.5.2 run_in_executor=copy_context().run——工具在 executor 线程
+        仍读到置位 user（跨线程传播单测；线程语义变更时此测红）。"""
+        import asyncio
+        from app.services import memory_runtime as rt
+        import app.services.learning.service as svc
+        from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools
+        seen = []
+        monkeypatch.setattr(svc, "due_cards", lambda user, kind=None: seen.append(user) or [])
+        twin = {t.name: t for t in build_inprocess_tutor_tools()}["fsrs_due"]
+        rt.set_runtime("tutor", "alice-twin", "s", "t")
+        try:
+            out = asyncio.run(asyncio.to_thread(lambda: twin.invoke({"kind": ""})))
+        finally:
+            rt.reset()
+        assert seen == ["alice-twin"], f"user 路径漂移: {seen}"   # alice 桶，非 anonymous
+        assert json.loads(out)["count"] == 0
+
+    def test_fail_closed_when_runtime_unset(self):
+        """🔴-4 fail-closed：runtime 未置位即抛（twin 与 HTTP 面同纪律）——绝不静默 anonymous。"""
+        from app.services import memory_runtime as rt
+        from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools
+        rt.reset()
+        twin = {t.name: t for t in build_inprocess_tutor_tools()}["fsrs_due"]
+        with pytest.raises(RuntimeError):
+            twin.invoke({"kind": ""})
+        from app.mcp_server import _tutor_user
+        with pytest.raises(RuntimeError):
+            _tutor_user()
+
+    def test_twin_face_covers_tutor_tools(self):
+        """装配替换完备性：twin 面=TUTOR_TOOLS 全集；描述面与 mcp_server 面 docstring 逐字一致
+        （fastmcp 装饰器返回包装对象致 getdoc 取不到函数 doc 时退化跳过，拷贝源纪律兜底）。"""
+        import inspect as _inspect
+        import app.mcp_server as _ms
+        from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools, SPECS
+        from app.services.query_contract import TUTOR_TOOLS
+        twins = {t.name: t for t in build_inprocess_tutor_tools()}
+        assert set(twins) == set(TUTOR_TOOLS)
+        for spec in SPECS:
+            _doc = _inspect.getdoc(getattr(_ms, str(spec["name"]))) or ""
+            if _doc:
+                assert twins[str(spec["name"])].description == _doc, \
+                    f"描述漂移: {spec['name']}"
+
+    def test_twin_schema_not_empty(self):
+        """P1（计划审查 2026-09-15）：(*args, **kwargs) 包装必须挂真实签名——否则
+        StructuredTool 按 inspect 推导出**空 schema**，模型面九件参数全消失。"""
+        from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools
+        twins = {t.name: t for t in build_inprocess_tutor_tools()}
+        assert set(twins["fsrs_review"].args) >= {"item_id", "rating", "kind"}
+        assert set(twins["fsrs_due"].args) == {"kind"}
+        assert set(twins["wrong_question_add"].args) >= {"variant_text"}

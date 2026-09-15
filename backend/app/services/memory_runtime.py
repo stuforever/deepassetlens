@@ -43,5 +43,15 @@ def current_user() -> str:
     return current()["user"]
 
 
+def current_user_strict() -> str:
+    """🔴-4（审查 2026-09-15）fail-closed：runtime 未置位即抛——绝不静默落 anonymous
+    共享桶（跨用户泄漏面）。教学工具（HTTP MCP 面+进程内 twin）一律走本解析；
+    current() 的 wenshu/anonymous 缺省兜底只服务无用户维度的既有只读面（spec §十一）。"""
+    rt = _memory_runtime.get()
+    if rt is None:
+        raise RuntimeError("memory_runtime 未置位：教学工具拒绝执行（fail-closed，🔴-4）")
+    return rt["user"]
+
+
 def reset() -> None:
     _memory_runtime.set(None)
