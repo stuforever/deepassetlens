@@ -77,7 +77,23 @@ const ExpertChat: React.FC = () => {
     if (card?.name) document.title = `${card.name} · 图谱平台`;
   }, [card?.name]);
   // ② 建议卡卡驱动（本地保留原常量为缺省——卡读失败时等值兜底）
-  const SUGGESTIONS = card?.ui_config?.suggestions ?? FREEPLAN_EXAMPLE_QUERIES;
+  // 附件四 A-1：卡级 suggestions 优先（tutor 三条）——空/缺省回落 ui_config（wenshu 零变化）
+const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
+  ? card.suggestions
+  : card?.ui_config?.suggestions) ?? FREEPLAN_EXAMPLE_QUERIES;
+
+  // ⑤补补-2：欢迎语动态数（仅 tutor——wenshu 不调接口零变化）
+  const [tutorProfile, setTutorProfile] = useState<{ due_count: number; streak_days: number } | null>(null);
+  useEffect(() => {
+    if (slug !== 'tutor') return;
+    (async () => {
+      try {
+        const r = await fetch('/api/tutor/profile');
+        const j = await r.json();
+        if (j?.data) setTutorProfile({ due_count: j.data.due_count ?? 0, streak_days: j.data.streak_days ?? 0 });
+      } catch { /* 画像失败静默——欢迎语回落 */ }
+    })();
+  }, [slug]);
 
   // Session 状态来自 Zustand store（与 AppSider 共享）
   const sessions = useStore((s) => s.sessions);
@@ -90,6 +106,14 @@ const ExpertChat: React.FC = () => {
 
   // 本地状态（仅对话相关）
   const [question, setQuestion] = useState('');
+  // 附件四 A-1：门户卡建议点击→跳 chat 预填（sessionStorage 一次性消费）
+  useEffect(() => {
+    const pre = sessionStorage.getItem('dal_chat_prefill');
+    if (pre) {
+      sessionStorage.removeItem('dal_chat_prefill');
+      setQuestion(pre);
+    }
+  }, []);
   // 批13-P：受控路由模拟器 Drawer 开关（审计入口，不常驻前台）
   const [simOpen, setSimOpen] = useState(false);
   const [status, setStatus] = useState<ChatStatus>('ready');
@@ -1146,6 +1170,12 @@ const ExpertChat: React.FC = () => {
             <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-tertiary)' }}>
               {card?.ui_config?.welcome?.tagline ?? '一句话问数 · 受控执行 · 全程可审计'}
             </div>
+            {/* ⑤补补-2：tutor 欢迎语动态数（画像聚合 /api/tutor/profile——N 题待复习/M 天连续） */}
+            {slug === 'tutor' && tutorProfile && (tutorProfile.due_count > 0 || tutorProfile.streak_days > 0) && (
+              <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.info }}>
+                今日有 {tutorProfile.due_count} 题待复习，已连续学习 {tutorProfile.streak_days} 天
+              </div>
+            )}
           </div>
 
           {/* 统计胶囊（S1 卡：图标 + tabular-nums 数字 + 12px 说明） */}

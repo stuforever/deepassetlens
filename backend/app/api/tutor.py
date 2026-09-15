@@ -38,6 +38,19 @@ def _require_tutor_enabled(request: Request) -> None:
 
 # ---------- 复习页 ----------
 
+@router.get("/profile")
+def get_profile(request: Request):
+    """⑤补补-2：画像聚合端点（streak/due/weak/今日活跃）——u 从会话取（auth=0=anonymous）。"""
+    _require_tutor_enabled(request)
+    from app.services.learning.learner_profile import build_learner_profile
+    p = build_learner_profile(_uid(request))
+    return {"code": 200, "data": {
+        "streak_days": p.streak_days, "today_reviews": p.today_reviews,
+        "due_count": len(p.due_reviews), "weak_points": p.weak_points,
+        "strong_points": p.strong_points, "kp_mastery": p.kp_mastery,
+    }}
+
+
 @router.get("/due")
 def get_due(request: Request, kind: str = "", limit: int = 20):
     _require_tutor_enabled(request)
