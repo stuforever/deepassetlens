@@ -126,7 +126,9 @@ class QdrantFamily:
             client.delete_collection(name)
             return
         from qdrant_client import models as _qmodels
-        client._client.delete(
+        # I1（复审 2026-09-15）：显式 wait=True + UpdateResult 校验——fail-closed 不能只认
+        # 异常不认返回值（ACKNOWLEDGED=已受理未落盘，靠库默认值撑不住契约）。
+        res = client._client.delete(
             collection_name=name,
             points_selector=_qmodels.FilterSelector(
                 filter=_qmodels.Filter(
@@ -134,4 +136,8 @@ class QdrantFamily:
                                                   match=_qmodels.MatchAny(any=list(doc_ids)))]
                 )
             ),
+            wait=True,
         )
+        _status = getattr(res, "status", None)
+        if _status != _qmodels.UpdateStatus.COMPLETED:
+            raise RuntimeError(f"删旧向量未确认完成（status={_status}）")

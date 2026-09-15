@@ -411,6 +411,7 @@ class TestQdrantFamilyDeleteSafe:
     变异锚点：回退 scroll 重写路径或误删整库 → 红。"""
 
     def test_delete_by_doc_ids_uses_filter_selector(self):
+        from qdrant_client.models import UpdateResult, UpdateStatus
         from app.api.knowledge_base import _collection_name
         from app.services.kb_engines.qdrant_family import QdrantFamily
         calls = []
@@ -418,6 +419,7 @@ class TestQdrantFamilyDeleteSafe:
         class _FakeRaw:
             def delete(self, **kw):
                 calls.append(kw)
+                return UpdateResult(operation_id=1, status=UpdateStatus.COMPLETED)
 
         class _FakeClient:
             _client = _FakeRaw()
@@ -454,3 +456,24 @@ class TestQdrantFamilyDeleteSafe:
         fam = QdrantFamily(client=_FakeClient(), embed_fn=lambda batch: [[0.0]] * len(batch))
         fam.delete({"id": "kb-whole"})
         assert calls == [("collection", _collection_name("kb-whole"))]   # 恰一次整库删除、零 scroll
+
+    def test_delete_acknowledged_not_confirmed_fail_closed(self):
+        """I1（复审 2026-09-15）：显式 wait=True + 返回值校验——ACKNOWLEDGED（受理未落盘）
+        必须 fail-closed，fail-closed 不能只认异常不认返回值（靠库默认值撑不住契约）。
+        变异锚点：去掉 status 校验或丢掉 wait=True 即红。"""
+        from qdrant_client.models import UpdateResult, UpdateStatus
+        from app.services.kb_engines.qdrant_family import QdrantFamily
+        kw_seen = {}
+
+        class _FakeRaw:
+            def delete(self, **kw):
+                kw_seen.update(kw)
+                return UpdateResult(operation_id=2, status=UpdateStatus.ACKNOWLEDGED)
+
+        class _FakeClient:
+            _client = _FakeRaw()
+
+        fam = QdrantFamily(client=_FakeClient(), embed_fn=lambda batch: [[0.0]] * len(batch))
+        with pytest.raises(RuntimeError, match="未确认完成"):
+            fam.delete({"id": "kb-i1"}, doc_ids=["x"])
+        assert kw_seen.get("wait") is True          # 显式等待进原语参数
