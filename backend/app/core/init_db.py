@@ -431,6 +431,28 @@ def init_db(db: Session):
     # 专家地基①（spec §九步骤 3）：kg_run_events + expert_id 观测列（失败不阻启动）
     _ensure_expert_column(db)
 
+    # 附件四 A-1：专家卡 suggestions/params 两列（已有库缺列补齐；create_all 不改已有表）
+    _ensure_expert_card_columns(db)
+
+
+def _ensure_expert_card_columns(db: Session):
+    """附件四 A-1：kg_expert_profiles +suggestions/params（JSON NULL，幂等——列存在则跳过）。"""
+    from sqlalchemy import text
+    for col, ddl in (("suggestions", "JSON"),
+                     ("params", "JSON")):
+        try:
+            has = db.execute(text(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE "
+                "TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kg_expert_profiles' "
+                f"AND COLUMN_NAME = '{col}'")).scalar()
+            if not has:
+                db.execute(text(f"ALTER TABLE kg_expert_profiles ADD COLUMN {col} {ddl} NULL"))
+                db.commit()
+                logger.info(f"[附件四A-1] kg_expert_profiles.{col} 列已加")
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"[附件四A-1] kg_expert_profiles.{col} 补列失败（不阻启动）: {e}")
+
 
 def _ensure_expert_column(db: Session):
     """专家地基①（spec §九步骤 3）：kg_run_events + expert_id（NOT NULL DEFAULT 'wenshu'——

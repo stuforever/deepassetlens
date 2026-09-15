@@ -41,6 +41,15 @@ const App: React.FC = () => {
 
   const switchToMenu = useCallback(
     (menuKey: string) => {
+      // 附件四 A-1：专家区动态键（e:{slug}:{chat|admin|page}）——EXPERT_PAGES 注册表优先，
+      // chat/admin 动态拼路径（menuKeyToPath 静态表不覆盖 /e/ 动态段——与下方 L80 同款运行时分支）。
+      if (menuKey.startsWith('e:')) {
+        const [, slug, sub] = menuKey.split(':');
+        if (sub === 'admin') { navigate(`/e/${slug}/admin`); return; }
+        const pg = expertPageRoutes().find((p) => p.menuKey === menuKey);
+        navigate(pg ? pg.path : `/e/${slug}/chat`);
+        return;
+      }
       const path = menuKeyToPath[menuKey];
       if (path) navigate(path);
     },
@@ -79,9 +88,11 @@ const App: React.FC = () => {
     // 未命中才回退 chat 页签（四页与 chat 各自独立页签——KeepAlive 互不串扰）。
     if (location.pathname.startsWith('/e/')) {
       const slug = location.pathname.split('/')[2] || 'wenshu';
+      // 附件四 A-1：后台路径特判（admin 不在 EXPERT_PAGES 注册表——独立页签）
+      const isAdminPath = location.pathname.endsWith('/admin');
       const pageCfg = expertPageRoutes().find((p) => p.path === location.pathname);
-      const menuKey = pageCfg ? pageCfg.menuKey : `e:${slug}:chat`;
-      const label = pageCfg ? pageCfg.label : `专家 ${slug}`;
+      const menuKey = isAdminPath ? `e:${slug}:admin` : (pageCfg ? pageCfg.menuKey : `e:${slug}:chat`);
+      const label = isAdminPath ? `${slug} 后台` : (pageCfg ? pageCfg.label : `专家 ${slug}`);
       setPageTabs((prev) => {
         if (prev.find((t) => t.key === menuKey)) return prev;
         const newTabs = [...prev, { key: menuKey, label, menuKey }];

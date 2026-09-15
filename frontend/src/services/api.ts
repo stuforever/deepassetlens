@@ -586,6 +586,9 @@ export interface ExpertCard {
   memory: string[]; knowledge_sources: string[]; llm_connection_id?: string | null;
   icon?: string | null; description?: string | null;
   ui_config?: { placeholder?: string; suggestions?: string[]; welcome?: { title?: string; tagline?: string } };
+  // 附件四 A-1：卡级 suggestions（门户/欢迎页可点建议）+params（调度参数白名单）——纯卡数据
+  suggestions?: string[];
+  params?: Record<string, unknown>;
   version: number; updated_by?: string | null; updated_at?: string | null; close_reason?: string | null;
 }
 

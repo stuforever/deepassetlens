@@ -1101,6 +1101,10 @@ class ExpertProfile(Base):
     icon = Column(String(64), nullable=True)
     description = Column(String(500), nullable=True)
     ui_config = Column(JSON, nullable=True)                  # placeholder/建议问题/欢迎语
+    # 附件四 A-1：卡级 suggestions（门户/欢迎页可点建议，≤5 条×≤120 字）+params
+    # （调度参数白名单 {"fsrs"}，A-3 消费）——manifest 不含此两键（纯卡数据，零装配差）。
+    suggestions = Column(JSON, nullable=True)                # List[str]
+    params = Column(JSON, nullable=True)                     # Dict[str, Any]
     updated_by = Column(String(64), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
     close_reason = Column(String(500), nullable=True)        # 关停（红级）必填

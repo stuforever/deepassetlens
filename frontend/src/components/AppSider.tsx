@@ -4,7 +4,7 @@
  * 下部：最近对话会话列表（从 Zustand store 读取，点击切到首页并激活该会话）。
  * 底部：收起/展开按钮。
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { Layout, Menu, Tooltip, Input, Typography, Popconfirm, message } from 'antd';
 import {
   MenuFoldOutlined,
@@ -15,10 +15,15 @@ import {
   EditOutlined,
   CheckOutlined,
   SearchOutlined,
+  CommentOutlined,
+  ReadOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { NAV_GROUPS, HOME_NAV_ITEM } from '../config/navigation';
+import { EXPERT_PAGES } from '../config/expertPages';
 import { expertsApi } from '../services/api';
 import type { ExpertCard } from '../services/api';
+import { AuthCtx } from '../auth/AuthGate';
 import { tokens } from '../theme/tokens';
 import { useStore } from '../store/useStore';
 
@@ -43,6 +48,10 @@ interface AppSiderProps {
 }
 
 const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, onSelect }) => {
+  // 附件四 A-1：后台入口可见性（role-based 雏形——A-4 升级 ACL use/manage）
+  const { user } = useContext(AuthCtx);
+  const isAdminUser = (((user as any)?.roles || []) as string[]).includes('admin');
+
   // Session store
   const sessions = useStore((s) => s.sessions);
   const activeSessionId = useStore((s) => s.activeSessionId);
@@ -103,17 +112,34 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
         icon: <HOME_NAV_ITEM.icon />,
         label: HOME_NAV_ITEM.label,
       },
-      // 专家地基①：「专家」动态区——启用卡实时渲染（menuKey e:{slug}:chat）
+      // 专家地基①：「专家」动态区——启用卡实时渲染。
+      // 附件四 A-1：每 enabled 专家从单 chat 项变子菜单（对话+功能页+后台*）。
+      // *后台仅 admin 可见（A-4 升级为 ACL use/manage 分层）；EXPERT_PAGES[slug] 空数组
+      // 的专家（wenshu）保持现状单 chat 项——等值分支。
       ...(expertCards.length > 0
         ? [{
             key: 'expert_section',
             type: 'group' as const,
             label: '专家',
-            children: expertCards.map((c) => ({
-              key: `e:${c.expert_id}:chat`,
-              icon: <SearchOutlined />,
-              label: c.name,
-            })),
+            children: expertCards.flatMap((c) => {
+              const pages = EXPERT_PAGES[c.expert_id] || [];
+              const adminEntry = isAdminUser
+                ? [{ key: `e:${c.expert_id}:admin`, icon: <SettingOutlined />, label: `${c.name}后台` }]
+                : [];
+              if (pages.length === 0 && adminEntry.length === 0) {
+                return [{ key: `e:${c.expert_id}:chat`, icon: <SearchOutlined />, label: c.name }];
+              }
+              return [{
+                key: `e:${c.expert_id}`,
+                icon: <SearchOutlined />,
+                label: c.name,
+                children: [
+                  { key: `e:${c.expert_id}:chat`, icon: <CommentOutlined />, label: '对话' },
+                  ...pages.map((p) => ({ key: p.menuKey, icon: <ReadOutlined />, label: p.label })),
+                  ...adminEntry,
+                ],
+              }];
+            }),
           }]
         : []),
       // 专家地基①：既有五组整体归入「平台管理」区（结构零删）

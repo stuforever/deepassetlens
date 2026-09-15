@@ -2,6 +2,8 @@ import React, { lazy } from 'react';
 import { MENU_LABELS } from './config/navigation';
 // ⑤批4（⑤e）：专家自定义页注册表（import 在顶部——eslint import/first）。
 import { expertPageRoutes } from './config/expertPages';
+// 附件四 A-1：守卫雏形（role-based——A-4 升级 ACL use/manage 分层）
+import RequireAdmin from './components/RequireAdmin';
 
 // 路由懒加载：每页独立 chunk（webpackChunkName 控制产物名）。
 // KeepAlive 语义不受影响——lazy 只影响「首次打开某页签时的模块加载」，已挂载页签不卸载。
@@ -28,6 +30,8 @@ const ExpertPortal = lazy(() => import(/* webpackChunkName: "expert-portal" */ '
 const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pages/expert/ExpertChat'));
 // 记忆插槽②批6：记忆管理页（平台管理区，admin-only）
 const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './pages/MemoryAdmin'));
+// 附件四 A-1：tutor 后台首页骨架（A-2 填卡配置编辑面实体）+守卫雏形（A-4 升级 ACL 分层）
+const TutorAdminHome = lazy(() => import(/* webpackChunkName: "tutor-admin" */ './pages/tutor/admin/AdminHome'));
 // ⑤批4（⑤e）：专家自定义页——EXPERT_PAGES 注册表（①spec §七预留扩展点）实体化注入。
 // 卡是数据页面是代码：路由静态注册，可见性由卡 enabled 决定（卡关=门户/侧栏不渲染）。
 
@@ -64,6 +68,9 @@ export const routes: RouteConfig[] = [
   { path: '/memory-admin', element: MemoryAdmin, label: '记忆管理', menuKey: 'memory_admin' },
   // ⑤批4（⑤e）：专家自定义页（EXPERT_PAGES 首战=tutor 四页：练习/复习/错题本/学情）
   ...expertPageRoutes().map((p) => ({ path: p.path, element: p.element as any, label: p.label, menuKey: p.menuKey })),
+  // 附件四 A-1：tutor 后台（守卫雏形包裹——非 admin 重定向首页）
+  { path: '/e/tutor/admin', label: 'tutor 后台', menuKey: 'e:tutor:admin',
+    element: (() => <RequireAdmin><TutorAdminHome /></RequireAdmin>) as any },
   { path: '*', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
 ];
 

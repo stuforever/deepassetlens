@@ -44,6 +44,8 @@ def default_wenshu_card() -> Dict[str, Any]:
                             "配电变压器有哪些？列出编号和名称", "用电客户数据的来源"],
             "welcome": {"title": "数据资产探查", "tagline": "一句话问数 · 受控执行 · 全程可审计"},
         },
+        # 附件四 A-1：形状一致（wenshu 无此数据=空=零显示差）
+        "suggestions": [], "params": {},
         "version": 1,
     }
 
@@ -71,6 +73,7 @@ def _load_rows(force: bool = False) -> List[Dict[str, Any]]:
                 "knowledge_sources": r.knowledge_sources or [],
                 "llm_connection_id": r.llm_connection_id, "icon": r.icon,
                 "description": r.description, "ui_config": r.ui_config or {},
+                "suggestions": r.suggestions or [], "params": r.params or {},
                 "updated_by": r.updated_by, "updated_at": r.updated_at,
                 "close_reason": r.close_reason, "version": r.version or 1,
             } for r in rows]

@@ -46,6 +46,9 @@ class ExpertCardBody(BaseModel):
     icon: Optional[str] = None
     description: Optional[str] = None
     ui_config: Optional[Dict[str, Any]] = None
+    # 附件四 A-1：卡级 suggestions（≤5 条×≤120 字）+params（键白名单 {"fsrs"}）
+    suggestions: Optional[List[str]] = None
+    params: Optional[Dict[str, Any]] = None
 
 
 class ExpertPatchBody(BaseModel):
@@ -64,6 +67,9 @@ class ExpertPatchBody(BaseModel):
     enabled: Optional[bool] = None
     close_reason: Optional[str] = None
     confirm: bool = True
+    # 附件四 A-1：同 POST——suggestions/params（校验在 _validate_card_fields）
+    suggestions: Optional[List[str]] = None
+    params: Optional[Dict[str, Any]] = None
 
 
 def _validate_card_fields(body: Dict[str, Any]) -> None:
@@ -105,8 +111,7 @@ def _validate_card_fields(body: Dict[str, Any]) -> None:
                 raise ValueError(f"声明路径不存在: {s}")
     for k in body.get("knowledge_sources") or []:
         if k in _KNOWLEDGE_WHITELIST:
-            continue
-        # ④批4（spec D9）：白名单扩展 kb:{id}——id 须真实存在（存在性校验=白名单纪律）
+            continue        # ④批4（spec D9）：白名单扩展 kb:{id}——id 须真实存在（存在性校验=白名单纪律）
         if str(k).startswith("kb:"):
             from app.models.knowledge_base import KnowledgeBase
             from app.core.database import SessionLocal as _SL
@@ -120,6 +125,29 @@ def _validate_card_fields(body: Dict[str, Any]) -> None:
                 raise ValueError(f"knowledge_sources 声明的知识库不存在: {k}")
             continue
         raise ValueError(f"knowledge_sources 白名单外（ontology_graph 或 kb:{{id}}）: {k}")
+    # 附件四 A-1：卡级 suggestions/params 白名单（≤5 条×≤120 字非空；params 键 ⊆ {"fsrs"}，
+    # fsrs 子键 ⊆ {desired_retention, w}——A-3 调度面消费；缺省 None=零行为差）。
+    _sugg = body.get("suggestions")
+    if _sugg is not None:
+        if not isinstance(_sugg, list) or len(_sugg) > 5:
+            raise ValueError("suggestions 须为列表且不超过 5 条")
+        for s in _sugg:
+            if not isinstance(s, str) or not s.strip() or len(s) > 120:
+                raise ValueError("suggestions 每条须为非空字符串且不超过 120 字")
+    _params = body.get("params")
+    if _params is not None:
+        if not isinstance(_params, dict):
+            raise ValueError("params 须为对象")
+        _unk = set(_params) - {"fsrs"}
+        if _unk:
+            raise ValueError(f"params 键白名单外: {sorted(_unk)}")
+        _fsrs = _params.get("fsrs")
+        if _fsrs is not None:
+            if not isinstance(_fsrs, dict):
+                raise ValueError("params.fsrs 须为对象")
+            _sub_unk = set(_fsrs) - {"desired_retention", "w"}
+            if _sub_unk:
+                raise ValueError(f"params.fsrs 子键白名单外: {sorted(_sub_unk)}")
 
 
 @router.get("")
@@ -186,7 +214,8 @@ def create_expert(request: Request, expert_id: str = Query(..., alias="id"), bod
                              skills=body.skills, memory=body.memory,
                              knowledge_sources=body.knowledge_sources,
                              llm_connection_id=body.llm_connection_id, icon=body.icon,
-                             description=body.description, ui_config=body.ui_config, version=1))
+                             description=body.description, ui_config=body.ui_config,
+                             suggestions=body.suggestions, params=body.params, version=1))
         db.commit()
     finally:
         db.close()
@@ -205,7 +234,8 @@ def patch_expert(expert_id: str, body: ExpertPatchBody, request: Request):
               if v is not None and k not in ("confirm", "close_reason")}
     if fields.get("tools") is not None or fields.get("skills") is not None or \
        fields.get("memory") is not None or fields.get("knowledge_sources") is not None or \
-       fields.get("system_prompt") is not None:
+       fields.get("system_prompt") is not None or \
+       fields.get("suggestions") is not None or fields.get("params") is not None:
         from app.services import expert_config as ec
         try:
             merged = {**ec.get_card(expert_id), **fields}
