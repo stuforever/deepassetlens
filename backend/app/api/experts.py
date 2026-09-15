@@ -69,8 +69,12 @@ class ExpertPatchBody(BaseModel):
 def _validate_card_fields(body: Dict[str, Any]) -> None:
     """spec §六 POST 校验：slug 格式/tools ⊆ 活注册表/skills 路径存在/知识源白名单/
     system_prompt 非空/entry_kind 白名单。"""
-    from app.services.expert_config import _mcp_tool_registry
+    # ⑤批3（⑤c 诚实账①回补源头）：卡 tools 校验用真实注册全集（GENERIC_ALLOWED_TOOLS，
+    # 含教学族）——_mcp_tool_registry() 是 wenshu tools **推导面**（剔除教学族的零感知
+    # 语义），不是校验面；批 2 一函数两用导致 tutor 卡九件必 422（洞在批 2，不在本批打补丁）。
+    from app.services.query_contract import GENERIC_ALLOWED_TOOLS
     from pathlib import Path
+    reg = set(GENERIC_ALLOWED_TOOLS)
     slug = body.get("expert_id") or ""
     if not _SLUG_RE.match(slug):
         raise ValueError(f"expert_id 非法（小写字母数字连字符）: {slug}")
@@ -78,7 +82,6 @@ def _validate_card_fields(body: Dict[str, Any]) -> None:
         raise ValueError("system_prompt 不能为空")
     if body.get("entry_kind") not in _ENTRY_KINDS:
         raise ValueError(f"entry_kind 白名单外（①期仅 chat）: {body.get('entry_kind')}")
-    reg = set(_mcp_tool_registry())
     for t in body.get("tools") or []:
         if t not in reg:
             raise ValueError(f"tools 越界（不在活注册表）: {t}")
