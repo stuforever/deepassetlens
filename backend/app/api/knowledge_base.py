@@ -121,6 +121,81 @@ class KBSearch(BaseModel):
     top_k: int = 5
 
 
+# ---------- ⑤R B0（唯一交棒 批2.2）：教学域 KB 注册表导入（数据分区 knowledge_bases→导入④） ----------
+
+_TUTOR_DT_PROVIDER = "tutor_dt"          # B0 新白名单值——仅导入面；create 既有白名单零触碰
+_IMPORT_STATUS_WHITELIST = ("ready", "processing", "error", "degraded")
+
+
+class KBImportItem(BaseModel):
+    name: str
+    description: Optional[str] = None
+    status: Optional[str] = None
+    pointer_params: Optional[Dict[str, Any]] = None
+
+
+class KBImport(BaseModel):
+    class Item(KBImportItem):
+        pass
+
+    source: str = "tutor"
+    items: List[Item]
+
+
+@router.post("/import")
+def import_knowledge_bases(payload: KBImport, db: Session = Depends(get_db)):
+    """教学域 KB 注册表批量导入④——幂等 upsert（⑤R B0）。
+
+    定位键：name + type=connected + pointer_params.source（重复导入零重复）；
+    一律 type=connected（R2 D6：删除只删注册行，外部索引零触碰）；
+    rag_provider=tutor_dt（B0 新值）——检索不透传④（教学域走原通道，search 有守卫）。
+    变更记录：m15 spec 头部（B0 追加行）。"""
+    source = (payload.source or "").strip() or "tutor"
+    imported = updated = 0
+    touched = []
+    for it in payload.items:
+        name = (it.name or "").strip()
+        pp = dict(it.pointer_params or {})
+        if not name:
+            raise HTTPException(status_code=422, detail="导入项 name 不能为空")
+        if not pp.get("source"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"导入项 {name or '?'} pointer_params.source 必填（upsert 定位键）")
+        status = (it.status or "ready").strip().lower()
+        if status not in _IMPORT_STATUS_WHITELIST:
+            raise HTTPException(
+                status_code=422,
+                detail=f"status 白名单: {'/'.join(_IMPORT_STATUS_WHITELIST)}（收到 {status}）")
+        pp.setdefault("source", source)
+        pp["kb_name"] = pp.get("kb_name") or name
+        row = db.query(KnowledgeBase).filter(
+            KnowledgeBase.name == name,
+            KnowledgeBase.type == "connected",
+            KnowledgeBase.rag_provider == _TUTOR_DT_PROVIDER).first()
+        if row is not None and (row.pointer_params or {}).get("source") != source:
+            row = None
+        if row is None:
+            kb_id = str(uuid.uuid4())
+            row = KnowledgeBase(
+                id=kb_id, name=name, description=it.description,
+                collection_name=_collection_name(kb_id), storage_dir=kb_id,
+                doc_count=0, vector_count=0,
+                type="connected", rag_provider=_TUTOR_DT_PROVIDER,
+                pointer_params=pp, status=status, enabled=True)
+            db.add(row)
+            imported += 1
+        else:
+            row.description = it.description
+            row.pointer_params = pp
+            row.status = status
+            updated += 1
+        touched.append(name)
+    db.commit()
+    return {"code": 200, "data": {"imported": imported, "updated": updated,
+                                  "source": source, "names": touched}}
+
+
 # ---------- CRUD ----------
 
 @router.get("")
@@ -421,6 +496,11 @@ def search_knowledge_base(kb_id: str, payload: KBSearch, db: Session = Depends(g
 
     # ④批2：type 分路——connected→指针族透传（外部 ES）；indexed→Qdrant 相似检索
     if (kb.type or "indexed") == "connected":
+        # ⑤R B0：tutor 域导入行不透传④——教学域检索走原通道（vendor 栈），诚实 422
+        if kb.rag_provider == "tutor_dt" or (kb.pointer_params or {}).get("source") == "tutor":
+            raise HTTPException(
+                status_code=422,
+                detail="tutor 域 KB 检索走教学域原通道（vendor 栈）——④不透传")
         from app.services.kb_engines.connected_es import ConnectedESFamily
         params = dict(kb.pointer_params or {})
         fam = ConnectedESFamily(params)

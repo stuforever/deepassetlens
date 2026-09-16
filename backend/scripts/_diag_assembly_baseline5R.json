@@ -27,7 +27,7 @@
   "files_hash": "d56da628b24ddeff",
   "seeded_files": 71,
   "expert_id": "wenshu",
-  "card_version": 109,
+  "card_version": 111,
   "memory_trace": "inactive",
   "tool_availability_installed": [
    "analyze_wrong_questions",
@@ -55,9 +55,9 @@
    "execute_sql"
   ]
  },
- "version": 284,
- "agent_key": "ae9805a7-ac5a-48a3-a4d4-37916f1032ed",
- "capability_version": 284,
+ "version": 286,
+ "agent_key": "fb5bd879-2095-469e-a220-f9f72764e1b1",
+ "capability_version": 286,
  "tool_universe": [
   "analyze_wrong_questions",
   "batch_entity_source_mode",

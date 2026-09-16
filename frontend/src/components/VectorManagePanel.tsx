@@ -485,6 +485,10 @@ const VectorManagePanel: React.FC = () => {
         ];
 
   // ---------- 渲染：KB 卡片 ----------
+  // ⑤R B0（批2.3）：tutor 域导入行判定——注册表镜像，机制面走教学域原通道
+  const isTutorKb = !!(activeKb && (activeKb.rag_provider === 'tutor_dt'
+    || ((activeKb.pointer_params || {}) as any).source === 'tutor'));
+
   const renderKbCard = (kb: any) => {
     const preset = KB_STATUS_PRESET[kb.status] || 'default';
     return (
@@ -495,6 +499,7 @@ const VectorManagePanel: React.FC = () => {
             <FileTextOutlined />
             <Text strong>{kb.name}</Text>
             <StatusTag preset={preset as any}>{kb.status}</StatusTag>
+            {kb.rag_provider === 'tutor_dt' && <Tag color="purple">tutor 域</Tag>}
           </Space>
         }
         extra={
@@ -698,13 +703,19 @@ const VectorManagePanel: React.FC = () => {
                       <Text type="secondary" style={{ fontSize: 12 }}>（全量重建：会清空旧向量后重新生成；对账标 stale 的文档在重嵌前检索照常）</Text>
                     </>
                   )}
-                  {(activeKb.type || 'indexed') === 'connected' && (
+                  {(activeKb.type || 'indexed') === 'connected' && !isTutorKb && (
                     <Text type="secondary" style={{ fontSize: 12 }}>指针型知识库：检索实时透传外部索引，无向量化工序。</Text>
+                  )}
+                  {isTutorKb && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      tutor 域导入库（教学域注册表镜像）：文档管理/解析状态/检索测试走教学域原通道（tutor 知识库），本页仅注册表浏览；指针参数 {(JSON.stringify(activeKb.pointer_params) || '').slice(0, 120)}
+                    </Text>
                   )}
                 </Space>
               </Card>
 
-              {/* 上传文档 */}
+              {/* 上传文档（tutor 域导入行不开放——教学域通道） */}
+              {!isTutorKb && (
               <Card size="small" title="上传文档（支持 .txt / .md）">
                 <Upload.Dragger
                   accept=".txt,.md,.markdown"
@@ -731,6 +742,14 @@ const VectorManagePanel: React.FC = () => {
                   </Button>
                 )}
               </Card>
+              )}
+              {isTutorKb && (
+                <Card size="small" title="文档管理（教学域通道）">
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    tutor 域知识库的文档上传/文件树/解析进度由教学域管理（tutor 知识库页——vendor 通道），本页为注册表镜像不重复入口。
+                  </Text>
+                </Card>
+              )}
 
               {/* 文档列表 */}
               <Card size="small" title={`文档列表（${activeKb.documents?.length || 0}）`}>
@@ -760,7 +779,8 @@ const VectorManagePanel: React.FC = () => {
                 />
               </Card>
 
-              {/* 检索测试 */}
+              {/* 检索测试（tutor 域导入行不开放——走教学域原通道） */}
+              {!isTutorKb && (
               <Card size="small" title="检索测试">
                 <Space wrap style={{ marginBottom: 12 }}>
                   <Input
@@ -793,6 +813,7 @@ const VectorManagePanel: React.FC = () => {
                   )}
                 />
               </Card>
+              )}
             </Space>
           </Spin>
         )}
