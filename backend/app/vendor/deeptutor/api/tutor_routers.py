@@ -18,6 +18,11 @@ _auth = [Depends(_dt_require_auth)]
 from deeptutor.api.routers import mother_question  # noqa: E402
 from deeptutor.api.routers import knowledge as knowledge_router  # noqa: E402
 from deeptutor.api.routers import question, quiz_judge  # noqa: E402
+from deeptutor.api.routers import (  # noqa: E402
+    learner_profile,
+    mastery_path,
+    self_learning,
+)
 from deeptutor.learning.curriculum import router as curriculum_router  # noqa: E402
 
 tutor_routers = [
@@ -30,6 +35,10 @@ tutor_routers = [
     # 原挂载（原仓 main.py L442/L566）：question 带 _auth，quiz_judge 自带 ws_require_auth
     (question.router, "/api/v1/question", ["question"], _auth),
     (quiz_judge.router, "/api/v1", ["quiz-judge"], None),
+    # ⑤R B3：学习闭环——原挂载（原仓 main.py L448/L458/L571）
+    (learner_profile.router, "/api/v1/learning", ["learner-profile"], _auth),
+    (mastery_path.router, "/api/v1/learning", ["mastery-path"], _auth),
+    (self_learning.router, "/api/v1/self-learning", ["self-learning"], _auth),
 ]
 
 

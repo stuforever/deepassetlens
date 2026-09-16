@@ -60,7 +60,7 @@ def deep_diff(a, b, path=""):
 import urllib.request
 import urllib.error
 
-samples = sorted(BASE.glob("api__v1__curriculum*.json")) + sorted(BASE.glob("api__v1__mother-questions*.json")) + sorted(BASE.glob("api__v1__knowledge*.json"))
+samples = sorted(BASE.glob("api__v1__curriculum*.json")) + sorted(BASE.glob("api__v1__mother-questions*.json")) + sorted(BASE.glob("api__v1__knowledge*.json")) + sorted(BASE.glob("api__v1__learning*.json")) + sorted(BASE.glob("api__v1__self-learning*.json"))
 print("B1 域样例:", len(samples))
 results = []
 for f in samples:
