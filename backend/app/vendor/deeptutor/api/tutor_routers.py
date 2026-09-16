@@ -25,12 +25,16 @@ from deeptutor.api.routers import (  # noqa: E402
 )
 from deeptutor.api.routers import (  # noqa: E402
     book,
+    capabilities_settings,
     dashboard,
     h5_links,
     imports,
+    mcp_settings,
+    memory,
     notebook,
     question_notebook,
     sessions,
+    settings,
     voice,
     wechat_push,
 )
@@ -64,6 +68,15 @@ tutor_routers = [
     # ⑤R F2（批9）：sessions 原挂载（原 main.py L491）——h5/chat 会话列表/重命名/删除/
     # 分支选择/quiz-results 消费方（端点审计 _b9_endpoint_audit 活探 404→真缺口）
     (sessions.router, "/api/v1/sessions", ["sessions"], _auth),
+    # ⑤R F3（批10）：memory 原挂载（原 main.py L483）——memory 分层视图并入
+    # MemoryAdmin（单套不双轨）的端点面：overview/doc CRUD/runs/trace/snapshot/resolve
+    (memory.router, "/api/v1/memory", ["memory"], _auth),
+    # ⑤R F3（批10）：settings 族原挂载（原 main.py L485/L500/L503）——settings 45 端点
+    # （llm-options=H5 chat 依赖/chat-attachments/document-parsing/network/tour 等）+
+    # capabilities_settings（能力开关）+ mcp_settings（MCP 配置）——活探 404→真缺口闭合
+    (capabilities_settings.router, "/api/v1/capabilities", ["capabilities"], _auth),
+    (settings.router, "/api/v1/settings", ["settings"], _auth),
+    (mcp_settings.router, "/api/v1/settings/mcp", ["mcp-settings"], None),
 ]
 
 

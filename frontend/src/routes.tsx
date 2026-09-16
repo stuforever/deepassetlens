@@ -30,6 +30,8 @@ const ExpertPortal = lazy(() => import(/* webpackChunkName: "expert-portal" */ '
 const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pages/expert/ExpertChat'));
 // 记忆插槽②批6：记忆管理页（平台管理区，admin-only）
 const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './pages/MemoryAdmin'));
+// ⑤R F3（批10）：对话附件上限设置（chat-attachments 最小补件，admin-only）
+const AttachmentSettings = lazy(() => import(/* webpackChunkName: "attachment-settings" */ './pages/AttachmentSettings'));
 const ExpertGrants = lazy(() => import(/* webpackChunkName: "expert-grants" */ './pages/ExpertGrants'));
 // 附件四 A-1：tutor 后台首页骨架（A-2 填卡配置编辑面实体）+守卫雏形（A-4 升级 ACL 分层）
 const TutorAdminHome = lazy(() => import(/* webpackChunkName: "tutor-admin" */ './pages/tutor/admin/AdminHome'));
@@ -67,6 +69,7 @@ export const routes: RouteConfig[] = [
   { path: '/vector', element: VectorManagePanel, label: '向量管理', menuKey: 'vector_manage' },
   { path: '/llm-config', element: LLMConfigManager, label: 'LLM 配置', menuKey: 'llmconfig' },
   { path: '/memory-admin', element: MemoryAdmin, label: '记忆管理', menuKey: 'memory_admin' },
+  { path: '/attachment-settings', element: AttachmentSettings, label: '对话附件上限', menuKey: 'attachment_settings' },
   // ⑥-2a B-2：专家赋权管理面（平台配置层——grant 三端点复用，admin-only）
   { path: '/expert-grants', label: '专家赋权', menuKey: 'expert_grants',
     element: (() => <RequireAdmin><ExpertGrants /></RequireAdmin>) as any },

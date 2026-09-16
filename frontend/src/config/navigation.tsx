@@ -24,6 +24,7 @@ import {
   FundOutlined,
   ThunderboltOutlined,
   FileSearchOutlined,
+  FileTextOutlined,
   PoweroffOutlined,
 } from '@ant-design/icons';
 
@@ -95,6 +96,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { menuKey: 'golden_qa', label: '金标锚定管理', path: '/golden-qa', icon: FileSearchOutlined },
       // 记忆插槽②批6：记忆管理（平台管理区，admin-only 页）
       { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
+      // ⑤R F3（批10）：对话附件上限（chat-attachments 最小补件）
+      { menuKey: 'attachment_settings', label: '对话附件上限', path: '/attachment-settings', icon: FileTextOutlined },
     ],
   },
   {
