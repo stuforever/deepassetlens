@@ -85,3 +85,9 @@
 - 浏览器绑定复用：首次 `globalThis.browser = await agent.browsers.get("iab")`，后续轮次复用同一绑定；每个标签页操作批次前先 `await browser.tabs.list()` 确认目标，再 `browser.tabs.get(id)` 激活，绝不按数组下标盲选。
 - 读页面优先用 `await tab.playwright.domSnapshot()`（AI/ARIA 树）定位元素、构造 locator；仅在需要视觉确认布局/样式/渲染时才 `tab.screenshot()` 并配 `nodeRepl.emitImage()`，同一 JS 单元默认不既快照又截图。
 - **不要和过时的 `mcp__playwright__*` 混淆**——当前环境无 Playwright MCP 服务，唯一入口是 `mcp__node_repl__js` + `agent.browsers`（IAB）。
+
+## 复刻开发纪律（2026-09-16 用户定调，永久生效）
+
+- 实施窗口**必须用技能**执行计划（executing-plans/systematic-debugging/verification-before-completion 等 superpowers 技能，开场宣布）；
+- **完整复刻原有功能 1:1**（页面/子页面/字段/端点/能力一级不漏、一字不改），**不许重写新逻辑、不许「等价实现」糊弄**——对拍不一致必须修到一致或停下问用户，不许私自裁剪；
+- 复刻任务总账=`docs/superpowers/plans/2026-09-12-唯一交棒-全部未完成任务.md`（唯一交棒，自包含 20 批）；没有对拍证据的批不算完成、不许 commit。
