@@ -13,7 +13,38 @@ from app.api.experts import router
 
 
 @pytest.fixture()
-def client(monkeypatch):
+def client(monkeypatch, tmp_path):
+    # ⑤R B2 登记的隔离修正：真实库存在并发写者（live 后端/管理 UI 与测试交替写 tutor 卡，
+    # version 177-181 实录）——PATCH/GET 竞态致 A-4 断言不稳。本文件改 hermetic：
+    # tmp SQLite + 种子 tutor 卡，monkeypatch 模块级 SessionLocal（experts/expert_config
+    # 均为函数内 `from app.core.database import SessionLocal`，改源模块属性即全覆盖）。
+    import app.core.database as _db
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models.base import ExpertEvent, ExpertProfile
+
+    eng = create_engine(f"sqlite:///{tmp_path}/experts.db",
+                        connect_args={"check_same_thread": False})
+    Base = ExpertProfile.metadata
+    Base.create_all(eng, tables=[ExpertProfile.__table__, ExpertEvent.__table__])
+    TestSess = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+    monkeypatch.setattr(_db, "SessionLocal", TestSess)
+    # expert_config 的模块级 TTL 缓存会残留真实库行（含 kb:{uuid} 引用→SQLite 无该表崩）——
+    # 每测重置缓存，读路径落回本测 SQLite 种子。
+    import threading as _threading
+
+    from app.services import expert_config as _ec
+
+    monkeypatch.setattr(_ec, "_CACHE",
+                        {"rows": None, "ts": 0.0, "version": None,
+                         "lock": _threading.Lock()})
+    seed = TestSess()
+    seed.add(ExpertProfile(expert_id="tutor", name="tutor", enabled=True,
+                           entry_kind="chat", system_prompt="s", version=1))
+    seed.commit()
+    seed.close()
+
     app = FastAPI()
     app.include_router(router)
     # 匿名=admin（auth=0 基线；B 批前执法不拦测试）

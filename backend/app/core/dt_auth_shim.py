@@ -7,7 +7,11 @@
   vendor 子树全部复刻 router 经由本 shim 的 require_auth，教学域对非授权 expert 关闭；
 - ENABLE_AUTH=1：get_current_user 验 JWT，admin 判定走 tupu 角色模型；
 - vendor 内部 handler 的 `multi_user.context.get_current_user()`（ContextVar+local_admin
-  桌面语义、?u= 选择）原样保留——不改 vendor 一行。"""
+  桌面语义、?u= 选择）原样保留——不改 vendor 一行。
+
+批4 B2 实测修正（登记）：vendor 路由挂载改用 vendored auth.require_auth（原结构照搬）——
+其 Header/Cookie 形签名对 WS 路由可解（Request 形 shim 在 WS 域不可解致握手 500）；
+auth=0 下两者行为等价（放行+桌面语义）。本模块保留：auth=1 单点接线位（批18/20.2/20.3）。"""
 from typing import Any
 
 from fastapi import HTTPException, Request
