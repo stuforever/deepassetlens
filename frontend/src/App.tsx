@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Input, AutoComplete, ConfigProvider, Badge } from 'antd';
 import { SearchOutlined, ThunderboltFilled } from '@ant-design/icons';
@@ -18,7 +18,7 @@ import { antdThemeToken, antdComponents, tokens } from './theme/tokens';
 import UserBadge from './components/UserBadge';
 import AppSider from './components/AppSider';
 import AppTabs, { type PageTab } from './components/AppTabs';
-import { expertPageRoutes } from './config/expertPages';
+import { expertPageRoutes, matchExpertPage } from './config/expertPages';
 
 const { Header, Content } = Layout;
 
@@ -39,6 +39,9 @@ const App: React.FC = () => {
   ]);
   const [activeTabKey, setActiveTabKey] = useState(PINNED_KEY);
 
+  // ⑤R F1：参数路由（:mid 等）页签记忆——切回页签时导航到最后一次真实路径（字面 ':mid' 不可导航）
+  const lastPathByMenuKey = useRef<Map<string, string>>(new Map());
+
   const switchToMenu = useCallback(
     (menuKey: string) => {
       // 附件四 A-1：专家区动态键（e:{slug}:{chat|admin|page}）——EXPERT_PAGES 注册表优先，
@@ -47,6 +50,10 @@ const App: React.FC = () => {
         const [, slug, sub] = menuKey.split(':');
         if (sub === 'admin') { navigate(`/e/${slug}/admin`); return; }
         const pg = expertPageRoutes().find((p) => p.menuKey === menuKey);
+        if (pg && pg.path.includes(':')) {
+          navigate(lastPathByMenuKey.current.get(menuKey) || pg.path);
+          return;
+        }
         navigate(pg ? pg.path : `/e/${slug}/chat`);
         return;
       }
@@ -90,9 +97,11 @@ const App: React.FC = () => {
       const slug = location.pathname.split('/')[2] || 'wenshu';
       // 附件四 A-1：后台路径特判（admin 不在 EXPERT_PAGES 注册表——独立页签）
       const isAdminPath = location.pathname.endsWith('/admin');
-      const pageCfg = expertPageRoutes().find((p) => p.path === location.pathname);
+      // ⑤R F1：先精确后参数模式（:mid 详情页等参数路由——原精确匹配永不命中落 chat 兜底）
+      const pageCfg = matchExpertPage(location.pathname);
       const menuKey = isAdminPath ? `e:${slug}:admin` : (pageCfg ? pageCfg.menuKey : `e:${slug}:chat`);
       const label = isAdminPath ? `${slug} 后台` : (pageCfg ? pageCfg.label : `专家 ${slug}`);
+      if (menuKey.startsWith('e:')) lastPathByMenuKey.current.set(menuKey, location.pathname);
       setPageTabs((prev) => {
         if (prev.find((t) => t.key === menuKey)) return prev;
         const newTabs = [...prev, { key: menuKey, label, menuKey }];
