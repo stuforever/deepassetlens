@@ -30,6 +30,7 @@ from deeptutor.api.routers import (  # noqa: E402
     imports,
     notebook,
     question_notebook,
+    sessions,
     voice,
     wechat_push,
 )
@@ -60,6 +61,9 @@ tutor_routers = [
     # 1.10 判定=全还原（前会话对账）：voice/wechat_push 原挂载（原 main.py L537/L538）
     (voice.router, "/api/v1/voice", ["voice"], _auth),
     (wechat_push.router, "/api/v1/wechat", ["wechat-push"], _auth),
+    # ⑤R F2（批9）：sessions 原挂载（原 main.py L491）——h5/chat 会话列表/重命名/删除/
+    # 分支选择/quiz-results 消费方（端点审计 _b9_endpoint_audit 活探 404→真缺口）
+    (sessions.router, "/api/v1/sessions", ["sessions"], _auth),
 ]
 
 
