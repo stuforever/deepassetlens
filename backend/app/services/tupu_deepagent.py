@@ -1005,13 +1005,9 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         _rf = [t for t in _all_mcp if getattr(t, "name", "") == "read_file"]
         if _rf and "read_file" not in {getattr(t, "name", "") for t in mcp_tools}:
             mcp_tools = mcp_tools + _rf
-    # 🔴-4（审查 2026-09-15）+⑥-2a B-0（2026-09-16）：教学九件进程内 twin——共享桶已拆除
-    # （恒 anonymous 解析不复存在）：twin 在本进程执行，用户经 memory_runtime ContextVar
-    # 随请求解析（current_user_strict fail-closed，B-0 首测 test_expert_acl.py 自证隔离）。
-    # 九件名面/描述面与 MCP 版逐字一致（单源 SPECS），对模型与窄化逻辑零感知。
-    from app.services.learning.tutor_inprocess import build_inprocess_tutor_tools
-    _tutor_twins = {t.name: t for t in build_inprocess_tutor_tools()}
-    mcp_tools = [_tutor_twins.get(t.name, t) for t in mcp_tools]
+    # ⑤R R1（批12）：教学九件进程内 twin 随先行版教学面退役移除——
+    # 先行版 MCP 教学工具族已从 mcp_server 注册表摘除（twin 覆盖层失锚），
+    # 教学能力由 vendor 复刻件（deeptutor learning 原生工具+路由族）承接。
 
     def _cap(cid: str) -> dict:
         return caps.get(cid) or {}

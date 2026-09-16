@@ -17,11 +17,12 @@ def _fresh_cache():
 
 
 def test_默认全勾_排除清单等于红线五件():
-    """默认 allowed=勾选域全勾 -> excluded=红线 5 件∪教学 9 件（⑤批2：教学族进
-    universe 但默认不勾——对问数面排除=wenshu 零感知的正确表达）。"""
-    from app.services.query_contract import TUTOR_TOOLS
+    """默认 allowed=勾选域全勾 -> excluded=红线 5 件。
+    ⑤R R1（批12）：教学工具族 11 件已从 mcp_server 注册表退役摘除（退出 universe/
+    GENERIC_ALLOWED_TOOLS）——excluded 不再含教学件，wenshu 零感知由「注册表不存在」
+    结构性保证；TUTOR_TOOLS 冻结名单留作防御性剔除依据（不再参与 excluded 换算）。"""
     out = cc.get_tool_exclusions()
-    assert sorted(out["excluded"]) == sorted(set(cc.W1_REDLINE_EXCLUSIONS) | set(TUTOR_TOOLS))
+    assert sorted(out["excluded"]) == sorted(cc.W1_REDLINE_EXCLUSIONS)
     assert out["locked"] == cc.W1_LOCKED_TOOLS
 
 

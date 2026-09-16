@@ -14,13 +14,8 @@ import RequireAdmin from '../components/RequireAdmin';
 const withAdminGuard = (C: ComponentType<any>): ComponentType<any> => (props: any) =>
   createElement(RequireAdmin, null, createElement(C, props));
 
-// ⑤e 四页（懒加载，chunk 独立）+ ⑤补补-3 自主学习页 + ⑤补补-4 精通之路页
-export const TutorPractice = lazy(() => import(/* webpackChunkName: "tutor-practice" */ '../pages/tutor/TutorPractice'));
-export const TutorWrongBook = lazy(() => import(/* webpackChunkName: "tutor-wrongbook" */ '../pages/tutor/TutorWrongBook'));
-export const TutorReview = lazy(() => import(/* webpackChunkName: "tutor-review" */ '../pages/tutor/TutorReview'));
-export const TutorProgress = lazy(() => import(/* webpackChunkName: "tutor-progress" */ '../pages/tutor/TutorProgress'));
-export const TutorLearn = lazy(() => import(/* webpackChunkName: "tutor-learn" */ '../pages/tutor/TutorLearn'));
-export const TutorPath = lazy(() => import(/* webpackChunkName: "tutor-path" */ '../pages/tutor/TutorPath'));
+// ⑤R R1（批12）：先行版六页退役（TutorLearn/Path/Practice/Review/WrongBook/Progress）——
+// §3.3.5 终版菜单由 DT h5 复刻件（TUTOR_H5_PAGES）取代，本表注册项随批12 移除。
 
 // ⑤R F1（批8）：工作台组→tutor 后台（复刻原仓 (workspace)/mother-questions×6+book+(utility)/settings/curriculum）
 const MotherQuestionsAdmin = lazy(() => import(/* webpackChunkName: "dt-mq-admin" */ '../pages/tutor/admin/MotherQuestionsAdmin'));
@@ -100,13 +95,7 @@ export interface ExpertPageConfig {
 
 export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
   tutor: [
-    // ⑤R F4（批11）：先行版六页 hideInMenu（§3.3.5 终版菜单=DT h5 复刻件取代；路由保留至 R1 退役）
-    { path: '/e/tutor/learn', element: TutorLearn, label: '自主学习', menuKey: 'e:tutor:learn', hideInMenu: true },
-    { path: '/e/tutor/path', element: TutorPath, label: '精通之路', menuKey: 'e:tutor:path', hideInMenu: true },
-    { path: '/e/tutor/practice', element: TutorPractice, label: '练习', menuKey: 'e:tutor:practice', hideInMenu: true },
-    { path: '/e/tutor/review', element: TutorReview, label: '复习', menuKey: 'e:tutor:review', hideInMenu: true },
-    { path: '/e/tutor/wrong-book', element: TutorWrongBook, label: '错题本', menuKey: 'e:tutor:wrongbook', hideInMenu: true },
-    { path: '/e/tutor/progress', element: TutorProgress, label: '学情', menuKey: 'e:tutor:progress', hideInMenu: true },
+    // ⑤R R1（批12）：先行版六页退役移除（§3.3.5 终版=DT h5 复刻件）
     ...TUTOR_ADMIN_PAGES,
     ...TUTOR_H5_PAGES,
   ],

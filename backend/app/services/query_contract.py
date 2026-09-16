@@ -23,13 +23,16 @@ logger = logging.getLogger(__name__)
 # 严格解析；HTTP MCP 面 fail-closed。见 tutor_inprocess.py）；
 # 但 **expert_config 推导 wenshu/存量卡 tools 时剔除本族**（wenshu 零感知铁律——
 # 教学工具只进 tutor 卡显式 tools，不随「全集=卡 tools」推导泄漏进问数面）。
+# ⑤R R1（批12）：先行版教学工具族已从 mcp_server 注册表退役摘除——本集合保留为
+# **冻结名单**（零感知防御性剔除依据：expert_config 仍从 generic 并集剔除本族，
+# 防未来同名重注册泄漏进问数面）；GENERIC_ALLOWED_TOOLS 不再并入本族（P0 幽灵名闸门）。
 TUTOR_TOOLS = frozenset({
     "fsrs_due", "fsrs_review", "mastery_query", "grade_answer", "generate_practice",
     "select_exercises", "wrong_question_add", "wrong_question_query", "export_wrong_book",
     "mother_question_find_or_create", "analyze_wrong_questions",   # ⑤补补-5 +2（错题全套）
 })
 
-# 默认只读通用能力（未命中场景时的低权限模式工具集）＝基础族 ∪ 教学族
+# 默认只读通用能力（未命中场景时的低权限模式工具集）＝基础族（R1 起不含教学族——已退役）
 GENERIC_ALLOWED_TOOLS = frozenset({
     # 定位类（只读元数据）
     "fetch_l1_l2_tree", "validate_l2", "fetch_subgraph",
@@ -44,7 +47,7 @@ GENERIC_ALLOWED_TOOLS = frozenset({
     "execute_sql", "execute_doris_sql", "execute_api_sql", "execute_entity_api",
     # 只读技能文件（deepagents 框架工具，非 MCP）
     "read_file",
-}) | TUTOR_TOOLS
+})
 # 绝对禁止的工具（任何契约下都不可调用）
 ABSOLUTE_FORBIDDEN_TOOLS = frozenset({
     "task",        # 子 Agent

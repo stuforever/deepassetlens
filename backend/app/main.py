@@ -241,10 +241,13 @@ async def lifespan(app: FastAPI):
         logger.warning(f"[startup] capabilities 列迁移异常（不阻启动）: {_cap_err}")
     # ⑤批1（spec §二 Runbook 步骤1）：教学引擎 PG 四表（幂等；失败不阻启动——教学工具
     # 面返回可读错误，L1/L2/L3 记忆不受影响）。
+    # ⑤R R1（批12）：四表冻结（learning_review_cards/learning_review_records/
+    # learning_wrong_questions/learning_mother_questions 保留不迁移不删除；
+    # 先行版端点/工具面已退役，表=专家域数据自隔离铁律下的冻结存档，M00 已登记）。
     try:
         from app.services.learning.pg import ensure_tables
         ensure_tables()
-        logger.info("[startup] learning PG 四表确保完成（⑤教学引擎）")
+        logger.info("[startup] learning PG 四表确保完成（⑤教学引擎，R1 起冻结）")
     except Exception as _pg_err:
         logger.warning(f"[startup] learning PG 四表迁移异常（不阻启动）: {_pg_err}")
     # 记忆插槽②批2（spec §九步骤2）：AGENTS.md 受控搬迁（warmup 前；fail-fast——等值前提
@@ -333,12 +336,10 @@ app.include_router(guards.router)  # 自带 prefix="/api/guards"（安全控制�
 app.include_router(capabilities.router)  # 自带 prefix="/api/capabilities"（能力开关中心，批13-Q）
 from app.api import experts
 app.include_router(experts.router)  # 自带 prefix="/api/experts"（专家地基①）
-from app.api import tutor_admin
-app.include_router(tutor_admin.router)  # 自带 prefix="/api/tutor-admin"（⑤补补-1 题库 admin CRUD）
+# ⑤R R1（批12）：先行版 /api/tutor-admin 与 /api/tutor 两路由退役移除——
+# 能力由 vendor 复刻件承接（mother-questions/learning 走 vendor tutor_routers 装配表）。
 from app.api import memory
 app.include_router(memory.router)  # 自带 prefix="/api/memory"（记忆插槽②）
-from app.api import tutor as tutor_api
-app.include_router(tutor_api.router)  # 自带 prefix="/api/tutor"（⑤批4：教学页面数据端点——user 会话取，不收 user_id）
 
 # ⑤R B1（唯一交棒 批3.1）：vendor 子树挂载——原 prefix，端点契约不变。
 # tutor_routers=(router, prefix, tags, deps) 逐对对齐原仓 main.py 挂载表（随批次增长）；

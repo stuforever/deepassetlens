@@ -33,10 +33,9 @@ const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './
 // ⑤R F3（批10）：对话附件上限设置（chat-attachments 最小补件，admin-only）
 const AttachmentSettings = lazy(() => import(/* webpackChunkName: "attachment-settings" */ './pages/AttachmentSettings'));
 const ExpertGrants = lazy(() => import(/* webpackChunkName: "expert-grants" */ './pages/ExpertGrants'));
-// 附件四 A-1：tutor 后台首页骨架（A-2 填卡配置编辑面实体）+守卫雏形（A-4 升级 ACL 分层）
-const TutorAdminHome = lazy(() => import(/* webpackChunkName: "tutor-admin" */ './pages/tutor/admin/AdminHome'));
 // ⑤批4（⑤e）：专家自定义页——EXPERT_PAGES 注册表（①spec §七预留扩展点）实体化注入。
 // 卡是数据页面是代码：路由静态注册，可见性由卡 enabled 决定（卡关=门户/侧栏不渲染）。
+// ⑤R R1（批12）：TutorAdminHome（旧后台骨架）退役移除。
 
 export type RouteConfig = {
   path: string;
@@ -73,11 +72,10 @@ export const routes: RouteConfig[] = [
   // ⑥-2a B-2：专家赋权管理面（平台配置层——grant 三端点复用，admin-only）
   { path: '/expert-grants', label: '专家赋权', menuKey: 'expert_grants',
     element: (() => <RequireAdmin><ExpertGrants /></RequireAdmin>) as any },
-  // ⑤批4（⑤e）：专家自定义页（EXPERT_PAGES 首战=tutor 四页：练习/复习/错题本/学情）
+  // ⑤批4（⑤e）：专家自定义页（EXPERT_PAGES 注册表驱动；⑤R R1（批12）先行版六页已退役）
   ...expertPageRoutes().map((p) => ({ path: p.path, element: p.element as any, label: p.label, menuKey: p.menuKey })),
-  // 附件四 A-1：tutor 后台（守卫雏形包裹——非 admin 重定向首页）
-  { path: '/e/tutor/admin', label: 'tutor 后台', menuKey: 'e:tutor:admin',
-    element: (() => <RequireAdmin><TutorAdminHome /></RequireAdmin>) as any },
+  // ⑤R R1（批12）：旧 tutor 后台骨架 /e/tutor/admin 退役（AdminHome/AdminZones 删除；
+  // 后台三项顶级入口=ExpertPages 注册 adminTop 件；legacy 键 e:{slug}:admin 由 App.tsx 回落 chat）
   { path: '*', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
 ];
 
