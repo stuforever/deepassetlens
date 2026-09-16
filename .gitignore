@@ -57,6 +57,9 @@ _*.txt
 _*.md
 _*.tsv
 
+# === ⑤R vendor 专家工作区照搬数据（本地数据分区，禁止入库） ===
+backend/data/experts/
+
 # === 截图 / 临时图片 ===
 e2e/_screenshots/
 frontend/_screenshots/

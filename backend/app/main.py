@@ -340,6 +340,19 @@ app.include_router(memory.router)  # 自带 prefix="/api/memory"（记忆插槽�
 from app.api import tutor as tutor_api
 app.include_router(tutor_api.router)  # 自带 prefix="/api/tutor"（⑤批4：教学页面数据端点——user 会话取，不收 user_id）
 
+# ⑤R B1（唯一交棒 批3.1）：vendor 子树挂载——原 prefix，端点契约不变。
+# tutor_routers=(router, prefix, tags, deps) 逐对对齐原仓 main.py 挂载表（随批次增长）；
+# 静态挂载照原仓 L342-376（workspace 根走 DEEPTUTOR_HOME=DT_TUTOR_WORKSPACE_ROOT 单点）。
+from app.vendor.deeptutor.api.tutor_routers import static_mounts as _dt_static_mounts
+from app.vendor.deeptutor.api.tutor_routers import tutor_routers as _dt_tutor_routers
+
+for _r, _prefix, _tags, _deps in _dt_tutor_routers:
+    app.include_router(_r, prefix=_prefix, tags=_tags, dependencies=_deps)
+from fastapi.staticfiles import StaticFiles as _DtStaticFiles
+
+for _mp, _mdir, _mname in _dt_static_mounts():
+    app.mount(_mp, _DtStaticFiles(directory=str(_mdir)), name=_mname)
+
 # MCP Server（业务工具标准化，deepagent 和外部 client 共用，SSE 传输 /mcp/sse）
 from app.mcp_server import mount_mcp
 mount_mcp(app)
