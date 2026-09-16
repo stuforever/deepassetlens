@@ -97,8 +97,34 @@ async def run_prep(*, req: Any, agent: Any, memory_thread_id: str,
 
     try:
         _t_route = time.time()
-        _route = route_user_input(req.user_input, _conversation_ctx)
-        prep_timing["route_ms"] = round((time.time() - _t_route) * 1000)
+        # ⑤R E1 接线：非 wenshu 专家按卡 tools 面路由（专家卡面契约）——原仓语义=教学
+        # 代理带自身工具自由对话，无 wenshu 场景路由层。wenshu 卡维持原路由不变。
+        _card_tools = None
+        if getattr(req, "expert_id", "") and req.expert_id != "wenshu":
+            try:
+                from app.services import expert_config as _ec_route
+                _route_card = _ec_route.get_card(req.expert_id)
+                if _route_card and _route_card.get("tools"):
+                    _card_tools = list(_route_card["tools"])
+            except Exception as _ece:
+                logger.warning(f"[E1 卡面路由] 卡读取失败（降级 wenshu 路由）: {_ece}")
+        if _card_tools:
+            from app.services.query_contract import QueryContract
+            from app.services.skill_router import RouteResult, PRIORITY_GENERIC
+            _route = RouteResult(
+                route_type="expert_card", skill_id=f"expert:{req.expert_id}",
+                workflow_step="chat",
+                matched_rules=[f"expert_card: {req.expert_id} 卡面路由"],
+                route_reason="专家卡面路由（⑤R E1：卡 tools 面=契约面，不走 wenshu 场景剧本）",
+                fallback_level="none",
+                contract=QueryContract.for_expert_card(
+                    expert_id=req.expert_id, tools=_card_tools),
+                priority=PRIORITY_GENERIC,
+            )
+            prep_timing["route_ms"] = round((time.time() - _t_route) * 1000)
+        else:
+            _route = route_user_input(req.user_input, _conversation_ctx)
+            prep_timing["route_ms"] = round((time.time() - _t_route) * 1000)
     except Exception as _rte:
         logger.warning(f"[SkillRouter] 路由异常，降级为低权限通用契约: {_rte}")
         from app.services.query_contract import QueryContract

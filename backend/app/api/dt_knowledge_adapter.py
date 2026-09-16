@@ -52,7 +52,11 @@ def sync_registry_to_kb4() -> dict:
 
 
 def attach_tutor_knowledge_sources() -> list:
-    """tutor 卡 knowledge_sources 挂接：kb:{④id}（tutor_dt 行）——去重保既有。"""
+    """tutor 卡 knowledge_sources 挂接：kb:{④id}（tutor_dt 行）。
+
+    重建式语义（E1 实测修正）：非 kb: 项（ontology_graph 等白名单源）保留原序；
+    kb: 引用以 ④ 现行 tutor_dt 行为准重建——外部窗口删行后旧引用成僵尸
+    （422 knowledge_sources 声明的知识库不存在），merge 保留会固化僵尸。"""
     db = SessionLocal()
     try:
         rows = db.query(KnowledgeBase).filter(
@@ -64,11 +68,12 @@ def attach_tutor_knowledge_sources() -> list:
             logger.warning("tutor 专家卡不存在——挂接跳过（cards 初始化后重跑）")
             return []
         existing = list(card.knowledge_sources or [])
-        merged = existing + [k for k in kb_refs if k not in existing]
+        kept = [k for k in existing if not k.startswith("kb:")]
+        merged = kept + kb_refs
         if merged != existing:
             card.knowledge_sources = merged
             db.commit()
-            logger.info("tutor 卡 knowledge_sources 挂接 +%d", len(merged) - len(existing))
+            logger.info("tutor 卡 knowledge_sources 挂接重建：kept=%d +kb=%d", len(kept), len(kb_refs))
         return merged
     finally:
         db.close()

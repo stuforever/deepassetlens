@@ -210,6 +210,33 @@ class QueryContract:
             c.forbidden_tools = [t for t in c.forbidden_tools if t != "task"]
         return c
 
+    @classmethod
+    def for_expert_card(cls, *, expert_id: str, tools: List[str],
+                        route_reason: str = "") -> "QueryContract":
+        """专家卡面契约（⑤R E1 接线）：非 wenshu 专家按卡 tools 面路由，不走 wenshu 场景剧本。
+
+        语义=原仓 DeepTutor chat：教学代理带自身工具集自由对话（无场景路由层）。
+        allowed_tools=卡 tools + read_file（只读，卡记忆纪律 /memory/ 槽读取面）；
+        wenshu 数据工具（execute_sql 族）不在卡面即不可用——教学域聊天不再误入数据探查工作流。
+        """
+        allowed = sorted({str(t) for t in (tools or []) if t} | {"read_file"})
+        c = cls(
+            run_id=f"run_{uuid.uuid4().hex[:12]}",
+            skill_id=f"expert:{expert_id}",
+            skill_version="1.0",
+            workflow_step="chat",
+            allowed_tools=allowed,
+            forbidden_tools=[],
+            scope={"customer_names": [], "commitment": "none", "source": "user_input"},
+            output_mode="default",
+            route_reason=route_reason or f"专家卡面路由（expert={expert_id}，不走 wenshu 场景剧本）",
+            route_type="expert_card",
+            allow_subagents=False,
+            _runtime={"engine_locked": False, "result_obtained": False, "violations": 0},
+        )
+        c.forbidden_tools = [t for t in ABSOLUTE_FORBIDDEN_TOOLS if t not in c.allowed_tools]
+        return c
+
     # ------------------------------------------------------------------
     # 运行期更新（仅代码调用，模型不可改）
     # ------------------------------------------------------------------

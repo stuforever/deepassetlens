@@ -567,7 +567,8 @@ def _seed_files(store, ns: tuple, root: Path) -> int:
     return n
 
 
-def _build_dynamic_system_prompt(skill_hint: str = "", base: str = None) -> str:
+def _build_dynamic_system_prompt(skill_hint: str = "", base: str = None,
+                                 expert_card: bool = False) -> str:
     """构建动态 system_prompt（按技能分段注入）。
 
     Plan-Execute 和 ReAct 共用此函数，技能知识统一来源 SKILL.md。
@@ -578,8 +579,13 @@ def _build_dynamic_system_prompt(skill_hint: str = "", base: str = None) -> str:
         skill_hint: 可选技能名（如 "execute-sql" 续轮执行），为空时走自主模式
         base: 专家地基①（spec §五）：提示词基座，缺省 _BASE_ROLE（等值现状）；
               专家卡给定时用卡声明的静态基座逐字节替换（A2 对拍强约束）
+        expert_card: ⑤R E1——非 wenshu 专家卡为 True：只保留卡基座（+日期），
+              不注入 wenshu 工作流规则块（技能概要/SQL 流程/决策门/数据完整性/
+              通用规则均为数据探查域纪律；教学代理按原仓语义=自身人设+卡面工具纪律）
     """
     date_str = datetime.now().strftime("%Y-%m-%d")
+    if expert_card:
+        return (base if base is not None else _BASE_ROLE).replace("__CURRENT_DATE__", date_str)
     parts = [(base if base is not None else _BASE_ROLE).replace("__CURRENT_DATE__", date_str)]
 
     # 读 SKILL.md 替代 _SKILL_HINTS 字典，与 ReAct 模式共用同一份技能知识
@@ -979,7 +985,26 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     except Exception as _tse:
         logger.warning(f"[批5-C2] 工具排序失败（保持原序）: {_tse}")
     # 专家地基①：按卡窄化工具面（批5-C2 序保留；空交集拒装配 fail-closed，spec §五）
+    # ⑤R E1：W-1 运维排除分层——原实现把 get_tool_exclusions()（含「教学 11 件默认排除于
+    # 问数面」的 W-1 运维态）喂进 HarnessProfile（按 model 共享键、并集合并）→ 教学卡工具面
+    # 被共享键连带剥离（E1 实测：模型只见 8 件框架工具）。分层修正：
+    #   a) HarnessProfile 只喂安全红线 5 件（普适物理排除，model 级）；
+    #   b) W-1 运维排除（问数面白名单）在窄化后对 wenshu 卡生效（问数面语义原样）；
+    #   c) 非 wenshu 专家卡=卡面即授权（tools 声明即授权面，不被 W-1 连带）。
+    #   wenshu agent 工具面逐件等值（窄化∩card.tools 后再减 excluded16=原两级减法结果）。
+    _is_expert_card = bool(card and (card.get("expert_id") or "wenshu") != "wenshu")
     mcp_tools = _narrow_mcp_tools(mcp_tools, (card or {}).get("tools"))
+    if not _is_expert_card:
+        try:
+            _w1_excl = frozenset(_cc.get_tool_exclusions()["excluded"]) if _cc is not None else frozenset()
+        except Exception:
+            _w1_excl = frozenset()
+        mcp_tools = [t for t in mcp_tools if getattr(t, "name", "") not in _w1_excl]
+    if _is_expert_card:
+        _all_mcp = await mcp_client.get_tools()
+        _rf = [t for t in _all_mcp if getattr(t, "name", "") == "read_file"]
+        if _rf and "read_file" not in {getattr(t, "name", "") for t in mcp_tools}:
+            mcp_tools = mcp_tools + _rf
     # 🔴-4（审查 2026-09-15）+⑥-2a B-0（2026-09-16）：教学九件进程内 twin——共享桶已拆除
     # （恒 anonymous 解析不复存在）：twin 在本进程执行，用户经 memory_runtime ContextVar
     # 随请求解析（current_user_strict fail-closed，B-0 首测 test_expert_acl.py 自证隔离）。
@@ -1071,8 +1096,10 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     _cc = None
     try:
         from app.services import capability_config as _cc
-        _excl_cfg = _cc.get_tool_exclusions()
-        _excluded = frozenset(_excl_cfg["excluded"])
+        # ⑤R E1 分层：HarnessProfile（model 级共享键）只喂安全红线 5 件——W-1 运维排除
+        # 已折进 wenshu 卡窄化（见 _narrow 后减法）。原实现把运维态喂进共享键会把
+        # 非 wenshu 卡声明的工具连带剥离（并集合并，先装配者定态）。
+        _excluded = frozenset(_cc.W1_REDLINE_EXCLUSIONS)
     except Exception:
         _excluded = frozenset({"grep", "glob", "write_file", "edit_file", "execute"})
     # ②批补验注记（spec §五三重防线）：write_file/edit_file 的物理挂回**不走 excluded 减法**——
@@ -1139,11 +1166,13 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     _dg_cfg = _cc.get_decision_gate_config() if _cc is not None else {
         "enabled": os.getenv("TUPU_DECISION_GATE", "") == "1",
         "scope_tools": ["execute_sql", "execute_doris_sql", "execute_entity_api", "execute_api_sql"]}
-    if _dg_cfg["enabled"]:
+    if _dg_cfg["enabled"] and not bool(card and (card.get("expert_id") or "wenshu") != "wenshu"):
         from app.services.decision_gate import DecisionGateMiddleware
         middleware_list.append(DecisionGateMiddleware(scope_gated=frozenset(_dg_cfg["scope_tools"])))
         logger.info(f"[DecisionGate] 下一步判断闸门已装配（env={_dg_cfg.get('env_fallback') or '未设'}/管理页）："
                     f"全工具理由校验 + 范围强校验 {sorted(_dg_cfg['scope_tools'])}")
+    elif bool(card and (card.get("expert_id") or "wenshu") != "wenshu"):
+        logger.info("[DecisionGate] ⑤R E1：非 wenshu 专家卡不装判断闸门（原仓教学代理无此协议）")
     else:
         logger.warning("[DecisionGate] 下一步判断闸门未装配（env 未设=1 且管理页开关关）")
 
@@ -1228,7 +1257,11 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     agent = create_deep_agent(
             model=model,
             tools=mcp_tools,
-            system_prompt=_build_dynamic_system_prompt(base=(card or {}).get("system_prompt")),
+            system_prompt=_build_dynamic_system_prompt(
+                base=(card or {}).get("system_prompt"),
+                # ⑤R E1：非 wenshu 专家卡=纯净卡基座（无 wenshu 工作流规则块）
+                expert_card=bool(card and (card.get("expert_id") or "wenshu") != "wenshu"),
+            ),
             state_schema=TupuAgentState,
             context_schema=TupuAgentContext,  # F4: 原生运行时上下文（不进 checkpoint）
             response_format=_response_format,  # F5/批13-Q: 结构化最终答案（按能力开关装配）
@@ -1276,13 +1309,18 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         # 没勾的不在——换算结果即「没勾的」，红线 5 件恒在）
         try:
             from app.services import capability_config as _cc2
-            manifest_items["tool_availability_installed"] = sorted(_cc2.get_tool_exclusions()["excluded"])
+            # ⑤R E1 分层：探针记本卡实装排除=W-1 运维排除（仅 wenshu 卡承载）∪ 红线 5
+            _w1_applied = frozenset() if _is_expert_card else frozenset(_cc2.get_tool_exclusions()["excluded"])
+            manifest_items["tool_availability_installed"] = sorted(
+                _w1_applied | set(_cc2.W1_REDLINE_EXCLUSIONS))
         except Exception:
             manifest_items["tool_availability_installed"] = sorted(
                 {"grep", "glob", "write_file", "edit_file", "execute"})
         # 批13-W W-4：决策门装卸探针 + 参数一致性探针（params 声明==栈内实例 scope_gated）
-        manifest_items["decision_gate_installed"] = bool(_dg_cfg["enabled"])
-        manifest_items["scope_gated_installed"] = sorted(_dg_cfg["scope_tools"]) if _dg_cfg["enabled"] else []
+        # ⑤R E1：非 wenshu 专家卡不装闸门——探针记实装态（与 middleware_list 一致）
+        _dg_installed = bool(_dg_cfg["enabled"]) and not _is_expert_card
+        manifest_items["decision_gate_installed"] = _dg_installed
+        manifest_items["scope_gated_installed"] = sorted(_dg_cfg["scope_tools"]) if _dg_installed else []
         _ASSEMBLY_MANIFEST.clear()
         _ASSEMBLY_MANIFEST.update({
             "version": _cap_version(), "agent_key": connection_id or "__default__",

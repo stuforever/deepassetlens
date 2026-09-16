@@ -147,6 +147,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
 
             tool_results = {}
             think_stream = []
+            _e1_answer_acc = {"text": "", "round": ""}  # ⑤R E1：answer 类轮累积（expert_card 终采兜底）
             final_sent_at = [0.0]
             llm_round = [0]  # LLM 推理轮次计数器（每轮 ReAct 循环 +1）
             step_counter = [0]  # 工具调用步骤序号(每次 on_tool_start +1), 前端按 step_id 区分同名步骤
@@ -422,6 +423,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                             else:
                                 _rs["classifier"] = "answer"
                                 _mark("first_answer_token")
+                                _e1_answer_acc["text"] = _rs["accumulated"]  # ⑤R E1 流式兜底源
+                                _e1_answer_acc["round"] = _rid
                                 yield f"event: think_token\n"
                                 yield f"data: {json.dumps({'kind': 'answer_draft', 'round_id': _rid, 'delta': _rs['accumulated']}, ensure_ascii=False)}\n\n"
                                 continue
@@ -429,6 +432,9 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                         if _rs["classifier"] == "notes":
                             continue
                         _kind = "decision_draft" if _rs["classifier"] == "decision" else "answer_draft"
+                        if _kind == "answer_draft":
+                            _e1_answer_acc["text"] = _rs["accumulated"]  # ⑤R E1 流式兜底源
+                            _e1_answer_acc["round"] = _rid
                         yield f"event: think_token\n"
                         yield f"data: {json.dumps({'kind': _kind, 'round_id': _rid, 'delta': content}, ensure_ascii=False)}\n\n"
                         continue
@@ -921,19 +927,27 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
             # 统一最终交付构建（A-E 确定性降级）。
             # 替换旧的"二次 LLM 四段式总结"兜底：不再根据 rows[:3] 让模型总结全量结果，
             # 不再生成"定位实体"等内部过程内容作为业务答案；无模型最终文本时用纯 Python 确定性交付。
-            _delivery_result = _build_final_delivery(
-                user_input=req.user_input,
-                final_answer=final_answer,
-                structured=_structured,
-                sql_result=tool_results.get("sql_result"),
-                sql_error=tool_results.get("sql_error", ""),
-                sql_executed=tool_results.get("sql_executed", False),
-                l2_name=tool_results.get("l2_name", ""),
-                entity_name=tool_results.get("entity_name", ""),
-            )
-            final_answer = _delivery_result["final_answer"]
-            final_delivery = _delivery_result["final_delivery"]
-            _structured_degraded = _delivery_result["degraded"]  # true=GLM 未产出结构化，用文本/确定性交付
+            # ⑤R E1：expert_card 契约（教学域）跳过 wenshu 结果信封——原仓 chat 语义=模型
+            # 文本直出（讲题/判分回答不被「未查询到…」模板替换）。
+            if _contract is not None and getattr(_contract, "route_type", "") == "expert_card":
+                if not final_answer and _e1_answer_acc["text"]:
+                    final_answer = _e1_answer_acc["text"]  # 流式 answer 轮兜底（防终采丢失）
+                final_delivery = {"answer": final_answer, "recommendations": []}
+                _structured_degraded = False
+            else:
+                _delivery_result = _build_final_delivery(
+                    user_input=req.user_input,
+                    final_answer=final_answer,
+                    structured=_structured,
+                    sql_result=tool_results.get("sql_result"),
+                    sql_error=tool_results.get("sql_error", ""),
+                    sql_executed=tool_results.get("sql_executed", False),
+                    l2_name=tool_results.get("l2_name", ""),
+                    entity_name=tool_results.get("entity_name", ""),
+                )
+                final_answer = _delivery_result["final_answer"]
+                final_delivery = _delivery_result["final_delivery"]
+                _structured_degraded = _delivery_result["degraded"]  # true=GLM 未产出结构化，用文本/确定性交付
             if _structured_degraded and final_answer:
                 logger.info("[FreePlan] response_format 降级：GLM 未产出结构化结果，使用文本/确定性交付")
 
@@ -958,7 +972,11 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                     yield _f
 
             # 推送推荐问题（优先 final_delivery.recommendations，其次从 final_answer 提取，再默认兜底）
-            recs = build_recommendations(final_delivery, final_answer)
+            # ⑤R E1：expert_card（教学域）不出 wenshu 推荐兜底（原仓 chat 无推荐 chips）
+            if _contract is not None and getattr(_contract, "route_type", "") == "expert_card":
+                recs = []
+            else:
+                recs = build_recommendations(final_delivery, final_answer)
             for _f in sse_frames("recommend", {"questions": [{"label": r, "shortcut": r} for r in recs]}):
                 yield _f
 
