@@ -23,6 +23,16 @@ from deeptutor.api.routers import (  # noqa: E402
     mastery_path,
     self_learning,
 )
+from deeptutor.api.routers import (  # noqa: E402
+    book,
+    dashboard,
+    h5_links,
+    imports,
+    notebook,
+    question_notebook,
+    voice,
+    wechat_push,
+)
 from deeptutor.learning.curriculum import router as curriculum_router  # noqa: E402
 
 tutor_routers = [
@@ -39,6 +49,17 @@ tutor_routers = [
     (learner_profile.router, "/api/v1/learning", ["learner-profile"], _auth),
     (mastery_path.router, "/api/v1/learning", ["mastery-path"], _auth),
     (self_learning.router, "/api/v1/self-learning", ["self-learning"], _auth),
+    # ⑤R B4：配套件——原挂载（原仓 main.py L453/L455/L480/L482/L494/L578/L586/L537/L538）
+    (notebook.router, "/api/v1/notebook", ["notebook"], _auth),
+    (question_notebook.router, "/api/v1/question-notebook", ["question-notebook"], _auth),
+    (book.router, "/api/v1/book", ["book"], _auth),
+    (imports.router, "/api/v1/imports", ["imports"], _auth),
+    (dashboard.router, "/api/v1/dashboard", ["dashboard"], _auth),
+    (h5_links.router, "/api/v1/h5-links", ["h5-links"], _auth),
+    (h5_links.settings_router, "/api/v1/h5-settings", ["h5-settings"], _auth),
+    # 1.10 判定=全还原（前会话对账）：voice/wechat_push 原挂载（原 main.py L537/L538）
+    (voice.router, "/api/v1/voice", ["voice"], _auth),
+    (wechat_push.router, "/api/v1/wechat", ["wechat-push"], _auth),
 ]
 
 
