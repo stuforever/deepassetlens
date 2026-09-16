@@ -116,15 +116,18 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
       // 附件四 A-1：每 enabled 专家从单 chat 项变子菜单（对话+功能页+后台*）。
       // *后台仅 admin 可见（A-4 升级为 ACL use/manage 分层）；EXPERT_PAGES[slug] 空数组
       // 的专家（wenshu）保持现状单 chat 项——等值分支。
+      // ⑤R F4（批11）：菜单终版——hideInMenu 页（详情路由/先行版）不出菜单；
+      // 后台段=adminTop 三项（母题库管理/书源管理/教学设置，admin-only）。
       ...(expertCards.length > 0
         ? [{
             key: 'expert_section',
             type: 'group' as const,
             label: '专家',
             children: expertCards.flatMap((c) => {
-              const pages = EXPERT_PAGES[c.expert_id] || [];
+              const pages = (EXPERT_PAGES[c.expert_id] || []).filter((p) => !p.hideInMenu);
+              const adminTops = (EXPERT_PAGES[c.expert_id] || []).filter((p) => p.adminTop);
               const adminEntry = isAdminUser
-                ? [{ key: `e:${c.expert_id}:admin`, icon: <SettingOutlined />, label: `${c.name}后台` }]
+                ? adminTops.map((p) => ({ key: p.menuKey, icon: <SettingOutlined />, label: p.label }))
                 : [];
               if (pages.length === 0 && adminEntry.length === 0) {
                 return [{ key: `e:${c.expert_id}:chat`, icon: <SearchOutlined />, label: c.name }];

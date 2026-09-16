@@ -24,7 +24,6 @@ import {
   FundOutlined,
   ThunderboltOutlined,
   FileSearchOutlined,
-  FileTextOutlined,
   PoweroffOutlined,
 } from '@ant-design/icons';
 
@@ -92,12 +91,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { menuKey: 'skills', label: '技能管理', path: '/skills', icon: RocketOutlined },
       { menuKey: 'governance', label: '运行观测', path: '/governance', icon: FundOutlined },
       { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
-      { menuKey: 'vector_manage', label: '向量管理', path: '/vector', icon: BookOutlined },
+      // ⑤R F4（批11）11.1：§3.3.5 菜单更名——「向量管理」→「知识库管理」（/vector 路径保留，
+      // DT knowledge 页 /knowledge 别名经 pathToMenuKey 重定向入本页）
+      { menuKey: 'vector_manage', label: '知识库管理', path: '/vector', icon: BookOutlined },
       { menuKey: 'golden_qa', label: '金标锚定管理', path: '/golden-qa', icon: FileSearchOutlined },
       // 记忆插槽②批6：记忆管理（平台管理区，admin-only 页）
       { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
-      // ⑤R F3（批10）：对话附件上限（chat-attachments 最小补件）
-      { menuKey: 'attachment_settings', label: '对话附件上限', path: '/attachment-settings', icon: FileTextOutlined },
+      // ⑤R F4（批11）11.1：§3.3.5 菜单树 21 项定版——对话附件上限（/attachment-settings）
+      // 不入菜单（路由保留，批10 最小补件，登记见 batch10_映射登记.json）
     ],
   },
   {
@@ -142,6 +143,8 @@ export const pathToMenuKey: Record<string, string> = (() => {
   }
   // 兼容旧路径 /free-plan -> 首页
   out['/free-plan'] = 'home';
+  // ⑤R F4（批11）11.1：DT knowledge 页路径别名 → 知识库管理（/vector）——语义并入重定向
+  out['/knowledge'] = 'vector_manage';
   return out;
 })();
 

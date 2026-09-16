@@ -47,8 +47,11 @@ const App: React.FC = () => {
       // 附件四 A-1：专家区动态键（e:{slug}:{chat|admin|page}）——EXPERT_PAGES 注册表优先，
       // chat/admin 动态拼路径（menuKeyToPath 静态表不覆盖 /e/ 动态段——与下方 L80 同款运行时分支）。
       if (menuKey.startsWith('e:')) {
-        const [, slug, sub] = menuKey.split(':');
-        if (sub === 'admin') { navigate(`/e/${slug}/admin`); return; }
+        const segs = menuKey.split(':');
+        const slug = segs[1] || 'wenshu';
+        // ⑤R F4（批11）：legacy 三段键 e:{slug}:admin → 旧后台骨架；四段键（e:tutor:admin:mq 等）
+        // =后台注册页，走下方 EXPERT_PAGES 查表（母题库管理/书源管理/教学设置三项顶级入口）
+        if (segs.length === 3 && segs[2] === 'admin') { navigate(`/e/${slug}/admin`); return; }
         const pg = expertPageRoutes().find((p) => p.menuKey === menuKey);
         if (pg && pg.path.includes(':')) {
           navigate(lastPathByMenuKey.current.get(menuKey) || pg.path);

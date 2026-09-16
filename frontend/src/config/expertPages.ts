@@ -4,7 +4,15 @@
  * 纪律：页面是代码，卡是数据——本表只登记路由与组件映射，开关由卡 enabled 决定。
  */
 import type { ComponentType } from 'react';
-import { lazy } from 'react';
+import { createElement, lazy } from 'react';
+import RequireAdmin from '../components/RequireAdmin';
+
+/**
+ * ⑤R F4（批11）11.3：ACL 联调位——tutor 后台页面统一包 RequireAdmin（manage 语义，
+ * 前端守卫管体验不管安全，执法在批16 vendor shim 统一门）。auth=0 快路径匿名=admin 不破开发链路。
+ */
+const withAdminGuard = (C: ComponentType<any>): ComponentType<any> => (props: any) =>
+  createElement(RequireAdmin, null, createElement(C, props));
 
 // ⑤e 四页（懒加载，chunk 独立）+ ⑤补补-3 自主学习页 + ⑤补补-4 精通之路页
 export const TutorPractice = lazy(() => import(/* webpackChunkName: "tutor-practice" */ '../pages/tutor/TutorPractice'));
@@ -44,7 +52,7 @@ const H5Me = lazy(() => import(/* webpackChunkName: "dt-h5-me" */ '../pages/tuto
 const H5Share = lazy(() => import(/* webpackChunkName: "dt-h5-share" */ '../pages/tutor/h5/H5Share'));
 
 const TUTOR_H5_PAGES: ExpertPageConfig[] = [
-  { path: '/e/tutor/h5', element: H5Home, label: 'H5 首页', menuKey: 'e:tutor:h5:home' },
+  { path: '/e/tutor/h5', element: H5Home, label: '首页', menuKey: 'e:tutor:h5:home' },
   { path: '/e/tutor/h5/chat', element: H5Chat, label: '对话', menuKey: 'e:tutor:h5:chat' },
   { path: '/e/tutor/h5/learn', element: H5Learn, label: '学习', menuKey: 'e:tutor:h5:learn' },
   { path: '/e/tutor/h5/learn/textbook', element: H5LearnTextbook, label: '教材学', menuKey: 'e:tutor:h5:learn:textbook' },
@@ -53,28 +61,30 @@ const TUTOR_H5_PAGES: ExpertPageConfig[] = [
   { path: '/e/tutor/h5/wrong', element: H5Wrong, label: '错题录入', menuKey: 'e:tutor:h5:wrong' },
   { path: '/e/tutor/h5/wrongbook', element: H5WrongBook, label: '错题本', menuKey: 'e:tutor:h5:wrongbook' },
   { path: '/e/tutor/h5/paths', element: H5Paths, label: '精通之路', menuKey: 'e:tutor:h5:paths' },
-  { path: '/e/tutor/h5/paths/:bookId', element: H5PathBook, label: '书路径', menuKey: 'e:tutor:h5:paths:book' },
+  // ⑤R F4（批11）：详情路由（书路径/教材阅读）不进菜单—— flows 内可达
+  { path: '/e/tutor/h5/paths/:bookId', element: H5PathBook, label: '书路径', menuKey: 'e:tutor:h5:paths:book', hideInMenu: true },
   { path: '/e/tutor/h5/report', element: H5Report, label: '学情报告', menuKey: 'e:tutor:h5:report' },
   { path: '/e/tutor/h5/atlas', element: H5Atlas, label: '知识地图', menuKey: 'e:tutor:h5:atlas' },
-  { path: '/e/tutor/h5/book/:bookId', element: H5BookRead, label: '教材阅读', menuKey: 'e:tutor:h5:book' },
+  { path: '/e/tutor/h5/book/:bookId', element: H5BookRead, label: '教材阅读', menuKey: 'e:tutor:h5:book', hideInMenu: true },
   { path: '/e/tutor/h5/me', element: H5Me, label: '我的', menuKey: 'e:tutor:h5:me' },
   { path: '/e/tutor/h5/share', element: H5Share, label: '分享', menuKey: 'e:tutor:h5:share' },
 ];
 
 const TUTOR_ADMIN_PAGES: ExpertPageConfig[] = [
-  { path: '/e/tutor/admin/mother-questions', element: MotherQuestionsAdmin, label: '母题库', menuKey: 'e:tutor:admin:mq' },
-  { path: '/e/tutor/admin/mother-questions/new', element: MotherQuestionNew, label: '录题', menuKey: 'e:tutor:admin:mq:new' },
-  { path: '/e/tutor/admin/mother-questions/photo', element: MotherQuestionPhoto, label: '拍照录题', menuKey: 'e:tutor:admin:mq:photo' },
-  { path: '/e/tutor/admin/mother-questions/photo-center', element: MotherQuestionPhotoCenter, label: '拍照中心', menuKey: 'e:tutor:admin:mq:photocenter' },
-  { path: '/e/tutor/admin/mother-questions/analysis', element: MotherQuestionAnalysis, label: '错题分析', menuKey: 'e:tutor:admin:mq:analysis' },
-  { path: '/e/tutor/admin/mother-questions/review', element: MotherQuestionReview, label: '复习', menuKey: 'e:tutor:admin:mq:review' },
-  { path: '/e/tutor/admin/mother-questions/trash', element: MotherQuestionTrash, label: '回收站', menuKey: 'e:tutor:admin:mq:trash' },
+  // ⑤R F4（批11）：后台三项顶级入口（adminTop）——AppSider admin 段；子页/详情页 hideInMenu
+  { path: '/e/tutor/admin/mother-questions', element: withAdminGuard(MotherQuestionsAdmin), label: '母题库管理', menuKey: 'e:tutor:admin:mq', adminTop: true },
+  { path: '/e/tutor/admin/mother-questions/new', element: withAdminGuard(MotherQuestionNew), label: '录题', menuKey: 'e:tutor:admin:mq:new', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/photo', element: withAdminGuard(MotherQuestionPhoto), label: '拍照录题', menuKey: 'e:tutor:admin:mq:photo', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/photo-center', element: withAdminGuard(MotherQuestionPhotoCenter), label: '拍照中心', menuKey: 'e:tutor:admin:mq:photocenter', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/analysis', element: withAdminGuard(MotherQuestionAnalysis), label: '错题分析', menuKey: 'e:tutor:admin:mq:analysis', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/review', element: withAdminGuard(MotherQuestionReview), label: '复习', menuKey: 'e:tutor:admin:mq:review', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/trash', element: withAdminGuard(MotherQuestionTrash), label: '回收站', menuKey: 'e:tutor:admin:mq:trash', hideInMenu: true },
   // ⑤R F1：原仓 [mid] 详情页（卡片点击可达——功能 1:1 闭环，底册枚举外补齐）
-  { path: '/e/tutor/admin/mother-questions/:mid', element: MotherQuestionDetail, label: '母题详情', menuKey: 'e:tutor:admin:mq:detail' },
-  { path: '/e/tutor/admin/book', element: BookAdmin, label: '书源管理', menuKey: 'e:tutor:admin:book' },
-  { path: '/e/tutor/admin/settings', element: SettingsAdmin, label: '教学设置', menuKey: 'e:tutor:admin:settings' },
+  { path: '/e/tutor/admin/mother-questions/:mid', element: withAdminGuard(MotherQuestionDetail), label: '母题详情', menuKey: 'e:tutor:admin:mq:detail', hideInMenu: true },
+  { path: '/e/tutor/admin/book', element: withAdminGuard(BookAdmin), label: '书源管理', menuKey: 'e:tutor:admin:book', adminTop: true },
+  { path: '/e/tutor/admin/settings', element: withAdminGuard(SettingsAdmin), label: '教学设置', menuKey: 'e:tutor:admin:settings', adminTop: true },
   // ⑤R F1：原仓「设置管理」按钮目标 /settings/curriculum 的等值落点（与 /settings 同页 tab）
-  { path: '/e/tutor/admin/settings/curriculum', element: SettingsAdmin, label: '教学设置', menuKey: 'e:tutor:admin:settings:curriculum' },
+  { path: '/e/tutor/admin/settings/curriculum', element: withAdminGuard(SettingsAdmin), label: '教学设置', menuKey: 'e:tutor:admin:settings:curriculum', hideInMenu: true },
 ];
 
 export interface ExpertPageConfig {
@@ -82,16 +92,21 @@ export interface ExpertPageConfig {
   element: ComponentType<any>;
   label: string;           // 页签名
   menuKey: string;         // 页签 key（AppTabs/KeepAlive 语义）
+  /** ⑤R F4（批11）：侧栏菜单终版——详情路由/先行版页不出菜单（路由保留至 R1 退役） */
+  hideInMenu?: boolean;
+  /** ⑤R F4（批11）：tutor 后台三项顶级入口（母题库管理/书源管理/教学设置）——AppSider admin 段消费 */
+  adminTop?: boolean;
 }
 
 export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
   tutor: [
-    { path: '/e/tutor/learn', element: TutorLearn, label: '自主学习', menuKey: 'e:tutor:learn' },
-    { path: '/e/tutor/path', element: TutorPath, label: '精通之路', menuKey: 'e:tutor:path' },
-    { path: '/e/tutor/practice', element: TutorPractice, label: '练习', menuKey: 'e:tutor:practice' },
-    { path: '/e/tutor/review', element: TutorReview, label: '复习', menuKey: 'e:tutor:review' },
-    { path: '/e/tutor/wrong-book', element: TutorWrongBook, label: '错题本', menuKey: 'e:tutor:wrongbook' },
-    { path: '/e/tutor/progress', element: TutorProgress, label: '学情', menuKey: 'e:tutor:progress' },
+    // ⑤R F4（批11）：先行版六页 hideInMenu（§3.3.5 终版菜单=DT h5 复刻件取代；路由保留至 R1 退役）
+    { path: '/e/tutor/learn', element: TutorLearn, label: '自主学习', menuKey: 'e:tutor:learn', hideInMenu: true },
+    { path: '/e/tutor/path', element: TutorPath, label: '精通之路', menuKey: 'e:tutor:path', hideInMenu: true },
+    { path: '/e/tutor/practice', element: TutorPractice, label: '练习', menuKey: 'e:tutor:practice', hideInMenu: true },
+    { path: '/e/tutor/review', element: TutorReview, label: '复习', menuKey: 'e:tutor:review', hideInMenu: true },
+    { path: '/e/tutor/wrong-book', element: TutorWrongBook, label: '错题本', menuKey: 'e:tutor:wrongbook', hideInMenu: true },
+    { path: '/e/tutor/progress', element: TutorProgress, label: '学情', menuKey: 'e:tutor:progress', hideInMenu: true },
     ...TUTOR_ADMIN_PAGES,
     ...TUTOR_H5_PAGES,
   ],
