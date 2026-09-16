@@ -62,7 +62,7 @@ export default function TrashPage() {
   };
 
   const hardDelete = async (mid: string) => {
-    if (!confirm('永久删除后无法恢复，确认？')) return;
+    if (!window.confirm('永久删除后无法恢复，确认？')) return;
     try {
       const res = await fetch(`/api/v1/mother-questions/${mid}?hard=true`, { method: 'DELETE' });
       if (!res.ok) throw new Error();

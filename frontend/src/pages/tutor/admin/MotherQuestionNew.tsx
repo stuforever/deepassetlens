@@ -36,7 +36,7 @@ function NewQuestionContent() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         if (res.status === 409) {
-          if (confirm(err.detail + '\n\n' + '确认仍要创建？')) {
+          if (window.confirm(err.detail + '\n\n' + '确认仍要创建？')) {
             const res2 = await fetch('/api/v1/mother-questions', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

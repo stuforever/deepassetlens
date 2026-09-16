@@ -146,7 +146,6 @@ export default memo(function ContextReferenceTree({
           <>
             <ElbowMark direction={direction} mirrored={mirrored} />
             {item.thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={item.thumbnailUrl}
                 alt=""

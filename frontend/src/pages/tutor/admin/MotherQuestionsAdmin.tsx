@@ -310,7 +310,7 @@ function MotherQuestionsContent() {
               onOpen={() => navigate(`/e/tutor/admin/mother-questions/${m.id}`)}
               onEdit={() => navigate(`/e/tutor/admin/mother-questions/${m.id}?edit=1`)}
               onDelete={async () => {
-                if (!confirm('确认删除？')) return;
+                if (!window.confirm('确认删除？')) return;
                 await fetch(`/api/v1/mother-questions/${m.id}`, { method: 'DELETE' });
                 message.success('已删除'); load();
               }}

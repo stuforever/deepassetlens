@@ -8,7 +8,7 @@
 // 原仓 @/lib/api 的 wsUrl 为直通函数（由 web/proxy.ts 转发）；本仓等价实现：
 function wsUrl(path: string): string {
   return (
-    (location.protocol === "https:" ? "wss://" : "ws://") + location.host + path
+    (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host + path
   );
 }
 

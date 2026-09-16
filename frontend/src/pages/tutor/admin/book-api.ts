@@ -5,7 +5,7 @@
  *    （同源请求默认携带 cookie）、apiUrl(x) 一律脱壳为 x 相对路径
  *    （由 setupProxy.js 转发到后端 28000）；
  * 2) WebSocket URL：wsUrl(`${BASE}/ws`) 改为
- *    (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `${BASE}/ws`
+ *    (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + `${BASE}/ws`
  *    同路径拼接；
  * 3) 对 book-ws-operation / book-types 的导入改为同目录相对导入
  *    './book-ws-operation' / './book-types'；
@@ -35,8 +35,8 @@ function requestOverSocket<T extends BookWsEvent>(
   return runBookSocketOperation<T>(
     () =>
       new WebSocket(
-        (location.protocol === "https:" ? "wss://" : "ws://") +
-          location.host +
+        (window.location.protocol === "https:" ? "wss://" : "ws://") +
+          window.location.host +
           `${BASE}/ws`,
       ),
     {

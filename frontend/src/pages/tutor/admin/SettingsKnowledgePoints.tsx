@@ -124,7 +124,7 @@ export default function SettingsKnowledgePoints() {
   }, [load]);
 
   const extractFromTextbooks = async () => {
-    if (!confirm('用 LLM 从教材章节+原文自动提取「学科知识体系」知识点树，并自动关联所有章节？\n（将重建知识点目录，可能需要几分钟）')) return;
+    if (!window.confirm('用 LLM 从教材章节+原文自动提取「学科知识体系」知识点树，并自动关联所有章节？\n（将重建知识点目录，可能需要几分钟）')) return;
     setExtracting(true);
     message.info('LLM 提取中，请耐心等待（可能 2-5 分钟）...');
     try {
@@ -148,7 +148,7 @@ export default function SettingsKnowledgePoints() {
   };
 
   const assignGrades = async () => {
-    if (!confirm('按教材年级自动给知识点归类学段（小学/初中）？父节点按子节点继承。')) return;
+    if (!window.confirm('按教材年级自动给知识点归类学段（小学/初中）？父节点按子节点继承。')) return;
     setAssigning(true);
     message.info('归类中...');
     try {
@@ -165,7 +165,7 @@ export default function SettingsKnowledgePoints() {
   };
 
   const seed = async () => {
-    if (!confirm('预置小学1-6年级数学知识点体系？')) return;
+    if (!window.confirm('预置小学1-6年级数学知识点体系？')) return;
     message.info('正在预置...');
     const r = await fetch('/api/v1/mother-questions/knowledge-points/seed', { method: 'POST' });
     if (r.ok) {
@@ -176,7 +176,7 @@ export default function SettingsKnowledgePoints() {
   };
 
   const assignDifficulty = async () => {
-    if (!confirm('用 LLM 为所有学科知识点标注难度 1-5（用于树内易→难排序）？约需 1-3 分钟。')) return;
+    if (!window.confirm('用 LLM 为所有学科知识点标注难度 1-5（用于树内易→难排序）？约需 1-3 分钟。')) return;
     setDiffing(true);
     message.info('LLM 标注难度中，请耐心等待...');
     try {
@@ -197,7 +197,7 @@ export default function SettingsKnowledgePoints() {
   };
 
   const assignFigures = async () => {
-    if (!confirm('按规则为数学知识点自动标注可拖拽图形（数轴/方程天平/几何画板）？')) return;
+    if (!window.confirm('按规则为数学知识点自动标注可拖拽图形（数轴/方程天平/几何画板）？')) return;
     setFiguring(true);
     message.info('标注图形中...');
     try {
@@ -466,7 +466,7 @@ function DetailEditor({
 
   const enrich = async () => {
     if (!detail) return;
-    if (!confirm(`用 LLM 为「${detail.name}」补全 总结/讲解/实例${detail.subject === 'math' ? '/公式推导' : ''}/相关知识点？`)) return;
+    if (!window.confirm(`用 LLM 为「${detail.name}」补全 总结/讲解/实例${detail.subject === 'math' ? '/公式推导' : ''}/相关知识点？`)) return;
     setEnriching(true);
     message.info('LLM 生成中，约 10-60 秒...');
     try {

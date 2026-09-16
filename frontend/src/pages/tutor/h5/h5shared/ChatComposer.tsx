@@ -961,7 +961,6 @@ export default memo(function ChatComposer({
                         {/* Native <img> is safe for SVG: scripts inside an
                             SVG don't execute under <img> context. Next.js
                             <Image> rejects SVG by default. */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={a.previewUrl}
                           alt={a.filename || zh("Attachment preview")}

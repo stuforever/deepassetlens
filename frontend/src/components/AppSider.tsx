@@ -124,7 +124,9 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
             type: 'group' as const,
             label: '专家',
             children: expertCards.flatMap((c) => {
-              const pages = (EXPERT_PAGES[c.expert_id] || []).filter((p) => !p.hideInMenu);
+              // ⑤R F4（批11）+R2 修正：adminTop 三项只在 admin 段渲染（从 pages 段排除，
+              // 否则同 menuKey 双挂→React 重复 key 告警+菜单项重复）
+              const pages = (EXPERT_PAGES[c.expert_id] || []).filter((p) => !p.hideInMenu && !p.adminTop);
               const adminTops = (EXPERT_PAGES[c.expert_id] || []).filter((p) => p.adminTop);
               const adminEntry = isAdminUser
                 ? adminTops.map((p) => ({ key: p.menuKey, icon: <SettingOutlined />, label: p.label }))

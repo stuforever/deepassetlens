@@ -221,7 +221,7 @@ export default function MotherQuestionDetail() {
   };
 
   const onDelete = async () => {
-    if (!confirm('确认删除此母题？此操作不可撤销。')) return;
+    if (!window.confirm('确认删除此母题？此操作不可撤销。')) return;
     try {
       await fetch(`/api/v1/mother-questions/${mid}`, { method: 'DELETE' });
       message.success('已删除');
@@ -244,7 +244,7 @@ export default function MotherQuestionDetail() {
   };
 
   const transferToCorrect = async () => {
-    if (!confirm('确认将此题转入正确题库？将标记为已掌握。')) return;
+    if (!window.confirm('确认将此题转入正确题库？将标记为已掌握。')) return;
     setTransferring(true);
     try {
       await fetch(`/api/v1/mother-questions/${mid}/transfer-to-correct`, { method: 'POST' });

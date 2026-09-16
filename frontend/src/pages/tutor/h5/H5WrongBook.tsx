@@ -1773,7 +1773,6 @@ function WrongBookContent() {
                 <Field label="题目图（OCR 自动识别）">
                   {form.photo_url ? (
                     <div style={{ position: "relative" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={form.photo_url} alt="题目图" style={{ width: "100%", height: 128, objectFit: "cover", borderRadius: 12, border: `1px solid #e5e7eb`, display: "block" }} />
                       <button
                         type="button"
@@ -1815,7 +1814,6 @@ function WrongBookContent() {
                 <Field label="错答图">
                   {form.wrong_answer_image_url ? (
                     <div style={{ position: "relative" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={form.wrong_answer_image_url} alt="错答图" style={{ width: "100%", height: 128, objectFit: "cover", borderRadius: 12, border: `1px solid #e5e7eb`, display: "block" }} />
                       <button
                         type="button"

@@ -101,7 +101,7 @@ export default function SettingsChapters() {
   };
 
   const del = async (id: string) => {
-    if (!confirm('删除此章节及子章节？')) return;
+    if (!window.confirm('删除此章节及子章节？')) return;
     await fetch(`/api/v1/curriculum/chapters/${id}`, { method: 'DELETE' });
     message.success('已删除');
     await loadChapters(tbId);
@@ -112,7 +112,7 @@ export default function SettingsChapters() {
       message.error('先选教材');
       return;
     }
-    if (!confirm('用 LLM 自动为该教材构建章节？')) return;
+    if (!window.confirm('用 LLM 自动为该教材构建章节？')) return;
     message.info('LLM 分析中...');
     const r = await fetch(`/api/v1/mother-questions/chapters/auto-build/${tbId}`, {
       method: 'POST',

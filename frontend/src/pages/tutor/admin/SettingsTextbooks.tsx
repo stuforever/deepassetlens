@@ -95,7 +95,7 @@ export default function SettingsTextbooks() {
   };
 
   const del = async (id: string) => {
-    if (!confirm('删除此教材及其章节？')) return;
+    if (!window.confirm('删除此教材及其章节？')) return;
     await fetch(`/api/v1/curriculum/textbooks/${id}`, { method: 'DELETE' });
     message.success('已删除');
     load();
