@@ -29,6 +29,16 @@ def _mk_card(card_id: str, kind: str, item_id: str, *, stability: float, days_ag
              "lr": now - timedelta(days=days_ago_last)})
 
 
+def _utc_noon_days_ago(days: int) -> datetime:
+    """N 天前的 UTC 正午——日期桶无歧义锚点（分桶=reviewed_at::date UTC）。
+
+    2026-09-16 修复时段敏感 flaky：原用「N 天前小数偏移」播种，UTC 晨间
+    （本地 08:00-12:48）运行时「1.2 天前」落到 D-2 桶 → streak 断言随机炸。
+    改锚定显式日期正午，任何运行时刻日期桶恒定。"""
+    d = datetime.now(timezone.utc).date() - timedelta(days=days)
+    return datetime(d.year, d.month, d.day, 12, 0, tzinfo=timezone.utc)
+
+
 def _mk_record(card_id: str, days_ago: float):
     now = datetime.now(timezone.utc)
     with _engine.begin() as c:
@@ -36,6 +46,14 @@ def _mk_record(card_id: str, days_ago: float):
             "INSERT INTO learning_review_records (card_id, user_id, rating, scheduled_interval, reviewed_at) "
             "VALUES (:cid, :uid, 3, 1.0, :at)"),
             {"cid": card_id, "uid": UID, "at": now - timedelta(days=days_ago)})
+
+
+def _mk_record_at(card_id: str, at: datetime):
+    with _engine.begin() as c:
+        c.execute(text(
+            "INSERT INTO learning_review_records (card_id, user_id, rating, scheduled_interval, reviewed_at) "
+            "VALUES (:cid, :uid, 3, 1.0, :at)"),
+            {"cid": card_id, "uid": UID, "at": at})
 
 
 def _cleanup():
@@ -54,9 +72,9 @@ def clean():
 def test_streak_and_today_active(clean):
     """streak=reviewed_at::date 连续区间（今天+昨天+前天=3）；今日活跃=今日 records 数。"""
     _mk_card("c-streak-1", "knowledge_point", "kp:有理数", stability=5.0, days_ago_last=0.01)
-    _mk_record("c-streak-1", 0.01)   # 今天
-    _mk_record("c-streak-1", 1.2)    # 昨天
-    _mk_record("c-streak-1", 2.1)    # 前天
+    _mk_record("c-streak-1", 0.01)                              # 今天（实测时刻，桶=今天）
+    _mk_record_at("c-streak-1", _utc_noon_days_ago(1))          # 昨天 UTC 正午（锚定）
+    _mk_record_at("c-streak-1", _utc_noon_days_ago(2))          # 前天（锚定）
     from app.services.learning.learner_profile import build_learner_profile
     p = build_learner_profile(UID)
     assert p.streak_days == 3, f"streak={p.streak_days}"
@@ -67,7 +85,7 @@ def test_streak_broken(clean):
     """断档：今天+前天（缺昨天）→ streak=1。"""
     _mk_card("c-streak-2", "knowledge_point", "kp:正数与负数", stability=5.0, days_ago_last=0.01)
     _mk_record("c-streak-2", 0.01)
-    _mk_record("c-streak-2", 2.5)
+    _mk_record_at("c-streak-2", _utc_noon_days_ago(2))   # 前天（锚定——缺昨天→streak=1）
     from app.services.learning.learner_profile import build_learner_profile
     p = build_learner_profile(UID)
     assert p.streak_days == 1, f"streak={p.streak_days}"
