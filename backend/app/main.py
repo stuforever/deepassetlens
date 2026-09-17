@@ -311,6 +311,9 @@ app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(upload.router, prefix="/api/v1", tags=["upload"])
 app.include_router(source_tables.router, prefix="/api/v1", tags=["source_tables"])
 app.include_router(llm_admin.router, prefix="/api/v1", tags=["llm_admin"])
+# IA批5 5.6：vendor llm 配置 → ③连接目录幂等同步适配层（引擎解析链零改动——诚实账 6）
+from app.api import dt_llm_sync as _dt_llm_sync
+app.include_router(_dt_llm_sync.router, tags=["llm_sync"])
 app.include_router(standard_semantic.router, prefix="/api/v1", tags=["standard_semantic"])
 app.include_router(data_source.router, prefix="/api/v1", tags=["data_source"])
 app.include_router(entity_relation_manage.router, prefix="/api/v1", tags=["entity_relation_manage"])

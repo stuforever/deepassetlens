@@ -160,9 +160,45 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '设置中心',
     icon: SettingOutlined,
     items: [
-      { menuKey: 'settings_hub', label: '设置中心', path: '/settings', icon: SettingOutlined, placeholder: true },
+      // IA批5 5.3：设置中心 31 页复刻落地——placeholder 解除，主菜单仅此一个入口（子页 hideInMenu）
+      { menuKey: 'settings_hub', label: '设置中心', path: '/settings', icon: SettingOutlined },
     ],
   },
+];
+
+// IA批5 接线：设置中心子页注册表（menuKey 口径 'settings:<页>'，与 routes.tsx settings 路由块
+// 逐一对应）——只进页签/面包屑映射，不进侧栏 NAV_GROUPS（主菜单唯一入口=设置中心）。
+const SETTINGS_PAGES: Array<{ key: string; label: string; path: string }> = [
+  { key: 'settings:agents', label: '伙伴和智能体', path: '/settings/agents' },
+  { key: 'settings:agents-claude-code', label: 'Claude Code', path: '/settings/agents/claude-code' },
+  { key: 'settings:agents-codex', label: 'Codex', path: '/settings/agents/codex' },
+  { key: 'settings:agents-gemini', label: 'Gemini CLI', path: '/settings/agents/gemini' },
+  { key: 'settings:agents-kimi', label: 'Kimi CLI', path: '/settings/agents/kimi' },
+  { key: 'settings:agents-mimo', label: 'MiMo Code', path: '/settings/agents/mimo' },
+  { key: 'settings:agents-opencode', label: 'opencode', path: '/settings/agents/opencode' },
+  { key: 'settings:chat', label: '聊天', path: '/settings/chat' },
+  { key: 'settings:curriculum', label: '设置管理', path: '/settings/curriculum' },
+  { key: 'settings:attachments', label: '附件', path: '/settings/attachments' },
+  { key: 'settings:appearance', label: '外观', path: '/settings/appearance' },
+  { key: 'settings:network', label: '网络', path: '/settings/network' },
+  { key: 'settings:llm', label: 'LLM', path: '/settings/llm' },
+  { key: 'settings:embedding', label: '嵌入模型', path: '/settings/embedding' },
+  { key: 'settings:stt', label: '语音识别', path: '/settings/stt' },
+  { key: 'settings:tts', label: '语音合成', path: '/settings/tts' },
+  { key: 'settings:image', label: '文生图', path: '/settings/image' },
+  { key: 'settings:video', label: '文生视频', path: '/settings/video' },
+  { key: 'settings:document-parsing', label: '文档解析', path: '/settings/document-parsing' },
+  { key: 'settings:mineru', label: 'MinerU', path: '/settings/mineru' },
+  { key: 'settings:models', label: '模型', path: '/settings/models' },
+  { key: 'settings:mcp', label: 'MCP', path: '/settings/mcp' },
+  { key: 'settings:memory', label: '记忆', path: '/settings/memory' },
+  { key: 'settings:tools', label: '工具', path: '/settings/tools' },
+  { key: 'settings:capabilities', label: '能力', path: '/settings/capabilities' },
+  { key: 'settings:search', label: '搜索', path: '/settings/search' },
+  { key: 'settings:status', label: '状态', path: '/settings/status' },
+  { key: 'settings:curriculum-textbooks', label: '课本管理', path: '/settings/curriculum/textbooks' },
+  { key: 'settings:curriculum-chapters', label: '章节管理', path: '/settings/curriculum/chapters' },
+  { key: 'settings:curriculum-knowledge-points', label: '知识点管理', path: '/settings/curriculum/knowledge-points' },
 ];
 
 /** menuKey -> label（页签标题、面包屑用） */
@@ -171,6 +207,8 @@ export const MENU_LABELS: Record<string, string> = (() => {
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.menuKey] = it.label;
   }
+  // IA批5：设置中心子页页签标题（子页不在 NAV_GROUPS，主菜单唯一入口）
+  for (const p of SETTINGS_PAGES) out[p.key] = p.label;
   return out;
 })();
 
@@ -181,6 +219,7 @@ export const menuKeyToPath: Record<string, string> = (() => {
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.menuKey] = it.path;
   }
+  for (const p of SETTINGS_PAGES) out[p.key] = p.path;
   return out;
 })();
 
@@ -211,6 +250,8 @@ export const pathToMenuKey: Record<string, string> = (() => {
   out['/e/tutor/h5/me'] = 'e:tutor-h5:me';
   out['/e/tutor/h5/share'] = 'e:tutor-h5:share';
   out['/e/tutor/notebook'] = 'e:tutor-h5:notebook';
+  // IA批5：设置中心子页 path→menuKey（页签切换；hideInMenu 不进侧栏）
+  for (const p of SETTINGS_PAGES) out[p.path] = p.key;
   return out;
 })();
 
