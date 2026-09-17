@@ -34,10 +34,10 @@ const { Text } = Typography;
 const MODE = 'free_plan' as const;
 
 const FREEPLAN_EXAMPLE_QUERIES = [
-  '统计用电客户总数',
-  '什么是变压器',
-  '配电变压器有哪些？列出编号和名称',
-  '用电客户数据的来源',
+  '查询所有项目成本预算信息',
+  '什么是成本中心',
+  '采购订单有哪些？列出编号和供应商',
+  '维修工单数据来源',
 ];
 
 // B2 美化：2×2 建议卡图标（与示例问题一一对应）
@@ -936,7 +936,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     // 没有活跃会话时，发送第一条消息才正式创建会话
     let sid = activeSession?.id;
     if (!sid) {
-      sid = createNewSession();
+      // IA 件批2 2.2：会话创建写入专家维度（slug 同 L280 expert_id 同源；string 收窄 ExpertId）
+      sid = createNewSession(slug === 'tutor' || slug === 'tutor-h5' ? slug : 'wenshu');
     }
     setQuestion('');
 

@@ -768,6 +768,25 @@ function H5ChatContentInner() {
     return () => clearTimeout(t);
   }, [deepText, state.messages.length, sendMessage]);
 
+  // IA 件批2 2.3：会话深链恢复（AppSider h5 组点击 → /e/tutor-h5/chat?session={id}）
+  // 有 ?session= 时加载 SessionDetail 恢复历史（ref 防重放，同 deepText 直达先例）。
+  const sessionParam = searchParams.get("session") || "";
+  const sessionRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!sessionParam || sessionRestoredRef.current) return;
+    sessionRestoredRef.current = true;
+    void loadSession(sessionParam);
+  }, [sessionParam, loadSession]);
+
+  // IA 件批2 2.3：h5 组「新建」→ /e/tutor-h5/chat?new={ts}——每次 new 参数变化重置为新会话。
+  const newFlag = searchParams.get("new") || "";
+  const newAppliedRef = useRef("");
+  useEffect(() => {
+    if (!newFlag || newAppliedRef.current === newFlag) return;
+    newAppliedRef.current = newFlag;
+    newSession();
+  }, [newFlag, newSession]);
+
   useEffect(() => {
     setSpeechSupported(
       typeof window !== "undefined" &&

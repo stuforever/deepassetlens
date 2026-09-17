@@ -41,13 +41,15 @@ module.exports = function (app) {
     })
   );
 
-  // 其它所有 /api/* 路径走默认 proxy
+  // IA批2：/api 代理启用 ws:true——vendor 聊天走 /api/v1/ws WebSocket（unified-ws.ts），
+  // 原仓 web/proxy.ts 转发 WS，dev 代理此前缺位致 h5 发送"WebSocket failed to connect"。
+  // 实测：scoped '/api/v1/ws' 挂载 HPM upgrade 不生效（握手悬挂），'/api' 全局 ws:true 可用。
   app.use(
     ['/api'],
     createProxyMiddleware({
       target: BACKEND,
       changeOrigin: true,
-      ws: false,
+      ws: true,
     })
   );
 };

@@ -4,7 +4,7 @@
  * 下部：最近对话会话列表（从 Zustand store 读取，点击切到首页并激活该会话）。
  * 底部：收起/展开按钮。
  */
-import React, { useState, useEffect, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useContext, useCallback } from 'react';
 import { Layout, Menu, Tooltip, Input, Typography, Popconfirm, message } from 'antd';
 import {
   MenuFoldOutlined,
@@ -18,7 +18,10 @@ import {
   CommentOutlined,
   ReadOutlined,
   SettingOutlined,
+  DownOutlined,
+  RightOutlined,
 } from '@ant-design/icons';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { NAV_GROUPS, HOME_NAV_ITEM } from '../config/navigation';
 import { EXPERT_PAGES } from '../config/expertPages';
 import { expertsApi } from '../services/api';
@@ -26,6 +29,9 @@ import type { ExpertCard } from '../services/api';
 import { AuthCtx } from '../auth/AuthGate';
 import { tokens } from '../theme/tokens';
 import { useStore } from '../store/useStore';
+import type { ExpertId } from '../store/useStore';
+import { listSessions, updateSessionTitle, deleteSession } from '../pages/tutor/admin/session-api';
+import type { SessionSummary } from '../pages/tutor/admin/session-api';
 
 const { Sider } = Layout;
 const { Text } = Typography;
@@ -104,6 +110,46 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
     setOpenKeys(latest ? [latest] : []);
   };
 
+  // ---- IA 件批2 2.3：会话面板按专家三分组（数据探索/私塾先生/私塾先生h5，q5 统一方案+终审裁定④）----
+  const navigate = useNavigate();
+  const location = useLocation();
+  const createNewSession = useStore((s) => s.createNewSession);
+  // h5 组数据源=vendor sessions API（平台两组走本 store 过滤）
+  const [h5Sessions, setH5Sessions] = useState<SessionSummary[]>([]);
+  const refreshH5Sessions = useCallback(() => {
+    listSessions(50, 0).then((rows) => setH5Sessions(rows || [])).catch(() => { /* 静默：h5 组显示空态 */ });
+  }, []);
+  useEffect(() => {
+    void refreshH5Sessions();
+  }, [refreshH5Sessions, location.pathname]);
+  // 当前路由所属专家（/e/tutor-h5/* → tutor-h5；/e/tutor/* → tutor；其余 → wenshu）
+  const currentExpert: ExpertId = location.pathname.startsWith('/e/tutor-h5')
+    ? 'tutor-h5'
+    : location.pathname.startsWith('/e/tutor')
+      ? 'tutor'
+      : 'wenshu';
+  // 组名=专家卡名实时取（拉取失败回退静态名）；组顺序=当前专家组置顶，其余按固定序
+  const groupNameOf = (id: ExpertId, fallback: string) =>
+    expertCards.find((c) => c.expert_id === id)?.name || fallback;
+  // 分组展开态：当前路由所属专家的组自动展开，其余折叠（手动切换后尊重手动）
+  const [sessionGroupsOpen, setSessionGroupsOpen] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setSessionGroupsOpen((prev) => (prev[currentExpert] ? prev : { ...prev, [currentExpert]: true }));
+  }, [currentExpert]);
+  const activeH5SessionId = (() => {
+    try { return new URLSearchParams(location.search).get('session') || ''; } catch { return ''; }
+  })();
+  const relTime = (ts: number) => {
+    if (!ts) return '';
+    const t = ts < 1e12 ? ts * 1000 : ts; // vendor updated_at=秒（DT 语义），<1e12 视为秒归一为毫秒
+    const d = Date.now() - t;
+    if (d < 60_000) return '刚刚';
+    if (d < 3_600_000) return `${Math.floor(d / 60_000)}分钟前`;
+    if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}小时前`;
+    if (d < 7 * 86_400_000) return `${Math.floor(d / 86_400_000)}天前`;
+    return new Date(t).toLocaleDateString();
+  };
+
   const items = useMemo(
     () => [
       // 首页顶层项（专家地基①：HOME_NAV_ITEM=专家门户）
@@ -140,7 +186,8 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
                 label: c.name,
                 children: [
                   { key: `e:${c.expert_id}:chat`, icon: <CommentOutlined />, label: '对话' },
-                  ...pages.map((p) => ({ key: p.menuKey, icon: <ReadOutlined />, label: p.label })),
+                  // IA 批1 后 h5 组 menuKey 前缀=e:tutor-h5:*，与生成对话项同键——过滤防 antd Menu 重复 key
+                  ...pages.filter((p) => p.menuKey !== `e:${c.expert_id}:chat`).map((p) => ({ key: p.menuKey, icon: <ReadOutlined />, label: p.label })),
                   ...adminEntry,
                 ],
               }];
@@ -172,16 +219,6 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
     ],
     [expertCards]
   );
-
-  const handleSessionClick = (id: string) => {
-    setActiveSessionId(id);
-    onSelect('home');
-  };
-
-  const handleNewSession = () => {
-    setActiveSessionId('');
-    onSelect('home');
-  };
 
   const startEdit = (sid: string, currentTitle: string) => {
     setEditingId(sid);
@@ -235,75 +272,150 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
         style={{ borderInlineEnd: 'none', paddingTop: collapsed ? 0 : tokens.space.s2, flexShrink: 0 }}
       />
 
-        {/* 会话区 - 展开时显示 */}
+        {/* 会话区 - 展开时显示（IA 件批2：按专家三分组——数据探索/私塾先生/私塾先生h5） */}
         {!collapsed && (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: `1px solid ${tokens.colors.border}` }}>
-            <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ padding: '6px 8px', flexShrink: 0 }}>
               <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5 }}>最近对话</Text>
-              <Tooltip title="新建对话">
-                <PlusOutlined
-                  style={{ color: tokens.colors.primary, cursor: 'pointer', fontSize: 12 }}
-                  onClick={handleNewSession}
-                />
-              </Tooltip>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px' }}>
-              {sessions.filter((s) => s.messages.length > 0).map((s) => (
-                <div
-                  key={s.id}
-                  onClick={() => handleSessionClick(s.id)}
-                  className="dal-session-row"
-                  style={{
-                    padding: '6px 8px',
-                    cursor: 'pointer',
-                    borderRadius: 4,
-                    marginBottom: 1,
-                    background: s.id === activeSessionId ? tokens.colors.primaryBg : 'transparent',
-                    borderLeft: s.id === activeSessionId ? `2px solid ${tokens.colors.primary}` : '2px solid transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <MessageOutlined style={{ color: s.id === activeSessionId ? tokens.colors.primary : tokens.colors.textTertiary, fontSize: 11, flexShrink: 0 }} />
-                  {editingId === s.id ? (
-                    <Input
-                      size="small"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onPressEnter={() => saveEdit(s.id)}
-                      suffix={<CheckOutlined onClick={() => saveEdit(s.id)} style={{ color: tokens.colors.success, cursor: 'pointer' }} />}
-                      style={{ flex: 1, fontSize: 12 }}
-                    />
-                  ) : (
-                    <Text
-                      ellipsis
-                      style={{ flex: 1, fontSize: 12, fontWeight: s.id === activeSessionId ? 500 : 400 }}
-                      onDoubleClick={() => startEdit(s.id, s.title)}
+              {([
+                { gid: 'wenshu' as ExpertId, label: groupNameOf('wenshu', '数据探索') },
+                { gid: 'tutor' as ExpertId, label: groupNameOf('tutor', '私塾先生') },
+                { gid: 'tutor-h5' as ExpertId, label: groupNameOf('tutor-h5', '私塾先生h5') },
+              ]).map(({ gid, label }) => {
+                const isOpen = !!sessionGroupsOpen[gid];
+                const platformRows = sessions.filter((s) => s.expertId === gid && s.messages.length > 0);
+                const vendorRows = gid === 'tutor-h5' ? [...h5Sessions].sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0)) : [];
+                const count = gid === 'tutor-h5' ? vendorRows.length : platformRows.length;
+                return (
+                  <div key={gid} style={{ marginBottom: 2 }}>
+                    {/* 组头=专家卡名+新建（新建不重设计：平台组=空白欢迎页会话首条消息时落 expertId；h5 组=无 session 参数新会话） */}
+                    <div
+                      onClick={() => setSessionGroupsOpen((prev) => ({ ...prev, [gid]: !isOpen }))}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', cursor: 'pointer',
+                        color: tokens.colors.textSecondary, fontSize: 11, fontWeight: 600, borderRadius: 4,
+                        background: gid === currentExpert ? tokens.colors.primaryBg : 'transparent',
+                      }}
                     >
-                      {s.title}
-                    </Text>
-                  )}
-                  {editingId !== s.id && (
-                    <div className="dal-session-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      <EditOutlined
-                        style={{ color: tokens.colors.textTertiary, fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
-                        onClick={(e) => { e.stopPropagation(); startEdit(s.id, s.title); }}
-                      />
-                      <Popconfirm
-                        title="删除此对话？"
-                        onConfirm={(e) => { e?.stopPropagation(); handleDelete(s.id); }}
-                        onCancel={(e) => e?.stopPropagation()}
-                      >
-                        <CloseOutlined
-                          style={{ color: tokens.colors.textTertiary, fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
-                          onClick={(e) => e.stopPropagation()}
+                      {isOpen ? <DownOutlined style={{ fontSize: 9 }} /> : <RightOutlined style={{ fontSize: 9 }} />}
+                      <Text style={{ flex: 1, fontSize: 11, fontWeight: 600 }}>{label}</Text>
+                      <Tooltip title={`新建${label}对话`}>
+                        <PlusOutlined
+                          style={{ color: tokens.colors.primary, cursor: 'pointer', fontSize: 12 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (gid === 'tutor-h5') {
+                              navigate(`/e/tutor-h5/chat?new=${Date.now()}`);
+                            } else {
+                              setActiveSessionId('');
+                              navigate(`/e/${gid}/chat`);
+                            }
+                          }}
                         />
-                      </Popconfirm>
+                      </Tooltip>
+                      {count > 0 && <Text type="secondary" style={{ fontSize: 10 }}>{count}</Text>}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {isOpen && gid !== 'tutor-h5' && platformRows.map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => { setActiveSessionId(s.id); gid === 'tutor' ? navigate('/e/tutor/chat') : onSelect('home'); }}
+                        className="dal-session-row"
+                        style={{
+                          padding: '6px 8px', cursor: 'pointer', borderRadius: 4, marginBottom: 1,
+                          background: s.id === activeSessionId ? tokens.colors.primaryBg : 'transparent',
+                          borderLeft: s.id === activeSessionId ? `2px solid ${tokens.colors.primary}` : '2px solid transparent',
+                          display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                      >
+                        <MessageOutlined style={{ color: s.id === activeSessionId ? tokens.colors.primary : tokens.colors.textTertiary, fontSize: 11, flexShrink: 0 }} />
+                        {editingId === s.id ? (
+                          <Input
+                            size="small"
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onPressEnter={() => saveEdit(s.id)}
+                            suffix={<CheckOutlined onClick={() => saveEdit(s.id)} style={{ color: tokens.colors.success, cursor: 'pointer' }} />}
+                            style={{ flex: 1, fontSize: 12 }}
+                          />
+                        ) : (
+                          <Text
+                            ellipsis
+                            style={{ flex: 1, fontSize: 12, fontWeight: s.id === activeSessionId ? 500 : 400 }}
+                            onDoubleClick={() => startEdit(s.id, s.title)}
+                          >
+                            {s.title}
+                          </Text>
+                        )}
+                        {editingId !== s.id && (
+                          <div className="dal-session-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            <EditOutlined
+                              style={{ color: tokens.colors.textTertiary, fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+                              onClick={(e) => { e.stopPropagation(); startEdit(s.id, s.title); }}
+                            />
+                            <Popconfirm
+                              title="删除此对话？"
+                              onConfirm={(e) => { e?.stopPropagation(); handleDelete(s.id); }}
+                              onCancel={(e) => e?.stopPropagation()}
+                            >
+                              <CloseOutlined
+                                style={{ color: tokens.colors.textTertiary, fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </Popconfirm>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {isOpen && gid === 'tutor-h5' && vendorRows.map((vs) => {
+                      const sid = vs.session_id || vs.id;
+                      const isActive = sid === activeH5SessionId;
+                      return (
+                        <div
+                          key={sid}
+                          onClick={() => navigate(`/e/tutor-h5/chat?session=${encodeURIComponent(sid)}`)}
+                          className="dal-session-row"
+                          style={{
+                            padding: '6px 8px', cursor: 'pointer', borderRadius: 4, marginBottom: 1,
+                            background: isActive ? tokens.colors.primaryBg : 'transparent',
+                            borderLeft: isActive ? `2px solid ${tokens.colors.primary}` : '2px solid transparent',
+                            display: 'flex', alignItems: 'center', gap: 4,
+                          }}
+                        >
+                          <MessageOutlined style={{ color: isActive ? tokens.colors.primary : tokens.colors.textTertiary, fontSize: 11, flexShrink: 0 }} />
+                          <Text ellipsis style={{ flex: 1, fontSize: 12, fontWeight: isActive ? 500 : 400 }}>{vs.title}</Text>
+                          <Text type="secondary" style={{ fontSize: 10, flexShrink: 0 }}>{relTime(vs.updated_at)}</Text>
+                          <div className="dal-session-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            <EditOutlined
+                              style={{ color: tokens.colors.textTertiary, fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const title = window.prompt('输入新标题', '');
+                                if (title === null || !title.trim()) return;
+                                try { await updateSessionTitle(sid, title.trim()); refreshH5Sessions(); } catch { /* ignore */ }
+                              }}
+                            />
+                            <Popconfirm
+                              title="删除此对话？"
+                              onConfirm={async (e) => {
+                                e?.stopPropagation();
+                                try { await deleteSession(sid); refreshH5Sessions(); } catch { /* ignore */ }
+                              }}
+                              onCancel={(e) => e?.stopPropagation()}
+                            >
+                              <CloseOutlined
+                                style={{ color: tokens.colors.textTertiary, fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </Popconfirm>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

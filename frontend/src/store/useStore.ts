@@ -11,6 +11,8 @@ const SESSIONS_STORAGE_KEY = 'di_sessions_freeplan_v1';
 export type Session = {
   id: string;
   title: string;
+  /** IA 件批2 新增：创建时写入（值源=ExpertChat 现有 slug）；旧会话读入归 'wenshu'（终审裁定④） */
+  expertId: ExpertId;
   messages: ChatMessage[];
   confirmed: Record<string, any>;
   flags: Record<string, boolean>;
@@ -27,9 +29,12 @@ export type Session = {
   createdAt: number;
 };
 
-export function newSession(): Session {
+/** IA 件批2：会话所属专家（三专家门户；h5 组不走本 store——vendor sessions API 单列） */
+export type ExpertId = 'wenshu' | 'tutor' | 'tutor-h5';
+
+export function newSession(expertId: ExpertId = 'wenshu'): Session {
   const id = `free_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  return { id, title: '新对话', messages: [], confirmed: {}, flags: {}, thinkStream: [], pendingCandidates: [], lastResponse: null, finalTokens: [], createdAt: Date.now() };
+  return { id, title: '新对话', expertId, messages: [], confirmed: {}, flags: {}, thinkStream: [], pendingCandidates: [], lastResponse: null, finalTokens: [], createdAt: Date.now() };
 }
 
 function loadSessions(): Session[] {
@@ -37,7 +42,10 @@ function loadSessions(): Session[] {
     const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Session[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // IA 件批2 迁移规则（终审裁定④）：旧会话无 expertId → 默认 'wenshu'（诚实账8：不做猜测式迁移）
+        return parsed.map((s) => ({ ...s, expertId: s.expertId || 'wenshu' }));
+      }
     }
   } catch { /* ignore */ }
   return [newSession()];
@@ -73,7 +81,7 @@ interface AppState {
   setSessions: (updater: Session[] | ((prev: Session[]) => Session[])) => void;
   setActiveSessionId: (id: string) => void;
   updateSession: (id: string, patch: Partial<Session>) => void;
-  createNewSession: () => string;
+  createNewSession: (expertId?: ExpertId) => string;
   deleteSessionById: (id: string) => Promise<boolean>;
   renameSessionById: (id: string, title: string) => void;
   deleteMessage: (sessionId: string, msgId: string) => void;
@@ -119,8 +127,8 @@ export const useStore = create<AppState>((set) => {
     persistSessions(next);
     return { sessions: next };
   }),
-  createNewSession: () => {
-    const s = newSession();
+  createNewSession: (expertId) => {
+    const s = newSession(expertId || 'wenshu');
     set((state) => {
       const next = [s, ...state.sessions];
       persistSessions(next);
