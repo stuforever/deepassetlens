@@ -31,6 +31,7 @@ const MotherQuestionAnalysis = lazy(() => import(/* webpackChunkName: "dt-mq-ana
 const MotherQuestionReview = lazy(() => import(/* webpackChunkName: "dt-mq-review" */ '../pages/tutor/admin/MotherQuestionReview'));
 const MotherQuestionTrash = lazy(() => import(/* webpackChunkName: "dt-mq-trash" */ '../pages/tutor/admin/MotherQuestionTrash'));
 const BookAdmin = lazy(() => import(/* webpackChunkName: "dt-book-admin" */ '../pages/tutor/admin/BookAdmin'));
+const BookWorkbench = lazy(() => import(/* webpackChunkName: "dt-book-workbench" */ '../pages/tutor/book/BookWorkbench'));
 const SettingsAdmin = lazy(() => import(/* webpackChunkName: "dt-settings-admin" */ '../pages/tutor/admin/SettingsAdmin'));
 const MotherQuestionDetail = lazy(() => import(/* webpackChunkName: "dt-mq-detail" */ '../pages/tutor/admin/MotherQuestionDetail'));
 
@@ -143,6 +144,8 @@ export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
     { path: '/e/tutor/self-learning', element: withUseGuard(SelfLearning), label: '自主学习', menuKey: 'e:tutor:self-learning' },
     // 引擎批2 2.6：DT 桌面对话窗口（navigation.tsx e:tutor:chat 既有占位→真路由）
     { path: '/e/tutor/chat', element: withUseGuard(TutorHomeChat, 'tutor'), label: '对话', menuKey: 'e:tutor:chat' },
+    // 引擎批5 5.5：书籍工作台（DT book/page.tsx 1:1 壳件）
+    { path: '/e/tutor/book', element: withUseGuard(BookWorkbench, 'tutor'), label: '书籍', menuKey: 'e:tutor:book' },
   ],
   'tutor-h5': [
     ...TUTOR_H5_PAGES,

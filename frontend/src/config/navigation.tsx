@@ -93,6 +93,8 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: ReadOutlined,
     items: [
       { menuKey: 'e:tutor:chat', label: '对话', path: '/e/tutor/chat', icon: CommentOutlined },
+      // 引擎批5 5.5：书籍工作台（DT book 页 1:1——书库/创建器/阅读器三态）
+      { menuKey: 'e:tutor:book', label: '书籍', path: '/e/tutor/book', icon: BookOutlined },
       // IA批6 6.3：placeholder 解除——页面已注册 EXPERT_PAGES.tutor（co-writer/self-learning=use、partners=manage）
       { menuKey: 'e:tutor:self-learning', label: '自主学习', path: '/e/tutor/self-learning', icon: RocketOutlined },
       { menuKey: 'e:tutor:co-writer', label: 'AI写作', path: '/e/tutor/co-writer', icon: EditOutlined },

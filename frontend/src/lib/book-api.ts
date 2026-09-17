@@ -1,8 +1,5 @@
-import { apiFetch, apiUrl, wsUrl } from "./api";
-import {
-  runBookSocketOperation,
-  type BookWsEvent,
-} from "./book-ws-operation";
+import { apiFetch, apiUrl } from "./api";
+import type { BookWsEvent } from "./book-ws-operation";
 import type {
   Book,
   BookDetail,
@@ -14,16 +11,63 @@ import type {
 
 const BASE = "/api/v1/book";
 
-function requestOverSocket<T extends BookWsEvent>(
-  message: BookWsEvent,
-  resultType: string,
+/**
+ * 引擎批5 5.3：生成类操作切桥（E-25）——原 WS requestOverSocket（runBookSocketOperation）
+ * 删除，改为 POST /api/v2/skills/capability（skill_code=tutor/book-generate）SSE 消费。
+ * 帧映射：metadata.ws_event→onEvent（BookWsEvent 同型）；result.metadata.ws_result→resolve；
+ * error→reject。接口签名与原函数一致，调用点零改动。
+ */
+async function requestOverBridge<T>(
+  message: Record<string, unknown>,
   onEvent?: (event: BookWsEvent) => void,
 ): Promise<T> {
-  return runBookSocketOperation<T>(() => new WebSocket(wsUrl(`${BASE}/ws`)), {
-    message,
-    resultType,
-    onEvent,
+  const resp = await fetch(apiUrl("/api/v2/skills/capability"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      skill_code: "tutor/book-generate",
+      message: String(message.type || "book_op"),
+      config: { ...message },
+    }),
   });
+  if (!resp.ok || !resp.body) throw new Error(`book bridge HTTP ${resp.status}`);
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let result: T | null = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const raw = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      for (const line of raw.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        let ev: {
+          type?: string;
+          content?: string;
+          metadata?: Record<string, unknown>;
+        };
+        try {
+          ev = JSON.parse(line.slice(5).trim());
+        } catch {
+          continue;
+        }
+        const md = ev.metadata || {};
+        if (md.ws_event) {
+          onEvent?.(md.ws_event as Record<string, unknown>);
+        } else if (ev.type === "result" && md.ws_result) {
+          result = md.ws_result as T;
+        } else if (ev.type === "error") {
+          throw new Error(ev.content || "book bridge error");
+        }
+      }
+    }
+  }
+  if (result === null) throw new Error("book bridge: 未收到结果帧");
+  return result;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -74,23 +118,22 @@ export const bookApi = {
     payload: CreateBookPayload,
     onEvent?: (event: BookWsEvent) => void,
   ) =>
-    requestOverSocket<{
+    requestOverBridge<{
       type: "create_result";
       book: Book;
       proposal: BookProposal;
-    }>({ type: "create", ...payload }, "create_result", onEvent),
+    }>({ type: "create", ...payload }, onEvent),
   confirmProposal: (
     book_id: string,
     proposal?: BookProposal,
     onEvent?: (event: BookWsEvent) => void,
   ) =>
-    requestOverSocket<{
+    requestOverBridge<{
       type: "confirm_proposal_result";
       book: Book;
       spine: Spine;
     }>(
       { type: "confirm_proposal", book_id, proposal: proposal ?? null },
-      "confirm_proposal_result",
       onEvent,
     ),
   confirmSpine: (book_id: string, spine?: Spine, auto_compile = true) =>
@@ -104,9 +147,8 @@ export const bookApi = {
     force = false,
     onEvent?: (event: BookWsEvent) => void,
   ) =>
-    requestOverSocket<{ type: "compile_page_result"; page: Page }>(
+    requestOverBridge<{ type: "compile_page_result"; page: Page }>(
       { type: "compile_page", book_id, page_id, force },
-      "compile_page_result",
       onEvent,
     ),
   regenerateBlock: (
@@ -116,7 +158,7 @@ export const bookApi = {
     params_override?: Record<string, unknown>,
     onEvent?: (event: BookWsEvent) => void,
   ) =>
-    requestOverSocket<{
+    requestOverBridge<{
       type: "regenerate_block_result";
       block: Block | null;
     }>(
@@ -127,7 +169,6 @@ export const bookApi = {
         block_id,
         params_override: params_override ?? null,
       },
-      "regenerate_block_result",
       onEvent,
     ),
 
