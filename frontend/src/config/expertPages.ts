@@ -66,6 +66,11 @@ const PartnersNew = lazy(() => import(/* webpackChunkName: "dt-partners-new" */ 
 const PartnerDetail = lazy(() => import(/* webpackChunkName: "dt-partners-detail" */ '../pages/tutor/partners/PartnerDetail'));
 const SelfLearning = lazy(() => import(/* webpackChunkName: "dt-self-learning" */ '../pages/tutor/learning/SelfLearning'));
 
+// 引擎批2 2.5/2.6：DT 桌面对话窗口（home 页复刻壳+桥 SSE 态源——AgentChatContext）。
+// 静态路径 /e/tutor/chat 压过 routes.tsx 的 /e/:slug/chat 参数路由（v6 静态优先）；
+// ExpertChat 收归 wenshu（/e/wenshu/chat）——计划 2.6。
+const TutorHomeChat = lazy(() => import(/* webpackChunkName: "dt-tutor-home-chat" */ '../pages/tutor/chat/TutorHomeChat'));
+
 const TUTOR_H5_PAGES: ExpertPageConfig[] = [
   // IA 件批1：16 条路由从 /e/tutor/{h5,notebook} 迁出 → /e/tutor-h5/*（menuKey 同步换前缀）；
   // 守卫传 'tutor-h5'（use 语义不变——A-4 分层，API 面四执法点为真执法）
@@ -136,6 +141,8 @@ export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
     { path: '/e/tutor/partners/:partnerId', element: withAdminGuard(PartnerDetail), label: '伙伴详情', menuKey: 'e:tutor:partners:detail', hideInMenu: true },
     // IA批6 6.3：桌面自主学习（use——与 h5 版 /e/tutor-h5/learn 并存，DT 本就两页各自 1:1）
     { path: '/e/tutor/self-learning', element: withUseGuard(SelfLearning), label: '自主学习', menuKey: 'e:tutor:self-learning' },
+    // 引擎批2 2.6：DT 桌面对话窗口（navigation.tsx e:tutor:chat 既有占位→真路由）
+    { path: '/e/tutor/chat', element: withUseGuard(TutorHomeChat, 'tutor'), label: '对话', menuKey: 'e:tutor:chat' },
   ],
   'tutor-h5': [
     ...TUTOR_H5_PAGES,

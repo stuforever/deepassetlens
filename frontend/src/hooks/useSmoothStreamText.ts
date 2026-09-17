@@ -1,4 +1,5 @@
-// IA批6 lib 补件：1:1 移植自 DeepTutor web/hooks/useSmoothStreamText.ts（纯逻辑件逐字；@/ 别名→相对路径）。
+"use client";
+
 import { useEffect, useRef, useState } from "react";
 
 interface SmoothStreamOptions {

@@ -1,0 +1,242 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ────────────────────────────────────────────────────────────────────────
+   引擎批2：DT 桌面窗口主题与全局动画层（源=DT web/app/globals.css 1:1 选段——
+   只入 19 组件族实际引用的类，防整本 globals 与 tupu 既有样式互撞；台账 E-20）。
+   主题=Cream（DT :root 默认块原值）；--font-sans/--font-serif=DT next/font 的
+   系统栈等值（CRA 无 next/font）。
+   ──────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, "Songti SC", "SimSun", serif;
+  --background: #fdfcf9;
+  --foreground: #1c1816;
+  --card: #ffffff;
+  --card-foreground: #1c1816;
+  --popover: #ffffff;
+  --popover-foreground: #1c1816;
+  --primary: #b0501e;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f2ea;
+  --secondary-foreground: #1c1816;
+  --muted: #f1ede2;
+  --muted-foreground: #6d645a;
+  --accent: #ece7d8;
+  --accent-foreground: #1c1816;
+  --destructive: #c53a2c;
+  --destructive-foreground: #ffffff;
+  --border: #e6decc;
+  --input: #e6decc;
+  --ring: #b0501e;
+  --overlay: rgba(28, 24, 22, 0.42);
+}
+
+/* Chat 滚动容器：锚定抑制 + 禁 smooth（ChatMessages 滚动钉帧依赖，globals L277-280） */
+[data-chat-scroll-root="true"] {
+  overflow-anchor: none;
+  scroll-behavior: auto;
+}
+
+/* fade-in（欢迎态入场，globals L612-614） */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.35s ease-out forwards;
+}
+
+/* Picker chrome（globals L618-641） */
+@keyframes dt-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-overlay-in {
+  animation: dt-overlay-in 160ms ease-out;
+}
+@keyframes dt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-pop-in {
+  animation: dt-pop-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Streaming breathing（globals L646-679） */
+@keyframes dt-breathing {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.dt-breathing-text {
+  animation: dt-breathing 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes dt-mark-pulse {
+  0%,
+  100% {
+    transform: scale(0.9);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.dt-mark-pulse {
+  animation: dt-mark-pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+  will-change: transform;
+}
+
+/* Turn navigator arrival flash（globals L688-709） */
+@keyframes turn-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 42%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 32%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+
+.turn-flash {
+  animation: turn-flash 1.3s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-flash {
+    animation-duration: 0.01ms;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+}
+
+/* Picker 开态冻结环境动画（globals L717-722） */
+body[data-picker-open] .dt-breathing-text,
+body[data-picker-open] .session-pulse,
+body[data-picker-open] .dt-session-icon-running,
+body[data-picker-open] .dt-mark-pulse {
+  animation-play-state: paused !important;
+}
+
+/* Capability menu pop-up（globals L727-742） */
+@keyframes dt-popup-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dt-popup-up {
+  animation: dt-popup-up 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: bottom left;
+  will-change: opacity, transform;
+}
+
+/* Session status pulse + running icon（globals L745-782） */
+@keyframes session-pulse {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(2.2);
+  }
+}
+
+.session-pulse {
+  animation: session-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes dt-session-icon-running {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(-0.6px) rotate(-6deg) scale(1.05);
+  }
+  50% {
+    transform: translateY(0) rotate(0deg) scale(1.02);
+  }
+  75% {
+    transform: translateY(0.6px) rotate(6deg) scale(1.05);
+  }
+}
+
+.dt-session-icon-running {
+  animation: dt-session-icon-running 1.6s cubic-bezier(0.45, 0.05, 0.55, 0.95)
+    infinite;
+  transform-origin: center;
+}
+
+/* Chat shell ↔ file preview drawer（globals L789-811） */
+.chat-preview-shell {
+  transition: padding-right 220ms ease-out;
+  padding-right: 0;
+}
+:root[data-viewer-resizing="true"] .chat-preview-shell {
+  transition: none;
+}
+@media (min-width: 1024px) {
+  .chat-preview-shell[data-preview-open="true"] {
+    padding-right: min(560px, 92vw);
+  }
+  .chat-preview-shell[data-preview-open="false"][data-viewer-open="true"] {
+    padding-right: min(var(--viewer-width, 620px), 92vw);
+  }
+}
+
+/* Reduced motion（globals L854-870 全段照抄） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .dt-breathing-text,
+  .dt-mark-pulse,
+  .session-pulse,
+  .animate-spin {
+    animation: none !important;
+  }
+}
