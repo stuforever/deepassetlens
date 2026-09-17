@@ -93,15 +93,15 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: ReadOutlined,
     items: [
       { menuKey: 'e:tutor:chat', label: '对话', path: '/e/tutor/chat', icon: CommentOutlined },
-      // 批6 页就绪前 placeholder 标记（计划 3.1 表注）
-      { menuKey: 'e:tutor:self-learning', label: '自主学习', path: '/e/tutor/self-learning', icon: RocketOutlined, placeholder: true },
-      { menuKey: 'e:tutor:co-writer', label: 'AI写作', path: '/e/tutor/co-writer', icon: EditOutlined, placeholder: true },
+      // IA批6 6.3：placeholder 解除——页面已注册 EXPERT_PAGES.tutor（co-writer/self-learning=use、partners=manage）
+      { menuKey: 'e:tutor:self-learning', label: '自主学习', path: '/e/tutor/self-learning', icon: RocketOutlined },
+      { menuKey: 'e:tutor:co-writer', label: 'AI写作', path: '/e/tutor/co-writer', icon: EditOutlined },
       // 管理三项列空间菜单（menuKey=TUTOR_ADMIN_PAGES 注册表现状键——KeepAlive 稳定）
       { menuKey: 'e:tutor:admin:mq', label: '母题库管理', path: '/e/tutor/admin/mother-questions', icon: BookOutlined },
       { menuKey: 'e:tutor:admin:book', label: '书源管理', path: '/e/tutor/admin/book', icon: BookOutlined },
       { menuKey: 'e:tutor:admin:settings', label: '教学设置', path: '/e/tutor/admin/settings', icon: SettingOutlined },
-      // 伙伴/推送（批6 页就绪前 placeholder；空间内显隐按 manage——3.3）
-      { menuKey: 'e:tutor:partners', label: '伙伴/推送', path: '/e/tutor/partners', icon: TeamOutlined, placeholder: true },
+      // 伙伴/推送（IA批6 6.3 就绪；空间内显隐按 manage——3.3）
+      { menuKey: 'e:tutor:partners', label: '伙伴/推送', path: '/e/tutor/partners', icon: TeamOutlined },
     ],
   },
   {

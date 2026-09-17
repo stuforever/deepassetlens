@@ -56,6 +56,16 @@ const H5Share = lazy(() => import(/* webpackChunkName: "dt-h5-share" */ '../page
 // IA 件批1：笔记本随 h5 组迁入 tutor-h5 空间（spec §3.1 h5 组 12 项含笔记本）→ /e/tutor-h5/notebook
 const NotebookPage = lazy(() => import(/* webpackChunkName: "dt-notebook" */ '../pages/tutor/notebook/NotebookPage'));
 
+// IA批6 6.3：AI写作+伙伴+桌面自主学习（DT (workspace) 组复刻件落位）
+// 编辑页/新建/详情为动线子页（hideInMenu——列表卡/新建入口可达，1:1 闭环）；
+// 守卫：co-writer/self-learning=use；partners 三页=manage（plan 6.3 裁决，批3 comment 预告）。
+const CowriterList = lazy(() => import(/* webpackChunkName: "dt-cowriter-list" */ '../pages/tutor/cowriter/CowriterList'));
+const CowriterEditor = lazy(() => import(/* webpackChunkName: "dt-cowriter-editor" */ '../pages/tutor/cowriter/CowriterEditor'));
+const PartnersList = lazy(() => import(/* webpackChunkName: "dt-partners-list" */ '../pages/tutor/partners/PartnersList'));
+const PartnersNew = lazy(() => import(/* webpackChunkName: "dt-partners-new" */ '../pages/tutor/partners/PartnersNew'));
+const PartnerDetail = lazy(() => import(/* webpackChunkName: "dt-partners-detail" */ '../pages/tutor/partners/PartnerDetail'));
+const SelfLearning = lazy(() => import(/* webpackChunkName: "dt-self-learning" */ '../pages/tutor/learning/SelfLearning'));
+
 const TUTOR_H5_PAGES: ExpertPageConfig[] = [
   // IA 件批1：16 条路由从 /e/tutor/{h5,notebook} 迁出 → /e/tutor-h5/*（menuKey 同步换前缀）；
   // 守卫传 'tutor-h5'（use 语义不变——A-4 分层，API 面四执法点为真执法）
@@ -110,11 +120,22 @@ export interface ExpertPageConfig {
 }
 
 export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
-  // IA 件批1：拆分双空间——tutor=桌面后台（co-writer/partners/self-learning 批6 再加）；
-  // tutor-h5=移动学习空间（h5 15 页+笔记本）。数据面共用同一教学数据域（spec §一）。
+  // IA 件批1：拆分双空间——tutor=桌面后台；tutor-h5=移动学习空间（h5 15 页+笔记本）。
+  // IA批6：桌面三功能页入 tutor 空间（AI写作/伙伴/自主学习——DT (workspace) 组复刻件）。
+  // 数据面共用同一教学数据域（spec §一）。
   tutor: [
     // ⑤R R1（批12）：先行版六页退役移除（§3.3.5 终版=DT h5 复刻件）
     ...TUTOR_ADMIN_PAGES,
+    // IA批6 6.3：AI写作（列表 use + 编辑动线 :docId——CowriterList 跳 ?doc=<id>，
+    // 编辑页 props 优先回退 ?doc=，双承接等价于源 /co-writer/[docId]）
+    { path: '/e/tutor/co-writer', element: withUseGuard(CowriterList), label: 'AI写作', menuKey: 'e:tutor:co-writer' },
+    { path: '/e/tutor/co-writer/:docId', element: withUseGuard(CowriterEditor), label: 'AI写作编辑', menuKey: 'e:tutor:co-writer:doc', hideInMenu: true },
+    // IA批6 6.3：伙伴（三页 manage——plan 6.3 裁决；列表卡进详情、新建向导、详情四 Tab）
+    { path: '/e/tutor/partners', element: withAdminGuard(PartnersList), label: '伙伴/推送', menuKey: 'e:tutor:partners' },
+    { path: '/e/tutor/partners/new', element: withAdminGuard(PartnersNew), label: '新建伙伴', menuKey: 'e:tutor:partners:new', hideInMenu: true },
+    { path: '/e/tutor/partners/:partnerId', element: withAdminGuard(PartnerDetail), label: '伙伴详情', menuKey: 'e:tutor:partners:detail', hideInMenu: true },
+    // IA批6 6.3：桌面自主学习（use——与 h5 版 /e/tutor-h5/learn 并存，DT 本就两页各自 1:1）
+    { path: '/e/tutor/self-learning', element: withUseGuard(SelfLearning), label: '自主学习', menuKey: 'e:tutor:self-learning' },
   ],
   'tutor-h5': [
     ...TUTOR_H5_PAGES,

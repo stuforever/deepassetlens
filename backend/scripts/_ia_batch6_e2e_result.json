@@ -1,0 +1,42 @@
+[
+ {
+  "name": "S1 菜单入口→AI写作列表",
+  "ok": true,
+  "detail": "http://localhost:23000/e/tutor/co-writer"
+ },
+ {
+  "name": "S2 新建草稿→编辑动线",
+  "ok": true,
+  "detail": "http://localhost:23000/e/tutor/co-writer/9ef98af2c7fd"
+ },
+ {
+  "name": "S3 编辑→自动保存",
+  "ok": true,
+  "detail": "saved=True"
+ },
+ {
+  "name": "S4 自主学习页",
+  "ok": true,
+  "detail": "http://localhost:23000/e/tutor/self-learning"
+ },
+ {
+  "name": "S5 菜单入口→伙伴列表",
+  "ok": true,
+  "detail": "http://localhost:23000/e/tutor/partners"
+ },
+ {
+  "name": "S6 新建伙伴向导",
+  "ok": true,
+  "detail": "http://localhost:23000/e/tutor/partners/new"
+ },
+ {
+  "name": "S7 伙伴详情（列表卡）",
+  "ok": true,
+  "detail": "http://localhost:23000/e/tutor/partners/partner-f5849d88"
+ },
+ {
+  "name": "S8 详情参数路由直访",
+  "ok": true,
+  "detail": "http://localhost:23000/e/tutor/partners/partner-f5849d88"
+ }
+]
