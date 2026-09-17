@@ -57,7 +57,7 @@ def _evt(type_, source, stage, content="", metadata=None, session_id=None,
 
 
 async def dispatch(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
-    """按 skill_code 派发到编排实现（批1 chat+批3 三件）。"""
+    """按 skill_code 派发到编排实现（批1 chat+批3 三件+批4 三件）。"""
     code = req.skill_code
     if code == "tutor/chat":
         async for ev in run_chat(req, session_id, turn_id, user_prefix):
@@ -73,6 +73,18 @@ async def dispatch(req, session_id: str, turn_id: str, user_prefix: str) -> Asyn
         return
     if code == "tutor/wrong-intake":
         async for ev in run_wrong_intake(req, session_id, turn_id, user_prefix):
+            yield ev
+        return
+    if code == "tutor/quiz":
+        async for ev in run_quiz(req, session_id, turn_id, user_prefix):
+            yield ev
+        return
+    if code == "tutor/visualize":
+        async for ev in run_visualize(req, session_id, turn_id, user_prefix):
+            yield ev
+        return
+    if code == "tutor/research":
+        async for ev in run_research(req, session_id, turn_id, user_prefix):
             yield ev
         return
     yield _evt("error", "bridge", "dispatch",
@@ -599,6 +611,401 @@ async def run_wrong_intake(req, session_id: str, turn_id: str, user_prefix: str)
 def _chunk_text(text: str, size: int = 48) -> List[str]:
     """确定性回执分片（content×N 流感——不进 LLM）。"""
     return [text[i:i + size] for i in range(0, len(text), size)] or [""]
+
+
+# ---------------------------------------------------------------------------
+# 引擎批4：quiz / visualize / research 三编排
+# ---------------------------------------------------------------------------
+
+def _cfg(req) -> Dict[str, Any]:
+    """桥请求 config（dict 保护）。"""
+    c = getattr(req, "config", None)
+    return c if isinstance(c, dict) else {}
+
+
+def _llm_stream_text(system: str, user: str, temperature: float = 0.3):
+    """平台默认连接流式文本生成（async generator of chunks）。"""
+    from app.services.llm_client import get_chat_model
+    model = get_chat_model(temperature=temperature, streaming=True)
+    return model.astream([{"role": "system", "content": system},
+                          {"role": "user", "content": user}])
+
+
+async def run_quiz(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
+    """quiz 编排（批4）：action=judge 判题回分（vendor quiz_judge prompt 语义 1:1 复用——
+    零触导入）/mimic 试卷 PDF 仿制/默认=计划器→结构化出题→自检→题卡事件。"""
+    req._user_prefix = user_prefix
+    cfg = _cfg(req)
+    action = str(cfg.get("action") or "generate")
+    gen = _prepare(req, session_id, turn_id)
+    while True:
+        try:
+            ev = await gen.__anext__()
+        except StopAsyncIteration:
+            break
+        if isinstance(ev, tuple):
+            break
+        yield ev
+
+    if action == "judge":
+        # 判题分支（E-24②）：vendor quiz_judge 语义吸收——题面/作答/图片→回分帧。
+        yield _evt("stage_start", "bridge", "judge", content="AI 判分中",
+                   session_id=session_id, turn_id=turn_id)
+        from app.vendor.deeptutor.api.routers.quiz_judge import (
+            _JUDGE_SYSTEM_PROMPTS, _build_judge_user_prompt,
+        )
+        lang = str(cfg.get("language") or "zh")
+        has_image = bool(cfg.get("user_answer_images"))
+        user_prompt = _build_judge_user_prompt(
+            language=lang,
+            question=str(cfg.get("question") or req.message or ""),
+            question_type=str(cfg.get("question_type") or ""),
+            options=cfg.get("options"),
+            correct_answer=str(cfg.get("correct_answer") or ""),
+            explanation=str(cfg.get("explanation") or ""),
+            user_answer=str(cfg.get("user_answer") or ""),
+            has_image=has_image, image_count=len(cfg.get("user_answer_images") or []),
+        )
+        acc: List[str] = []
+        try:
+            system_prompt = _JUDGE_SYSTEM_PROMPTS.get(lang, _JUDGE_SYSTEM_PROMPTS["zh"])
+            from app.services.llm_client import get_chat_model
+            model = get_chat_model(temperature=0.1, streaming=True)
+            user_msg: Dict[str, Any] = {"role": "user", "content": user_prompt}
+            if has_image:
+                from app.vendor.deeptutor.api.routers.quiz_judge import _build_multimodal_user_content
+                parts = await _build_multimodal_user_content(
+                    text=user_prompt,
+                    image_records=[img for img in (cfg.get("user_answer_images") or [])
+                                   if isinstance(img, dict)])
+                user_msg = {"role": "user", "content": parts}
+            aiter = model.astream([{"role": "system", "content": system_prompt}, user_msg]).__aiter__()
+            while True:
+                try:
+                    chunk = await aiter.__anext__()
+                except StopAsyncIteration:
+                    break
+                c = getattr(chunk, "content", "")
+                if isinstance(c, str) and c:
+                    acc.append(c)
+                    yield _evt("content", "agent", "judge", content=c,
+                               session_id=session_id, turn_id=turn_id)
+        except Exception as e:
+            logger.exception("[bridge] quiz judge 失败")
+            yield _evt("error", "agent", "judge", content=str(e),
+                       session_id=session_id, turn_id=turn_id)
+            yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                       metadata={"ok": False})
+            return
+        final_text = "".join(acc).strip()
+        yield _evt("stage_end", "bridge", "judge", session_id=session_id, turn_id=turn_id)
+        if final_text:
+            yield _evt("result", "agent", "judge", content=final_text,
+                       metadata={"action": "judge"}, session_id=session_id, turn_id=turn_id)
+        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"ok": True, "action": "judge"})
+        return
+
+    # 出题分支（generate/mimic）：计划器→结构化出题→自检→题卡事件
+    yield _evt("stage_start", "bridge", "plan", content="出题计划中",
+               session_id=session_id, turn_id=turn_id)
+    mimic_text = ""
+    if action == "mimic":
+        pdf_b64 = str(cfg.get("quiz_pdf") or cfg.get("pdf_base64") or "")
+        atts = getattr(req, "attachments", None) or []
+        if not pdf_b64 and atts:
+            first = atts[0] if isinstance(atts[0], dict) else {}
+            pdf_b64 = str(first.get("base64") or "")
+        if pdf_b64:
+            import base64 as _b64
+            raw = _b64.b64decode(pdf_b64)
+            import io as _io
+            try:
+                import pdfplumber
+                with pdfplumber.open(_io.BytesIO(raw)) as pdf:
+                    mimic_text = "\n".join((p.extract_text() or "") for p in pdf.pages[:12])
+            except Exception:
+                try:
+                    from pypdf import PdfReader
+                    mimic_text = "\n".join((p.extract_text() or "") for p in PdfReader(_io.BytesIO(raw)).pages[:12])
+                except Exception as e:
+                    logger.warning(f"[bridge] quiz mimic PDF 解析失败: {e}")
+        if not mimic_text:
+            yield _evt("error", "agent", "plan", content="mimic 需要 PDF 附件且解析失败（pypdf/pdfplumber 均不可用或空文档）",
+                       session_id=session_id, turn_id=turn_id)
+            yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                       metadata={"ok": False})
+            return
+
+    plan_cfg = {k: cfg.get(k) for k in
+                ("question_types", "questionCount", "question_count", "difficulty", "knowledgePoints",
+                 "knowledge_points", "gradeBand", "grade_band", "language", "includeAnswers", "include_explanations")
+                if cfg.get(k) is not None}
+    plan_note = f"[配置]\n{json.dumps(plan_cfg, ensure_ascii=False)}\n\n" if plan_cfg else ""
+    yield _evt("stage_end", "bridge", "plan", session_id=session_id, turn_id=turn_id)
+
+    yield _evt("stage_start", "bridge", "generate", content="结构化出题中",
+               session_id=session_id, turn_id=turn_id)
+    quiz_system = (
+        "你是出题引擎。按配置与素材生成结构化试卷，返回 JSON：\n"
+        "{\"questions\": [{\"question\": \"题干\", \"question_type\": \"multiple_choice|fill_blank|short_answer|math_proof\", "
+        "\"options\": {\"A\": \"...\", \"B\": \"...\"} 或 null, \"correct_answer\": \"正确答案\", "
+        "\"explanation\": \"解析\", \"difficulty\": \"基础|提高|挑战\"}]}\n"
+        "只输出 JSON。题目必须与配置/素材语义一致，不出超纲题。")
+    quiz_user = (plan_note + (f"[mimic 源试卷]\n{mimic_text[:6000]}\n\n" if mimic_text else "")
+                 + (req.message or "按配置出题"))
+    acc = []
+    try:
+        model = _llm_stream_text(quiz_system, quiz_user, temperature=0.3)
+        async for chunk in model:
+            c = getattr(chunk, "content", "")
+            if isinstance(c, str) and c:
+                acc.append(c)
+                yield _evt("content", "agent", "generate", content=c,
+                           session_id=session_id, turn_id=turn_id)
+    except Exception as e:
+        logger.exception("[bridge] quiz 出题失败")
+        yield _evt("error", "agent", "generate", content=str(e),
+                   session_id=session_id, turn_id=turn_id)
+        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"ok": False})
+        return
+    raw_txt = "".join(acc)
+    questions: List[Dict[str, Any]] = []
+    try:
+        data = json.loads(raw_txt[raw_txt.find("{"):raw_txt.rfind("}") + 1])
+        questions = list(data.get("questions") or [])
+    except Exception:
+        questions = []
+    yield _evt("stage_end", "bridge", "generate", session_id=session_id, turn_id=turn_id)
+
+    # 自检（self-check）：逐题校验结构完整性（确定性面——不二次 LLM，省时且可测）
+    valid = [q for q in questions if isinstance(q, dict) and q.get("question") and q.get("correct_answer")]
+    for i, q in enumerate(valid):
+        yield _evt("question_card", "agent", "answer", content="题卡",
+                   metadata={"index": i, "question": q.get("question", ""),
+                             "question_type": q.get("question_type", "multiple_choice"),
+                             "options": q.get("options"), "correct_answer": q.get("correct_answer", ""),
+                             "explanation": q.get("explanation", ""), "difficulty": q.get("difficulty", ""),
+                             "self_check": "pass"},
+                   session_id=session_id, turn_id=turn_id)
+    summary = f"共出 {len(valid)} 题（自检通过 {len(valid)}/{len(questions)}）。"
+    if valid:
+        yield _evt("result", "agent", "answer", content=summary,
+                   metadata={"action": action, "count": len(valid), "self_check_total": len(questions),
+                             "questions": valid},
+                   session_id=session_id, turn_id=turn_id)
+    yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+               metadata={"ok": True, "action": action, "count": len(valid)})
+
+
+_VISUALIZE_TEXT_MODES = {"auto", "svg", "chartjs", "mermaid", "html"}
+_VISUALIZE_SYSTEM = (
+    "你是可视化引擎。按 render_mode 生成可直接渲染的产物，只输出产物本身（无解释无代码围栏）：\n"
+    "- svg: 完整 <svg> 标记\n- chartjs: Chart.js 配置 JSON（含 type/data/options）\n"
+    "- mermaid: mermaid 图源码\n- html: 完整自包含 HTML\n"
+    "- auto: 按数据形态选最合适的一种并输出。")
+
+
+async def run_visualize(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
+    """visualize 编排（批4）：文本类 render_mode（svg/chartjs/mermaid/html/auto）=LLM 直出产物；
+    manim_video/manim_image=LLM 生成 manim 代码→SandboxService(9385 runner) 执行→产物事件。
+    render_mode 7 值=frontend lib/visualize-types.ts 枚举 1:1。"""
+    req._user_prefix = user_prefix
+    cfg = _cfg(req)
+    render_mode = str(cfg.get("render_mode") or "auto")
+    quality = str(cfg.get("quality") or "standard")
+    gen = _prepare(req, session_id, turn_id)
+    kb_block = ""
+    while True:
+        try:
+            ev = await gen.__anext__()
+        except StopAsyncIteration:
+            break
+        if isinstance(ev, tuple):
+            _, kb_block, _ = ev
+            break
+        yield ev
+
+    yield _evt("stage_start", "bridge", "generate", content="生成可视化产物",
+               session_id=session_id, turn_id=turn_id)
+    user = (f"render_mode={render_mode}\nquality={quality}\n\n{kb_block}\n\n" if kb_block else
+            f"render_mode={render_mode}\nquality={quality}\n\n") + (req.message or "")
+
+    if render_mode in _VISUALIZE_TEXT_MODES:
+        acc = []
+        try:
+            model = _llm_stream_text(_VISUALIZE_SYSTEM, user, temperature=0.2)
+            async for chunk in model:
+                c = getattr(chunk, "content", "")
+                if isinstance(c, str) and c:
+                    acc.append(c)
+                    yield _evt("content", "agent", "generate", content=c,
+                               session_id=session_id, turn_id=turn_id)
+        except Exception as e:
+            logger.exception("[bridge] visualize 文本产物失败")
+            yield _evt("error", "agent", "generate", content=str(e),
+                       session_id=session_id, turn_id=turn_id)
+            yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                       metadata={"ok": False})
+            return
+        artifact = "".join(acc).strip()
+        yield _evt("artifact", "agent", "answer", content="可视化产物",
+                   metadata={"render_mode": render_mode, "render_type": render_mode,
+                             "content": artifact},
+                   session_id=session_id, turn_id=turn_id)
+        yield _evt("stage_end", "bridge", "generate", session_id=session_id, turn_id=turn_id)
+        yield _evt("result", "agent", "answer", content=artifact or "（空产物）",
+                   metadata={"render_mode": render_mode, "artifact": True},
+                   session_id=session_id, turn_id=turn_id)
+        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"ok": True, "render_mode": render_mode})
+        return
+
+    # manim 分支：代码→沙箱（vendor SandboxService——runner=DEEPTUTOR_SANDBOX_RUNNER_URL）
+    manim_system = ("你是 manim 代码引擎。生成单文件 manim Community 版脚本（Scene 类名 Main），"
+                    "渲染参数由调用方注入。只输出 Python 代码。")
+    code_acc = []
+    try:
+        model = _llm_stream_text(manim_system, user, temperature=0.2)
+        async for chunk in model:
+            c = getattr(chunk, "content", "")
+            if isinstance(c, str) and c:
+                code_acc.append(c)
+    except Exception as e:
+        yield _evt("error", "agent", "generate", content=str(e),
+                   session_id=session_id, turn_id=turn_id)
+        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"ok": False})
+        return
+    code = "".join(code_acc).strip().removeprefix("```python").removeprefix("```").removesuffix("```")
+    exec_res: Dict[str, Any] = {}
+    try:
+        from app.vendor.deeptutor.services.sandbox.service import SandboxService
+        from app.vendor.deeptutor.services.sandbox.spec import ExecRequest, ResourceLimits
+        svc = SandboxService()
+        script_name = "manim_scene.py"
+        out_flag = "-ql" if render_mode == "manim_video" else "-qm"
+        req_exec = ExecRequest(
+            command=f"bash -lc \"cat > /tmp/{script_name} << 'PYEOF'\n{code}\nPYEOF\nmanim {out_flag} /tmp/{script_name} Main\"",
+            limits=ResourceLimits(timeout_s=300, memory_mb=2048, max_output_chars=20_000, cpu_seconds=300))
+        result = await svc.run(req_exec, user_id=user_prefix or "anonymous")
+        exec_res = {"exit_code": result.exit_code, "stdout": result.stdout[-2000:], "stderr": result.stderr[-2000:],
+                    "error": result.error, "timed_out": result.timed_out}
+    except Exception as e:
+        logger.warning(f"[bridge] manim 沙箱执行失败: {e}")
+        exec_res = {"error": str(e)[:300]}
+    ok = not exec_res.get("error") and exec_res.get("exit_code") == 0
+    yield _evt("artifact", "agent", "answer", content="manim 产物",
+               metadata={"render_mode": render_mode, "render_type": render_mode,
+                         "exec": exec_res, "ok": ok, "code": code[:4000]},
+               session_id=session_id, turn_id=turn_id)
+    yield _evt("stage_end", "bridge", "generate", session_id=session_id, turn_id=turn_id)
+    if ok:
+        yield _evt("result", "agent", "answer", content="manim 产物已生成（见 artifact）",
+                   metadata={"render_mode": render_mode, "artifact": True},
+                   session_id=session_id, turn_id=turn_id)
+    else:
+        yield _evt("result", "agent", "answer", content="manim 执行未成功（沙箱环境缺 manim 或超时）",
+                   metadata={"render_mode": render_mode, "artifact": True, "degraded": True},
+                   session_id=session_id, turn_id=turn_id)
+    yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+               metadata={"ok": True, "render_mode": render_mode, "manim_ok": ok})
+
+
+_RESEARCH_SYSTEM_OUTLINE = (
+    "你是研究大纲规划器。按主题与研究配置产出分节大纲，返回 JSON："
+    "{\"title\": \"...\", \"sections\": [{\"heading\": \"...\", \"points\": [\"要点1\", \"...\"]}]}。只输出 JSON。")
+_RESEARCH_SYSTEM_SECTION = (
+    "你是研究写作者。按小节标题与要点写出该节正文（Markdown，300-600 字，有依据地展开，不编造具体数据）。")
+_RESEARCH_SYSTEM_MERGE = (
+    "你是研究汇总者。把各节正文合并为一篇结构化研究报告（Markdown：标题+导语+各节+结论），不改写事实。")
+
+
+async def run_research(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
+    """research 编排（批4）：大纲→分节生成（逐节 progress 事件）→汇总。
+    DT 子代理编排语义吸收为分节独立生成+进度事件（E-24③：进程内顺序分节，
+    非 langgraph 子代理——桥线程面等价可观察行为=大纲/进度/汇总帧序一致）。"""
+    req._user_prefix = user_prefix
+    cfg = _cfg(req)
+    depth = str(cfg.get("depth") or "standard")
+    mode = str(cfg.get("mode") or "report")
+    gen = _prepare(req, session_id, turn_id)
+    kb_block = ""
+    while True:
+        try:
+            ev = await gen.__anext__()
+        except StopAsyncIteration:
+            break
+        if isinstance(ev, tuple):
+            _, kb_block, _ = ev
+            break
+        yield ev
+
+    topic = req.message or ""
+    yield _evt("stage_start", "bridge", "outline", content="规划大纲",
+               session_id=session_id, turn_id=turn_id)
+    outline: Dict[str, Any] = {}
+    try:
+        from app.services.llm_client import get_chat_model
+        resp = get_chat_model(temperature=0.2).invoke([
+            {"role": "system", "content": _RESEARCH_SYSTEM_OUTLINE},
+            {"role": "user", "content": f"主题：{topic}\nmode={mode} depth={depth}\n" +
+                                        (f"\n[知识库素材]\n{kb_block}" if kb_block else "")}])
+        txt = str(resp.content)
+        outline = json.loads(txt[txt.find("{"):txt.rfind("}") + 1])
+    except Exception as e:
+        logger.exception("[bridge] research 大纲失败")
+        yield _evt("error", "agent", "outline", content=str(e),
+                   session_id=session_id, turn_id=turn_id)
+        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"ok": False})
+        return
+    sections = [s for s in (outline.get("sections") or []) if isinstance(s, dict) and s.get("heading")]
+    yield _evt("outline", "agent", "outline", content=outline.get("title", topic),
+               metadata={"title": outline.get("title", topic),
+                         "sections": [{"heading": s.get("heading"), "points": s.get("points") or []} for s in sections]},
+               session_id=session_id, turn_id=turn_id)
+    yield _evt("stage_end", "bridge", "outline", session_id=session_id, turn_id=turn_id)
+
+    section_texts: List[str] = []
+    for i, sec in enumerate(sections):
+        yield _evt("progress", "agent", "sections", content=f"撰写第 {i + 1}/{len(sections)} 节：{sec.get('heading')}",
+                   metadata={"index": i, "total": len(sections), "heading": sec.get("heading"),
+                             "phase": "section"},
+                   session_id=session_id, turn_id=turn_id)
+        sec_acc: List[str] = []
+        try:
+            model = _llm_stream_text(_RESEARCH_SYSTEM_SECTION,
+                                     f"主题：{outline.get('title', topic)}\n"
+                                     f"小节：{sec.get('heading')}\n要点：{json.dumps(sec.get('points') or [], ensure_ascii=False)}",
+                                     temperature=0.3)
+            async for chunk in model:
+                c = getattr(chunk, "content", "")
+                if isinstance(c, str) and c:
+                    sec_acc.append(c)
+        except Exception as e:
+            logger.warning(f"[bridge] research 第{i + 1}节失败: {e}")
+        section_texts.append("## " + str(sec.get("heading")) + "\n\n" + "".join(sec_acc).strip())
+
+    yield _evt("stage_start", "bridge", "merge", content="汇总成文",
+               session_id=session_id, turn_id=turn_id)
+    try:
+        from app.services.llm_client import get_chat_model
+        resp = get_chat_model(temperature=0.2).invoke([
+            {"role": "system", "content": _RESEARCH_SYSTEM_MERGE},
+            {"role": "user", "content": f"标题：{outline.get('title', topic)}\n\n" + "\n\n".join(section_texts)}])
+        merged = str(resp.content).strip()
+    except Exception as e:
+        merged = "\n\n".join(section_texts)
+        logger.warning(f"[bridge] research 汇总降级直拼: {e}")
+    yield _evt("stage_end", "bridge", "merge", session_id=session_id, turn_id=turn_id)
+    if merged:
+        yield _evt("result", "agent", "answer", content=merged,
+                   metadata={"mode": mode, "depth": depth, "sections": len(sections)},
+                   session_id=session_id, turn_id=turn_id)
+    yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+               metadata={"ok": True, "sections": len(sections)})
 
 
 def _safe_json(v: Any) -> Any:

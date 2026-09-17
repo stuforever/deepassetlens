@@ -41,7 +41,7 @@ import {
   readFileAsBase64,
   startQuizJudge,
   type QuizJudgeHandle,
-} from "../../lib/quiz-judge";
+} from "../../lib/quiz-judge-bridge";
 import { type QuizQuestion } from "../../lib/quiz-types";
 import {
   addEntryToCategory,

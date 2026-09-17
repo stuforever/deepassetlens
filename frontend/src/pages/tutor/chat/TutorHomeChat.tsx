@@ -5,7 +5,7 @@
 // 能力选择器数据源=平台技能表（?expert=tutor 8 项全显；未编排技能点击得桥 error 事件）。
 "use client";
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BarChart3, BookMarked, BrainCircuit, Clapperboard, ClipboardCheck, Code2, Compass, Database,
@@ -774,14 +774,67 @@ function TutorHomeChatInner() {
     () => buildSessionActivity(state.messages as never),
     [state.messages],
   );
-  const capabilityConfigSection = useMemo(() => {
+  /* ---- 配置面板确认（DT L1389-1451 1:1——configSection=CapabilityConfigCard JSX） ---- */
+  const handleConfirmCapabilityConfig = useCallback(() => setCapabilityConfigConfirmed(true), []);
+  const handleChangeQuizConfig = useCallback((c: DeepQuestionFormConfig) => { setCapabilityConfigConfirmed(false); setQuizConfig(c); }, []);
+  const handleUploadQuizPdf = useCallback((f: File | null) => { setCapabilityConfigConfirmed(false); setQuizPdf(f); }, []);
+  const handleChangeVisualizeConfig = useCallback((c: VisualizeFormConfig) => { setCapabilityConfigConfirmed(false); setVisualizeConfig(c); }, []);
+  const handleChangeResearchConfig = useCallback((c: DeepResearchFormConfig) => { setCapabilityConfigConfirmed(false); setResearchConfig(c); }, []);
+  const capabilityConfigSection = useMemo((): ReactNode => {
     if (!capabilityNeedsConfig) return null;
-    const storageKey = activeCapabilityDef.value || "chat";
-    return {
-      storageKey,
-      capability: activeCapabilityDef.value,
-    };
-  }, [capabilityNeedsConfig, activeCapabilityDef]);
+    if (isQuizMode) {
+      return (
+        <CapabilityConfigCard
+          capability="deep_question"
+          confirmed={capabilityConfigConfirmed}
+          canConfirm
+          onConfirm={handleConfirmCapabilityConfig}
+        >
+          <QuizConfigPanel
+            value={quizConfig}
+            onChange={handleChangeQuizConfig}
+            uploadedPdf={quizPdf}
+            onUploadPdf={handleUploadQuizPdf}
+          />
+        </CapabilityConfigCard>
+      );
+    }
+    if (isVisualizeMode) {
+      return (
+        <CapabilityConfigCard
+          capability="visualize"
+          confirmed={capabilityConfigConfirmed}
+          canConfirm
+          onConfirm={handleConfirmCapabilityConfig}
+        >
+          <VisualizeConfigPanel
+            value={visualizeConfig}
+            onChange={handleChangeVisualizeConfig}
+          />
+        </CapabilityConfigCard>
+      );
+    }
+    // Research: 校验错误前置透出（DT L1423-1440 1:1）
+    const researchErrorMessages = Object.values(researchValidation.errors);
+    return (
+      <CapabilityConfigCard
+        capability="deep_research"
+        confirmed={capabilityConfigConfirmed}
+        canConfirm={researchErrorMessages.length === 0}
+        validationErrors={researchErrorMessages}
+        onConfirm={handleConfirmCapabilityConfig}
+      >
+        <ResearchConfigPanel
+          value={researchConfig}
+          errors={researchValidation.errors}
+          onChange={handleChangeResearchConfig}
+        />
+      </CapabilityConfigCard>
+    );
+  }, [capabilityNeedsConfig, isQuizMode, isVisualizeMode, capabilityConfigConfirmed,
+    handleConfirmCapabilityConfig, quizConfig, quizPdf, handleChangeQuizConfig, handleUploadQuizPdf,
+    visualizeConfig, handleChangeVisualizeConfig, researchConfig, researchValidation, handleChangeResearchConfig,
+    activeCapabilityDef]);
 
   /* ---- 能力需配置→自动开活动面板（DT L652-659 1:1） ---- */
   const lastCapabilityNeedsConfigRef = useRef(capabilityNeedsConfig);
