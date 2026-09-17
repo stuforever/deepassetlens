@@ -322,6 +322,9 @@ app.include_router(metadata.router, prefix="/api/v1", tags=["metadata"])
 app.include_router(runs.router, prefix="/api/v1", tags=["runs"])
 # v2 API（新技能管理架构）
 app.include_router(v2_skills.router, prefix="/api/v2", tags=["skills-v2"])
+# 引擎批1：deepagent 桥端点 POST /api/v2/skills/capability（SSE——自带 prefix="/api/v2/skills"）
+from app.api import dt_agent_capabilities as _dt_agent_caps
+app.include_router(_dt_agent_caps.router, tags=["agent-bridge"])
 app.include_router(data_intelligence.router)  # 自带 prefix="/api/data-intelligence"
 app.include_router(data_sync.router)  # 自带 prefix="/api/v1/sync"
 app.include_router(knowledge_base.router)  # 自带 prefix="/api/v1/knowledge-bases"

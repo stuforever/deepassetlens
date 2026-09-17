@@ -89,8 +89,10 @@ const SkillManagerV2: React.FC = () => {
         .filter((s: SkillDTO) => s.skill_code !== 'query_entity_pipeline')
         .filter((s: SkillDTO) => {
           if (!expertFilter) return true;
-          // ?expert=wenshu → scenarios/ 命名空间（数据探索个性技能）；tutor → 暂无落库（空态）
-          return expertFilter === 'wenshu' ? s.skill_code.startsWith('scenarios/') : false;
+          // ?expert=wenshu → scenarios/ 命名空间（数据探索个性技能）；tutor → tutor/（引擎批1 八技能真列表）
+          if (expertFilter === 'wenshu') return s.skill_code.startsWith('scenarios/');
+          if (expertFilter === 'tutor') return s.skill_code.startsWith('tutor/');
+          return false;
         });
       setSkills(list);
       // 自动选中第一条技能，避免右侧大面积空白

@@ -993,7 +993,18 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     #   c) 非 wenshu 专家卡=卡面即授权（tools 声明即授权面，不被 W-1 连带）。
     #   wenshu agent 工具面逐件等值（窄化∩card.tools 后再减 excluded16=原两级减法结果）。
     _is_expert_card = bool(card and (card.get("expert_id") or "wenshu") != "wenshu")
-    mcp_tools = _narrow_mcp_tools(mcp_tools, (card or {}).get("tools"))
+    # 引擎批1（2026-09-16）：教学族专家卡（tutor）工具面=vendor 引擎族声明（fsrs/mastery/
+    # wrong_question 等 11 件）——该族已随先行版从 MCP 注册表摘除（⑤R R1），批3/4 由本件
+    # 编排（dt_agent_orchestrations）承接，非 MCP 面。专家卡 MCP 交集为空不再 fail-closed：
+    # 降级空 MCP 面装配（LLM 裸循环+下块 read_file 补挂=可对话可读技能/记忆文件）；
+    # wenshu 卡维持原 fail-closed（问数面零感知）。台账登记。
+    try:
+        mcp_tools = _narrow_mcp_tools(mcp_tools, (card or {}).get("tools"))
+    except ValueError:
+        if not _is_expert_card:
+            raise
+        logger.warning("[引擎批1] 专家卡 MCP 交集为空（教学族声明面）——降级空 MCP 面装配，教学工具由编排承接")
+        mcp_tools = []
     if not _is_expert_card:
         try:
             _w1_excl = frozenset(_cc.get_tool_exclusions()["excluded"]) if _cc is not None else frozenset()
