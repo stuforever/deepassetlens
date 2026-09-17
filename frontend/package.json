@@ -10,6 +10,8 @@
     "@monaco-editor/react": "^4.7.0",
     "antd": "^5.12.2",
     "axios": "^1.6.2",
+    "docx-preview": "^0.4.0",
+    "exceljs": "^4.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",

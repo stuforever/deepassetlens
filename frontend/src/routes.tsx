@@ -18,7 +18,8 @@ const MetricManager = lazy(() => import(/* webpackChunkName: "metrics" */ './pag
 const SkillManagerV2 = lazy(() => import(/* webpackChunkName: "skills" */ './pages/SkillManagerV2'));
 const DataSourceConfigPage = lazy(() => import(/* webpackChunkName: "config" */ './pages/DataSourceConfig'));
 const DorisConfigPage = lazy(() => import(/* webpackChunkName: "config" */ './pages/DorisConfig'));
-const VectorManagePanel = lazy(() => import(/* webpackChunkName: "vector" */ './components/VectorManagePanel'));
+// IA批4 4.5：知识中心 16 件复刻承接 /vector（menuKey vector_manage 不变）；VectorManagePanel 退役 git rm
+const KnowledgePage = lazy(() => import(/* webpackChunkName: "knowledge" */ './pages/knowledge/KnowledgePage'));
 const LLMConfigManager = lazy(() => import(/* webpackChunkName: "llmconfig" */ './pages/LLMConfigManager'));
 const GovernanceObservatory = lazy(() => import(/* webpackChunkName: "governance" */ './pages/GovernanceObservatory'));
 const EngineWorkbench = lazy(() => import(/* webpackChunkName: "workbench" */ './pages/EngineWorkbench'));
@@ -65,7 +66,9 @@ export const routes: RouteConfig[] = [
   { path: '/security-controls', element: SecurityControlCenter, label: '安全控制中心', menuKey: 'security_controls' },
   { path: '/datasource', element: DataSourceConfigPage, label: '数据源', menuKey: 'datasource' },
   { path: '/doris-config', element: DorisConfigPage, label: 'Doris 配置', menuKey: 'doris_config' },
-  { path: '/vector', element: VectorManagePanel, label: '向量管理', menuKey: 'vector_manage' },
+  // IA批4 4.5：/vector 承接=知识中心复刻页（名「知识库管理」保留）；/knowledge 别名同页（pathToMenuKey 已映射 vector_manage）
+  { path: '/vector', element: KnowledgePage, label: '知识库管理', menuKey: 'vector_manage' },
+  { path: '/knowledge', element: KnowledgePage, label: '知识库管理', menuKey: 'vector_manage' },
   { path: '/llm-config', element: LLMConfigManager, label: 'LLM 配置', menuKey: 'llmconfig' },
   { path: '/memory-admin', element: MemoryAdmin, label: '记忆管理', menuKey: 'memory_admin' },
   { path: '/attachment-settings', element: AttachmentSettings, label: '对话附件上限', menuKey: 'attachment_settings' },
