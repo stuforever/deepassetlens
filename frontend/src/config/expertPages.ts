@@ -81,19 +81,21 @@ const TUTOR_H5_PAGES: ExpertPageConfig[] = [
 
 const TUTOR_ADMIN_PAGES: ExpertPageConfig[] = [
   // ⑤R F4（批11）：后台三项顶级入口（adminTop）——AppSider admin 段；子页/详情页 hideInMenu
-  { path: '/e/tutor/admin/mother-questions', element: withAdminGuard(MotherQuestionsAdmin), label: '母题库管理', menuKey: 'e:tutor:admin:mq', adminTop: true },
-  { path: '/e/tutor/admin/mother-questions/new', element: withAdminGuard(MotherQuestionNew), label: '录题', menuKey: 'e:tutor:admin:mq:new', hideInMenu: true },
-  { path: '/e/tutor/admin/mother-questions/photo', element: withAdminGuard(MotherQuestionPhoto), label: '拍照录题', menuKey: 'e:tutor:admin:mq:photo', hideInMenu: true },
-  { path: '/e/tutor/admin/mother-questions/photo-center', element: withAdminGuard(MotherQuestionPhotoCenter), label: '拍照中心', menuKey: 'e:tutor:admin:mq:photocenter', hideInMenu: true },
-  { path: '/e/tutor/admin/mother-questions/analysis', element: withAdminGuard(MotherQuestionAnalysis), label: '错题分析', menuKey: 'e:tutor:admin:mq:analysis', hideInMenu: true },
-  { path: '/e/tutor/admin/mother-questions/review', element: withAdminGuard(MotherQuestionReview), label: '复习', menuKey: 'e:tutor:admin:mq:review', hideInMenu: true },
-  { path: '/e/tutor/admin/mother-questions/trash', element: withAdminGuard(MotherQuestionTrash), label: '回收站', menuKey: 'e:tutor:admin:mq:trash', hideInMenu: true },
+  // IA 批3 3.4（终审裁定①·诚实账7）：管理三项数据面=vendor shim 统一门实测挂 use——
+  // 守卫 manage→use 对齐（A-4 manage 语义升级登记台账）；伙伴/推送守卫维持 manage（批6）
+  { path: '/e/tutor/admin/mother-questions', element: withUseGuard(MotherQuestionsAdmin, 'tutor'), label: '母题库管理', menuKey: 'e:tutor:admin:mq', adminTop: true },
+  { path: '/e/tutor/admin/mother-questions/new', element: withUseGuard(MotherQuestionNew, 'tutor'), label: '录题', menuKey: 'e:tutor:admin:mq:new', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/photo', element: withUseGuard(MotherQuestionPhoto, 'tutor'), label: '拍照录题', menuKey: 'e:tutor:admin:mq:photo', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/photo-center', element: withUseGuard(MotherQuestionPhotoCenter, 'tutor'), label: '拍照中心', menuKey: 'e:tutor:admin:mq:photocenter', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/analysis', element: withUseGuard(MotherQuestionAnalysis, 'tutor'), label: '错题分析', menuKey: 'e:tutor:admin:mq:analysis', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/review', element: withUseGuard(MotherQuestionReview, 'tutor'), label: '复习', menuKey: 'e:tutor:admin:mq:review', hideInMenu: true },
+  { path: '/e/tutor/admin/mother-questions/trash', element: withUseGuard(MotherQuestionTrash, 'tutor'), label: '回收站', menuKey: 'e:tutor:admin:mq:trash', hideInMenu: true },
   // ⑤R F1：原仓 [mid] 详情页（卡片点击可达——功能 1:1 闭环，底册枚举外补齐）
-  { path: '/e/tutor/admin/mother-questions/:mid', element: withAdminGuard(MotherQuestionDetail), label: '母题详情', menuKey: 'e:tutor:admin:mq:detail', hideInMenu: true },
-  { path: '/e/tutor/admin/book', element: withAdminGuard(BookAdmin), label: '书源管理', menuKey: 'e:tutor:admin:book', adminTop: true },
-  { path: '/e/tutor/admin/settings', element: withAdminGuard(SettingsAdmin), label: '教学设置', menuKey: 'e:tutor:admin:settings', adminTop: true },
+  { path: '/e/tutor/admin/mother-questions/:mid', element: withUseGuard(MotherQuestionDetail, 'tutor'), label: '母题详情', menuKey: 'e:tutor:admin:mq:detail', hideInMenu: true },
+  { path: '/e/tutor/admin/book', element: withUseGuard(BookAdmin, 'tutor'), label: '书源管理', menuKey: 'e:tutor:admin:book', adminTop: true },
+  { path: '/e/tutor/admin/settings', element: withUseGuard(SettingsAdmin, 'tutor'), label: '教学设置', menuKey: 'e:tutor:admin:settings', adminTop: true },
   // ⑤R F1：原仓「设置管理」按钮目标 /settings/curriculum 的等值落点（与 /settings 同页 tab）
-  { path: '/e/tutor/admin/settings/curriculum', element: withAdminGuard(SettingsAdmin), label: '教学设置', menuKey: 'e:tutor:admin:settings:curriculum', hideInMenu: true },
+  { path: '/e/tutor/admin/settings/curriculum', element: withUseGuard(SettingsAdmin, 'tutor'), label: '教学设置', menuKey: 'e:tutor:admin:settings:curriculum', hideInMenu: true },
 ];
 
 export interface ExpertPageConfig {

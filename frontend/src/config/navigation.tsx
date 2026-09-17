@@ -1,8 +1,14 @@
 /**
  * 左侧导航分组配置 -- DeepAssetLens 资产深度探查平台。
- * 顶部独立项：数据资产探查（首页）。
- * 5 分组：图谱建模 / 数据资产 / 语义指标 / 能力管理 / 系统配置。
+ * 顶部独立项：专家门户（HOME_NAV_ITEM）。
+ * IA 批3 3.1：七组（数据探索专家/私塾先生/私塾先生h5/技能配置/后台配置/设置中心——
+ * 原五组 items 全部并入；menuKey 现状键为准，口径差登记 E-1）。
  * menuKey 与 routes.tsx 对齐；placeholder=true 表示该页为占位（待开发）。
+ */
+/**
+ * IA 件批3 3.1：NAV_GROUPS 七组重构（spec §3.1 终版——原五组 graph_modeling/data_asset/
+ * semantic_metric/capability/system 的 items 全部并入下组；现状键为准，口径差登记 E-1）。
+ * 三空间组静态注册=下拉 bug 根因2 修复（结构永不依赖网络）；组内 adminTop 项语义见 3.3/3.4。
  */
 import type { ComponentType } from 'react';
 import {
@@ -25,6 +31,15 @@ import {
   ThunderboltOutlined,
   FileSearchOutlined,
   PoweroffOutlined,
+  CommentOutlined,
+  ReadOutlined,
+  EditOutlined,
+  VideoCameraOutlined,
+  RedoOutlined,
+  FormOutlined,
+  TrophyOutlined,
+  BarChartOutlined,
+  ProfileOutlined,
 } from '@ant-design/icons';
 
 export interface NavItem {
@@ -51,66 +66,101 @@ export const HOME_NAV_ITEM: NavItem = {
 };
 
 export const NAV_GROUPS: NavGroup[] = [
+  // ── IA 批3 3.1：三空间组（静态注册——根因2 修复；组名回退由 AppSider 卡名实时取覆盖）──
   {
-    key: 'graph_modeling',
-    title: '图谱建模',
-    icon: ApartmentOutlined,
+    key: 'expert_wenshu',
+    title: '数据探索专家',
+    icon: SearchOutlined,
     items: [
+      { menuKey: 'e:wenshu:chat', label: '对话', path: '/e/wenshu/chat', icon: CommentOutlined },
       { menuKey: 'graph', label: '图谱管理', path: '/graph', icon: ShareAltOutlined },
       { menuKey: 'tree_model', label: '四区建模', path: '/tree-model', icon: PartitionOutlined },
       { menuKey: 'matrix_model', label: '资产矩阵', path: '/matrix', icon: TableOutlined },
       { menuKey: 'gallery', label: '图库', path: '/gallery', icon: DeploymentUnitOutlined },
       { menuKey: 'entity_relation_manage', label: '实体关系', path: '/entity-relation', icon: NodeIndexOutlined },
-    ],
-  },
-  {
-    key: 'data_asset',
-    title: '数据资产',
-    icon: DatabaseOutlined,
-    items: [
       { menuKey: 'master_data', label: '主数据', path: '/master-data', icon: DatabaseOutlined },
       { menuKey: 'activity_data', label: '活动数据', path: '/activity', icon: NodeIndexOutlined },
       { menuKey: 'source', label: '来源表管理', path: '/source', icon: TableOutlined },
       { menuKey: 'mapping', label: '映射管理', path: '/mapping', icon: BranchesOutlined },
       { menuKey: 'datasource', label: '数据源', path: '/datasource', icon: CloudServerOutlined },
-    ],
-  },
-  {
-    key: 'semantic_metric',
-    title: '语义指标',
-    icon: UnorderedListOutlined,
-    items: [
       { menuKey: 'metric_manager', label: '指标管理', path: '/metrics', icon: UnorderedListOutlined },
+      { menuKey: 'doris_config', label: 'Doris 配置', path: '/doris-config', icon: DatabaseOutlined },
     ],
   },
   {
-    key: 'capability',
-    title: '能力管理',
+    key: 'expert_tutor',
+    title: '私塾先生',
+    icon: ReadOutlined,
+    items: [
+      { menuKey: 'e:tutor:chat', label: '对话', path: '/e/tutor/chat', icon: CommentOutlined },
+      // 批6 页就绪前 placeholder 标记（计划 3.1 表注）
+      { menuKey: 'e:tutor:self-learning', label: '自主学习', path: '/e/tutor/self-learning', icon: RocketOutlined, placeholder: true },
+      { menuKey: 'e:tutor:co-writer', label: 'AI写作', path: '/e/tutor/co-writer', icon: EditOutlined, placeholder: true },
+      // 管理三项列空间菜单（menuKey=TUTOR_ADMIN_PAGES 注册表现状键——KeepAlive 稳定）
+      { menuKey: 'e:tutor:admin:mq', label: '母题库管理', path: '/e/tutor/admin/mother-questions', icon: BookOutlined },
+      { menuKey: 'e:tutor:admin:book', label: '书源管理', path: '/e/tutor/admin/book', icon: BookOutlined },
+      { menuKey: 'e:tutor:admin:settings', label: '教学设置', path: '/e/tutor/admin/settings', icon: SettingOutlined },
+      // 伙伴/推送（批6 页就绪前 placeholder；空间内显隐按 manage——3.3）
+      { menuKey: 'e:tutor:partners', label: '伙伴/推送', path: '/e/tutor/partners', icon: TeamOutlined, placeholder: true },
+    ],
+  },
+  {
+    key: 'expert_tutor_h5',
+    title: '私塾先生h5',
+    icon: ReadOutlined,
+    items: [
+      // 12 项（终审裁定③：首页/我的/教材学/书路径 hideInMenu 保留路由，不入菜单）
+      { menuKey: 'e:tutor-h5:chat', label: '对话', path: '/e/tutor-h5/chat', icon: CommentOutlined },
+      { menuKey: 'e:tutor-h5:learn', label: '自主学习', path: '/e/tutor-h5/learn', icon: ReadOutlined },
+      { menuKey: 'e:tutor-h5:classroom', label: '课堂', path: '/e/tutor-h5/classroom', icon: VideoCameraOutlined },
+      { menuKey: 'e:tutor-h5:review', label: '复习', path: '/e/tutor-h5/review', icon: RedoOutlined },
+      { menuKey: 'e:tutor-h5:wrong', label: '错题录入', path: '/e/tutor-h5/wrong', icon: FormOutlined },
+      { menuKey: 'e:tutor-h5:wrongbook', label: '错题本', path: '/e/tutor-h5/wrongbook', icon: BookOutlined },
+      { menuKey: 'e:tutor-h5:paths', label: '精通之路', path: '/e/tutor-h5/paths', icon: TrophyOutlined },
+      { menuKey: 'e:tutor-h5:report', label: '学情报告', path: '/e/tutor-h5/report', icon: BarChartOutlined },
+      { menuKey: 'e:tutor-h5:atlas', label: '知识地图', path: '/e/tutor-h5/atlas', icon: ApartmentOutlined },
+      { menuKey: 'e:tutor-h5:book', label: '教材阅读', path: '/e/tutor-h5/book', icon: BookOutlined },
+      { menuKey: 'e:tutor-h5:notebook', label: '笔记本', path: '/e/tutor-h5/notebook', icon: ProfileOutlined },
+      { menuKey: 'e:tutor-h5:share', label: '分享', path: '/e/tutor-h5/share', icon: ShareAltOutlined },
+    ],
+  },
+  // ── 技能配置（SkillManagerV2 读 ?expert= 查询参数过滤——3.5，不新建页面）──
+  {
+    key: 'skills_group',
+    title: '技能配置',
     icon: RocketOutlined,
     items: [
-      { menuKey: 'skills', label: '技能管理', path: '/skills', icon: RocketOutlined },
-      { menuKey: 'governance', label: '运行观测', path: '/governance', icon: FundOutlined },
-      { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
-      // ⑤R F4（批11）11.1：§3.3.5 菜单更名——「向量管理」→「知识库管理」（/vector 路径保留，
-      // DT knowledge 页 /knowledge 别名经 pathToMenuKey 重定向入本页）
-      { menuKey: 'vector_manage', label: '知识库管理', path: '/vector', icon: BookOutlined },
-      { menuKey: 'golden_qa', label: '金标锚定管理', path: '/golden-qa', icon: FileSearchOutlined },
-      // 记忆插槽②批6：记忆管理（平台管理区，admin-only 页）
-      { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
-      // ⑤R F4（批11）11.1：§3.3.5 菜单树 21 项定版——对话附件上限（/attachment-settings）
-      // 不入菜单（路由保留，批10 最小补件，登记见 batch10_映射登记.json）
+      { menuKey: 'skills', label: '通用技能', path: '/skills', icon: RocketOutlined },
+      { menuKey: 'skills:wenshu', label: '数据探索个性技能', path: '/skills?expert=wenshu', icon: DatabaseOutlined },
+      { menuKey: 'skills:tutor', label: '私塾先生个性技能', path: '/skills?expert=tutor', icon: ReadOutlined },
     ],
   },
+  // ── 后台配置（原 capability/system 组治理项并入；键全部现状不变——E-1）──
   {
-    key: 'system',
-    title: '系统配置',
+    key: 'admin_group',
+    title: '后台配置',
     icon: SettingOutlined,
     items: [
-      { menuKey: 'doris_config', label: 'Doris 配置', path: '/doris-config', icon: DatabaseOutlined },
+      { menuKey: 'governance', label: '运行观测', path: '/governance', icon: FundOutlined },
+      { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
+      // ⑤R F4（批11）11.1：「向量管理」→「知识库管理」（/vector；/knowledge 别名经 pathToMenuKey）
+      { menuKey: 'vector_manage', label: '知识库管理', path: '/vector', icon: BookOutlined },
+      { menuKey: 'golden_qa', label: '金标锚定管理', path: '/golden-qa', icon: FileSearchOutlined },
+      // 记忆插槽②批6：记忆管理（admin-only 页）
+      { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
       { menuKey: 'llmconfig', label: 'LLM 配置', path: '/llm-config', icon: SettingOutlined },
       { menuKey: 'security_controls', label: '安全控制中心', path: '/security-controls', icon: PoweroffOutlined },
-      // ⑥-2a B-2：专家赋权管理面（平台配置层——附件四 §10.2 治理层位置，admin-only）
+      // ⑥-2a B-2：专家赋权管理面（admin-only）
       { menuKey: 'expert_grants', label: '专家赋权', path: '/expert-grants', icon: TeamOutlined },
+    ],
+  },
+  // ── 设置中心（批5 页就绪前 placeholder——5.3 复刻后解除）──
+  {
+    key: 'settings_group',
+    title: '设置中心',
+    icon: SettingOutlined,
+    items: [
+      { menuKey: 'settings_hub', label: '设置中心', path: '/settings', icon: SettingOutlined, placeholder: true },
     ],
   },
 ];

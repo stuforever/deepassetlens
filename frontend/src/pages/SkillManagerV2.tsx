@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Button, Space, Modal, Form, Input, Select, Tag, message,
   Tooltip, Empty, Spin, Input as AntInput, Popconfirm,
@@ -47,6 +48,11 @@ const STATUS_MAP: Record<string, { label: string; preset: StatusPreset; icon: Re
 
 // ── 组件 ──────────────────────────────────────────────────
 const SkillManagerV2: React.FC = () => {
+  // IA 批3 3.5：读 URL ?expert= 查询参数过滤（wenshu/tutor；无参=全量）——页内最小实现，布局零改。
+  // 过滤规则：专家个性技能=scenarios/ 命名空间技能（现有 wenshu 数据探索个性技能；
+  // tutor 个性技能尚未落库→诚实空态）。菜单三键 skills/skills:wenshu/skills:tutor 已登记 navigation。
+  const location = useLocation();
+  const expertFilter = new URLSearchParams(location.search).get('expert') || '';
   const [skills, setSkills] = useState<SkillDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<SkillDTO | null>(null);
@@ -79,7 +85,13 @@ const SkillManagerV2: React.FC = () => {
     setLoading(true);
     try {
       const res = await skillV2Api.listSkills();
-      const list = (res.data?.data || []).filter((s: SkillDTO) => s.skill_code !== 'query_entity_pipeline');
+      const list = (res.data?.data || [])
+        .filter((s: SkillDTO) => s.skill_code !== 'query_entity_pipeline')
+        .filter((s: SkillDTO) => {
+          if (!expertFilter) return true;
+          // ?expert=wenshu → scenarios/ 命名空间（数据探索个性技能）；tutor → 暂无落库（空态）
+          return expertFilter === 'wenshu' ? s.skill_code.startsWith('scenarios/') : false;
+        });
       setSkills(list);
       // 自动选中第一条技能，避免右侧大面积空白
       if (list.length > 0) {
@@ -90,7 +102,7 @@ const SkillManagerV2: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [expertFilter]);
 
   useEffect(() => { loadSkills(); }, [loadSkills]);
 

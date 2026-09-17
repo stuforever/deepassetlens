@@ -14,19 +14,15 @@ import {
   CloseOutlined,
   EditOutlined,
   CheckOutlined,
-  SearchOutlined,
-  CommentOutlined,
-  ReadOutlined,
-  SettingOutlined,
   DownOutlined,
   RightOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { NAV_GROUPS, HOME_NAV_ITEM } from '../config/navigation';
-import { EXPERT_PAGES } from '../config/expertPages';
 import { expertsApi } from '../services/api';
 import type { ExpertCard } from '../services/api';
 import { AuthCtx } from '../auth/AuthGate';
+import { getStoredToken } from '../auth/oidc';
 import { tokens } from '../theme/tokens';
 import { useStore } from '../store/useStore';
 import type { ExpertId } from '../store/useStore';
@@ -36,12 +32,31 @@ import type { SessionSummary } from '../pages/tutor/admin/session-api';
 const { Sider } = Layout;
 const { Text } = Typography;
 
-const OPEN_KEYS_STORAGE = 'dal_sider_open_keys';
+const OPEN_KEYS_STORAGE = 'dal_sider_open_keys_v2';
+// IA 批3 根因3：存储键升级 dal_sider_open_keys→_v2（旧键弃读，防旧 openKeys 值串组）
 
-/** 根据 menuKey 找到所属分组 key */
+/** 三空间组键→专家 slug（ACL use 显隐判定用） */
+const EXPERT_GROUP_SLUGS: Record<string, 'wenshu' | 'tutor' | 'tutor-h5'> = {
+  expert_wenshu: 'wenshu',
+  expert_tutor: 'tutor',
+  expert_tutor_h5: 'tutor-h5',
+};
+
+/**
+ * 根据 menuKey 找到所属分组 key。
+ * IA 批3 根因1 修复：NAV_GROUPS 已含三空间组（e: 键入表）——遍历天然覆盖；
+ * 另加专家页键回落（e:tutor-h5:*→expert_tutor_h5、e:tutor:*→expert_tutor、e:wenshu:*→expert_wenshu），
+ * 覆盖 EXPERT_PAGES 注册表内 menuKey（详情路由等不在 NAV_GROUPS 的键）。
+ */
 function findGroupKey(menuKey: string): string | undefined {
   for (const g of NAV_GROUPS) {
     if (g.items.some((it) => it.menuKey === menuKey)) return g.key;
+  }
+  if (menuKey.startsWith('e:')) {
+    const slug = menuKey.split(':')[1] || '';
+    if (slug === 'tutor-h5') return 'expert_tutor_h5';
+    if (slug === 'tutor') return 'expert_tutor';
+    if (slug === 'wenshu') return 'expert_wenshu';
   }
   return undefined;
 }
@@ -70,7 +85,10 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
   const [editTitle, setEditTitle] = useState('');
 
   // 手风琴 openKeys：同时只展开 1 组
+  // IA 批3 根因3：初始化以当前路由所属组为准（saved 旧值仅兜底——防 localStorage 残留串组）
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
+    const gk = findGroupKey(selectedKey);
+    if (gk) return [gk];
     try {
       const saved = localStorage.getItem(OPEN_KEYS_STORAGE);
       if (saved) {
@@ -78,8 +96,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
         if (Array.isArray(parsed) && parsed.length > 0) return [parsed[0]];
       }
     } catch { /* ignore */ }
-    const gk = findGroupKey(selectedKey);
-    return gk ? [gk] : [];
+    return [];
   });
 
   useEffect(() => {
@@ -94,16 +111,50 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
     try { localStorage.setItem(OPEN_KEYS_STORAGE, JSON.stringify(openKeys)); } catch { /* ignore */ }
   }, [openKeys]);
 
-  // 专家地基①：拉启用专家卡渲染「专家」动态区（失败静默=空区，不阻导航）
+  // 专家地基①：拉启用专家卡渲染组名（IA 批3 根因2：三空间组已静态注册——卡拉取失败
+  // 仅回退组名，结构永不消失）；ACL use 显隐（3.3——auth=0 匿名=admin 全见）
   const [expertCards, setExpertCards] = useState<ExpertCard[]>([]);
   useEffect(() => {
     (async () => {
       try {
         const res = await expertsApi.list({ enabled: true });
         setExpertCards((res.data?.items as ExpertCard[]) || []);
-      } catch { /* 静默：门户自身会再拉 */ }
+      } catch { /* 静默：组名回退静态名 */ }
     })();
   }, []);
+
+  // IA 批3 3.3：三空间组 ACL use 显隐——判定源复用 RequireAdmin 同款
+  // GET /api/v1/auth/check?resource_type=expert&resource_id=<slug>&action=use（三卡并行；
+  // auth=0 匿名=admin 快路径全见；失败保守可见+console.warn）
+  const [expertAcl, setExpertAcl] = useState<Record<string, boolean>>({});
+  const [tutorManageVisible, setTutorManageVisible] = useState<boolean>(isAdminUser);
+  useEffect(() => {
+    if (isAdminUser) { setExpertAcl({}); setTutorManageVisible(true); return; }
+    let alive = true;
+    (async () => {
+      const t = getStoredToken();
+      const headers: Record<string, string> = {};
+      if (t) headers['Authorization'] = `${t.token_type} ${t.access_token}`;
+      const ask = async (resourceId: string, action: 'use' | 'manage') => {
+        try {
+          const r = await fetch(`/api/v1/auth/check?resource_type=expert&resource_id=${encodeURIComponent(resourceId)}&action=${action}`, { headers });
+          const j = await r.json();
+          return !!j?.data?.allowed;
+        } catch {
+          console.warn(`[AppSider] expert ACL check 失败：${resourceId}/${action}——保守可见`);
+          return true;
+        }
+      };
+      const [uw, ut, uh5, mt] = await Promise.all([
+        ask('wenshu', 'use'), ask('tutor', 'use'), ask('tutor-h5', 'use'), ask('tutor', 'manage'),
+      ]);
+      if (alive) {
+        setExpertAcl({ wenshu: uw, tutor: ut, 'tutor-h5': uh5 });
+        setTutorManageVisible(mt);
+      }
+    })();
+    return () => { alive = false; };
+  }, [isAdminUser]);
 
   const onOpenChange = (keys: string[]) => {
     const latest = keys.find((k) => !openKeys.includes(k));
@@ -158,66 +209,40 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
         icon: <HOME_NAV_ITEM.icon />,
         label: HOME_NAV_ITEM.label,
       },
-      // 专家地基①：「专家」动态区——启用卡实时渲染。
-      // 附件四 A-1：每 enabled 专家从单 chat 项变子菜单（对话+功能页+后台*）。
-      // *后台仅 admin 可见（A-4 升级为 ACL use/manage 分层）；EXPERT_PAGES[slug] 空数组
-      // 的专家（wenshu）保持现状单 chat 项——等值分支。
-      // ⑤R F4（批11）：菜单终版——hideInMenu 页（详情路由/先行版）不出菜单；
-      // 后台段=adminTop 三项（母题库管理/书源管理/教学设置，admin-only）。
-      ...(expertCards.length > 0
-        ? [{
-            key: 'expert_section',
-            type: 'group' as const,
-            label: '专家',
-            children: expertCards.flatMap((c) => {
-              // ⑤R F4（批11）+R2 修正：adminTop 三项只在 admin 段渲染（从 pages 段排除，
-              // 否则同 menuKey 双挂→React 重复 key 告警+菜单项重复）
-              const pages = (EXPERT_PAGES[c.expert_id] || []).filter((p) => !p.hideInMenu && !p.adminTop);
-              const adminTops = (EXPERT_PAGES[c.expert_id] || []).filter((p) => p.adminTop);
-              const adminEntry = isAdminUser
-                ? adminTops.map((p) => ({ key: p.menuKey, icon: <SettingOutlined />, label: p.label }))
-                : [];
-              if (pages.length === 0 && adminEntry.length === 0) {
-                return [{ key: `e:${c.expert_id}:chat`, icon: <SearchOutlined />, label: c.name }];
-              }
-              return [{
-                key: `e:${c.expert_id}`,
-                icon: <SearchOutlined />,
-                label: c.name,
-                children: [
-                  { key: `e:${c.expert_id}:chat`, icon: <CommentOutlined />, label: '对话' },
-                  // IA 批1 后 h5 组 menuKey 前缀=e:tutor-h5:*，与生成对话项同键——过滤防 antd Menu 重复 key
-                  ...pages.filter((p) => p.menuKey !== `e:${c.expert_id}:chat`).map((p) => ({ key: p.menuKey, icon: <ReadOutlined />, label: p.label })),
-                  ...adminEntry,
-                ],
-              }];
-            }),
-          }]
-        : []),
-      // 专家地基①：既有五组整体归入「平台管理」区（结构零删）
-      { key: 'platform_section', type: 'group' as const, label: '平台管理' },
-      // 分组子菜单
-      ...NAV_GROUPS.map((g) => ({
-        key: g.key,
-        icon: <g.icon />,
-        label: g.title,
-        children: g.items.map((it) => ({
-          key: it.menuKey,
-          icon: <it.icon />,
-          label: (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {it.label}
-              {it.placeholder && (
-                <span style={{ fontSize: 10, color: tokens.colors.warning, lineHeight: 1 }}>
-                  ·开发中
+      // IA 批3 3.1/3.3：七组静态菜单（根因2 修复——三空间组入 NAV_GROUPS，结构永不依赖网络）。
+      // 组名=卡名实时取（失败回退静态 title）；三空间组按 use 显隐（ACL，auth=0 全见）；
+      // 空间内 伙伴/推送 按 manage 显隐（数据面=partners.py 行内 is_admin，1:1 不改）。
+      // 管理三项列空间菜单=裁定①「不再单设 manage 段」（数据面 use——守卫已对齐 3.4）。
+      ...NAV_GROUPS.filter((g) => {
+        const slug = EXPERT_GROUP_SLUGS[g.key];
+        return !slug || expertAcl[slug] !== false;
+      }).map((g) => {
+        const slug = EXPERT_GROUP_SLUGS[g.key];
+        const card = slug ? expertCards.find((c) => c.expert_id === slug) : undefined;
+        return {
+          key: g.key,
+          icon: <g.icon />,
+          label: card?.name || g.title,
+          children: g.items
+            .filter((it) => !(it.menuKey === 'e:tutor:partners' && !tutorManageVisible))
+            .map((it) => ({
+              key: it.menuKey,
+              icon: <it.icon />,
+              label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {it.label}
+                  {it.placeholder && (
+                    <span style={{ fontSize: 10, color: tokens.colors.warning, lineHeight: 1 }}>
+                      ·开发中
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-          ),
-        })),
-      })),
+              ),
+            })),
+        };
+      }),
     ],
-    [expertCards]
+    [expertCards, expertAcl, tutorManageVisible]
   );
 
   const startEdit = (sid: string, currentTitle: string) => {
