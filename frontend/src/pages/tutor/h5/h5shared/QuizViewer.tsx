@@ -60,7 +60,7 @@ import {
   readFileAsBase64,
   startQuizJudge,
   type QuizJudgeHandle,
-} from "./quizJudge";
+} from "../../../../lib/quiz-judge-bridge";
 import { type QuizQuestion } from "./quizTypes";
 import {
   addEntryToCategory,

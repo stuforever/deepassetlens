@@ -112,7 +112,7 @@ export default function BookChatPanel({
   const attachmentLimits = useAttachmentLimits();
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
-  const clientRef = useRef<UnifiedWSClient | null>(null);
+  const clientRef = useRef<H5BridgeClient | null>(null);
   const retryTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -268,9 +268,9 @@ export default function BookChatPanel({
     });
   }
 
-  function ensureClient(): UnifiedWSClient {
+  function ensureClient(): H5BridgeClient {
     if (clientRef.current) return clientRef.current;
-    const client = new UnifiedWSClient(handleEvent, () => {
+    const client = new H5BridgeClient(handleEvent, () => {
       setBusy(false);
       setConnectionError(true);
     });
@@ -280,7 +280,7 @@ export default function BookChatPanel({
   }
 
   function sendWithRetry(
-    client: UnifiedWSClient,
+    client: H5BridgeClient,
     payload: StartTurnMessage,
     attempt = 0,
   ) {

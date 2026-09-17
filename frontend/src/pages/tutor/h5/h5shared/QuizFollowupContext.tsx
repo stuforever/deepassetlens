@@ -39,8 +39,8 @@ import {
   type ChatMessage,
   type LLMSelection,
   type StreamEvent,
-  UnifiedWSClient,
 } from "../../admin/unified-ws";
+import { H5BridgeClient } from "./h5BridgeClient";
 import type { QuizQuestion } from "./quizTypes";
 
 export interface FollowupMessage {
@@ -230,7 +230,7 @@ export function QuizFollowupProvider({ children, h5U, h5Code }: ProviderProps) {
   );
   const threadsRef = useRef<Record<string, FollowupThreadState>>({});
   const runnersRef = useRef<
-    Map<string, { questionKey: string; client: UnifiedWSClient }>
+    Map<string, { questionKey: string; client: H5BridgeClient }>
   >(new Map());
   // Notebook entry ids per question — captured from sendMessage so the
   // ``session`` event handler can persist ``followup_session_id`` on the
@@ -365,7 +365,7 @@ export function QuizFollowupProvider({ children, h5U, h5Code }: ProviderProps) {
       }
       const record = {
         questionKey: key,
-        client: new UnifiedWSClient(
+        client: new H5BridgeClient(
           (event) => handleThreadEvent(key, event),
           () => {
             const current = threadsRef.current[key];

@@ -12,10 +12,7 @@
  * 其余 endpoint 路径 / method / headers / body / 导出名逐字保留，未裁剪。
  */
 
-import {
-  runBookSocketOperation,
-  type BookWsEvent,
-} from "./book-ws-operation";
+import type { BookWsEvent } from "./book-ws-operation";
 import type {
   Book,
   BookDetail,
@@ -27,26 +24,54 @@ import type {
 
 const BASE = "/api/v1/book";
 
+// 引擎批6 6.4：book WS 消费退役——requestOverSocket 改桥 SSE 传输（签名/导出面 1:1，
+// L7 硬门 ④ book WS 消费清零；vendor ws_op 形状经 metadata.ws_event/ws_result 同批5）。
 function requestOverSocket<T extends BookWsEvent>(
-  message: BookWsEvent,
-  resultType: string,
+  message: Record<string, unknown>,
+  _resultType: string,
   onEvent?: (event: BookWsEvent) => void,
 ): Promise<T> {
-  return runBookSocketOperation<T>(
-    () =>
-      new WebSocket(
-        (window.location.protocol === "https:" ? "wss://" : "ws://") +
-          window.location.host +
-          `${BASE}/ws`,
-      ),
-    {
-      message,
-      resultType,
-      onEvent,
-    },
-  );
+  return fetch(apiUrl("/api/v2/skills/capability"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      skill_code: "tutor/book-generate",
+      message: String(message.type || "book_op"),
+      config: { ...message },
+    }),
+  }).then(async (resp) => {
+    if (!resp.ok || !resp.body) throw new Error(`book bridge HTTP ${resp.status}`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let result: T | null = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const raw = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        for (const line of raw.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          let ev: { type?: string; content?: string; metadata?: Record<string, unknown> };
+          try {
+            ev = JSON.parse(line.slice(5).trim());
+          } catch {
+            continue;
+          }
+          const md = ev.metadata || {};
+          if (md.ws_event) onEvent?.(md.ws_event as BookWsEvent);
+          else if (ev.type === "result" && md.ws_result) result = md.ws_result as T;
+          else if (ev.type === "error") throw new Error(ev.content || "book bridge error");
+        }
+      }
+    }
+    if (result === null) throw new Error("book bridge: no result frame");
+    return result;
+  });
 }
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },

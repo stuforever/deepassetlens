@@ -54,10 +54,10 @@ import { shouldSubmitOnEnter } from "./composer-keyboard";
 import { useImeComposing } from "./use-ime-composing";
 import { shouldAppendEventContent } from "./stream";
 import {
-  UnifiedWSClient,
   type StartTurnMessage,
   type StreamEvent,
 } from "./unified-ws";
+import { H5BridgeClient } from "../h5/h5shared/h5BridgeClient";
 import type { MessageAttachment } from "./unifiedChatTypes";
 import type { Page, Book } from "./book-types";
 
@@ -134,7 +134,7 @@ export default function BookChatPanel({
   // Tailwind focus-within 的最小等价物：composer 容器聚焦高亮。
   const [composerFocus, setComposerFocus] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
-  const clientRef = useRef<UnifiedWSClient | null>(null);
+  const clientRef = useRef<H5BridgeClient | null>(null);
   const retryTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -288,9 +288,9 @@ export default function BookChatPanel({
     });
   }
 
-  function ensureClient(): UnifiedWSClient {
+  function ensureClient(): H5BridgeClient {
     if (clientRef.current) return clientRef.current;
-    const client = new UnifiedWSClient(handleEvent, () => {
+    const client = new H5BridgeClient(handleEvent, () => {
       setBusy(false);
       setConnectionError(true);
     });
@@ -300,7 +300,7 @@ export default function BookChatPanel({
   }
 
   function sendWithRetry(
-    client: UnifiedWSClient,
+    client: H5BridgeClient,
     payload: StartTurnMessage,
     attempt = 0,
   ) {

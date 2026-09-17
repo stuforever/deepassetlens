@@ -34,7 +34,7 @@ import {
   writeStoredActiveSessionId,
 } from "./appShellStorage";
 import type { StreamEvent, ChatMessage, LLMSelection } from "../../admin/unified-ws";
-import { UnifiedWSClient } from "../../admin/unified-ws";
+import { H5BridgeClient } from "./h5BridgeClient";
 import {
   getSession,
   deleteMessage,
@@ -1023,7 +1023,7 @@ export function UnifiedChatProvider({
       string,
       {
         key: string;
-        client: UnifiedWSClient;
+        client: H5BridgeClient;
       }
     >
   >(new Map());
@@ -1262,9 +1262,9 @@ export function UnifiedChatProvider({
         if (!existing.client.connected) existing.client.connect();
         return existing;
       }
-      const record: { key: string; client: UnifiedWSClient } = {
+      const record: { key: string; client: H5BridgeClient } = {
         key,
-        client: new UnifiedWSClient(
+        client: new H5BridgeClient(
           (event) => handleRunnerEvent(record.key, event),
           () => {
             const session = stateRef.current.sessions[record.key];

@@ -19,7 +19,7 @@ _auth = [Depends(_dt_require_auth)]
 # 原导入路径零改码（vendor 子树原结构）
 from deeptutor.api.routers import mother_question  # noqa: E402
 from deeptutor.api.routers import knowledge as knowledge_router  # noqa: E402
-from deeptutor.api.routers import question, quiz_judge  # noqa: E402
+# 引擎批6 6.5：question/quiz_judge 导入随卸挂删除（vendor 物理文件保留）
 from deeptutor.api.routers import (  # noqa: E402
     learner_profile,
     mastery_path,
@@ -37,7 +37,7 @@ from deeptutor.api.routers import (  # noqa: E402
     space_mcp,
     subagents,
     system,
-    unified_ws,
+    # 引擎批6 6.3：unified_ws 导入随卸挂删除（router 不再挂载）
 )
 from deeptutor.api.routers import (  # noqa: E402
     book,
@@ -70,8 +70,8 @@ tutor_routers = [
     (knowledge_router.router, "/api/v1/knowledge", ["knowledge"], _auth),
     # ⑤R B2：问答判题练习件——question(WS mimic/generate)+quiz_judge(WS judge)
     # 原挂载（原仓 main.py L442/L566）：question 带 _auth，quiz_judge 自带 ws_require_auth
-    (question.router, "/api/v1/question", ["question"], _auth),
-    (quiz_judge.router, "/api/v1", ["quiz-judge"], None),
+    # 引擎批6 6.5：两族 WS 卸挂——前端消费 grep 实测零（question REST 无消费、
+    # quiz_judge 消费方批4/6 切桥 lib/quiz-judge-bridge.ts）；vendor 物理文件保留。
     # ⑤R B3：学习闭环——原挂载（原仓 main.py L448/L458/L571）
     (learner_profile.router, "/api/v1/learning", ["learner-profile"], _auth),
     (mastery_path.router, "/api/v1/learning", ["mastery-path"], _auth),
@@ -115,7 +115,8 @@ tutor_routers = [
     (agent_config.router, "/api/v1/agent-config", ["agent-config"], _auth),    # 原 L547
     (partners.router, "/api/v1/partners", ["partners"], _admin),               # 原 L550（_admin）
     (attachments.router, "/api/attachments", ["attachments"], _auth),          # 原 L553（前缀无 /v1）
-    (unified_ws.router, "/api/v1", ["unified-ws"], None),                      # 原 L562（鉴权在 handler 内）
+    # 引擎批6 6.3：unified_ws.router 卸挂（原 L118=L562）——统一 WS 退役，对话面走桥
+    # POST /api/v2/skills/capability SSE；vendor 树物理文件保留（裁定点 A——A4 基线不破坏）。
     # ⑤R R2（批13）A1 二轮：auth/chat 两族补挂（原 L421/L440 无 deps）——同前缀 tupu 自有
     # 路由（⑥-2a auth 面/chat 引擎）先注册恒优先，vendor 件仅补 tupu 缺位路径
     # （auth/status、auth/profile、chat/sessions 等），同路径不遮蔽自有面=合并裁定承接。

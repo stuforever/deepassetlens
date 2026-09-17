@@ -32,6 +32,8 @@ class CapabilityRequest(BaseModel):
     attachments: List[Dict[str, Any]] = []
     history_references: List[Dict[str, Any]] = []
     h5_user: Optional[str] = None         # h5 端用户隔离（批6 消费）
+    code: Optional[str] = None            # h5 访问码（P3-B/R4，h5_user_guarded）
+    x_access_code: Optional[str] = None   # 访问码头字段等价体（REST 同名 Header）
 
 
 def _evt(type_, source, stage, content="", metadata=None, session_id=None,
@@ -63,20 +65,92 @@ async def capability(req: CapabilityRequest):
     from .dt_agent_orchestrations import dispatch
     session_id = req.session_id or f"sess_{uuid.uuid4().hex[:12]}"
     turn_id = f"turn_{uuid.uuid4().hex[:12]}"
+    is_regen = (req.config or {}).get("action") == "regenerate"
 
     async def gen():
         seq = 0
+        # 6.2 h5 持久化：h5_user 存在→vendor session store（user_context 隔离键；
+        # create_session/create_turn/append_turn_event/add_message 四方法，签名批内对齐）。
+        h5_ctx = None
+        store = None
+        acc: List[str] = []
+        final_text = ""
+        regen_content = ""
+        if req.h5_user:
+            try:
+                from deeptutor.multi_user.h5 import h5_user_guarded
+                from deeptutor.multi_user.paths import user_context
+                from deeptutor.services.session.sqlite_store import get_sqlite_session_store
+                h5_ctx = user_context(h5_user_guarded(
+                    req.h5_user, req.code or "", req.x_access_code or ""))
+                h5_ctx.__enter__()
+                store = get_sqlite_session_store()
+                regen_content = ""
+                if is_regen:
+                    # DT unified_ws regenerate 语义（regenerate_last_turn）1:1：
+                    # 删尾随 assistant 消息→复用最后一条 user 消息作为本轮内容
+                    # （不重复落 user 消息；无 user 消息→nothing_to_regenerate）。
+                    msgs = await store.get_messages(session_id)
+                    while msgs and msgs[-1].get("role") == "assistant":
+                        await store.delete_message(msgs[-1]["id"])
+                        msgs.pop()
+                    last_user = next((m for m in reversed(msgs)
+                                      if m.get("role") == "user"), None)
+                    if not last_user:
+                        raise ValueError("nothing_to_regenerate")
+                    regen_content = str(last_user.get("content") or "")
+                else:
+                    if not req.session_id:
+                        await store.create_session(title=(req.message or "新对话")[:40],
+                                                   session_id=session_id)
+                    await store.create_turn(session_id, capability=req.skill_code)
+                    await store.add_message(session_id, "user", req.message,
+                                            capability=req.skill_code,
+                                            attachments=req.attachments)
+            except Exception as e:
+                h5_ctx = None
+                store = None
+                ev = _evt("error", "bridge", "session_store", content=f"h5 会话隔离失败: {e}",
+                          session_id=session_id, turn_id=turn_id)
+                yield f"event: error\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
         try:
-            async for ev in dispatch(req, session_id, turn_id, user_prefix=_user_prefix(req)):
-                ev["seq"] = seq
-                seq += 1
-                yield f"event: {ev['type']}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
-            _finish_log(log_id)
-        except Exception as e:  # dispatch 抛异常→记账后 error 事件收尾
-            _finish_log(log_id, ok=False, err=str(e))
-            ev = _evt("error", "bridge", "dispatch", content=str(e),
-                      metadata={"log_id": log_id}, session_id=session_id, turn_id=turn_id)
-            yield f"event: error\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
+            dispatch_req = req
+            if is_regen and regen_content:
+                dispatch_req = req.model_copy(update={"message": regen_content})
+            try:
+                async for ev in dispatch(dispatch_req, session_id, turn_id, user_prefix=_user_prefix(req)):
+                    ev["seq"] = seq
+                    seq += 1
+                    if store is not None:
+                        try:
+                            await store.append_turn_event(turn_id, ev)
+                        except Exception:
+                            pass
+                    if ev.get("type") == "content" and ev.get("content"):
+                        acc.append(ev["content"])
+                    if ev.get("type") == "result" and ev.get("content"):
+                        final_text = ev["content"]
+                    yield f"event: {ev['type']}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                _finish_log(log_id)
+            except Exception as e:  # dispatch 抛异常→记账后 error 事件收尾
+                _finish_log(log_id, ok=False, err=str(e))
+                ev = _evt("error", "bridge", "dispatch", content=str(e),
+                          metadata={"log_id": log_id}, session_id=session_id, turn_id=turn_id)
+                yield f"event: error\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
+            if store is not None:
+                try:
+                    text = final_text or "".join(acc)
+                    if text:
+                        await store.add_message(session_id, "assistant", text,
+                                                capability=req.skill_code)
+                except Exception:
+                    pass
+        finally:
+            if h5_ctx is not None:
+                try:
+                    h5_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
