@@ -2,7 +2,7 @@
  * ── 复刻来源与替换点（tupu antd 复刻，批9 F2 / SA-D）────────────────────────
  * 源文件：DeepTutor web/app/h5/paths/[bookId]/page.tsx
  * 目标：frontend/src/pages/tutor/h5/H5PathBook.tsx（1:1 复刻，逻辑逐字保留）
- * 路由：/h5/paths/[bookId] → /e/tutor/h5/paths/:bookId（useParams 取 bookId）
+ * 路由：/h5/paths/[bookId] → /e/tutor-h5/paths/:bookId（useParams 取 bookId）
  * 替换点：
  * - "use client" 删除；next/link → react-router Link；next/navigation（useParams/
  *   useSearchParams）→ react-router 同名 hooks；
@@ -10,7 +10,7 @@
  *   @ant-design/icons（LeftOutlined/LoadingOutlined/CaretRightOutlined/UndoOutlined/
  *   DeleteOutlined/DownOutlined/AimOutlined/TrophyOutlined）；
  * - "@/lib/learning-api" → "./h5shared/learningApi"；"@/lib/h5-utils" → "./h5shared/h5Utils"；
- *   "../../components/H5Shell" → "./h5shared/H5Shell"；链接前缀 /h5/* → /e/tutor/h5/*；
+ *   "../../components/H5Shell" → "./h5shared/H5Shell"；链接前缀 /h5/* → /e/tutor-h5/*；
  * - window.confirm 中文文案逐字保留；window.location.href 跳转原样（路径映射后）；
  * - Tailwind → 内联样式逐项对位（STATUS_META 的 dot/bar 类名改为色值常量，语义一致）。
  * ─────────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ function H5PathDetailContent() {
     setBusy(true);
     try {
       await deleteProgress(bookId, u);
-      window.location.href = withU("/e/tutor/h5/paths", u);
+      window.location.href = withU("/e/tutor-h5/paths", u);
     } catch {
       setError("删除失败");
     } finally {
@@ -128,7 +128,7 @@ function H5PathDetailContent() {
           <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
           <div style={{ fontSize: 14 }}>{error || "路径不存在"}</div>
           <Link
-            to={withU("/e/tutor/h5/paths", u)}
+            to={withU("/e/tutor-h5/paths", u)}
             style={{ marginTop: 16, display: "inline-block", padding: "8px 16px", borderRadius: 12, background: "#4f46e5", color: "#fff", fontSize: 14, textDecoration: "none" }}
           >
             返回路径列表
@@ -162,7 +162,7 @@ function H5PathDetailContent() {
       {/* 顶栏 */}
       <div style={{ background: "linear-gradient(90deg, #f59e0b, #ea580c)", color: "#fff", padding: "40px 20px 56px", borderRadius: "0 0 24px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Link to={withU("/e/tutor/h5/paths", u)} aria-label="返回" style={{ display: "flex", alignItems: "center", gap: 4, color: "#fff", fontSize: 14, textDecoration: "none" }}>
+          <Link to={withU("/e/tutor-h5/paths", u)} aria-label="返回" style={{ display: "flex", alignItems: "center", gap: 4, color: "#fff", fontSize: 14, textDecoration: "none" }}>
             <LeftOutlined style={{ fontSize: 24 }} /> 返回
           </Link>
           <div style={{ fontSize: 18, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 8px" }}>{map.book_id}</div>
@@ -189,7 +189,7 @@ function H5PathDetailContent() {
         {/* 进入辅导 / 重置 */}
         <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 1px 2px 0 rgba(0,0,0,.05)", border: "1px solid #e2e8f0", padding: 16 }}>
           <Link
-            to={withU(`/e/tutor/h5/chat?mode=mastery&path=${encodeURIComponent(bookId)}`, u)}
+            to={withU(`/e/tutor-h5/chat?mode=mastery&path=${encodeURIComponent(bookId)}`, u)}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               padding: "12px 0", borderRadius: 16,

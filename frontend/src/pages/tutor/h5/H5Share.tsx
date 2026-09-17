@@ -17,7 +17,7 @@
  * - Tailwind → 内联样式逐项对位；`hidden print:block` → .dsh-print-only 打印类；
  *   styled-jsx `<style jsx global>` → 普通 <style>（CSS 内容逐字）；
  * - withU/isIntranetUrl ← h5shared（h5Utils/h5Version）；
- * - 路由前缀映射：原 /h5 → /e/tutor/h5（targetPath 同步映射）。
+ * - 路由前缀映射：原 /h5 → /e/tutor-h5（targetPath 同步映射）。
  */
 import { useState, Suspense, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -70,7 +70,7 @@ function H5ShareContent() {
     }
   }, [u]);
 
-  const targetPath = "/e/tutor/h5";
+  const targetPath = "/e/tutor-h5";
   const basePath = withU(targetPath, u);
   const codeQuery = accessCode
     ? `${basePath.includes("?") ? "&" : "?"}code=${encodeURIComponent(accessCode)}`
@@ -135,7 +135,7 @@ function H5ShareContent() {
       {/* 顶栏 */}
       <div style={{ background: "linear-gradient(to right, #f59e0b, #ea580c)", color: "#fff", padding: "16px 16px 20px", borderRadius: "0 0 24px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Link to={withU("/e/tutor/h5/me", u)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, color: "#fef3c7", textDecoration: "none" }}>
+          <Link to={withU("/e/tutor-h5/me", u)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, color: "#fef3c7", textDecoration: "none" }}>
             <LeftOutlined style={{ fontSize: 16 }} /> 返回
           </Link>
           <div style={{ fontSize: 18, fontWeight: 700 }}>🔗 分享</div>

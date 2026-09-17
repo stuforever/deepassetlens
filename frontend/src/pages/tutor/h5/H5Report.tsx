@@ -13,7 +13,7 @@
  * - fetchLearnerProfile/LearnerProfileDto ← h5shared/selfLearningApi（SA-D 共享数据层）；
  * - API 端点逐字：/api/v1/h5-links、/api/v1/mother-questions/analysis/{weak-points,error-patterns,retention}、
  *   /api/v1/learning/weekly-digest、/api/v1/learning/learner-profile（经 fetchLearnerProfile）。
- * - 路由前缀映射：原 /h5/* → /e/tutor/h5/*。
+ * - 路由前缀映射：原 /h5/* → /e/tutor-h5/*。
  */
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -145,7 +145,7 @@ export default function H5Report() {
     return (
       <H5Shell active="home">
         <div style={{ padding: "24px 16px" }}>
-          <Link to={withU("/e/tutor/h5", viewU)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, color: "#4f46e5", marginBottom: 24, textDecoration: "none" }}>
+          <Link to={withU("/e/tutor-h5", viewU)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, color: "#4f46e5", marginBottom: 24, textDecoration: "none" }}>
             <LeftOutlined style={{ fontSize: 16 }} /> 返回
           </Link>
           <div style={{ textAlign: "center", padding: "64px 0", color: "#94a3b8" }}>
@@ -153,7 +153,7 @@ export default function H5Report() {
             {viewU ? `${viewU} 还没有学习数据` : "还没有学习数据"}
             <div style={{ fontSize: 14, marginTop: 8 }}>从「拍错题」开始，系统会自动建立学情画像</div>
             <Link
-              to={withU("/e/tutor/h5/wrong", viewU)}
+              to={withU("/e/tutor-h5/wrong", viewU)}
               style={{ marginTop: 16, display: "inline-block", padding: "8px 16px", borderRadius: 12, background: "#f43f5e", color: "#fff", fontSize: 14, textDecoration: "none" }}
             >
               📷 去拍错题
@@ -176,7 +176,7 @@ export default function H5Report() {
     <H5Shell active="home">
       {/* 顶栏 */}
       <div style={{ background: "linear-gradient(to right, #059669, #0d9488)", color: "#fff", padding: "20px 16px", borderRadius: "0 0 24px 24px" }}>
-        <Link to={withU("/e/tutor/h5", viewU)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, color: "#d1fae5", marginBottom: 12, textDecoration: "none" }}>
+        <Link to={withU("/e/tutor-h5", viewU)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, color: "#d1fae5", marginBottom: 12, textDecoration: "none" }}>
           <LeftOutlined style={{ fontSize: 16 }} /> 返回首页
         </Link>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -258,7 +258,7 @@ export default function H5Report() {
               <div style={{ fontSize: 30, marginBottom: 8 }}>🌱</div>
               <div style={{ fontSize: 14, color: "#64748b" }}>本周还没有学习记录，去做几道闯关题吧</div>
               <Link
-                to={withU("/e/tutor/h5/learn", viewU)}
+                to={withU("/e/tutor-h5/learn", viewU)}
                 style={{ marginTop: 12, display: "inline-block", padding: "8px 16px", borderRadius: 12, background: "#4f46e5", color: "#fff", fontSize: 14, textDecoration: "none" }}
               >
                 去学习
@@ -544,7 +544,7 @@ export default function H5Report() {
         )}
 
         <Link
-          to={withU("/e/tutor/h5/learn", viewU)}
+          to={withU("/e/tutor-h5/learn", viewU)}
           style={{ display: "block", textAlign: "center", padding: "12px 0", borderRadius: 16, background: "#4f46e5", color: "#fff", fontWeight: 500, boxShadow: "0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)", textDecoration: "none" }}
         >
           去学习 → 继续巩固

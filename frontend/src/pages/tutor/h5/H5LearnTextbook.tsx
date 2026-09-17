@@ -4,7 +4,7 @@
  * react-router-dom；lucide（Loader2/ChevronLeft/ChevronRight/BookOpen/FileText/
  * RotateCw）→ @ant-design/icons（LoadingOutlined/LeftOutlined/RightOutlined/
  * ReadOutlined/FileTextOutlined/ReloadOutlined）；Tailwind → 内联样式逐项对位
- * （active:* 伪类无法内联，已省略）；路由前缀映射：原 /h5/* → /e/tutor/h5/*。
+ * （active:* 伪类无法内联，已省略）；路由前缀映射：原 /h5/* → /e/tutor-h5/*。
  * 数据源：/curriculum/textbooks/{tid}/pages -> [{page_num, image_url, ocr_text}]。
  * 页图（PNG）+ OCR 文本双显，支持手势翻页按钮。
  */
@@ -122,7 +122,7 @@ function H5TextbookContent() {
       <div style={{ background: "linear-gradient(to right, #334155, #0f172a)", color: "#fff", padding: 16, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Link
-            to={withU("/e/tutor/h5/learn", u)}
+            to={withU("/e/tutor-h5/learn", u)}
             style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#cbd5e1", textDecoration: "none" }}
           >
             <LeftOutlined style={{ fontSize: 14 }} /> 返回学习

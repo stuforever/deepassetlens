@@ -145,6 +145,22 @@ export const pathToMenuKey: Record<string, string> = (() => {
   out['/free-plan'] = 'home';
   // ⑤R F4（批11）11.1：DT knowledge 页路径别名 → 知识库管理（/vector）——语义并入重定向
   out['/knowledge'] = 'vector_manage';
+  // IA 件批1 1.3：tutor-h5 迁移旧路径别名（14 条静态——KeepAlive 架构无 Navigate，
+  // 沿 /knowledge→/vector 先例=pathToMenuKey 别名；含参数旧路径走 expertPages LEGACY_H5_ALIASES）
+  out['/e/tutor/h5'] = 'e:tutor-h5:home';
+  out['/e/tutor/h5/chat'] = 'e:tutor-h5:chat';
+  out['/e/tutor/h5/learn'] = 'e:tutor-h5:learn';
+  out['/e/tutor/h5/learn/textbook'] = 'e:tutor-h5:learn:textbook';
+  out['/e/tutor/h5/classroom'] = 'e:tutor-h5:classroom';
+  out['/e/tutor/h5/review'] = 'e:tutor-h5:review';
+  out['/e/tutor/h5/wrong'] = 'e:tutor-h5:wrong';
+  out['/e/tutor/h5/wrongbook'] = 'e:tutor-h5:wrongbook';
+  out['/e/tutor/h5/paths'] = 'e:tutor-h5:paths';
+  out['/e/tutor/h5/report'] = 'e:tutor-h5:report';
+  out['/e/tutor/h5/atlas'] = 'e:tutor-h5:atlas';
+  out['/e/tutor/h5/me'] = 'e:tutor-h5:me';
+  out['/e/tutor/h5/share'] = 'e:tutor-h5:share';
+  out['/e/tutor/notebook'] = 'e:tutor-h5:notebook';
   return out;
 })();
 

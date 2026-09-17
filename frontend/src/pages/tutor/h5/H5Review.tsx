@@ -14,7 +14,7 @@
  *   h5shared/learningApi（SA-D 共享数据层）；H5PageHeader ← h5shared；
  * - fetch(apiUrl(...)) → fetch('/api/v1/...') 逐字；
  * - Tailwind → 内联样式逐项对位（active:/hover: 伪类变体随共享层先例省略）；
- * - 路由前缀映射：原 /h5/* → /e/tutor/h5/*。
+ * - 路由前缀映射：原 /h5/* → /e/tutor-h5/*。
  */
 import { useCallback, useEffect, useState, Suspense } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -128,7 +128,7 @@ function H5ReviewContent() {
             <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
               {hasItem && (
                 <Link
-                  to={withU("/e/tutor/h5/wrongbook", u)}
+                  to={withU("/e/tutor-h5/wrongbook", u)}
                   style={{ padding: "12px 0", borderRadius: 16, background: "#f97316", color: "#fff", fontSize: 14, fontWeight: 500, textAlign: "center", textDecoration: "none" }}
                 >
                   📖 复习错题（{dueItems.length}）
@@ -137,14 +137,14 @@ function H5ReviewContent() {
               {hasKp &&
                 (reviewPathId ? (
                   <Link
-                    to={withU(`/e/tutor/h5/chat?mode=mastery&path=${encodeURIComponent(reviewPathId)}`, u)}
+                    to={withU(`/e/tutor-h5/chat?mode=mastery&path=${encodeURIComponent(reviewPathId)}`, u)}
                     style={{ padding: "12px 0", borderRadius: 16, background: "#4f46e5", color: "#fff", fontSize: 14, fontWeight: 500, textAlign: "center", textDecoration: "none" }}
                   >
                     💬 AI 带复习（{kpDue.length}）
                   </Link>
                 ) : (
                   <Link
-                    to={withU("/e/tutor/h5/paths", u)}
+                    to={withU("/e/tutor-h5/paths", u)}
                     style={{ padding: "12px 0", borderRadius: 16, background: "#4f46e5", color: "#fff", fontSize: 14, fontWeight: 500, textAlign: "center", textDecoration: "none" }}
                   >
                     🏆 先建精通之路
@@ -178,7 +178,7 @@ function H5ReviewContent() {
                   {dueItems.slice(0, 20).map((it) => (
                     <Link
                       key={it.id}
-                      to={withU("/e/tutor/h5/wrongbook", u)}
+                      to={withU("/e/tutor-h5/wrongbook", u)}
                       style={{ display: "flex", background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 14, alignItems: "center", gap: 12, textDecoration: "none" }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -206,8 +206,8 @@ function H5ReviewContent() {
                       key={kp.kp_id}
                       to={
                         reviewPathId
-                          ? withU(`/e/tutor/h5/chat?mode=mastery&path=${encodeURIComponent(reviewPathId)}`, u)
-                          : withU("/e/tutor/h5/paths", u)
+                          ? withU(`/e/tutor-h5/chat?mode=mastery&path=${encodeURIComponent(reviewPathId)}`, u)
+                          : withU("/e/tutor-h5/paths", u)
                       }
                       style={{ display: "flex", background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 14, alignItems: "center", gap: 12, textDecoration: "none" }}
                     >

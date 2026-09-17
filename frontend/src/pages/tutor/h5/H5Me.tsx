@@ -18,7 +18,7 @@
  * - Tailwind → 内联样式逐项对位；`divide-y divide-slate-100` → .dsh-me-settings 子相邻边框规则；
  *   `pb-[max(1rem,env(safe-area-inset-bottom))]` → paddingBottom 同值；active:/hover: 变体随共享层先例省略；
  * - `process.env.NEXT_PUBLIC_BUILD_ID` → `process.env.REACT_APP_BUILD_ID`（CRA 注入口径，语义同源）；
- * - 路由前缀映射：原 /h5/* → /e/tutor/h5/*。
+ * - 路由前缀映射：原 /h5/* → /e/tutor-h5/*。
  */
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -186,7 +186,7 @@ function MeContent() {
     (next: string) => {
       setU(next);
       setPickerOpen(false);
-      navigate(withU("/e/tutor/h5/me", next), { replace: true });
+      navigate(withU("/e/tutor-h5/me", next), { replace: true });
     },
     [navigate],
   );
@@ -327,7 +327,7 @@ function MeContent() {
 
   const shareUrl = useMemo(() => {
     const base = (publicBase || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "");
-    return base + withU("/e/tutor/h5", u);
+    return base + withU("/e/tutor-h5", u);
   }, [publicBase, u]);
 
   return (
@@ -417,7 +417,7 @@ function MeContent() {
 
           {u && due > 0 && (
             <Link
-              to={withU("/e/tutor/h5/wrongbook", u)}
+              to={withU("/e/tutor-h5/wrongbook", u)}
               style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 12, background: "#fffbeb", border: "1px solid #fde68a", fontSize: 14, color: "#b45309", textDecoration: "none" }}
             >
               有 {due} 项到期复习
@@ -600,7 +600,7 @@ function MeContent() {
               保存设置
             </button>
             <Link
-              to={withU("/e/tutor/h5/share", u)}
+              to={withU("/e/tutor-h5/share", u)}
               style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%", padding: "10px 0", borderRadius: 12, border: "1px solid #fcd34d", color: "#d97706", fontSize: 14, fontWeight: 500, textDecoration: "none" }}
             >
               <ShareAltOutlined style={{ fontSize: 16 }} /> 生成分享二维码
@@ -719,7 +719,7 @@ function MeContent() {
 
           {/* E2（M11）：班级视图入口 */}
           <button
-            onClick={() => navigate(`/e/tutor/h5/classroom?u=${encodeURIComponent(u)}`)}
+            onClick={() => navigate(`/e/tutor-h5/classroom?u=${encodeURIComponent(u)}`)}
             style={{ width: "100%", marginTop: 12, padding: "10px 0", borderRadius: 12, border: "1px solid #c7d2fe", background: "#eef2ff", color: "#4f46e5", fontSize: 14, fontWeight: 500, cursor: "pointer" }}
           >
             <TeamOutlined style={{ fontSize: 16, marginRight: 4, verticalAlign: "-0.125em" }} /> 以班级视图查看

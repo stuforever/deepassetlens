@@ -2,7 +2,7 @@
  * ── 复刻来源与替换点（tupu antd 复刻，批9 F2 / SA-D）────────────────────────
  * 源文件：DeepTutor web/app/h5/paths/page.tsx
  * 目标：frontend/src/pages/tutor/h5/H5Paths.tsx（1:1 复刻，逻辑逐字保留）
- * 路由：/h5/paths → /e/tutor/h5/paths
+ * 路由：/h5/paths → /e/tutor-h5/paths
  * 替换点：
  * - "use client" 删除（tupu 为 CRA/SPA，无 RSC）；next/link → react-router Link；
  *   next/navigation useSearchParams → react-router useSearchParams；
@@ -14,7 +14,7 @@
  *   "./h5shared/selfLearningApi"；"@/lib/h5-utils" → "./h5shared/h5Utils"；
  *   fetch(apiUrl('/api/v1/...')) → fetch('/api/v1/...')（apiUrl pass-through 脱壳）；
  * - "@/components/h5/H5Sheet" 与 ../components/H5Shell → "./h5shared/H5Sheet" /
- *   "./h5shared/H5Shell"；站内链接前缀 /h5/* → /e/tutor/h5/*；
+ *   "./h5shared/H5Shell"；站内链接前缀 /h5/* → /e/tutor-h5/*；
  * - Tailwind → 内联样式逐项对位（active:/focus: 伪类用注入 CSS 类等价实现）。
  * ─────────────────────────────────────────────────────────────────────
  */
@@ -427,7 +427,7 @@ function H5PathsContent() {
               从「新建路径」开始，或先在 <b>学习</b> 里做题——系统会自动为你生成影子学习路径
             </div>
             <Link
-              to={withU("/e/tutor/h5/learn", u)}
+              to={withU("/e/tutor-h5/learn", u)}
               style={{ marginTop: 16, display: "inline-block", padding: "10px 20px", borderRadius: 12, background: "#4f46e5", color: "#fff", fontSize: 14, textDecoration: "none" }}
             >
               📚 去做题
@@ -440,7 +440,7 @@ function H5PathsContent() {
               return (
                 <Link
                   key={s.book_id}
-                  to={withU(`/e/tutor/h5/paths/${encodeURIComponent(s.book_id)}`, u)}
+                  to={withU(`/e/tutor-h5/paths/${encodeURIComponent(s.book_id)}`, u)}
                   style={{ display: "block", background: "#fff", borderRadius: 16, boxShadow: "0 1px 2px 0 rgba(0,0,0,.05)", border: "1px solid #e2e8f0", padding: 16, textDecoration: "none" }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

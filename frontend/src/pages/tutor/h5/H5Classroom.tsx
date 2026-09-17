@@ -21,7 +21,7 @@
  * - Tailwind → 内联样式逐项对位（active:/hover:/print: 变体随共享层先例省略，
  *   print:hidden 以补充的 @media print 规则 .dsh-print-hidden 等价实现）；
  * - fetch(apiUrl(...)) → fetch('/api/v1/...') 逐字；
- * - 路由前缀映射：原 /h5/* → /e/tutor/h5/*。
+ * - 路由前缀映射：原 /h5/* → /e/tutor-h5/*。
  */
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -239,7 +239,7 @@ function ClassroomContent() {
               <button
                 key={c.child}
                 onClick={() =>
-                  navigate(`/e/tutor/h5/report?u=${encodeURIComponent(teacher)}&child=${encodeURIComponent(c.child)}`)
+                  navigate(`/e/tutor-h5/report?u=${encodeURIComponent(teacher)}&child=${encodeURIComponent(c.child)}`)
                 }
                 style={{ width: "100%", background: "#fff", borderRadius: 16, boxShadow: "0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", padding: 16, textAlign: "left", cursor: "pointer" }}
               >
@@ -304,7 +304,7 @@ function ClassroomContent() {
               </div>
               <div className="qr-board" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }} data-testid="qr-board">
                 {children.map((c) => {
-                  const link = `${originBase.replace(/\/$/, "")}/e/tutor/h5?u=${encodeURIComponent(c.child)}`;
+                  const link = `${originBase.replace(/\/$/, "")}/e/tutor-h5?u=${encodeURIComponent(c.child)}`;
                   return (
                     <div
                       key={c.child}

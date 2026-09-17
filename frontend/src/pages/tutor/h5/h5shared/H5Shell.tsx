@@ -3,7 +3,7 @@
  * 等价替换：next/link → react-router Link；useRouter → useNavigate；
  * lucide（Home/BookOpen/MessageCircle/BookMarked/User/Loader2）→ @ant-design/icons 对应；
  * Tailwind → 内联样式逐项对位；apiUrl(x) → fetch('/api/v1/...')。
- * 路由前缀映射：原 /h5/* → tupu /e/tutor/h5/*（TABS hrefs 同步映射）。
+ * 路由前缀映射：原 /h5/* → tupu /e/tutor-h5/*（TABS hrefs 同步映射）。
  *
  * 不做 layout（tab 高亮语义用 prop 更可控）。角标数据（错题 due_count）
  * 在此统一轮询（60s + window.focus 刷新），各页不再各自请求。
@@ -42,11 +42,11 @@ if (typeof window !== "undefined") {
 export type H5Tab = "home" | "learn" | "chat" | "wrongbook" | "me";
 
 const TABS: { key: H5Tab; label: string; href: string; icon: typeof HomeOutlined }[] = [
-  { key: "home", label: "首页", href: "/e/tutor/h5", icon: HomeOutlined },
-  { key: "learn", label: "学习", href: "/e/tutor/h5/learn", icon: ReadOutlined },
-  { key: "chat", label: "对话", href: "/e/tutor/h5/chat", icon: MessageOutlined },
-  { key: "wrongbook", label: "错题本", href: "/e/tutor/h5/wrongbook", icon: BookOutlined },
-  { key: "me", label: "我的", href: "/e/tutor/h5/me", icon: UserOutlined },
+  { key: "home", label: "首页", href: "/e/tutor-h5", icon: HomeOutlined },
+  { key: "learn", label: "学习", href: "/e/tutor-h5/learn", icon: ReadOutlined },
+  { key: "chat", label: "对话", href: "/e/tutor-h5/chat", icon: MessageOutlined },
+  { key: "wrongbook", label: "错题本", href: "/e/tutor-h5/wrongbook", icon: BookOutlined },
+  { key: "me", label: "我的", href: "/e/tutor-h5/me", icon: UserOutlined },
 ];
 
 /**

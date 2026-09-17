@@ -2,7 +2,7 @@
  * 复刻自 DeepTutor 原仓 web/components/h5/ChatPlusPanel.tsx（整件 1:1）。
  * 替换点（登记）：
  * 1. 删除 "use client"；
- * 2. next/link Link → react-router-dom Link；/h5/learn → /e/tutor/h5/learn（withU 原样）；
+ * 2. next/link Link → react-router-dom Link；/h5/learn → /e/tutor-h5/learn（withU 原样）；
  * 3. lucide 图标：原文件 import 的 BrainCircuit/Clapperboard/GraduationCap/
  *    MessageSquare/Microscope/PenLine/BarChart3/X 在 JSX 中未使用（UI 全用 emoji），
  *    移植后按 tupu tsconfig noUnusedLocals 纪律删除未用导入；实际使用的
@@ -1351,7 +1351,7 @@ function BookPanel({
           <div style={{ fontSize: 14, color: S400, padding: "24px 0", textAlign: "center" }}>
             还没有内部书
             <div style={{ marginTop: 8 }}>
-              <Link to={withU("/e/tutor/h5/learn", u)} style={{ color: "#6366f1", textDecoration: "underline" }}>
+              <Link to={withU("/e/tutor-h5/learn", u)} style={{ color: "#6366f1", textDecoration: "underline" }}>
                 去学习页看看教材
               </Link>
             </div>

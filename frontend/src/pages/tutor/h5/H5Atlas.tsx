@@ -2,7 +2,7 @@
  * ── 复刻来源与替换点（tupu antd 复刻，批9 F2 / SA-D）────────────────────────
  * 源文件：DeepTutor web/app/h5/atlas/page.tsx
  * 目标：frontend/src/pages/tutor/h5/H5Atlas.tsx（1:1 复刻，逻辑逐字保留）
- * 路由：/h5/atlas → /e/tutor/h5/atlas
+ * 路由：/h5/atlas → /e/tutor-h5/atlas
  * 替换点：
  * - "use client" 删除；next/link → react-router Link；useSearchParams → react-router；
  * - lucide（Loader2/ChevronDown/BookOpen/MessageCircle/Map/Sparkles）→ @ant-design/icons
@@ -10,7 +10,7 @@
  * - "@/lib/self-learning-api" → "./h5shared/selfLearningApi"；fetch(apiUrl('/api/v1/...'))
  *   → fetch('/api/v1/...')（apiUrl pass-through 脱壳）；"@/lib/h5-utils" → "./h5shared/h5Utils"；
  * - "../components/H5Shell"、"@/components/h5/H5PageHeader"、"@/components/h5/H5Sheet" →
- *   "./h5shared/*"；站内链接前缀 /h5/* → /e/tutor/h5/*；
+ *   "./h5shared/*"；站内链接前缀 /h5/* → /e/tutor-h5/*；
  * - Tailwind → 内联样式逐项对位。
  * 图件选型说明：原仓 H5 知识地图本身就是「缩进列表降级版」（源码注释：U8 第六篇正名，
  * 移动端不叫图谱，无 cytoscape），故无需平台图件/KpRelationGraph 降级，1:1 复刻
@@ -244,13 +244,13 @@ function H5AtlasContent() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
                 <a
-                  href={withU(`/e/tutor/h5/learn`, u)}
+                  href={withU(`/e/tutor-h5/learn`, u)}
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", borderRadius: 16, background: "#4f46e5", color: "#fff", fontSize: 14, fontWeight: 500, textDecoration: "none" }}
                 >
                   <ReadOutlined style={{ fontSize: 16 }} /> 看讲解
                 </a>
                 <Link
-                  to={withU("/e/tutor/h5/chat", u)}
+                  to={withU("/e/tutor-h5/chat", u)}
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", borderRadius: 16, background: "#7c3aed", color: "#fff", fontSize: 14, fontWeight: 500, textDecoration: "none" }}
                 >
                   <MessageOutlined style={{ fontSize: 16 }} /> 找 AI 补

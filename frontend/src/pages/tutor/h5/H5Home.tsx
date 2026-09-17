@@ -14,7 +14,7 @@
  * - Tailwind → 内联样式逐项对位（active:/hover: 伪类与 print: 变体无法内联，随共享层先例省略）；
  * - fetch(apiUrl('/api/v1/...')) → fetch('/api/v1/...') 逐字；
  * - fetchLearnerProfile/LearnerProfileDto ← h5shared/selfLearningApi（SA-D 共享数据层）；
- * - 路由前缀映射：原 /h5/* → /e/tutor/h5/*。
+ * - 路由前缀映射：原 /h5/* → /e/tutor-h5/*。
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -53,7 +53,7 @@ const ENTRIES = [
     key: "learn",
     title: "自主学习",
     desc: "三档练习 + 闯关",
-    href: "/e/tutor/h5/learn",
+    href: "/e/tutor-h5/learn",
     emoji: "⚔️",
     color: "linear-gradient(to bottom right, #3b82f6, #4f46e5)",
   },
@@ -61,7 +61,7 @@ const ENTRIES = [
     key: "wrongbook",
     title: "错题本",
     desc: "复习 / 变式 / 导出",
-    href: "/e/tutor/h5/wrongbook",
+    href: "/e/tutor-h5/wrongbook",
     emoji: "📖",
     color: "linear-gradient(to bottom right, #f97316, #d97706)",
   },
@@ -69,7 +69,7 @@ const ENTRIES = [
     key: "review",
     title: "复习中心",
     desc: "到期卡片",
-    href: "/e/tutor/h5/review",
+    href: "/e/tutor-h5/review",
     emoji: "🔄",
     color: "linear-gradient(to bottom right, #0ea5e9, #0891b2)",
   },
@@ -77,7 +77,7 @@ const ENTRIES = [
     key: "atlas",
     title: "知识地图",
     desc: "掌握度总览",
-    href: "/e/tutor/h5/atlas",
+    href: "/e/tutor-h5/atlas",
     emoji: "🗺️",
     color: "linear-gradient(to bottom right, #14b8a6, #059669)",
   },
@@ -85,7 +85,7 @@ const ENTRIES = [
     key: "paths",
     title: "精通之路",
     desc: "知识点达标进阶",
-    href: "/e/tutor/h5/paths",
+    href: "/e/tutor-h5/paths",
     emoji: "🏆",
     color: "linear-gradient(to bottom right, #8b5cf6, #9333ea)",
   },
@@ -96,7 +96,7 @@ const TOOL_ENTRIES = [
     key: "wrong",
     title: "拍错题",
     desc: "拍照秒入库",
-    href: "/e/tutor/h5/wrong",
+    href: "/e/tutor-h5/wrong",
     emoji: "📷",
     color: "linear-gradient(to bottom right, #f43f5e, #db2777)",
   },
@@ -104,7 +104,7 @@ const TOOL_ENTRIES = [
     key: "report",
     title: "学情报告",
     desc: "家长可看",
-    href: "/e/tutor/h5/report",
+    href: "/e/tutor-h5/report",
     emoji: "📊",
     color: "linear-gradient(to bottom right, #10b981, #0d9488)",
   },
@@ -228,7 +228,7 @@ export default function H5Home() {
               {!panel.done_today && (
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                   <Link
-                    to={withU("/e/tutor/h5/learn", u)}
+                    to={withU("/e/tutor-h5/learn", u)}
                     style={{
                       flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                       padding: "10px 0", borderRadius: 12, background: "#4f46e5", color: "#fff",
@@ -239,7 +239,7 @@ export default function H5Home() {
                   </Link>
                   {panel.due_count > 0 && (
                     <Link
-                      to={withU("/e/tutor/h5/wrongbook", u)}
+                      to={withU("/e/tutor-h5/wrongbook", u)}
                       style={{
                         flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                         padding: "10px 0", borderRadius: 12, background: "#fff", border: "1px solid #fcd34d",
@@ -261,7 +261,7 @@ export default function H5Home() {
                 <span>
                   已学 {total} · 薄弱 {weak} · 待复习 {due}
                 </span>
-                <Link to={withU("/e/tutor/h5/report", u)} style={{ marginLeft: "auto", color: "#4f46e5", display: "flex", alignItems: "center", textDecoration: "none" }}>
+                <Link to={withU("/e/tutor-h5/report", u)} style={{ marginLeft: "auto", color: "#4f46e5", display: "flex", alignItems: "center", textDecoration: "none" }}>
                   学情报告 <RightOutlined style={{ fontSize: 12 }} />
                 </Link>
               </div>
@@ -278,10 +278,12 @@ export default function H5Home() {
           <Link
             to={withU(
               lastLearn.href.startsWith("/h5")
-                ? lastLearn.href.replace(/^\/h5/, "/e/tutor/h5")
-                : lastLearn.href.startsWith("/e/tutor/h5")
+                ? lastLearn.href.replace(/^\/h5/, "/e/tutor-h5")
+                : lastLearn.href.startsWith("/e/tutor-h5")
                   ? lastLearn.href
-                  : "/e/tutor/h5/learn",
+                  : lastLearn.href.startsWith("/e/tutor/h5")
+                    ? lastLearn.href.replace(/^\/e\/tutor\/h5/, "/e/tutor-h5") // IA批1 迁移前存档旧前缀归一
+                    : "/e/tutor-h5/learn",
               u,
             )}
             style={{

@@ -3,7 +3,7 @@
  * 替换点（登记）：
  * 1. 删除 "use client"；
  * 2. next/link Link → react-router-dom Link；路由前缀 /h5/wrongbook →
- *    /e/tutor/h5/wrongbook（tupu h5 复刻路由映射，query 原样保留）；
+ *    /e/tutor-h5/wrongbook（tupu h5 复刻路由映射，query 原样保留）；
  * 3. lucide → @ant-design/icons 语义就近：ChevronDown→DownOutlined、
  *    Download→DownloadOutlined、ExternalLink→ExportOutlined、FileText→FileTextOutlined、
  *    Image→PictureOutlined、Film→VideoCameraOutlined、BookOpen→ReadOutlined、
@@ -292,7 +292,7 @@ export function AssistantMessageBody({
             <CheckCircleFilled style={{ fontSize: 16 }} /> 已存入错题本
           </div>
           <Link
-            to={wrongSaved.url || `/e/tutor/h5/wrongbook?mid=${wrongSaved.mid}${u ? `&u=${encodeURIComponent(u)}` : ""}`}
+            to={wrongSaved.url || `/e/tutor-h5/wrongbook?mid=${wrongSaved.mid}${u ? `&u=${encodeURIComponent(u)}` : ""}`}
             style={{
               marginTop: 6, display: "block", fontSize: 12, color: "#4f46e5",
               textDecoration: "underline",

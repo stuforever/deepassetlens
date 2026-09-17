@@ -4,7 +4,7 @@
  * 等价替换（与批8 F1/H5WrongBook 同口径）：
  *  - "use client" 删除；next/link → react-router-dom Link（href→to）；
  *    next/navigation useSearchParams/useRouter → react-router-dom useSearchParams/useNavigate（router.push→navigate）；
- *  - 路由前缀映射：原 /h5/* → tupu /e/tutor/h5/*（withU 拼参语义不变）；
+ *  - 路由前缀映射：原 /h5/* → tupu /e/tutor-h5/*（withU 拼参语义不变）；
  *  - fetch(apiUrl(x)) / fetch(backendUrl(x)) → fetch(x) 逐字路径（h5shared 无 api.ts，直接相对路径）；
  *  - lucide-react → @ant-design/icons 语义就近：BookOpen→ReadOutlined、ChevronRight→RightOutlined、
  *    ChevronDown→DownOutlined、Loader2→LoadingOutlined(spin)、CheckCircle2→CheckCircleOutlined、
@@ -309,7 +309,7 @@ function H5PracticeSet({ set, u, chapterId }: {
                 {/* W4（第八篇 M16-C）：练习答错一键问 AI */}
                 <Link
                   to={withU(
-                    `/e/tutor/h5/chat?text=${encodeURIComponent(`这道题我不会，帮我讲讲：\n${q.ask || ""}`)}`,
+                    `/e/tutor-h5/chat?text=${encodeURIComponent(`这道题我不会，帮我讲讲：\n${q.ask || ""}`)}`,
                     u,
                   )}
                   style={{ fontSize: 12, color: "#0284c7", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: 2 }}
@@ -784,7 +784,7 @@ function H5TierPractice({ u, chapterId }: { u?: string; chapterId?: string }) {
                     </span>
                     <Link
                       to={withU(
-                        `/e/tutor/h5/chat?text=${encodeURIComponent(`这道题我不会，帮我讲讲：\n${q.ask || ""}`)}`,
+                        `/e/tutor-h5/chat?text=${encodeURIComponent(`这道题我不会，帮我讲讲：\n${q.ask || ""}`)}`,
                         u,
                       )}
                       style={{ fontSize: 12, color: "#0284c7", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: 2 }}
@@ -1254,7 +1254,7 @@ function H5LearnContent() {
     setBookErr("");
     try {
       const r = await createChapterBook(selectedChapter.id);
-      navigate(withU(`/e/tutor/h5/book/${r.book_id}`, u || undefined));
+      navigate(withU(`/e/tutor-h5/book/${r.book_id}`, u || undefined));
     } catch {
       setBookErr("生成失败，请稍后重试");
     } finally {
@@ -1459,7 +1459,7 @@ function H5LearnContent() {
               {/* 阅读入口（design T3 原文 + T4 内部书） */}
               <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <Link
-                  to={withU("/e/tutor/h5/learn/textbook", u)}
+                  to={withU("/e/tutor-h5/learn/textbook", u)}
                   style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 12, border: `1px solid ${SLATE[200]}`, background: "#fff", fontSize: 14, textDecoration: "none" }}
                 >
                   <span style={{ color: SLATE[600] }}>📄 教材原文</span>
@@ -1471,7 +1471,7 @@ function H5LearnContent() {
                   </div>
                 ) : books.length > 0 ? (
                   <Link
-                    to={withU(`/e/tutor/h5/book/${books[0].id}`, u)}
+                    to={withU(`/e/tutor-h5/book/${books[0].id}`, u)}
                     style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 12, border: `1px solid ${SLATE[200]}`, background: "#fff", fontSize: 14, textDecoration: "none" }}
                   >
                     <span style={{ color: SLATE[600] }}>📕 内部书</span>
@@ -1566,7 +1566,7 @@ function H5LearnContent() {
                   ) : null}
                   {/* W4（第八篇 M16-C）：闯关区拍照入口——不会的题拍下来问 AI */}
                   <Link
-                    to={withU("/e/tutor/h5/wrong", u)}
+                    to={withU("/e/tutor-h5/wrong", u)}
                     style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 16, border: "1px dashed #fda4af", background: "rgba(255,241,242,0.5)", color: "#f43f5e", fontSize: 14, fontWeight: 500, textDecoration: "none" }}
                   >
                     📷 拍照问 AI（不会的题拍下来）
@@ -1728,7 +1728,7 @@ function H5LearnContent() {
                     {chapterWrongs.map((w: any) => (
                       <Link
                         key={w.id}
-                        to={withU(`/e/tutor/h5/wrongbook?mid=${encodeURIComponent(w.id)}`, u)}
+                        to={withU(`/e/tutor-h5/wrongbook?mid=${encodeURIComponent(w.id)}`, u)}
                         style={{ display: "block", background: "#fff", borderRadius: 16, border: `1px solid ${SLATE[200]}`, padding: "12px 14px", textDecoration: "none" }}
                       >
                         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
@@ -1748,7 +1748,7 @@ function H5LearnContent() {
                       </Link>
                     ))}
                     <Link
-                      to={withU("/e/tutor/h5/wrongbook", u)}
+                      to={withU("/e/tutor-h5/wrongbook", u)}
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 16, border: "1px solid #c7d2fe", background: "#eef2ff", fontSize: 14, fontWeight: 500, color: "#4338ca", textDecoration: "none" }}
                     >
                       <span>📚 进错题本复习（共 {chapterWrongs.length} 题）</span>
@@ -1822,7 +1822,7 @@ function H5LearnContent() {
                                 </div>
                                 {due && (
                                   <Link
-                                    to={withU("/e/tutor/h5/wrongbook", u)}
+                                    to={withU("/e/tutor-h5/wrongbook", u)}
                                     style={{ marginTop: 8, display: "block", textAlign: "center", padding: "8px 0", borderRadius: 12, background: "#fffbeb", border: "1px solid #fde68a", fontSize: 14, fontWeight: 500, color: "#b45309", textDecoration: "none" }}
                                   >
                                     📚 去复习
@@ -1874,7 +1874,7 @@ function H5LearnContent() {
                 ].map((tool) => (
                   <Link
                     key={tool.title}
-                    to={withU(`/e/tutor/h5/chat?prompt=${encodeURIComponent(tool.prompt)}`, u)}
+                    to={withU(`/e/tutor-h5/chat?prompt=${encodeURIComponent(tool.prompt)}`, u)}
                     style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: 14, borderRadius: 16, border: `1px solid ${BORDER}`, background: "#fff", fontSize: 14, textDecoration: "none" }}
                   >
                     <div style={{ width: 36, height: 36, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, ...tool.color }}>

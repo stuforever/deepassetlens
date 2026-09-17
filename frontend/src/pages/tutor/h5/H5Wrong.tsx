@@ -4,7 +4,7 @@
  *
  * 等价替换（与批8 F1 约定一致）：
  *  - next/navigation useSearchParams → react-router-dom useSearchParams；next/link → react-router Link；
- *  - 路由前缀映射：原 /h5/* → tupu /e/tutor/h5/*；
+ *  - 路由前缀映射：原 /h5/* → tupu /e/tutor-h5/*；
  *  - fetch(apiUrl(...)) / fetch(backendUrl(...)) → fetch('/api/v1/...') 逐字
  *    （原仓两函数均为 pass-through；tupu 由 setupProxy 统一转发 28000，直连/代理语义合一）；
  *  - lucide-react → @ant-design/icons 语义就近（Loader2→LoadingOutlined、Volume2 类比、
@@ -374,8 +374,8 @@ function H5WrongContent() {
           <Link
             to={
               questionText.trim()
-                ? withU(`/e/tutor/h5/chat?capability=deep_solve&text=${encodeURIComponent(questionText.trim())}`, u)
-                : withU("/e/tutor/h5/chat?capability=deep_solve", u)
+                ? withU(`/e/tutor-h5/chat?capability=deep_solve&text=${encodeURIComponent(questionText.trim())}`, u)
+                : withU("/e/tutor-h5/chat?capability=deep_solve", u)
             }
             style={{ marginTop: 8, width: "100%", padding: "12px 0", borderRadius: 12, border: "2px solid #7dd3fc", background: "#f0f9ff", color: "#0369a1", fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, textDecoration: "none" }}
           >

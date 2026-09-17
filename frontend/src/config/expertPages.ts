@@ -12,11 +12,12 @@ import RequireExpert from '../components/RequireAdmin';
  * 前端守卫管体验不管安全，执法在批16 vendor shim 统一门）。auth=0 快路径匿名=admin 不破开发链路。
  * ⑤R R3（权限联调收口）：功能页（h5 组+笔记本）统一包 withUseGuard（use 语义，A-4 分层）——
  * R3 权限三态 e2e 发现 h5 页缺 use 守卫（student2 无 grant 直连可见内容），本批补齐联调位。
+ * IA 件批1：守卫专家参数化（expertId 参数，默认 'tutor'）——tutor-h5 空间页传 'tutor-h5'。
  */
-const withAdminGuard = (C: ComponentType<any>): ComponentType<any> => (props: any) =>
-  createElement(RequireExpert, { action: 'manage', expertId: 'tutor', children: createElement(C, props) });
-const withUseGuard = (C: ComponentType<any>): ComponentType<any> => (props: any) =>
-  createElement(RequireExpert, { action: 'use', expertId: 'tutor', children: createElement(C, props) });
+const withAdminGuard = (C: ComponentType<any>, expertId: string = 'tutor'): ComponentType<any> => (props: any) =>
+  createElement(RequireExpert, { action: 'manage', expertId, children: createElement(C, props) });
+const withUseGuard = (C: ComponentType<any>, expertId: string = 'tutor'): ComponentType<any> => (props: any) =>
+  createElement(RequireExpert, { action: 'use', expertId, children: createElement(C, props) });
 
 // ⑤R R1（批12）：先行版六页退役（TutorLearn/Path/Practice/Review/WrongBook/Progress）——
 // §3.3.5 终版菜单由 DT h5 复刻件（TUTOR_H5_PAGES）取代，本表注册项随批12 移除。
@@ -51,29 +52,31 @@ const H5Me = lazy(() => import(/* webpackChunkName: "dt-h5-me" */ '../pages/tuto
 const H5Share = lazy(() => import(/* webpackChunkName: "dt-h5-share" */ '../pages/tutor/h5/H5Share'));
 
 // ⑤R R3（笔记本页补建）：原仓 (utility)/notebook/page.tsx 1:1——spec 2.6 #7 规划
-// /e/tutor/notebook（F2 复查发现仅 picker 链落位、页面本体缺位，本批补齐）
+// /e/tutor/notebook（F2 复查发现仅 picker 链落位、页面本体缺位，R3 补齐）
+// IA 件批1：笔记本随 h5 组迁入 tutor-h5 空间（spec §3.1 h5 组 12 项含笔记本）→ /e/tutor-h5/notebook
 const NotebookPage = lazy(() => import(/* webpackChunkName: "dt-notebook" */ '../pages/tutor/notebook/NotebookPage'));
 
 const TUTOR_H5_PAGES: ExpertPageConfig[] = [
-  // ⑤R R3 权限联调：功能页全部包 withUseGuard（use 语义——A-4 分层，API 面四执法点为真执法）
-  { path: '/e/tutor/h5', element: withUseGuard(H5Home), label: '首页', menuKey: 'e:tutor:h5:home' },
-  { path: '/e/tutor/h5/chat', element: withUseGuard(H5Chat), label: '对话', menuKey: 'e:tutor:h5:chat' },
-  { path: '/e/tutor/h5/learn', element: withUseGuard(H5Learn), label: '学习', menuKey: 'e:tutor:h5:learn' },
-  { path: '/e/tutor/h5/learn/textbook', element: withUseGuard(H5LearnTextbook), label: '教材学', menuKey: 'e:tutor:h5:learn:textbook' },
-  { path: '/e/tutor/h5/classroom', element: withUseGuard(H5Classroom), label: '课堂', menuKey: 'e:tutor:h5:classroom' },
-  { path: '/e/tutor/h5/review', element: withUseGuard(H5Review), label: '复习', menuKey: 'e:tutor:h5:review' },
-  { path: '/e/tutor/h5/wrong', element: withUseGuard(H5Wrong), label: '错题录入', menuKey: 'e:tutor:h5:wrong' },
-  { path: '/e/tutor/h5/wrongbook', element: withUseGuard(H5WrongBook), label: '错题本', menuKey: 'e:tutor:h5:wrongbook' },
-  { path: '/e/tutor/h5/paths', element: withUseGuard(H5Paths), label: '精通之路', menuKey: 'e:tutor:h5:paths' },
+  // IA 件批1：16 条路由从 /e/tutor/{h5,notebook} 迁出 → /e/tutor-h5/*（menuKey 同步换前缀）；
+  // 守卫传 'tutor-h5'（use 语义不变——A-4 分层，API 面四执法点为真执法）
+  { path: '/e/tutor-h5', element: withUseGuard(H5Home, 'tutor-h5'), label: '首页', menuKey: 'e:tutor-h5:home' },
+  { path: '/e/tutor-h5/chat', element: withUseGuard(H5Chat, 'tutor-h5'), label: '对话', menuKey: 'e:tutor-h5:chat' },
+  { path: '/e/tutor-h5/learn', element: withUseGuard(H5Learn, 'tutor-h5'), label: '学习', menuKey: 'e:tutor-h5:learn' },
+  { path: '/e/tutor-h5/learn/textbook', element: withUseGuard(H5LearnTextbook, 'tutor-h5'), label: '教材学', menuKey: 'e:tutor-h5:learn:textbook' },
+  { path: '/e/tutor-h5/classroom', element: withUseGuard(H5Classroom, 'tutor-h5'), label: '课堂', menuKey: 'e:tutor-h5:classroom' },
+  { path: '/e/tutor-h5/review', element: withUseGuard(H5Review, 'tutor-h5'), label: '复习', menuKey: 'e:tutor-h5:review' },
+  { path: '/e/tutor-h5/wrong', element: withUseGuard(H5Wrong, 'tutor-h5'), label: '错题录入', menuKey: 'e:tutor-h5:wrong' },
+  { path: '/e/tutor-h5/wrongbook', element: withUseGuard(H5WrongBook, 'tutor-h5'), label: '错题本', menuKey: 'e:tutor-h5:wrongbook' },
+  { path: '/e/tutor-h5/paths', element: withUseGuard(H5Paths, 'tutor-h5'), label: '精通之路', menuKey: 'e:tutor-h5:paths' },
   // ⑤R F4（批11）：详情路由（书路径/教材阅读）不进菜单—— flows 内可达
-  { path: '/e/tutor/h5/paths/:bookId', element: withUseGuard(H5PathBook), label: '书路径', menuKey: 'e:tutor:h5:paths:book', hideInMenu: true },
-  { path: '/e/tutor/h5/report', element: withUseGuard(H5Report), label: '学情报告', menuKey: 'e:tutor:h5:report' },
-  { path: '/e/tutor/h5/atlas', element: withUseGuard(H5Atlas), label: '知识地图', menuKey: 'e:tutor:h5:atlas' },
-  { path: '/e/tutor/h5/book/:bookId', element: withUseGuard(H5BookRead), label: '教材阅读', menuKey: 'e:tutor:h5:book', hideInMenu: true },
-  { path: '/e/tutor/h5/me', element: withUseGuard(H5Me), label: '我的', menuKey: 'e:tutor:h5:me' },
-  { path: '/e/tutor/h5/share', element: withUseGuard(H5Share), label: '分享', menuKey: 'e:tutor:h5:share' },
+  { path: '/e/tutor-h5/paths/:bookId', element: withUseGuard(H5PathBook, 'tutor-h5'), label: '书路径', menuKey: 'e:tutor-h5:paths:book', hideInMenu: true },
+  { path: '/e/tutor-h5/report', element: withUseGuard(H5Report, 'tutor-h5'), label: '学情报告', menuKey: 'e:tutor-h5:report' },
+  { path: '/e/tutor-h5/atlas', element: withUseGuard(H5Atlas, 'tutor-h5'), label: '知识地图', menuKey: 'e:tutor-h5:atlas' },
+  { path: '/e/tutor-h5/book/:bookId', element: withUseGuard(H5BookRead, 'tutor-h5'), label: '教材阅读', menuKey: 'e:tutor-h5:book', hideInMenu: true },
+  { path: '/e/tutor-h5/me', element: withUseGuard(H5Me, 'tutor-h5'), label: '我的', menuKey: 'e:tutor-h5:me' },
+  { path: '/e/tutor-h5/share', element: withUseGuard(H5Share, 'tutor-h5'), label: '分享', menuKey: 'e:tutor-h5:share' },
   // ⑤R R3：笔记本（题库——学习+题目两 tab 语义由 question-notebook 单面承接，spec 2.6 #7）
-  { path: '/e/tutor/notebook', element: withUseGuard(NotebookPage), label: '笔记本', menuKey: 'e:tutor:notebook' },
+  { path: '/e/tutor-h5/notebook', element: withUseGuard(NotebookPage, 'tutor-h5'), label: '笔记本', menuKey: 'e:tutor-h5:notebook' },
 ];
 
 const TUTOR_ADMIN_PAGES: ExpertPageConfig[] = [
@@ -105,17 +108,47 @@ export interface ExpertPageConfig {
 }
 
 export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
+  // IA 件批1：拆分双空间——tutor=桌面后台（co-writer/partners/self-learning 批6 再加）；
+  // tutor-h5=移动学习空间（h5 15 页+笔记本）。数据面共用同一教学数据域（spec §一）。
   tutor: [
     // ⑤R R1（批12）：先行版六页退役移除（§3.3.5 终版=DT h5 复刻件）
     ...TUTOR_ADMIN_PAGES,
+  ],
+  'tutor-h5': [
     ...TUTOR_H5_PAGES,
   ],
 };
 
 /** 汇总所有专家自定义路由（routes.tsx 消费）。 */
 export function expertPageRoutes(): ExpertPageConfig[] {
-  return Object.values(EXPERT_PAGES).flat();
+  return [...Object.values(EXPERT_PAGES).flat(), ...LEGACY_H5_ALIASES];
 }
+
+/**
+ * IA 件批1 1.3：tutor-h5 迁移旧路径别名（16 条全量含 2 条参数路由）。
+ * KeepAlive 架构无 <Navigate>——沿 /knowledge→/vector 先例：旧 path 注册同 element 实路由，
+ * menuKey 用新键（页签/打开状态归同域）；hideInMenu=true（防 AppSider/ExpertPortal 泄漏重复项）。
+ * 静态 14 条同时在 navigation.tsx pathToMenuKey 有别名（页签解析双保险）；
+ * 含参数 2 条（paths/:bookId、book/:bookId）仅此处可表达（matchExpertPage 段数匹配）。
+ */
+const LEGACY_H5_ALIASES: ExpertPageConfig[] = [
+  { path: '/e/tutor/h5', element: withUseGuard(H5Home, 'tutor-h5'), label: '首页', menuKey: 'e:tutor-h5:home', hideInMenu: true },
+  { path: '/e/tutor/h5/chat', element: withUseGuard(H5Chat, 'tutor-h5'), label: '对话', menuKey: 'e:tutor-h5:chat', hideInMenu: true },
+  { path: '/e/tutor/h5/learn', element: withUseGuard(H5Learn, 'tutor-h5'), label: '学习', menuKey: 'e:tutor-h5:learn', hideInMenu: true },
+  { path: '/e/tutor/h5/learn/textbook', element: withUseGuard(H5LearnTextbook, 'tutor-h5'), label: '教材学', menuKey: 'e:tutor-h5:learn:textbook', hideInMenu: true },
+  { path: '/e/tutor/h5/classroom', element: withUseGuard(H5Classroom, 'tutor-h5'), label: '课堂', menuKey: 'e:tutor-h5:classroom', hideInMenu: true },
+  { path: '/e/tutor/h5/review', element: withUseGuard(H5Review, 'tutor-h5'), label: '复习', menuKey: 'e:tutor-h5:review', hideInMenu: true },
+  { path: '/e/tutor/h5/wrong', element: withUseGuard(H5Wrong, 'tutor-h5'), label: '错题录入', menuKey: 'e:tutor-h5:wrong', hideInMenu: true },
+  { path: '/e/tutor/h5/wrongbook', element: withUseGuard(H5WrongBook, 'tutor-h5'), label: '错题本', menuKey: 'e:tutor-h5:wrongbook', hideInMenu: true },
+  { path: '/e/tutor/h5/paths', element: withUseGuard(H5Paths, 'tutor-h5'), label: '精通之路', menuKey: 'e:tutor-h5:paths', hideInMenu: true },
+  { path: '/e/tutor/h5/paths/:bookId', element: withUseGuard(H5PathBook, 'tutor-h5'), label: '书路径', menuKey: 'e:tutor-h5:paths:book', hideInMenu: true },
+  { path: '/e/tutor/h5/report', element: withUseGuard(H5Report, 'tutor-h5'), label: '学情报告', menuKey: 'e:tutor-h5:report', hideInMenu: true },
+  { path: '/e/tutor/h5/atlas', element: withUseGuard(H5Atlas, 'tutor-h5'), label: '知识地图', menuKey: 'e:tutor-h5:atlas', hideInMenu: true },
+  { path: '/e/tutor/h5/book/:bookId', element: withUseGuard(H5BookRead, 'tutor-h5'), label: '教材阅读', menuKey: 'e:tutor-h5:book', hideInMenu: true },
+  { path: '/e/tutor/h5/me', element: withUseGuard(H5Me, 'tutor-h5'), label: '我的', menuKey: 'e:tutor-h5:me', hideInMenu: true },
+  { path: '/e/tutor/h5/share', element: withUseGuard(H5Share, 'tutor-h5'), label: '分享', menuKey: 'e:tutor-h5:share', hideInMenu: true },
+  { path: '/e/tutor/notebook', element: withUseGuard(NotebookPage, 'tutor-h5'), label: '笔记本', menuKey: 'e:tutor-h5:notebook', hideInMenu: true },
+];
 
 /**
  * ⑤R F1：路径解析（先精确后参数模式）——KeepAlive 页签架构无 <Routes>，

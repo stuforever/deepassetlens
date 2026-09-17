@@ -1,7 +1,7 @@
 /**
  * H5PageHeader（第十一篇 N1）：全站统一的二级页顶栏行——原仓 1:1 移植。
  * 结构：[← 返回] [标题] [右侧插槽]，一行 44px。
- * - 返回行为：有历史 router.back()，无历史 fallback 到 backHref（默认 /e/tutor/h5）；
+ * - 返回行为：有历史 router.back()，无历史 fallback 到 backHref（默认 /e/tutor-h5）；
  * - 设计为「嵌入」各页现有渐变头的第一行（不重写各页配色），
  *   一级 tab 页（home）不用；chat 页用内联版（保持全屏布局）。
  */
@@ -11,7 +11,7 @@ import { LeftOutlined } from "@ant-design/icons";
 
 export function H5PageHeader({
   title,
-  backHref = "/e/tutor/h5",
+  backHref = "/e/tutor-h5",
   right,
   onBack,
 }: {

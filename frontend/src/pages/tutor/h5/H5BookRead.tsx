@@ -2,7 +2,7 @@
  * ── 复刻来源与替换点（tupu antd 复刻，批9 F2 / SA-D）────────────────────────
  * 源文件：DeepTutor web/app/h5/book/[bookId]/page.tsx
  * 目标：frontend/src/pages/tutor/h5/H5BookRead.tsx（1:1 复刻，逻辑逐字保留）
- * 路由：/h5/book/[bookId] → /e/tutor/h5/book/:bookId（useParams 取 bookId）
+ * 路由：/h5/book/[bookId] → /e/tutor-h5/book/:bookId（useParams 取 bookId）
  * 替换点：
  * - "use client" 删除；next/link → react-router Link；next/navigation → react-router；
  * - lucide（Loader2/ChevronLeft/ListTree/Volume2/VolumeX/BookOpen/CheckCircle2/XCircle/
@@ -16,7 +16,7 @@
  * - "@/components/h5/session-recap" → "./h5shared/sessionRecap"（postReadingEvent
  *   调用点原样：翻页即上报 book_progress，同一页会话内只报一次）；
  * - "../../components/H5Shell"、"@/components/h5/H5Sheet" → "./h5shared/*"；
- *   链接前缀 /h5/* → /e/tutor/h5/*；
+ *   链接前缀 /h5/* → /e/tutor-h5/*；
  * - Tailwind → 内联样式逐项对位；[&_svg]:max-w-full [&_svg]:h-auto → 注入 CSS 类
  *   .dsh-h5-svg-wrap svg 等价实现。
  * ─────────────────────────────────────────────────────────────────────
@@ -99,15 +99,15 @@ function jumpForType(type: string, u: string, chapterTitle: string): { href: str
     case "module_test":
     case "pretest":
       return {
-        href: withU(`/e/tutor/h5/learn?tab=practice${chQs()}`, u),
+        href: withU(`/e/tutor-h5/learn?tab=practice${chQs()}`, u),
         label: "去本章闯关练习 →",
       };
     case "retrieval_practice":
-      return { href: withU("/e/tutor/h5/wrongbook", u), label: "去错题重练 →" };
+      return { href: withU("/e/tutor-h5/wrongbook", u), label: "去错题重练 →" };
     case "error_diagnosis":
       return {
         href: withU(
-          `/e/tutor/h5/chat?text=${encodeURIComponent(`我在读《${chapterTitle || "本书"}》时想做个错因诊断，帮我分析易错点。`)}`,
+          `/e/tutor-h5/chat?text=${encodeURIComponent(`我在读《${chapterTitle || "本书"}》时想做个错因诊断，帮我分析易错点。`)}`,
           u,
         ),
         label: "问 AI 错因诊断 →",
@@ -469,7 +469,7 @@ function H5BookContent() {
       {/* 顶栏 */}
       <div style={{ background: "linear-gradient(90deg, #047857, #0f766e)", color: "#fff", padding: 16, borderRadius: "0 0 24px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Link to={withU("/e/tutor/h5/learn", u)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#a7f3d0", textDecoration: "none" }}>
+          <Link to={withU("/e/tutor-h5/learn", u)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#a7f3d0", textDecoration: "none" }}>
             <LeftOutlined style={{ fontSize: 16 }} /> 返回学习
           </Link>
           <div style={{ fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>

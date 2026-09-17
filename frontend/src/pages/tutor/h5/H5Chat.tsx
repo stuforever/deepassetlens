@@ -1,11 +1,11 @@
 /**
  * 复刻自 DeepTutor 原仓 web/app/h5/chat/page.tsx（整件 1:1），落位
- * frontend/src/pages/tutor/h5/H5Chat.tsx（路由 /e/tutor/h5/chat，已注册）。
+ * frontend/src/pages/tutor/h5/H5Chat.tsx（路由 /e/tutor-h5/chat，已注册）。
  * 替换点（登记）：
  * 1. 删除 "use client"；
  * 2. next/navigation useRouter → react-router-dom useNavigate（back()→navigate(-1)、
  *    push(x)→navigate(x)）；useSearchParams → react-router-dom 同名（get 语义一致）；
- * 3. next/link Link → react-router-dom Link；路由前缀 /h5/* → /e/tutor/h5/*
+ * 3. next/link Link → react-router-dom Link；路由前缀 /h5/* → /e/tutor-h5/*
  *    （withU 包裹的路径同步改写，query 原样）；
  * 4. fetch(apiUrl("/api/v1/...")) → fetch("/api/v1/...")（同源相对路径，路径/方法/
  *    头/体/query 逐字保留）；
@@ -1078,7 +1078,7 @@ function H5ChatContentInner() {
     ) {
       navigate(-1);
     } else {
-      navigate(withU("/e/tutor/h5", u));
+      navigate(withU("/e/tutor-h5", u));
     }
   };
 
@@ -1203,7 +1203,7 @@ function H5ChatContentInner() {
         {isMastery && (
           <div style={{ marginTop: 6 }}>
             <Link
-              to={withU("/e/tutor/h5/chat", u)}
+              to={withU("/e/tutor-h5/chat", u)}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 4,
                 padding: "4px 10px", borderRadius: 999, background: "rgba(167,139,250,.2)",
@@ -1580,7 +1580,7 @@ function H5ChatContentInner() {
             <div style={{ textAlign: "center", padding: "24px 0", display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ fontSize: 14, color: S500 }}>还没有精通之路，先创建一条吧。</div>
               <Link
-                to={withU("/e/tutor/h5/paths", u)}
+                to={withU("/e/tutor-h5/paths", u)}
                 onClick={() => setCoachOpen(false)}
                 style={{
                   display: "inline-block", padding: "10px 16px", borderRadius: 12,
@@ -1597,7 +1597,7 @@ function H5ChatContentInner() {
               <Link
                 key={p.book_id}
                 to={withU(
-                  `/e/tutor/h5/chat?mode=mastery&path=${encodeURIComponent(p.book_id)}`,
+                  `/e/tutor-h5/chat?mode=mastery&path=${encodeURIComponent(p.book_id)}`,
                   u,
                 )}
                 onClick={() => setCoachOpen(false)}

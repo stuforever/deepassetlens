@@ -28,13 +28,25 @@ def require_auth(request: Request) -> Any:
     """原仓 `from deeptutor.api.routers.auth import require_auth` 的同名同形替换。
 
     执法点③（vendor 统一门，批16 v2 语义）：所有 vendor 复刻 router 的挂载依赖
-    都经过本函数——expert ACL 单点判定（use 动作，expert_id=tutor）。
+    都经过本函数——expert ACL 单点判定（use 动作）。
+    IA 件批1 1.4 双专家（E-2 登记于 IA 差异台账）：tutor ∨ tutor-h5 任一 use 命中即过——
+    spec §一「同一教学数据域两入口」，vendor API 面两空间共用（桌面=h5 移动端同数据域）。
     auth=0 时 tupu 语义=匿名 admin 一票通过，与原仓本机模式行为一致。"""
     user = get_current_user(request)
     try:
         from app.services.expert_auth import ensure_expert_allowed
 
-        ensure_expert_allowed(request, "tutor", "use")
+        _last_denied: HTTPException | None = None
+        _allowed = False
+        for _eid in ("tutor", "tutor-h5"):
+            try:
+                ensure_expert_allowed(request, _eid, "use")
+                _allowed = True
+                break
+            except HTTPException as exc:
+                _last_denied = exc
+        if not _allowed and _last_denied is not None:
+            raise _last_denied
     except HTTPException:
         raise
     except Exception:

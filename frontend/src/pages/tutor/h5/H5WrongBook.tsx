@@ -4,7 +4,7 @@
  *
  * 等价替换（与批8 F1 约定一致）：
  *  - next/navigation useSearchParams → react-router-dom useSearchParams；next/link → react-router Link；
- *  - 路由前缀映射：原 /h5/* → tupu /e/tutor/h5/*；
+ *  - 路由前缀映射：原 /h5/* → tupu /e/tutor-h5/*；
  *  - fetch(apiUrl('/api/v1/...')) → fetch('/api/v1/...') 逐字（路径/方法/headers/body/query 一字不改）；
  *  - lucide-react → @ant-design/icons 语义就近（Loader2→LoadingOutlined、Volume2→SoundOutlined、
  *    Sparkles→ThunderboltOutlined、RotateCcw→ReloadOutlined、SlidersHorizontal→ControlOutlined、
@@ -1453,7 +1453,7 @@ function WrongBookContent() {
                   先去「拍错题」录入，或过一段时间再来巩固
                 </div>
                 <Link
-                  to={withU("/e/tutor/h5/wrong", u)}
+                  to={withU("/e/tutor-h5/wrong", u)}
                   style={{ marginTop: 16, display: "inline-block", padding: "8px 16px", borderRadius: 12, background: "#f43f5e", color: "#fff", fontSize: 14, textDecoration: "none" }}
                 >
                   📷 去拍错题
@@ -1550,7 +1550,7 @@ function WrongBookContent() {
               {revealed && (
                 <Link
                   to={withU(
-                    `/e/tutor/h5/chat?text=${encodeURIComponent(
+                    `/e/tutor-h5/chat?text=${encodeURIComponent(
                       [
                         current.question_text || current.title || "",
                         current.wrong_answer ? `我的错答：${current.wrong_answer}` : "",

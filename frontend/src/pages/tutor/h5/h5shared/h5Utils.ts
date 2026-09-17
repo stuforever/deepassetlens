@@ -3,7 +3,7 @@
  *
  * H5 用 `?u=<用户标识>` 区分使用者（如家长扫码后 /h5?u=小明）。
  * 所有 H5 内部路由透传 u，后端按 u 取对应学情/会话。
- * 路由前缀映射：原 /h5/* → tupu /e/tutor/h5/*。
+ * 路由前缀映射：原 /h5/* → tupu /e/tutor-h5/*。
  */
 
 /** 从当前 URL 读取用户标识 u（可能为空）。 */
@@ -13,7 +13,7 @@ export function getH5User(): string {
   return params.get("u") || params.get("openid") || "";
 }
 
-/** 把 u 透传到目标路径：/e/tutor/h5/learn -> /e/tutor/h5/learn?u=小明 */
+/** 把 u 透传到目标路径：/e/tutor-h5/learn -> /e/tutor-h5/learn?u=小明 */
 export function withU(path: string, u?: string): string {
   const uid = u ?? getH5User();
   if (!uid) return path;
