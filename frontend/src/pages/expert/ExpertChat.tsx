@@ -114,6 +114,18 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
       setQuestion(pre);
     }
   }, []);
+  // ⑤R R3：会话深链（?session=）——原仓 home 消费 /?session=X 恢复会话；tupu 等价物为
+  // 笔记本页「原始会话/追问对话」链接落点（/e/tutor/chat?session=X）。sessions 为
+  // localStorage 同步载入（store init），直接命中即切换。
+  useEffect(() => {
+    const m = location.search.match(/[?&]session=([^&]+)/);
+    if (!m) return;
+    const target = decodeURIComponent(m[1]);
+    const hit = useStore.getState().sessions.find((s) => s.id === target);
+    if (hit) {
+      useStore.getState().setActiveSessionId(target);
+    }
+  }, [location.search]);
   // 批13-P：受控路由模拟器 Drawer 开关（审计入口，不常驻前台）
   const [simOpen, setSimOpen] = useState(false);
   const [status, setStatus] = useState<ChatStatus>('ready');

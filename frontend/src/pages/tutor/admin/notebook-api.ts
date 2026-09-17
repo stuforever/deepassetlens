@@ -274,3 +274,53 @@ export async function addEntryToCategory(
   );
   await expectJson<{ added: boolean }>(response);
 }
+
+// ── ⑤R R3（笔记本页补建）： NotebookPage 引用链上的原仓导出 ──
+// 以下 4 个导出按原仓 web/lib/notebook-api.ts 逐字补入（apiFetch(apiUrl(x))→fetch(x)
+// 同批8 规则），纯增量、既有导出零改动。
+
+export async function deleteNotebookEntry(entryId: number): Promise<void> {
+  const response = await fetch(
+    `/api/v1/question-notebook/entries/${entryId}`,
+    {
+      method: "DELETE",
+    },
+  );
+  await expectJson<{ deleted: boolean }>(response);
+}
+
+export async function removeEntryFromCategory(
+  entryId: number,
+  categoryId: number,
+): Promise<void> {
+  const response = await fetch(
+    `/api/v1/question-notebook/entries/${entryId}/categories/${categoryId}`,
+    { method: "DELETE" },
+  );
+  await expectJson<{ removed: boolean }>(response);
+}
+
+export async function renameCategory(
+  categoryId: number,
+  name: string,
+): Promise<void> {
+  const response = await fetch(
+    `/api/v1/question-notebook/categories/${categoryId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    },
+  );
+  await expectJson<{ updated: boolean }>(response);
+}
+
+export async function deleteCategory(categoryId: number): Promise<void> {
+  const response = await fetch(
+    `/api/v1/question-notebook/categories/${categoryId}`,
+    {
+      method: "DELETE",
+    },
+  );
+  await expectJson<{ deleted: boolean }>(response);
+}

@@ -5,14 +5,18 @@
  */
 import type { ComponentType } from 'react';
 import { createElement, lazy } from 'react';
-import RequireAdmin from '../components/RequireAdmin';
+import RequireExpert from '../components/RequireAdmin';
 
 /**
  * ⑤R F4（批11）11.3：ACL 联调位——tutor 后台页面统一包 RequireAdmin（manage 语义，
  * 前端守卫管体验不管安全，执法在批16 vendor shim 统一门）。auth=0 快路径匿名=admin 不破开发链路。
+ * ⑤R R3（权限联调收口）：功能页（h5 组+笔记本）统一包 withUseGuard（use 语义，A-4 分层）——
+ * R3 权限三态 e2e 发现 h5 页缺 use 守卫（student2 无 grant 直连可见内容），本批补齐联调位。
  */
 const withAdminGuard = (C: ComponentType<any>): ComponentType<any> => (props: any) =>
-  createElement(RequireAdmin, null, createElement(C, props));
+  createElement(RequireExpert, { action: 'manage', expertId: 'tutor', children: createElement(C, props) });
+const withUseGuard = (C: ComponentType<any>): ComponentType<any> => (props: any) =>
+  createElement(RequireExpert, { action: 'use', expertId: 'tutor', children: createElement(C, props) });
 
 // ⑤R R1（批12）：先行版六页退役（TutorLearn/Path/Practice/Review/WrongBook/Progress）——
 // §3.3.5 终版菜单由 DT h5 复刻件（TUTOR_H5_PAGES）取代，本表注册项随批12 移除。
@@ -46,23 +50,30 @@ const H5BookRead = lazy(() => import(/* webpackChunkName: "dt-h5-book" */ '../pa
 const H5Me = lazy(() => import(/* webpackChunkName: "dt-h5-me" */ '../pages/tutor/h5/H5Me'));
 const H5Share = lazy(() => import(/* webpackChunkName: "dt-h5-share" */ '../pages/tutor/h5/H5Share'));
 
+// ⑤R R3（笔记本页补建）：原仓 (utility)/notebook/page.tsx 1:1——spec 2.6 #7 规划
+// /e/tutor/notebook（F2 复查发现仅 picker 链落位、页面本体缺位，本批补齐）
+const NotebookPage = lazy(() => import(/* webpackChunkName: "dt-notebook" */ '../pages/tutor/notebook/NotebookPage'));
+
 const TUTOR_H5_PAGES: ExpertPageConfig[] = [
-  { path: '/e/tutor/h5', element: H5Home, label: '首页', menuKey: 'e:tutor:h5:home' },
-  { path: '/e/tutor/h5/chat', element: H5Chat, label: '对话', menuKey: 'e:tutor:h5:chat' },
-  { path: '/e/tutor/h5/learn', element: H5Learn, label: '学习', menuKey: 'e:tutor:h5:learn' },
-  { path: '/e/tutor/h5/learn/textbook', element: H5LearnTextbook, label: '教材学', menuKey: 'e:tutor:h5:learn:textbook' },
-  { path: '/e/tutor/h5/classroom', element: H5Classroom, label: '课堂', menuKey: 'e:tutor:h5:classroom' },
-  { path: '/e/tutor/h5/review', element: H5Review, label: '复习', menuKey: 'e:tutor:h5:review' },
-  { path: '/e/tutor/h5/wrong', element: H5Wrong, label: '错题录入', menuKey: 'e:tutor:h5:wrong' },
-  { path: '/e/tutor/h5/wrongbook', element: H5WrongBook, label: '错题本', menuKey: 'e:tutor:h5:wrongbook' },
-  { path: '/e/tutor/h5/paths', element: H5Paths, label: '精通之路', menuKey: 'e:tutor:h5:paths' },
+  // ⑤R R3 权限联调：功能页全部包 withUseGuard（use 语义——A-4 分层，API 面四执法点为真执法）
+  { path: '/e/tutor/h5', element: withUseGuard(H5Home), label: '首页', menuKey: 'e:tutor:h5:home' },
+  { path: '/e/tutor/h5/chat', element: withUseGuard(H5Chat), label: '对话', menuKey: 'e:tutor:h5:chat' },
+  { path: '/e/tutor/h5/learn', element: withUseGuard(H5Learn), label: '学习', menuKey: 'e:tutor:h5:learn' },
+  { path: '/e/tutor/h5/learn/textbook', element: withUseGuard(H5LearnTextbook), label: '教材学', menuKey: 'e:tutor:h5:learn:textbook' },
+  { path: '/e/tutor/h5/classroom', element: withUseGuard(H5Classroom), label: '课堂', menuKey: 'e:tutor:h5:classroom' },
+  { path: '/e/tutor/h5/review', element: withUseGuard(H5Review), label: '复习', menuKey: 'e:tutor:h5:review' },
+  { path: '/e/tutor/h5/wrong', element: withUseGuard(H5Wrong), label: '错题录入', menuKey: 'e:tutor:h5:wrong' },
+  { path: '/e/tutor/h5/wrongbook', element: withUseGuard(H5WrongBook), label: '错题本', menuKey: 'e:tutor:h5:wrongbook' },
+  { path: '/e/tutor/h5/paths', element: withUseGuard(H5Paths), label: '精通之路', menuKey: 'e:tutor:h5:paths' },
   // ⑤R F4（批11）：详情路由（书路径/教材阅读）不进菜单—— flows 内可达
-  { path: '/e/tutor/h5/paths/:bookId', element: H5PathBook, label: '书路径', menuKey: 'e:tutor:h5:paths:book', hideInMenu: true },
-  { path: '/e/tutor/h5/report', element: H5Report, label: '学情报告', menuKey: 'e:tutor:h5:report' },
-  { path: '/e/tutor/h5/atlas', element: H5Atlas, label: '知识地图', menuKey: 'e:tutor:h5:atlas' },
-  { path: '/e/tutor/h5/book/:bookId', element: H5BookRead, label: '教材阅读', menuKey: 'e:tutor:h5:book', hideInMenu: true },
-  { path: '/e/tutor/h5/me', element: H5Me, label: '我的', menuKey: 'e:tutor:h5:me' },
-  { path: '/e/tutor/h5/share', element: H5Share, label: '分享', menuKey: 'e:tutor:h5:share' },
+  { path: '/e/tutor/h5/paths/:bookId', element: withUseGuard(H5PathBook), label: '书路径', menuKey: 'e:tutor:h5:paths:book', hideInMenu: true },
+  { path: '/e/tutor/h5/report', element: withUseGuard(H5Report), label: '学情报告', menuKey: 'e:tutor:h5:report' },
+  { path: '/e/tutor/h5/atlas', element: withUseGuard(H5Atlas), label: '知识地图', menuKey: 'e:tutor:h5:atlas' },
+  { path: '/e/tutor/h5/book/:bookId', element: withUseGuard(H5BookRead), label: '教材阅读', menuKey: 'e:tutor:h5:book', hideInMenu: true },
+  { path: '/e/tutor/h5/me', element: withUseGuard(H5Me), label: '我的', menuKey: 'e:tutor:h5:me' },
+  { path: '/e/tutor/h5/share', element: withUseGuard(H5Share), label: '分享', menuKey: 'e:tutor:h5:share' },
+  // ⑤R R3：笔记本（题库——学习+题目两 tab 语义由 question-notebook 单面承接，spec 2.6 #7）
+  { path: '/e/tutor/notebook', element: withUseGuard(NotebookPage), label: '笔记本', menuKey: 'e:tutor:notebook' },
 ];
 
 const TUTOR_ADMIN_PAGES: ExpertPageConfig[] = [

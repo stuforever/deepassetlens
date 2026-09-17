@@ -6,6 +6,7 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AuthCtx } from '../auth/AuthGate';
+import { getStoredToken } from '../auth/oidc';
 
 const RequireExpert: React.FC<{
   children: React.ReactNode;
@@ -24,7 +25,11 @@ const RequireExpert: React.FC<{
     let alive = true;
     (async () => {
       try {
-        const r = await fetch(`/api/v1/auth/check?resource_type=expert&resource_id=${encodeURIComponent(expertId)}&action=${action}`);
+        // ⑤R R3 权限联调修复：check 请求必须带 Bearer（auth=1 下裸 fetch=401 一律拒）
+        const t = getStoredToken();
+        const headers: Record<string, string> = {};
+        if (t) headers['Authorization'] = `${t.token_type} ${t.access_token}`;
+        const r = await fetch(`/api/v1/auth/check?resource_type=expert&resource_id=${encodeURIComponent(expertId)}&action=${action}`, { headers });
         const j = await r.json();
         if (alive) setAllowed(!!j?.data?.allowed);
       } catch {
