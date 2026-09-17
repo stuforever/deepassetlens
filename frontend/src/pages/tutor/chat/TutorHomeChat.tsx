@@ -8,7 +8,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  BarChart3, BookMarked, BrainCircuit, Clapperboard, Code2, Compass, Database,
+  BarChart3, BookMarked, BrainCircuit, Clapperboard, ClipboardCheck, Code2, Compass, Database,
   FileSearch, Globe, GraduationCap, Image as ImageIcon, Lightbulb, MessageSquare,
   Microscope, PenLine, Sparkles, BookmarkPlus, Download, PanelRight,
   type LucideIcon,
@@ -868,6 +868,36 @@ function TutorHomeChatInner() {
                       onDeleteTurn={deleteTurn}
                       onSubmitUserReply={submitUserReply}
                     />
+                    {state.pendingConfirmation && (
+                      <div
+                        data-testid="wrong-intake-confirmation"
+                        className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/60 p-5"
+                      >
+                        <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-[var(--foreground)]">
+                          <ClipboardCheck className="h-4 w-4 text-[var(--primary)]" />
+                          {t("Wrong question confirmation")}
+                        </div>
+                        <dl className="space-y-1.5 text-[13px] leading-relaxed text-[var(--foreground)]/85">
+                          <div className="flex gap-2"><dt className="shrink-0 text-[var(--muted-foreground)]">{t("Question")}</dt><dd className="min-w-0 break-words">{state.pendingConfirmation.card.question}</dd></div>
+                          <div className="flex gap-2"><dt className="shrink-0 text-[var(--muted-foreground)]">{t("Correct answer")}</dt><dd className="min-w-0 break-words text-[var(--primary)]">{state.pendingConfirmation.card.correct_answer}</dd></div>
+                          <div className="flex gap-2"><dt className="shrink-0 text-[var(--muted-foreground)]">{t("Your answer")}</dt><dd className="min-w-0 break-words">{state.pendingConfirmation.card.wrong_answer || "—"}</dd></div>
+                          {state.pendingConfirmation.card.error_type && (
+                            <div className="flex gap-2"><dt className="shrink-0 text-[var(--muted-foreground)]">{t("Error type")}</dt><dd>{state.pendingConfirmation.card.error_type}</dd></div>
+                          )}
+                        </dl>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            data-testid="wrong-intake-confirm-btn"
+                            disabled={state.isStreaming}
+                            onClick={() => void send("确认", { skillCode: state.pendingConfirmation!.skillCode, tools: enabledTools, knowledgeBases: selectedKbOnly, sessionId: state.sessionId })}
+                            className="rounded-xl bg-[var(--primary)] px-4 py-1.5 text-[13px] font-medium text-white hover:opacity-90 disabled:opacity-50"
+                          >
+                            {t("Confirm and save")}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div ref={messagesEndRef} className="h-px w-full shrink-0" />
                   </div>
                 </div>
@@ -985,7 +1015,8 @@ function TutorHomeChatInner() {
   );
 }
 
-/** useAgentChat 兼容面：state 命名对齐 DT useUnifiedChat（messages/isStreaming/sessionId）。 */
+/** useAgentChat 兼容面：state 命名对齐 DT useUnifiedChat（messages/isStreaming/sessionId）。
+    批3 确认门：pendingConfirmation 随 state 透传（wrong-intake 抽取卡渲染源）。 */
 function useAgentChatCompat() {
   const agent = useAgentChat();
   return {
@@ -993,6 +1024,7 @@ function useAgentChatCompat() {
       sessionId: agent.sessionId,
       messages: agent.messages,
       isStreaming: agent.isStreaming,
+      pendingConfirmation: agent.pendingConfirmation,
     },
     send: agent.send,
     stop: agent.stop,

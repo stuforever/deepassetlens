@@ -7,7 +7,7 @@
  * invalidateEnabledOptionalToolsCache 复用本仓复刻件（../tutor/h5/h5shared/toolsSettings）。
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Spin, Switch } from 'antd';
+import { Spin } from 'antd';
 import { DownOutlined, LoadingOutlined, LockOutlined, ToolOutlined } from '@ant-design/icons';
 import { useSettings } from '../../components/settings/SettingsContext';
 import { SettingsPageHeader } from '../../components/settings/shared';
@@ -68,6 +68,16 @@ const CAPABILITY_LABELS: Record<string, { zh: string; en: string }> = {
   solve: { zh: '深度解题', en: 'Deep Solve' },
   mastery: { zh: '精通路径', en: 'Mastery Path' },
 };
+
+// 引擎批3（裁定②，不静默隐藏）：桥编排面永拒的四件（geogebra_analysis/paper_search/
+// imagegen/videogen——backend dt_agent_orchestrations.DISCARDED_TOOLS 同名单）。
+// vendor 零触（铁律），故在展示层置灰锁定并标「未接入」——与 coming_soon 同态不同徽标。
+const NOT_WIRED_TOOLS: ReadonlySet<string> = new Set([
+  'geogebra_analysis',
+  'paper_search',
+  'imagegen',
+  'videogen',
+]);
 
 export default function ToolsSettingsPage() {
   const { language } = useSettings();
@@ -297,7 +307,8 @@ export default function ToolsSettingsPage() {
                     const isOpen = expanded.has(tool.name);
                     const hints = tool.hints[lang];
                     const isPending = pending.has(tool.name);
-                    const isComingSoon = !!tool.coming_soon;
+                    const isNotWired = NOT_WIRED_TOOLS.has(tool.name);
+                    const isComingSoon = !!tool.coming_soon || isNotWired;
                     const isEnabled =
                       !isComingSoon &&
                       (tool.toggleable ? enabled.has(tool.name) : true);
@@ -376,7 +387,13 @@ export default function ToolsSettingsPage() {
                                       color: 'rgba(0, 0, 0, 0.45)',
                                     }}
                                   >
-                                    {language === 'zh' ? '敬请期待' : 'Coming soon'}
+                                    {isNotWired
+                                      ? language === 'zh'
+                                        ? '未接入'
+                                        : 'Not wired'
+                                      : language === 'zh'
+                                        ? '敬请期待'
+                                        : 'Coming soon'}
                                   </span>
                                 )}
                               </div>
@@ -413,7 +430,15 @@ export default function ToolsSettingsPage() {
                                 onChange={() => {
                                   /* locked */
                                 }}
-                                label={language === 'zh' ? '敬请期待' : 'Coming soon'}
+                                label={
+                                  isNotWired
+                                    ? language === 'zh'
+                                      ? '未接入'
+                                      : 'Not wired'
+                                    : language === 'zh'
+                                      ? '敬请期待'
+                                      : 'Coming soon'
+                                }
                                 testId={`tools-toggle-${tool.name}`}
                               />
                             ) : tool.toggleable ? (
@@ -540,13 +565,29 @@ function ToolToggle({
   label: string;
   testId?: string;
 }) {
+  // 批3 对拍修正：恢复 DT 原生 switch button（data-testid 面——antd Switch 副本
+  // 丢 testid 致 e2e 断言失锚；DT page.tsx L447-482 1:1 拷回，Tailwind 类同源）。
   return (
-    <Switch
-      checked={checked}
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
       disabled={disabled}
-      onChange={onChange}
-      size="small"
-    />
+      onClick={onChange}
+      data-testid={testId}
+      className={`relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full border transition-colors ${
+        checked
+          ? "border-[var(--primary)] bg-[var(--primary)]/70"
+          : "border-[var(--border)] bg-[var(--muted)]/50"
+      } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+    >
+      <span
+        className={`inline-block h-[12px] w-[12px] transform rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-[16px]" : "translate-x-[2px]"
+        }`}
+      />
+    </button>
   );
 }
 

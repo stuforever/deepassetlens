@@ -55,6 +55,8 @@ interface AgentChatState {
   lastTurnId: string | null;
   /** 桥事件计数（上下文读数 chip 数据源之一——批3 接量）。 */
   lastUsage: { tokens: number; costUsd: number; calls: number } | null;
+  /** 批3 确认门：wrong-intake 抽取卡挂起态（确认→发「确认」触发落库轮）。 */
+  pendingConfirmation: { skillCode: string; card: Record<string, string> } | null;
   error: string | null;
 }
 
@@ -104,6 +106,7 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
     currentStage: "",
     lastTurnId: null,
     lastUsage: null,
+    pendingConfirmation: null,
     error: null,
   });
   const abortRef = useRef<AbortController | null>(null);
@@ -157,6 +160,7 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
       isStreaming: true,
       thinkingText: "",
       currentStage: "prepare",
+      pendingConfirmation: null,
       error: null,
     }));
 
@@ -231,6 +235,16 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
           case "result":
             patchAssistant((m) => ({ ...m, content: ev.content || m.content }));
             break;
+          case "confirmation_card":
+            // 批3 确认门：wrong-intake 抽取卡（结构化字段）——前端确认后发「确认」触发落库轮
+            setState((s) => ({
+              ...s,
+              pendingConfirmation: {
+                skillCode,
+                card: (ev.metadata || {}) as Record<string, string>,
+              },
+            }));
+            break;
           case "error":
             setState((s) => ({ ...s, error: ev.content }));
             break;
@@ -271,6 +285,7 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
       currentStage: "",
       lastTurnId: null,
       lastUsage: null,
+      pendingConfirmation: null,
       error: null,
     });
   }, []);

@@ -3323,5 +3323,9 @@
   "Your v1 memory was archived": "Your v1 memory was archived",
   "your: {{answer}}": "your: {{answer}}",
   "Zoom in": "Zoom in",
-  "Zoom out": "Zoom out"
+  "Zoom out": "Zoom out",
+  "Wrong question confirmation": "Wrong question confirmation",
+  "Correct answer": "Correct answer",
+  "Error type": "Error type",
+  "Confirm and save": "Confirm and save"
 }

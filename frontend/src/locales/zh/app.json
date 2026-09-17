@@ -3357,5 +3357,9 @@
   "Type what you remember": "输入你记得的内容",
   "Voice": "语音",
   "Whole passage": "整篇",
-  "Wrong": "错字"
+  "Wrong": "错字",
+  "Wrong question confirmation": "错题确认卡",
+  "Correct answer": "正确答案",
+  "Error type": "错因归类",
+  "Confirm and save": "确认并入库"
 }
