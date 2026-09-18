@@ -442,7 +442,7 @@ function SpaceSubsection({
   return (
     <div>
       <Link
-        href={category.href}
+        to={category.href}
         className="group flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-[var(--muted)]/40"
       >
         <Icon

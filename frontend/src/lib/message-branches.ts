@@ -14,7 +14,12 @@
  * persisted positive id).
  */
 
-import type { MessageItem } from "../pages/tutor/h5/h5shared/UnifiedChatContext";
+// E-36 泛型化：分支算法只依赖 id/parentMessageId（lib ChatMessageItem 与
+// h5 MessageItem 两类调用方共用，避免固定到单一消息类型）。
+export interface BranchableMessage {
+  id?: number;
+  parentMessageId?: number | null;
+}
 
 const ROOT_KEY = "null";
 
@@ -28,7 +33,7 @@ function parentKey(id: number | null | undefined): string {
 // ample headroom and stays well under ``Number.MAX_SAFE_INTEGER``.
 const OPTIMISTIC_RANK_OFFSET = 1e15;
 
-function siblingRank(message: MessageItem): number {
+function siblingRank(message: BranchableMessage): number {
   // Optimistic, in-flight messages get a negative ``id`` on the client
   // (``-Date.now()``) and must be treated as the freshest sibling so the
   // bubble the user just submitted stays visible. Among optimistic rows,
@@ -52,18 +57,18 @@ export interface SiblingInfo {
 
 export interface VisiblePathResult {
   /** The flat message list to render, in chronological order. */
-  messages: MessageItem[];
+  messages: BranchableMessage[];
   /** Sibling info keyed by message id. Only present for messages whose
    *  parent has more than one child (i.e. branching points). */
   siblingsByMessageId: Map<number, SiblingInfo>;
 }
 
-export function buildVisiblePath(
-  allMessages: MessageItem[],
+export function buildVisiblePath<T extends BranchableMessage>(
+  allMessages: T[],
   selectedBranches: Record<string, number> | undefined,
-): VisiblePathResult {
+): { messages: T[]; siblingsByMessageId: Map<number, SiblingInfo> } {
   // Group by parent.
-  const childrenByParent = new Map<string, MessageItem[]>();
+  const childrenByParent = new Map<string, T[]>();
   for (const msg of allMessages) {
     if (msg.id === undefined) continue;
     const key = parentKey(msg.parentMessageId);
@@ -76,7 +81,7 @@ export function buildVisiblePath(
   }
 
   const selection = selectedBranches ?? {};
-  const visible: MessageItem[] = [];
+  const visible: T[] = [];
   const siblingsByMessageId = new Map<number, SiblingInfo>();
   const guard = new Set<string>();
   let currentParent = ROOT_KEY;
@@ -89,7 +94,7 @@ export function buildVisiblePath(
     const children = childrenByParent.get(currentParent);
     if (!children || children.length === 0) break;
 
-    let chosen: MessageItem;
+    let chosen: T;
     if (children.length === 1) {
       chosen = children[0];
     } else {
@@ -124,8 +129,8 @@ export function buildVisiblePath(
  * Persisted (positive-id) rows only — optimistic in-flight rows aren't
  * useful as a persisted selection target.
  */
-export function latestChildId(
-  allMessages: MessageItem[],
+export function latestChildId<T extends BranchableMessage>(
+  allMessages: T[],
   parentId: number | null,
 ): number | null {
   const key = parentKey(parentId);
@@ -150,7 +155,7 @@ export function latestChildId(
  * when no server reload has reconciled real ids yet. ``null`` for an
  * empty session.
  */
-export function tipMessageId(visible: MessageItem[]): number | null {
+export function tipMessageId<T extends BranchableMessage>(visible: T[]): number | null {
   for (let i = visible.length - 1; i >= 0; i -= 1) {
     const id = visible[i].id;
     if (id !== undefined) return id;

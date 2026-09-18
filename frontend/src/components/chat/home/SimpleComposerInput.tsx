@@ -7,7 +7,7 @@ import { useAutoSizedTextarea } from "../../../lib/use-auto-sized-textarea";
 import { useImeComposing } from "../../../lib/use-ime-composing";
 
 interface SimpleComposerInputProps {
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  textareaRef: RefObject<HTMLTextAreaElement>;
   onSend: (content: string) => void;
   disabled?: boolean;
 }

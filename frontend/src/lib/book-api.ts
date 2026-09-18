@@ -57,7 +57,7 @@ async function requestOverBridge<T>(
         }
         const md = ev.metadata || {};
         if (md.ws_event) {
-          onEvent?.(md.ws_event as Record<string, unknown>);
+          onEvent?.(md.ws_event as unknown as BookWsEvent);
         } else if (ev.type === "result" && md.ws_result) {
           result = md.ws_result as T;
         } else if (ev.type === "error") {

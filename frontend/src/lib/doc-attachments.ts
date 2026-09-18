@@ -32,7 +32,9 @@ import {
 } from "@ant-design/icons";
 
 /** antd 图标组件的最小类型面（本 lib 只传引用，不渲染）。 */
-export type AntdIconComponent = ComponentType<{ style?: CSSProperties }>;
+// E-36：使用侧（ChatComposer/SessionActivityPanel/FilePreviewDrawer）按 lucide 风格传
+// size/strokeWidth/className，类型面同步拓宽（antd 图标 props 全可选，仍可赋值）。
+export type AntdIconComponent = ComponentType<{ size?: number; strokeWidth?: number; className?: string; style?: CSSProperties }>;
 
 /** Binary Office formats — handled by dedicated parsers server-side. */
 export const OFFICE_EXTS = [".pdf", ".docx", ".xlsx", ".pptx"] as const;

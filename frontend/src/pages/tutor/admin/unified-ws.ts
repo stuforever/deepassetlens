@@ -16,6 +16,7 @@ export type StreamEventType =
   | "progress"
   | "sources"
   | "result"
+  | "confirmation_card"
   | "error"
   | "session"
   | "session_meta"

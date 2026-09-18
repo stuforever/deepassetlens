@@ -25,6 +25,7 @@ export type StreamEventType =
   | "tool_call"
   | "tool_result"
   | "progress"
+  | "confirmation_card"
   | "sources"
   | "result"
   | "error"

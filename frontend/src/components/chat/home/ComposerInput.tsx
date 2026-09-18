@@ -22,7 +22,7 @@ import { useAutoSizedTextarea } from "../../../lib/use-auto-sized-textarea";
 import { useImeComposing } from "../../../lib/use-ime-composing";
 
 interface ComposerInputProps {
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  textareaRef: RefObject<HTMLTextAreaElement>;
   isVisualizeMode: boolean;
   isStreaming?: boolean;
   // When true, parent has attachments/references queued and will accept a
@@ -487,7 +487,6 @@ export const ComposerInput = memo(
                   className="shrink-0 text-[var(--muted-foreground)]"
                 />
                 {/* Command syntax token — must not be localized. */}
-                {/* eslint-disable-next-line i18n/no-literal-ui-text */}
                 <span className="font-medium text-[var(--foreground)]">
                   /persona
                 </span>

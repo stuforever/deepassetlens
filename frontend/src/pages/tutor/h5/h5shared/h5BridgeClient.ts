@@ -10,7 +10,7 @@
  *   submit_user_reply→桥 chat 无 ask_user 中断面（no-op，台账登记）。
  */
 import { apiUrl } from "../../../../lib/api";
-import type { ChatMessage, StreamEvent } from "../admin/unified-ws";
+import type { ChatMessage, StreamEvent } from "../../admin/unified-ws";
 
 /** capability（DT 语义 id）→桥 skill_code 映射。 */
 export function capabilityToSkill(capability: string | null | undefined): string {

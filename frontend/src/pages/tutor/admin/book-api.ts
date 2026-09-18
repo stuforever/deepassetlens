@@ -26,6 +26,10 @@ const BASE = "/api/v1/book";
 
 // 引擎批6 6.4：book WS 消费退役——requestOverSocket 改桥 SSE 传输（签名/导出面 1:1，
 // L7 硬门 ④ book WS 消费清零；vendor ws_op 形状经 metadata.ws_event/ws_result 同批5）。
+// 头部约定落地：本文件 apiUrl=恒等（相对路径直用）。
+function apiUrl(path: string): string {
+  return path;
+}
 function requestOverSocket<T extends BookWsEvent>(
   message: Record<string, unknown>,
   _resultType: string,

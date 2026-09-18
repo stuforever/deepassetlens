@@ -9,6 +9,8 @@ export type SkillSource = "user" | "builtin" | "admin";
 
 export interface SkillInfo {
   name: string;
+  /** 技能码（如 tutor/chat——技能面唯一注册表键；后端 /skills 返回）。 */
+  skill_code?: string;
   description: string;
   tags: string[];
   source?: SkillSource;
@@ -68,6 +70,8 @@ async function asJson(response: Response) {
 
 export async function listSkills(options?: {
   force?: boolean;
+  /** 专家域过滤（如 "tutor"——按 skill_code 前缀；SkillManagerV2 同口径）。 */
+  expert?: string;
 }): Promise<SkillInfo[]> {
   return withClientCache<SkillInfo[]>(
     `${SKILLS_CACHE_PREFIX}list`,
@@ -80,12 +84,14 @@ export async function listSkills(options?: {
       return items.map(
         (item: {
           name?: unknown;
+          skill_code?: unknown;
           description?: unknown;
           tags?: unknown;
           source?: unknown;
           read_only?: unknown;
         }) => ({
           name: String(item?.name ?? ""),
+          skill_code: item?.skill_code == null ? undefined : String(item?.skill_code),
           description: String(item?.description ?? ""),
           tags: normalizeTags(item?.tags),
           source: normalizeSource(item?.source),
@@ -94,6 +100,10 @@ export async function listSkills(options?: {
       );
     },
     { force: options?.force },
+  ).then((items) =>
+    options?.expert
+      ? items.filter((it) => (it.skill_code ?? it.name).startsWith(`${options.expert}/`))
+      : items,
   );
 }
 

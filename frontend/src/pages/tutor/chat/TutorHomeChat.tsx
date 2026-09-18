@@ -38,7 +38,7 @@ import type {
   MessageRequestSnapshot,
 } from "../../tutor/h5/h5shared/UnifiedChatContext";
 import type { FilePreviewSource } from "../../../components/chat/preview/previewerFor";
-import type { StreamEvent } from "../../../lib/unified-ws";
+import type { LLMSelection, StreamEvent } from "../../../lib/unified-ws";
 import {
   extractBase64FromDataUrl,
   readFileAsDataUrl,
@@ -249,7 +249,7 @@ function TutorHomeChatInner() {
   /* ---- 会话/选项 state（DT 同名面；桥 per-request 携带） ---- */
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [llmOptions, setLLMOptions] = useState<LLMOption[]>([]);
-  const [activeLLMDefault, setActiveLLMDefault] = useState<null>(null);
+  const [activeLLMDefault, setActiveLLMDefault] = useState<LLMSelection | null>(null);
   const [llmOptionsLoading, setLLMOptionsLoading] = useState(true);
   const [llmOptionsError, setLLMOptionsError] = useState(false);
   const [capabilityConfigs, setCapabilityConfigs] = useState<CapabilityPlaygroundConfigMap>({});
@@ -257,7 +257,7 @@ function TutorHomeChatInner() {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const attachmentLimits = useAttachmentLimits();
   const [dragging, setDragging] = useState(false);
-  const [dragCounter, setDragCounter] = useState(0);
+  const dragCounter = useRef(0);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [previewSource, setPreviewSource] = useState<FilePreviewSource | null>(null);
   const [viewerPanelOpen, setViewerPanelOpen] = useState(false);
@@ -283,19 +283,18 @@ function TutorHomeChatInner() {
   const attachmentErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [capMenuOpen, setCapMenuOpen] = useState(false);
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
-  const capMenuRef = useRef<HTMLDivElement | null>(null);
-  const capBtnRef = useRef<HTMLButtonElement | null>(null);
-  const spaceMenuRef = useRef<HTMLDivElement | null>(null);
-  const spaceBtnRef = useRef<HTMLButtonElement | null>(null);
-  const composerRef = useRef<HTMLDivElement | null>(null);
-  const prefillInputRef = useRef<string | null>(null);
-  const composerHeight = useMeasuredHeight(composerRef);
+  const capMenuRef = useRef<HTMLDivElement>(null);
+  const capBtnRef = useRef<HTMLButtonElement>(null);
+  const spaceMenuRef = useRef<HTMLDivElement>(null);
+  const spaceBtnRef = useRef<HTMLButtonElement>(null);
+  const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
+  const prefillInputRef = useRef<((text: string) => void) | null>(null);
 
   // Capabilities / tools / KB / LLM / persona / memory / refs selection state
   const [enabledTools, setEnabledTools] = useState<string[]>([]);
   const [activeCap, setActiveCap] = useState<string | null>(null);
   const [selectedKbOnly, setSelectedKbOnly] = useState<string[]>([]);
-  const [llmSelection, setLLMSelection] = useState<null>(null);
+  const [llmSelection, setLLMSelection] = useState<LLMSelection | null>(null);
   const [personaSelection, setPersonaSelection] = useState("");
   const [personaSelectorOpen, setPersonaSelectorOpen] = useState(false);
   const [selectedMemoryFiles, setSelectedMemoryFiles] = useState<SpaceMemoryFile[]>([]);
@@ -357,8 +356,8 @@ function TutorHomeChatInner() {
     }).catch(() => { if (alive) { setLLMOptionsError(true); setLLMOptionsLoading(false); } });
     getSubagentSettings().then((s) => {
       if (!alive) return;
-      if (s && typeof s === "object" && "budget" in (s as Record<string, unknown>)) {
-        setSubagentBudget(Number((s as Record<string, unknown>).budget) || 1);
+      if (s && typeof s === "object" && "budget" in (s as unknown as Record<string, unknown>)) {
+        setSubagentBudget(Number((s as unknown as Record<string, unknown>).budget) || 1);
       }
     }).catch(() => undefined);
     getEnabledOptionalTools().then((tools) => {
@@ -416,12 +415,8 @@ function TutorHomeChatInner() {
 
   const handleDownloadMarkdown = useCallback(() => {
     if (!state.messages.length) return;
-    downloadChatMarkdown(state.messages, displaySessionTitle, {
-      capability: activeCap || "chat",
-      sessionId: state.sessionId || undefined,
-      language: "zh",
-    });
-  }, [state.messages, state.sessionId, displaySessionTitle, activeCap]);
+    downloadChatMarkdown(state.messages, { title: displaySessionTitle });
+  }, [state.messages, displaySessionTitle]);
 
   /* ---- 自动滚动/导航（DT L884-945 1:1） ---- */
   const lastMessage = state.messages[state.messages.length - 1];
@@ -589,21 +584,19 @@ function TutorHomeChatInner() {
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation();
-    setDragCounter((c) => c + 1);
-    setDragging(true);
+    dragCounter.current += 1;
+    if (e.dataTransfer.types.includes("Files")) setDragging(true);
   }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation();
-    setDragCounter((c) => {
-      const next = c - 1;
-      if (next <= 0) { setDragging(false); return 0; }
-      return next;
-    });
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) setDragging(false);
   }, []);
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); }, []);
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation();
-    setDragCounter(0); setDragging(false);
+    setDragging(false);
+    dragCounter.current = 0;
     const files = Array.from(e.dataTransfer.files);
     await handleAddFiles(files);
   }, [handleAddFiles]);
@@ -611,11 +604,12 @@ function TutorHomeChatInner() {
   const removeAttachment = useCallback((index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
-  const handlePreviewPendingAttachment = useCallback((a: MessageAttachment) => {
-    if (a.base64 && a.filename) {
+  const handlePreviewPendingAttachment = useCallback((index: number) => {
+    const a: MessageAttachment | undefined = attachments[index];
+    if (a?.base64 && a.filename) {
       setPreviewSource({ kind: "file", filename: a.filename, dataUrl: `data:${a.mime_type || "application/octet-stream"};base64,${a.base64}` } as FilePreviewSource);
     }
-  }, []);
+  }, [attachments]);
   const handlePreviewMessageAttachment = useCallback((a: MessageAttachment) => {
     if (a.url) setPreviewSource({ kind: "file", filename: a.filename || a.url, url: a.url } as FilePreviewSource);
   }, []);
@@ -631,48 +625,52 @@ function TutorHomeChatInner() {
   const handleApplyNotebookRecords = useCallback((records: SelectedRecord[]) => {
     setSelectedNotebookRecords(records); setShowNotebookPicker(false);
   }, []);
-  const handleRemoveNotebook = useCallback((r: SelectedRecord) => {
-    setSelectedNotebookRecords((prev) => prev.filter((x) => x.id !== r.id));
+  const handleRemoveNotebook = useCallback((notebookId: string) => {
+    setSelectedNotebookRecords((prev) => prev.filter((x) => x.notebookId !== notebookId));
   }, []);
   const handleSelectBookPicker = useCallback(() => { setShowBookPicker(true); setSpaceMenuOpen(false); }, []);
   const handleCloseBookPicker = useCallback(() => setShowBookPicker(false), []);
   const handleApplyBookReferences = useCallback((refs: SelectedBookReference[]) => {
     setSelectedBookReferences(refs); setShowBookPicker(false);
   }, []);
-  const handleRemoveBookReference = useCallback((ref: SelectedBookReference) => {
-    setSelectedBookReferences((prev) => prev.filter((x) => x !== ref));
+  const handleRemoveBookReference = useCallback((bookId: string) => {
+    setSelectedBookReferences((prev) => prev.filter((x) => x.bookId !== bookId));
   }, []);
   const handleSelectHistoryPicker = useCallback(() => { setShowHistoryPicker(true); setSpaceMenuOpen(false); }, []);
   const handleCloseHistoryPicker = useCallback(() => setShowHistoryPicker(false), []);
   const handleApplyHistorySessions = useCallback((sessions: SelectedHistorySession[]) => {
     setSelectedHistorySessions(sessions); setShowHistoryPicker(false);
   }, []);
-  const handleRemoveHistory = useCallback((s: SelectedHistorySession) => {
-    setSelectedHistorySessions((prev) => prev.filter((x) => x.sessionId !== s.sessionId));
+  const handleRemoveHistory = useCallback((sessionId: string) => {
+    setSelectedHistorySessions((prev) => prev.filter((x) => x.sessionId !== sessionId));
   }, []);
   const handleSelectAgentsPicker = useCallback(() => { setShowAgentsPicker(true); setSpaceMenuOpen(false); }, []);
   const handleCloseAgentsPicker = useCallback(() => setShowAgentsPicker(false), []);
   const handleApplyAgentSessions = useCallback((sessions: SelectedHistorySession[]) => {
     setSelectedAgentSessions(sessions); setShowAgentsPicker(false);
   }, []);
-  const handleRemoveAgent = useCallback((s: SelectedHistorySession) => {
-    setSelectedAgentSessions((prev) => prev.filter((x) => x.sessionId !== s.sessionId));
+  const handleRemoveAgent = useCallback((sessionId: string) => {
+    setSelectedAgentSessions((prev) => prev.filter((x) => x.sessionId !== sessionId));
   }, []);
   const handleSelectQuestionBankPicker = useCallback(() => { setShowQuestionBankPicker(true); setSpaceMenuOpen(false); }, []);
   const handleCloseQuestionBankPicker = useCallback(() => setShowQuestionBankPicker(false), []);
   const handleApplyQuestionEntries = useCallback((entries: SelectedQuestionEntry[]) => {
     setSelectedQuestionEntries(entries); setShowQuestionBankPicker(false);
   }, []);
-  const handleRemoveQuestion = useCallback((q: SelectedQuestionEntry) => {
-    setSelectedQuestionEntries((prev) => prev.filter((x) => x.id !== q.id));
+  const handleRemoveQuestion = useCallback((entryId: number) => {
+    setSelectedQuestionEntries((prev) => prev.filter((x) => x.id !== entryId));
   }, []);
   const handleSelectMemoryPicker = useCallback(() => { setShowMemoryPicker(true); setSpaceMenuOpen(false); }, []);
   const handleCloseMemoryPicker = useCallback(() => setShowMemoryPicker(false), []);
   const handleApplyMemoryFiles = useCallback((files: SpaceMemoryFile[]) => {
     setSelectedMemoryFiles(files); setShowMemoryPicker(false);
   }, []);
-  const handleToggleMemoryFile = useCallback((f: SpaceMemoryFile) => {
-    setSelectedMemoryFiles((prev) => (prev.some((x) => x.path === f.path) ? prev.filter((x) => x.path !== f.path) : [...prev, f]));
+  const handleToggleMemoryFile = useCallback((file: SpaceMemoryFile) => {
+    setSelectedMemoryFiles((prev) =>
+      prev.includes(file)
+        ? prev.filter((item) => item !== file)
+        : [...prev, file],
+    );
   }, []);
   const handleSelectAgent = useCallback((name: string | null) => setSelectedAgent(name), []);
   const handleClearPersona = useCallback(() => setPersonaSelection(""), []);
@@ -851,8 +849,7 @@ function TutorHomeChatInner() {
   /* ---- 新会话 ---- */
   const newSession = useCallback(() => { reset(); navigateToHome(); }, [reset, navigateToHome]);
 
-  const kbOptions = knowledgeBases.map((kb) => kb.name);
-  const contextBudget = readContextBudget(lastMessage?.events);
+    const contextBudget = readContextBudget(lastMessage?.events);
 
   return (
     <QuizFollowupProvider>
@@ -971,13 +968,17 @@ function TutorHomeChatInner() {
               spaceBtnRef={spaceBtnRef}
               dragCounter={dragCounter}
               dragging={dragging}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
               capMenuOpen={capMenuOpen}
               spaceMenuOpen={spaceMenuOpen}
               hasMessages={hasMessages}
               attachments={attachments}
               attachmentError={attachmentError}
               activeCap={activeCapabilityDef}
-              knowledgeBases={kbOptions}
+              knowledgeBases={knowledgeBases}
               connectedAgents={agentOptions}
               selectedAgent={selectedAgent}
               onSelectAgent={handleSelectAgent}

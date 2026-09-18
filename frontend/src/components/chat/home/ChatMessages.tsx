@@ -1,9 +1,6 @@
 "use client";
 
-import { lazy } from "react";
-// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
-const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Bot,
@@ -57,6 +54,7 @@ import { buildVisiblePath, type SiblingInfo } from "../../../lib/message-branche
 import { turnAnchorKey } from "../../../lib/chat-outline";
 import { shouldSubmitOnEnter } from "../../../lib/composer-keyboard";
 import { useImeComposing } from "../../../lib/use-ime-composing";
+import type { OutlineItem } from "../../../lib/research-types";
 import type { SpaceMemoryFile } from "../../../lib/space-items";
 import {
   AskUserOptions,
@@ -69,6 +67,9 @@ import ContextReferenceTree, {
 import { AssistantActivity } from "./TracePanels";
 import { agentGlyph } from "../../agents/agent-icons";
 import { useConnectedAgentKinds } from "../../../hooks/useConnectedAgentKinds";
+
+// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
+const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 
 const MathAnimatorViewer = dynamic(
   () => import("../../math-animator/MathAnimatorViewer"),
@@ -201,7 +202,6 @@ function GeneratedFileCards({
               onClick={onOpen ? () => onOpen(a) : undefined}
               className="group block w-full max-w-[min(520px,90%)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] text-left shadow-sm transition hover:border-[var(--border)]"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={mediaSrc}
                 alt={filename}
@@ -439,7 +439,7 @@ const AssistantMessage = memo(function AssistantMessage({
           <ResearchOutlineEditor
             outline={outlinePreview.sub_topics}
             topic={outlinePreview.topic}
-            onConfirm={(items) =>
+            onConfirm={(items: OutlineItem[]) =>
               onConfirmOutline?.(
                 items,
                 outlinePreview.topic,
@@ -950,7 +950,8 @@ const UserMessage = memo(function UserMessage({
       const src = a.type === "image" ? imageSrcForAttachment(a) : null;
       return {
         key: `att-${ai}`,
-        icon: spec.Icon,
+        // 非 lucide 字形（antd 图标）按 DT 约定在调用侧 cast（ContextReferenceTree 注释同款）。
+        icon: spec.Icon as unknown as LucideIcon,
         kind: spec.label,
         label: filename,
         thumbnailUrl: src ?? undefined,
