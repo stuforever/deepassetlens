@@ -37,6 +37,12 @@ import {
 } from "../../pages/tutor/h5/h5shared/appShellStorage";
 import { useAppShell } from "../../pages/tutor/admin/appShellContext";
 import { invalidateLLMOptionsCache } from "../../pages/memory/llm-options";
+import {
+  llmBlocksEqual,
+  loadLlmDirectory,
+  saveLlmDirectory,
+  type LLMConnectionRow,
+} from "./llmDirectory";
 
 /**
  * 原仓 @/components/common/code-block-themes 的 CodeBlockThemeId（主题 id 联合类型）。
@@ -626,6 +632,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Extensions register their latest dirty/save on each render. Keep the
   // derived dirty state explicit instead of using an indirect version counter.
   const extensionsRef = useRef<Map<string, SettingsExtension>>(new Map());
+  // ── 引擎批8 8.1：/llm-config 数据面切③（LLM 合一反转，spec §七）──────────────
+  // ③目录可达时 services.llm 用③连接目录渲染（llmDirectory 适配器）；
+  // vendorLlmBlock 存档 vendor 原块——vendor PUT/apply 时回填，防合成形状污染 vendor
+  // catalog（六服务页 vendor 数据面分治不动）。③不可达→退回 vendor 数据面（台账）。
+  const llmDirectoryModeRef = useRef(false);
+  const vendorLlmBlockRef = useRef<CatalogService | null>(null);
+  const llmSyncedRowsRef = useRef<LLMConnectionRow[]>([]);
+  const llmSyncedBlockRef = useRef<CatalogService | null>(null);
   const [hasDirtyExtension, setHasDirtyExtension] = useState(false);
   const registerExtension = useCallback(
     (key: string, ext: SettingsExtension | null) => {
@@ -670,8 +684,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
       const payload = (await settingsResponse.json()) as SettingsPayload;
       if (payload.catalog) {
-        setCatalog(payload.catalog);
-        setDraft(cloneCatalog(payload.catalog));
+        // 引擎批8 8.1：③连接目录可达→services.llm 用③块渲染（vendor 块存档回填用）；
+        // ③不可达（网络/后端异常）→退回 vendor 数据面，行为同 IA 批5 现状。
+        const llmDir = await loadLlmDirectory();
+        if (llmDir) {
+          llmDirectoryModeRef.current = true;
+          vendorLlmBlockRef.current = payload.catalog.services.llm;
+          llmSyncedRowsRef.current = llmDir.rows;
+          llmSyncedBlockRef.current = llmDir.block;
+          const catalogWithLlmDir: Catalog = {
+            ...payload.catalog,
+            services: { ...payload.catalog.services, llm: llmDir.block },
+          };
+          setCatalog(catalogWithLlmDir);
+          setDraft(cloneCatalog(catalogWithLlmDir));
+        } else {
+          llmDirectoryModeRef.current = false;
+          setCatalog(payload.catalog);
+          setDraft(cloneCatalog(payload.catalog));
+        }
         setCatalogEditable(true);
       } else {
         setCatalogEditable(false);
@@ -1013,25 +1044,65 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [llmContextDetection, mutateCatalog, t]);
 
   // ── Save / Apply ────────────────────────────────────────────────────────
+  // 引擎批8 8.1：③目录模式下 llm 块变更走③CRUD（saveLlmDirectory）；vendor
+  // PUT/apply 的载荷一律把 llm 块回填为 vendor 存档块（vendor llm 冻结，六服务
+  // 页 vendor 数据面分治不动）；保存后 catalog 的 llm 块以③新块覆盖。
+  const saveLlmDirectoryIfDirty = useCallback(async (): Promise<CatalogService | null> => {
+    if (
+      !llmDirectoryModeRef.current ||
+      !draft ||
+      !llmSyncedBlockRef.current ||
+      llmBlocksEqual(draft.services.llm, llmSyncedBlockRef.current)
+    ) {
+      return null;
+    }
+    const saved = await saveLlmDirectory(draft.services.llm, llmSyncedRowsRef.current);
+    llmSyncedRowsRef.current = saved.rows;
+    llmSyncedBlockRef.current = saved.block;
+    invalidateLLMOptionsCache();
+    return saved.block;
+  }, [draft]);
+
+  const withVendorLlmBlock = useCallback((candidate: Catalog): Catalog => {
+    const vendorLlm = vendorLlmBlockRef.current;
+    if (!llmDirectoryModeRef.current || !vendorLlm) return candidate;
+    return { ...candidate, services: { ...candidate.services, llm: vendorLlm } };
+  }, []);
+
+  const overlayLlmDirectoryBlock = useCallback(
+    (candidate: Catalog, llmBlock: CatalogService | null): Catalog => {
+      if (!llmDirectoryModeRef.current) return candidate;
+      // llmBlock=null（本次保存块相等跳过③写入）时也必须用③同步块覆盖——
+      // 否则 vendor apply 响应里的冻结 vendor llm 块（单档「火山 Endpoint」）
+      // 会回显进编辑器，编辑态与③目录脱钩（E-28 实测教训）。
+      const block = llmBlock ?? llmSyncedBlockRef.current;
+      if (!block) return candidate;
+      return { ...candidate, services: { ...candidate.services, llm: block } };
+    },
+    [],
+  );
+
   const saveCatalog = useCallback(async () => {
     if (!catalogEditable) return;
     setSaving(true);
     try {
+      const llmBlock = await saveLlmDirectoryIfDirty();
       const response = await fetch("/api/v1/settings/catalog", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ catalog: draft }),
+        body: JSON.stringify({ catalog: withVendorLlmBlock(draft) }),
       });
       const payload = await response.json();
-      setCatalog(payload.catalog);
-      setDraft(cloneCatalog(payload.catalog));
+      const nextCatalog = overlayLlmDirectoryBlock(payload.catalog, llmBlock);
+      setCatalog(nextCatalog);
+      setDraft(cloneCatalog(nextCatalog));
       // The model list the chat composer shows is derived from this catalog.
       invalidateLLMOptionsCache();
       setToast(t("Draft saved"));
     } finally {
       setSaving(false);
     }
-  }, [catalogEditable, draft, t]);
+  }, [catalogEditable, draft, t, saveLlmDirectoryIfDirty, withVendorLlmBlock, overlayLlmDirectoryBlock]);
 
   const applyCatalog = useCallback(async () => {
     setApplying(true);
@@ -1043,17 +1114,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       );
       await Promise.all(exts.map((e) => e.save()));
 
+      // 引擎批8 8.1：llm 块变更先行落③目录（vendor apply 载荷回填 vendor llm 块）。
+      const llmBlock = await saveLlmDirectoryIfDirty();
+
       // The catalog apply is only meaningful when editable; an extension-
       // only flush should still produce a success toast.
       if (catalogEditable) {
         const response = await fetch("/api/v1/settings/apply", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ catalog: draft }),
+          body: JSON.stringify({ catalog: withVendorLlmBlock(draft) }),
         });
         const payload = await response.json();
-        setCatalog(payload.catalog);
-        setDraft(cloneCatalog(payload.catalog));
+        const nextCatalog = overlayLlmDirectoryBlock(payload.catalog, llmBlock);
+        setCatalog(nextCatalog);
+        setDraft(cloneCatalog(nextCatalog));
         invalidateLLMOptionsCache();
         const statusResponse = await fetch("/api/v1/system/status");
         setStatus((await statusResponse.json()) as SystemStatus);
@@ -1062,7 +1137,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     } finally {
       setApplying(false);
     }
-  }, [catalogEditable, draft, t]);
+  }, [catalogEditable, draft, t, saveLlmDirectoryIfDirty, withVendorLlmBlock, overlayLlmDirectoryBlock]);
 
   // ── Diagnostics ─────────────────────────────────────────────────────────
   // Reset capability snapshot when switching embedding profile/model so a
