@@ -106,10 +106,13 @@ if kb_id:
 else:
     print("[SKIP] TC3 无既有 KB")
 
-# TC4 编排未就绪（tutor/quiz）
+# TC4 quiz 正常流（批1 中间态负例已过时：tutor/quiz 批4 编排实现——终验收批9 对齐
+# behavior-specs/tutor_quiz.md 正式事件序：session_meta 首帧→…→done ok；正式判题/
+# mimic 用例在 _ia_b4_smoke_orchestrations.py）
 evs4 = stream({"skill_code": "tutor/quiz", "message": "出题"})
 ty4 = types_of(evs4)
-check("TC4 error 未就绪", ty4 == ["error"] and "未就绪" in (evs4[0][1].get("content", "") if evs4 else ""))
+_d4 = next((d for e, d in evs4 if e == "done"), {})
+check("TC4 quiz 正常流", "session_meta" in ty4 and "done" in ty4 and _d4.get("metadata", {}).get("ok") is True)
 
 # TC5 未知技能
 evs5 = stream({"skill_code": "tutor/notexist", "message": "x"})
