@@ -157,3 +157,6 @@ frontend/frontend_out*.txt
 frontend/frontend_start*.txt
 gitmsg_*.txt
 .omo/
+
+# R3 I5：判分/探针凭据缓存不入库
+backend/scripts/dt_baseline/tokens.json
