@@ -21,6 +21,8 @@ import type {
 
 export interface AgentMessageItem {
   id?: number;
+  /** 父消息 id（DT 乐观消息树语义：负 id=未持久化；buildVisiblePath 依赖父子链）。 */
+  parentMessageId?: number | null;
   role: "user" | "assistant" | "system";
   content: string;
   capability?: string;
