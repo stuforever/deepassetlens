@@ -1,0 +1,51 @@
+{
+ "mappings": {
+  "properties": {
+   "StorageLocation": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "StorageLocationName": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "Plant": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "Status": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "api_get": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   }
+  }
+ }
+}

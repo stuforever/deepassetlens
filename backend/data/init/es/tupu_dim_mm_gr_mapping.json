@@ -1,0 +1,84 @@
+{
+ "mappings": {
+  "properties": {
+   "MaterialDocument": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "MaterialDocumentYear": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "GoodsMovementType": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "PostingDate": {
+    "type": "date"
+   },
+   "DocumentDate": {
+    "type": "date"
+   },
+   "HeaderText": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "CreatedByUser": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "Status": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "WBSElement": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "api_get": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   }
+  }
+ }
+}

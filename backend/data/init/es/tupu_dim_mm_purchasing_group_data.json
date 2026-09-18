@@ -1,0 +1,352 @@
+[
+ {
+  "PurchasingGroup": "PGR001",
+  "PurchasingGroupName": "一次设备采购组01",
+  "Phone": "010-6100000",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR002",
+  "PurchasingGroupName": "二次设备采购组02",
+  "Phone": "010-6100001",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR003",
+  "PurchasingGroupName": "计量器具采购组03",
+  "Phone": "010-6100002",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR004",
+  "PurchasingGroupName": "服务采购组04",
+  "Phone": "010-6100003",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR005",
+  "PurchasingGroupName": "工程物资采购组05",
+  "Phone": "010-6100004",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR006",
+  "PurchasingGroupName": "一次设备采购组06",
+  "Phone": "010-6100005",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR007",
+  "PurchasingGroupName": "二次设备采购组07",
+  "Phone": "010-6100006",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR008",
+  "PurchasingGroupName": "计量器具采购组08",
+  "Phone": "010-6100007",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR009",
+  "PurchasingGroupName": "服务采购组09",
+  "Phone": "010-6100008",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR010",
+  "PurchasingGroupName": "工程物资采购组10",
+  "Phone": "010-6100009",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR011",
+  "PurchasingGroupName": "一次设备采购组11",
+  "Phone": "010-6100010",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR012",
+  "PurchasingGroupName": "二次设备采购组12",
+  "Phone": "010-6100011",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR013",
+  "PurchasingGroupName": "计量器具采购组13",
+  "Phone": "010-6100012",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR014",
+  "PurchasingGroupName": "服务采购组14",
+  "Phone": "010-6100013",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR015",
+  "PurchasingGroupName": "工程物资采购组15",
+  "Phone": "010-6100014",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR016",
+  "PurchasingGroupName": "一次设备采购组16",
+  "Phone": "010-6100015",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR017",
+  "PurchasingGroupName": "二次设备采购组17",
+  "Phone": "010-6100016",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR018",
+  "PurchasingGroupName": "计量器具采购组18",
+  "Phone": "010-6100017",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR019",
+  "PurchasingGroupName": "服务采购组19",
+  "Phone": "010-6100018",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR020",
+  "PurchasingGroupName": "工程物资采购组20",
+  "Phone": "010-6100019",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR021",
+  "PurchasingGroupName": "一次设备采购组21",
+  "Phone": "010-6100020",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR022",
+  "PurchasingGroupName": "二次设备采购组22",
+  "Phone": "010-6100021",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR023",
+  "PurchasingGroupName": "计量器具采购组23",
+  "Phone": "010-6100022",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR024",
+  "PurchasingGroupName": "服务采购组24",
+  "Phone": "010-6100023",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR025",
+  "PurchasingGroupName": "工程物资采购组25",
+  "Phone": "010-6100024",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR026",
+  "PurchasingGroupName": "一次设备采购组26",
+  "Phone": "010-6100025",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR027",
+  "PurchasingGroupName": "二次设备采购组27",
+  "Phone": "010-6100026",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR028",
+  "PurchasingGroupName": "计量器具采购组28",
+  "Phone": "010-6100027",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR029",
+  "PurchasingGroupName": "服务采购组29",
+  "Phone": "010-6100028",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR030",
+  "PurchasingGroupName": "工程物资采购组30",
+  "Phone": "010-6100029",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR031",
+  "PurchasingGroupName": "一次设备采购组31",
+  "Phone": "010-6100030",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR032",
+  "PurchasingGroupName": "二次设备采购组32",
+  "Phone": "010-6100031",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR033",
+  "PurchasingGroupName": "计量器具采购组33",
+  "Phone": "010-6100032",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR034",
+  "PurchasingGroupName": "服务采购组34",
+  "Phone": "010-6100033",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR035",
+  "PurchasingGroupName": "工程物资采购组35",
+  "Phone": "010-6100034",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR036",
+  "PurchasingGroupName": "一次设备采购组36",
+  "Phone": "010-6100035",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR037",
+  "PurchasingGroupName": "二次设备采购组37",
+  "Phone": "010-6100036",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR038",
+  "PurchasingGroupName": "计量器具采购组38",
+  "Phone": "010-6100037",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR039",
+  "PurchasingGroupName": "服务采购组39",
+  "Phone": "010-6100038",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR040",
+  "PurchasingGroupName": "工程物资采购组40",
+  "Phone": "010-6100039",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR041",
+  "PurchasingGroupName": "一次设备采购组41",
+  "Phone": "010-6100040",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR042",
+  "PurchasingGroupName": "二次设备采购组42",
+  "Phone": "010-6100041",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR043",
+  "PurchasingGroupName": "计量器具采购组43",
+  "Phone": "010-6100042",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR044",
+  "PurchasingGroupName": "服务采购组44",
+  "Phone": "010-6100043",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR045",
+  "PurchasingGroupName": "工程物资采购组45",
+  "Phone": "010-6100044",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR046",
+  "PurchasingGroupName": "一次设备采购组46",
+  "Phone": "010-6100045",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR047",
+  "PurchasingGroupName": "二次设备采购组47",
+  "Phone": "010-6100046",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR048",
+  "PurchasingGroupName": "计量器具采购组48",
+  "Phone": "010-6100047",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR049",
+  "PurchasingGroupName": "服务采购组49",
+  "Phone": "010-6100048",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ },
+ {
+  "PurchasingGroup": "PGR050",
+  "PurchasingGroupName": "工程物资采购组50",
+  "Phone": "010-6100049",
+  "Status": "启用",
+  "api_get": "Purchasing Group (A2X, V4)"
+ }
+]

@@ -1,0 +1,57 @@
+{
+ "mappings": {
+  "properties": {
+   "MaintenancePlan": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "MaintenancePlanItem": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "CycleFrequency": {
+    "type": "long"
+   },
+   "CycleUnit": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "CycleSequence": {
+    "type": "long"
+   },
+   "StrategyText": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "api_get": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   }
+  }
+ }
+}

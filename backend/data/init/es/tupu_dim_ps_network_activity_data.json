@@ -1,1 +1,219 @@
-{"took":3,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},"hits":{"total":{"value":10,"relation":"eq"},"max_score":1.0,"hits":[{"_index":"tupu_dim_ps_network_activity","_id":"Fziqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-001","network_number":"NET-001-01","description":"土建施工","activity_type":"PS01","control_key":"PS01","work_center":"PS01","planned_work":240.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":30.0,"duration_unit":"D","objnr":"OBJ_NA_001"}},{"_index":"tupu_dim_ps_network_activity","_id":"GDiqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-002","network_number":"NET-001-01","description":"设备安装","activity_type":"PS01","control_key":"PS02","work_center":"PS01","planned_work":360.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":45.0,"duration_unit":"D","objnr":"OBJ_NA_002"}},{"_index":"tupu_dim_ps_network_activity","_id":"GTiqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-003","network_number":"NET-001-02","description":"系统调试","activity_type":"PS01","control_key":"PS03","work_center":"PS01","planned_work":120.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":15.0,"duration_unit":"D","objnr":"OBJ_NA_003"}},{"_index":"tupu_dim_ps_network_activity","_id":"Gjiqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-004","network_number":"NET-001-03","description":"线路铺设","activity_type":"PS01","control_key":"PS01","work_center":"PS02","planned_work":480.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":60.0,"duration_unit":"D","objnr":"OBJ_NA_004"}},{"_index":"tupu_dim_ps_network_activity","_id":"Gziqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-005","network_number":"NET-001-03","description":"设备调试","activity_type":"PS01","control_key":"PS03","work_center":"PS02","planned_work":160.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":20.0,"duration_unit":"D","objnr":"OBJ_NA_005"}},{"_index":"tupu_dim_ps_network_activity","_id":"HDiqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-006","network_number":"NET-001-04","description":"测试活动6","activity_type":"PS01","control_key":"PS01","work_center":"GS01","planned_work":80.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":10.0,"duration_unit":"D","objnr":"OBJ_NA_006"}},{"_index":"tupu_dim_ps_network_activity","_id":"HTiqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-007","network_number":"NET-001-05","description":"测试活动7","activity_type":"PS01","control_key":"PS01","work_center":"GS01","planned_work":80.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":10.0,"duration_unit":"D","objnr":"OBJ_NA_007"}},{"_index":"tupu_dim_ps_network_activity","_id":"Hjiqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-008","network_number":"NET-002-01","description":"测试活动8","activity_type":"PS01","control_key":"PS01","work_center":"GS01","planned_work":80.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":10.0,"duration_unit":"D","objnr":"OBJ_NA_008"}},{"_index":"tupu_dim_ps_network_activity","_id":"Hziqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-009","network_number":"NET-002-02","description":"测试活动9","activity_type":"PS01","control_key":"PS01","work_center":"GS01","planned_work":80.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":10.0,"duration_unit":"D","objnr":"OBJ_NA_009"}},{"_index":"tupu_dim_ps_network_activity","_id":"IDiqyp8Bl0thyoyEMO7D","_score":1.0,"_source":{"activity_number":"A-010","network_number":"NET-002-03","description":"测试活动10","activity_type":"PS01","control_key":"PS01","work_center":"GS01","planned_work":80.0,"work_unit":"H","plan_start_date":"2024-02-01","plan_finish_date":"2024-03-01","duration":10.0,"duration_unit":"D","objnr":"OBJ_NA_010"}}]}}
+{
+  "took": 3,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 10,
+      "relation": "eq"
+    },
+    "max_score": 1.0,
+    "hits": [
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "Fziqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-001",
+          "Network": "NET-001-01",
+          "ActivityDescription": "土建施工",
+          "ActivityType": "PS01",
+          "ControlKey": "PS01",
+          "WorkCenter": "PS01",
+          "PlannedWork": 240.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 30.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_001"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "GDiqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-002",
+          "Network": "NET-001-01",
+          "ActivityDescription": "设备安装",
+          "ActivityType": "PS01",
+          "ControlKey": "PS02",
+          "WorkCenter": "PS01",
+          "PlannedWork": 360.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 45.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_002"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "GTiqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-003",
+          "Network": "NET-001-02",
+          "ActivityDescription": "系统调试",
+          "ActivityType": "PS01",
+          "ControlKey": "PS03",
+          "WorkCenter": "PS01",
+          "PlannedWork": 120.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 15.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_003"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "Gjiqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-004",
+          "Network": "NET-001-03",
+          "ActivityDescription": "线路铺设",
+          "ActivityType": "PS01",
+          "ControlKey": "PS01",
+          "WorkCenter": "PS02",
+          "PlannedWork": 480.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 60.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_004"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "Gziqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-005",
+          "Network": "NET-001-03",
+          "ActivityDescription": "设备调试",
+          "ActivityType": "PS01",
+          "ControlKey": "PS03",
+          "WorkCenter": "PS02",
+          "PlannedWork": 160.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 20.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_005"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "HDiqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-006",
+          "Network": "NET-001-04",
+          "ActivityDescription": "测试活动6",
+          "ActivityType": "PS01",
+          "ControlKey": "PS01",
+          "WorkCenter": "GS01",
+          "PlannedWork": 80.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 10.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_006"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "HTiqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-007",
+          "Network": "NET-001-05",
+          "ActivityDescription": "测试活动7",
+          "ActivityType": "PS01",
+          "ControlKey": "PS01",
+          "WorkCenter": "GS01",
+          "PlannedWork": 80.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 10.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_007"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "Hjiqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-008",
+          "Network": "NET-002-01",
+          "ActivityDescription": "测试活动8",
+          "ActivityType": "PS01",
+          "ControlKey": "PS01",
+          "WorkCenter": "GS01",
+          "PlannedWork": 80.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 10.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_008"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "Hziqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-009",
+          "Network": "NET-002-02",
+          "ActivityDescription": "测试活动9",
+          "ActivityType": "PS01",
+          "ControlKey": "PS01",
+          "WorkCenter": "GS01",
+          "PlannedWork": 80.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 10.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_009"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_network_activity",
+        "_id": "IDiqyp8Bl0thyoyEMO7D",
+        "_score": 1.0,
+        "_source": {
+          "Activity": "A-010",
+          "Network": "NET-002-03",
+          "ActivityDescription": "测试活动10",
+          "ActivityType": "PS01",
+          "ControlKey": "PS01",
+          "WorkCenter": "GS01",
+          "PlannedWork": 80.0,
+          "WorkUnit": "H",
+          "PlannedStartDate": "2024-02-01",
+          "PlannedFinishDate": "2024-03-01",
+          "Duration": 10.0,
+          "DurationUnit": "D",
+          "ObjectNumber": "OBJ_NA_010"
+        }
+      }
+    ]
+  }
+}

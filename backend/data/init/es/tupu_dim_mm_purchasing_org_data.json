@@ -1,0 +1,352 @@
+[
+ {
+  "PurchasingOrganization": "PO101",
+  "PurchasingOrganizationName": "北京采购组织",
+  "CompanyCode": "1010",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO102",
+  "PurchasingOrganizationName": "上海采购组织",
+  "CompanyCode": "1011",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO103",
+  "PurchasingOrganizationName": "广州采购组织",
+  "CompanyCode": "1012",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO104",
+  "PurchasingOrganizationName": "深圳采购组织",
+  "CompanyCode": "1013",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO105",
+  "PurchasingOrganizationName": "成都采购组织",
+  "CompanyCode": "1014",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO106",
+  "PurchasingOrganizationName": "杭州采购组织",
+  "CompanyCode": "1015",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO107",
+  "PurchasingOrganizationName": "武汉采购组织",
+  "CompanyCode": "1016",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO108",
+  "PurchasingOrganizationName": "西安采购组织",
+  "CompanyCode": "1017",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO109",
+  "PurchasingOrganizationName": "南京采购组织",
+  "CompanyCode": "1018",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO110",
+  "PurchasingOrganizationName": "苏州采购组织",
+  "CompanyCode": "1019",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO111",
+  "PurchasingOrganizationName": "天津采购组织",
+  "CompanyCode": "1020",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO112",
+  "PurchasingOrganizationName": "重庆采购组织",
+  "CompanyCode": "1021",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO113",
+  "PurchasingOrganizationName": "郑州采购组织",
+  "CompanyCode": "1022",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO114",
+  "PurchasingOrganizationName": "长沙采购组织",
+  "CompanyCode": "1023",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO115",
+  "PurchasingOrganizationName": "沈阳采购组织",
+  "CompanyCode": "1024",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO116",
+  "PurchasingOrganizationName": "哈尔滨采购组织",
+  "CompanyCode": "1025",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO117",
+  "PurchasingOrganizationName": "兰州采购组织",
+  "CompanyCode": "1026",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO118",
+  "PurchasingOrganizationName": "乌鲁木齐采购组织",
+  "CompanyCode": "1027",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO119",
+  "PurchasingOrganizationName": "福州采购组织",
+  "CompanyCode": "1028",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO120",
+  "PurchasingOrganizationName": "昆明采购组织",
+  "CompanyCode": "1029",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO121",
+  "PurchasingOrganizationName": "北京采购组织",
+  "CompanyCode": "1030",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO122",
+  "PurchasingOrganizationName": "上海采购组织",
+  "CompanyCode": "1031",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO123",
+  "PurchasingOrganizationName": "广州采购组织",
+  "CompanyCode": "1032",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO124",
+  "PurchasingOrganizationName": "深圳采购组织",
+  "CompanyCode": "1033",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO125",
+  "PurchasingOrganizationName": "成都采购组织",
+  "CompanyCode": "1034",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO126",
+  "PurchasingOrganizationName": "杭州采购组织",
+  "CompanyCode": "1035",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO127",
+  "PurchasingOrganizationName": "武汉采购组织",
+  "CompanyCode": "1036",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO128",
+  "PurchasingOrganizationName": "西安采购组织",
+  "CompanyCode": "1037",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO129",
+  "PurchasingOrganizationName": "南京采购组织",
+  "CompanyCode": "1038",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO130",
+  "PurchasingOrganizationName": "苏州采购组织",
+  "CompanyCode": "1039",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO131",
+  "PurchasingOrganizationName": "天津采购组织",
+  "CompanyCode": "1040",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO132",
+  "PurchasingOrganizationName": "重庆采购组织",
+  "CompanyCode": "1041",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO133",
+  "PurchasingOrganizationName": "郑州采购组织",
+  "CompanyCode": "1042",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO134",
+  "PurchasingOrganizationName": "长沙采购组织",
+  "CompanyCode": "1043",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO135",
+  "PurchasingOrganizationName": "沈阳采购组织",
+  "CompanyCode": "1044",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO136",
+  "PurchasingOrganizationName": "哈尔滨采购组织",
+  "CompanyCode": "1045",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO137",
+  "PurchasingOrganizationName": "兰州采购组织",
+  "CompanyCode": "1046",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO138",
+  "PurchasingOrganizationName": "乌鲁木齐采购组织",
+  "CompanyCode": "1047",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO139",
+  "PurchasingOrganizationName": "福州采购组织",
+  "CompanyCode": "1048",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO140",
+  "PurchasingOrganizationName": "昆明采购组织",
+  "CompanyCode": "1049",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO141",
+  "PurchasingOrganizationName": "北京采购组织",
+  "CompanyCode": "1050",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO142",
+  "PurchasingOrganizationName": "上海采购组织",
+  "CompanyCode": "1051",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO143",
+  "PurchasingOrganizationName": "广州采购组织",
+  "CompanyCode": "1052",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO144",
+  "PurchasingOrganizationName": "深圳采购组织",
+  "CompanyCode": "1053",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO145",
+  "PurchasingOrganizationName": "成都采购组织",
+  "CompanyCode": "1054",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO146",
+  "PurchasingOrganizationName": "杭州采购组织",
+  "CompanyCode": "1055",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO147",
+  "PurchasingOrganizationName": "武汉采购组织",
+  "CompanyCode": "1056",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO148",
+  "PurchasingOrganizationName": "西安采购组织",
+  "CompanyCode": "1057",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO149",
+  "PurchasingOrganizationName": "南京采购组织",
+  "CompanyCode": "1058",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ },
+ {
+  "PurchasingOrganization": "PO150",
+  "PurchasingOrganizationName": "苏州采购组织",
+  "CompanyCode": "1059",
+  "Status": "启用",
+  "api_get": "Purchasing Organization (A2X, V4)"
+ }
+]

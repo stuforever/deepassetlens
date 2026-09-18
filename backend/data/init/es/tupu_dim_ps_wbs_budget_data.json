@@ -1,1 +1,179 @@
-{"took":5,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},"hits":{"total":{"value":10,"relation":"eq"},"max_score":1.0,"hits":[{"_index":"tupu_dim_ps_wbs_budget","_id":"SDiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-001","wbs_element":"W-001","fiscal_year":"2024","total_budget":50000000.0,"distributed_budget":30000000.0,"released_budget":20000000.0,"available_budget":20000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"STiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-002","wbs_element":"W-001-2","fiscal_year":"2024","total_budget":20000000.0,"distributed_budget":15000000.0,"released_budget":10000000.0,"available_budget":5000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"Sjiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-003","wbs_element":"W-001-2-1","fiscal_year":"2024","total_budget":10000000.0,"distributed_budget":8000000.0,"released_budget":5000000.0,"available_budget":2000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"Sziqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-004","wbs_element":"W-001-2-1-1","fiscal_year":"2024","total_budget":5000000.0,"distributed_budget":3000000.0,"released_budget":2000000.0,"available_budget":2000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"TDiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-005","wbs_element":"W-002","fiscal_year":"2024","total_budget":8000000.0,"distributed_budget":5000000.0,"released_budget":3000000.0,"available_budget":3000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"TTiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-006","wbs_element":"W-003","fiscal_year":"2024","total_budget":15000000.0,"distributed_budget":10000000.0,"released_budget":8000000.0,"available_budget":5000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"Tjiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-007","wbs_element":"W-003-1","fiscal_year":"2024","total_budget":8000000.0,"distributed_budget":5000000.0,"released_budget":3000000.0,"available_budget":3000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"Tziqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-008","wbs_element":"W-004","fiscal_year":"2024","total_budget":5000000.0,"distributed_budget":3000000.0,"released_budget":2000000.0,"available_budget":2000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"UDiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-009","wbs_element":"W-005","fiscal_year":"2024","total_budget":3000000.0,"distributed_budget":2000000.0,"released_budget":1000000.0,"available_budget":1000000.0,"currency":"CNY","budget_profile":"BP01"}},{"_index":"tupu_dim_ps_wbs_budget","_id":"UTiqyp8Bl0thyoyENu4J","_score":1.0,"_source":{"budget_id":"B-010","wbs_element":"W-006","fiscal_year":"2024","total_budget":3000000.0,"distributed_budget":2000000.0,"released_budget":1000000.0,"available_budget":1000000.0,"currency":"CNY","budget_profile":"BP01"}}]}}
+{
+  "took": 5,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 10,
+      "relation": "eq"
+    },
+    "max_score": 1.0,
+    "hits": [
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "SDiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-001",
+          "WBSElement": "W-001",
+          "FiscalYear": "2024",
+          "TotalBudget": 50000000.0,
+          "DistributedBudget": 30000000.0,
+          "ReleasedBudget": 20000000.0,
+          "AvailableBudget": 20000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "STiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-002",
+          "WBSElement": "W-001-2",
+          "FiscalYear": "2024",
+          "TotalBudget": 20000000.0,
+          "DistributedBudget": 15000000.0,
+          "ReleasedBudget": 10000000.0,
+          "AvailableBudget": 5000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "Sjiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-003",
+          "WBSElement": "W-001-2-1",
+          "FiscalYear": "2024",
+          "TotalBudget": 10000000.0,
+          "DistributedBudget": 8000000.0,
+          "ReleasedBudget": 5000000.0,
+          "AvailableBudget": 2000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "Sziqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-004",
+          "WBSElement": "W-001-2-1-1",
+          "FiscalYear": "2024",
+          "TotalBudget": 5000000.0,
+          "DistributedBudget": 3000000.0,
+          "ReleasedBudget": 2000000.0,
+          "AvailableBudget": 2000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "TDiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-005",
+          "WBSElement": "W-002",
+          "FiscalYear": "2024",
+          "TotalBudget": 8000000.0,
+          "DistributedBudget": 5000000.0,
+          "ReleasedBudget": 3000000.0,
+          "AvailableBudget": 3000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "TTiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-006",
+          "WBSElement": "W-003",
+          "FiscalYear": "2024",
+          "TotalBudget": 15000000.0,
+          "DistributedBudget": 10000000.0,
+          "ReleasedBudget": 8000000.0,
+          "AvailableBudget": 5000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "Tjiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-007",
+          "WBSElement": "W-003-1",
+          "FiscalYear": "2024",
+          "TotalBudget": 8000000.0,
+          "DistributedBudget": 5000000.0,
+          "ReleasedBudget": 3000000.0,
+          "AvailableBudget": 3000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "Tziqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-008",
+          "WBSElement": "W-004",
+          "FiscalYear": "2024",
+          "TotalBudget": 5000000.0,
+          "DistributedBudget": 3000000.0,
+          "ReleasedBudget": 2000000.0,
+          "AvailableBudget": 2000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "UDiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-009",
+          "WBSElement": "W-005",
+          "FiscalYear": "2024",
+          "TotalBudget": 3000000.0,
+          "DistributedBudget": 2000000.0,
+          "ReleasedBudget": 1000000.0,
+          "AvailableBudget": 1000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      },
+      {
+        "_index": "tupu_dim_ps_wbs_budget",
+        "_id": "UTiqyp8Bl0thyoyENu4J",
+        "_score": 1.0,
+        "_source": {
+          "BudgetId": "B-010",
+          "WBSElement": "W-006",
+          "FiscalYear": "2024",
+          "TotalBudget": 3000000.0,
+          "DistributedBudget": 2000000.0,
+          "ReleasedBudget": 1000000.0,
+          "AvailableBudget": 1000000.0,
+          "Currency": "CNY",
+          "BudgetProfile": "BP01"
+        }
+      }
+    ]
+  }
+}

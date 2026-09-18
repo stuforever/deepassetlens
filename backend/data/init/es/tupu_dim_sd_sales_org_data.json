@@ -1,0 +1,402 @@
+[
+ {
+  "SalesOrganization": "SO101",
+  "SalesOrganizationName": "北京销售组织",
+  "CompanyCode": "1010",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO102",
+  "SalesOrganizationName": "上海销售组织",
+  "CompanyCode": "1011",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO103",
+  "SalesOrganizationName": "广州销售组织",
+  "CompanyCode": "1012",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO104",
+  "SalesOrganizationName": "深圳销售组织",
+  "CompanyCode": "1013",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO105",
+  "SalesOrganizationName": "成都销售组织",
+  "CompanyCode": "1014",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO106",
+  "SalesOrganizationName": "杭州销售组织",
+  "CompanyCode": "1015",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO107",
+  "SalesOrganizationName": "武汉销售组织",
+  "CompanyCode": "1016",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO108",
+  "SalesOrganizationName": "西安销售组织",
+  "CompanyCode": "1017",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO109",
+  "SalesOrganizationName": "南京销售组织",
+  "CompanyCode": "1018",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO110",
+  "SalesOrganizationName": "苏州销售组织",
+  "CompanyCode": "1019",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO111",
+  "SalesOrganizationName": "天津销售组织",
+  "CompanyCode": "1020",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO112",
+  "SalesOrganizationName": "重庆销售组织",
+  "CompanyCode": "1021",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO113",
+  "SalesOrganizationName": "郑州销售组织",
+  "CompanyCode": "1022",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO114",
+  "SalesOrganizationName": "长沙销售组织",
+  "CompanyCode": "1023",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO115",
+  "SalesOrganizationName": "沈阳销售组织",
+  "CompanyCode": "1024",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO116",
+  "SalesOrganizationName": "哈尔滨销售组织",
+  "CompanyCode": "1025",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO117",
+  "SalesOrganizationName": "兰州销售组织",
+  "CompanyCode": "1026",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO118",
+  "SalesOrganizationName": "乌鲁木齐销售组织",
+  "CompanyCode": "1027",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO119",
+  "SalesOrganizationName": "福州销售组织",
+  "CompanyCode": "1028",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO120",
+  "SalesOrganizationName": "昆明销售组织",
+  "CompanyCode": "1029",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO121",
+  "SalesOrganizationName": "北京销售组织",
+  "CompanyCode": "1030",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO122",
+  "SalesOrganizationName": "上海销售组织",
+  "CompanyCode": "1031",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO123",
+  "SalesOrganizationName": "广州销售组织",
+  "CompanyCode": "1032",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO124",
+  "SalesOrganizationName": "深圳销售组织",
+  "CompanyCode": "1033",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO125",
+  "SalesOrganizationName": "成都销售组织",
+  "CompanyCode": "1034",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO126",
+  "SalesOrganizationName": "杭州销售组织",
+  "CompanyCode": "1035",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO127",
+  "SalesOrganizationName": "武汉销售组织",
+  "CompanyCode": "1036",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO128",
+  "SalesOrganizationName": "西安销售组织",
+  "CompanyCode": "1037",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO129",
+  "SalesOrganizationName": "南京销售组织",
+  "CompanyCode": "1038",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO130",
+  "SalesOrganizationName": "苏州销售组织",
+  "CompanyCode": "1039",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO131",
+  "SalesOrganizationName": "天津销售组织",
+  "CompanyCode": "1040",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO132",
+  "SalesOrganizationName": "重庆销售组织",
+  "CompanyCode": "1041",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO133",
+  "SalesOrganizationName": "郑州销售组织",
+  "CompanyCode": "1042",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO134",
+  "SalesOrganizationName": "长沙销售组织",
+  "CompanyCode": "1043",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO135",
+  "SalesOrganizationName": "沈阳销售组织",
+  "CompanyCode": "1044",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO136",
+  "SalesOrganizationName": "哈尔滨销售组织",
+  "CompanyCode": "1045",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO137",
+  "SalesOrganizationName": "兰州销售组织",
+  "CompanyCode": "1046",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO138",
+  "SalesOrganizationName": "乌鲁木齐销售组织",
+  "CompanyCode": "1047",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO139",
+  "SalesOrganizationName": "福州销售组织",
+  "CompanyCode": "1048",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO140",
+  "SalesOrganizationName": "昆明销售组织",
+  "CompanyCode": "1049",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO141",
+  "SalesOrganizationName": "北京销售组织",
+  "CompanyCode": "1050",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO142",
+  "SalesOrganizationName": "上海销售组织",
+  "CompanyCode": "1051",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO143",
+  "SalesOrganizationName": "广州销售组织",
+  "CompanyCode": "1052",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO144",
+  "SalesOrganizationName": "深圳销售组织",
+  "CompanyCode": "1053",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO145",
+  "SalesOrganizationName": "成都销售组织",
+  "CompanyCode": "1054",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO146",
+  "SalesOrganizationName": "杭州销售组织",
+  "CompanyCode": "1055",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO147",
+  "SalesOrganizationName": "武汉销售组织",
+  "CompanyCode": "1056",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO148",
+  "SalesOrganizationName": "西安销售组织",
+  "CompanyCode": "1057",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO149",
+  "SalesOrganizationName": "南京销售组织",
+  "CompanyCode": "1058",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ },
+ {
+  "SalesOrganization": "SO150",
+  "SalesOrganizationName": "苏州销售组织",
+  "CompanyCode": "1059",
+  "Currency": "CNY",
+  "Status": "启用",
+  "api_get": "Sales Organization (A2X, V4)"
+ }
+]

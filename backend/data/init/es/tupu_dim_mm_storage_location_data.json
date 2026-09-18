@@ -1,0 +1,352 @@
+[
+ {
+  "StorageLocation": "P1001-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1001",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1002-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1002",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1003-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1003",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1004-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1004",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1005-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1005",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1006-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1006",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1007-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1007",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1008-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1008",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1009-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1009",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1010-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1010",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1011-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1011",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1012-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1012",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1013-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1013",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1014-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1014",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1015-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1015",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1016-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1016",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1017-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1017",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1018-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1018",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1019-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1019",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1020-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1020",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1021-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1021",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1022-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1022",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1023-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1023",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1024-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1024",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1025-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1025",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1026-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1026",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1027-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1027",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1028-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1028",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1029-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1029",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1030-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1030",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1031-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1031",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1032-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1032",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1033-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1033",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1034-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1034",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1035-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1035",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1036-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1036",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1037-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1037",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1038-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1038",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1039-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1039",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1040-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1040",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1041-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1041",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1042-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1042",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1043-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1043",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1044-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1044",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1045-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1045",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1046-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1046",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1047-01",
+  "StorageLocationName": "备件库",
+  "Plant": "P1047",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1048-01",
+  "StorageLocationName": "工具库",
+  "Plant": "P1048",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1049-01",
+  "StorageLocationName": "原料库",
+  "Plant": "P1049",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ },
+ {
+  "StorageLocation": "P1050-01",
+  "StorageLocationName": "成品库",
+  "Plant": "P1050",
+  "Status": "启用",
+  "api_get": "Storage Location (A2X, V4)"
+ }
+]

@@ -1,0 +1,502 @@
+[
+ {
+  "CompanyCode": "1010",
+  "CompanyCodeName": "电力事业001部",
+  "City": "北京",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1011",
+  "CompanyCodeName": "电力事业002部",
+  "City": "上海",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1012",
+  "CompanyCodeName": "电力事业003部",
+  "City": "广州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1013",
+  "CompanyCodeName": "电力事业004部",
+  "City": "深圳",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1014",
+  "CompanyCodeName": "电力事业005部",
+  "City": "成都",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1015",
+  "CompanyCodeName": "电力事业006部",
+  "City": "杭州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1016",
+  "CompanyCodeName": "电力事业007部",
+  "City": "武汉",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1017",
+  "CompanyCodeName": "电力事业008部",
+  "City": "西安",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1018",
+  "CompanyCodeName": "电力事业009部",
+  "City": "南京",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1019",
+  "CompanyCodeName": "电力事业010部",
+  "City": "苏州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1020",
+  "CompanyCodeName": "电力事业011部",
+  "City": "天津",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1021",
+  "CompanyCodeName": "电力事业012部",
+  "City": "重庆",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1022",
+  "CompanyCodeName": "电力事业013部",
+  "City": "郑州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1023",
+  "CompanyCodeName": "电力事业014部",
+  "City": "长沙",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1024",
+  "CompanyCodeName": "电力事业015部",
+  "City": "沈阳",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1025",
+  "CompanyCodeName": "电力事业016部",
+  "City": "哈尔滨",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1026",
+  "CompanyCodeName": "电力事业017部",
+  "City": "兰州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1027",
+  "CompanyCodeName": "电力事业018部",
+  "City": "乌鲁木齐",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1028",
+  "CompanyCodeName": "电力事业019部",
+  "City": "福州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1029",
+  "CompanyCodeName": "电力事业020部",
+  "City": "昆明",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1030",
+  "CompanyCodeName": "电力事业021部",
+  "City": "北京",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1031",
+  "CompanyCodeName": "电力事业022部",
+  "City": "上海",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1032",
+  "CompanyCodeName": "电力事业023部",
+  "City": "广州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1033",
+  "CompanyCodeName": "电力事业024部",
+  "City": "深圳",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1034",
+  "CompanyCodeName": "电力事业025部",
+  "City": "成都",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1035",
+  "CompanyCodeName": "电力事业026部",
+  "City": "杭州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1036",
+  "CompanyCodeName": "电力事业027部",
+  "City": "武汉",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1037",
+  "CompanyCodeName": "电力事业028部",
+  "City": "西安",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1038",
+  "CompanyCodeName": "电力事业029部",
+  "City": "南京",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1039",
+  "CompanyCodeName": "电力事业030部",
+  "City": "苏州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1040",
+  "CompanyCodeName": "电力事业031部",
+  "City": "天津",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1041",
+  "CompanyCodeName": "电力事业032部",
+  "City": "重庆",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1042",
+  "CompanyCodeName": "电力事业033部",
+  "City": "郑州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1043",
+  "CompanyCodeName": "电力事业034部",
+  "City": "长沙",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1044",
+  "CompanyCodeName": "电力事业035部",
+  "City": "沈阳",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1045",
+  "CompanyCodeName": "电力事业036部",
+  "City": "哈尔滨",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1046",
+  "CompanyCodeName": "电力事业037部",
+  "City": "兰州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1047",
+  "CompanyCodeName": "电力事业038部",
+  "City": "乌鲁木齐",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1048",
+  "CompanyCodeName": "电力事业039部",
+  "City": "福州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1049",
+  "CompanyCodeName": "电力事业040部",
+  "City": "昆明",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1050",
+  "CompanyCodeName": "电力事业041部",
+  "City": "北京",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1051",
+  "CompanyCodeName": "电力事业042部",
+  "City": "上海",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1052",
+  "CompanyCodeName": "电力事业043部",
+  "City": "广州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1053",
+  "CompanyCodeName": "电力事业044部",
+  "City": "深圳",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1054",
+  "CompanyCodeName": "电力事业045部",
+  "City": "成都",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1055",
+  "CompanyCodeName": "电力事业046部",
+  "City": "杭州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1056",
+  "CompanyCodeName": "电力事业047部",
+  "City": "武汉",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1057",
+  "CompanyCodeName": "电力事业048部",
+  "City": "西安",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1058",
+  "CompanyCodeName": "电力事业049部",
+  "City": "南京",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ },
+ {
+  "CompanyCode": "1059",
+  "CompanyCodeName": "电力事业050部",
+  "City": "苏州",
+  "Country": "CN",
+  "Currency": "CNY",
+  "Language": "ZH",
+  "Status": "启用",
+  "api_get": "Company Code (A2X, V4)"
+ }
+]

@@ -1,0 +1,452 @@
+[
+ {
+  "BusinessPartner": "V0001",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0002",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0002",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0002",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0003",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0004",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0004",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0005",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0005",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0005",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0006",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0007",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0008",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0008",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0009",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0009",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0010",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0010",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0011",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0011",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0012",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0012",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0013",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0013",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0013",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0014",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0014",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0014",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0015",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0015",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0016",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0017",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0017",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0018",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0019",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0019",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0020",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0020",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0020",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0021",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0021",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0022",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0023",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0024",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0024",
+  "BPRole": "FLSU01",
+  "BPRoleName": "国内供应商",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0025",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0026",
+  "BPRole": "BUP002",
+  "BPRoleName": "员工",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0026",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0027",
+  "BPRole": "CRM001",
+  "BPRoleName": "合同伙伴",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ },
+ {
+  "BusinessPartner": "V0027",
+  "BPRole": "FLCU01",
+  "BPRoleName": "国内客户",
+  "ValidFrom": "2020-01-01",
+  "ValidTo": "2099-12-31",
+  "Status": "生效",
+  "api_get": "BP Role (A2X, V4)"
+ }
+]

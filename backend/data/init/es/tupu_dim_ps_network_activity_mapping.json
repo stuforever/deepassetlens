@@ -1,1 +1,127 @@
-{"tupu_dim_ps_network_activity":{"aliases":{},"mappings":{"properties":{"activity_number":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"activity_type":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"control_key":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"description":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"duration":{"type":"float"},"duration_unit":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"network_number":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"objnr":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"plan_finish_date":{"type":"date"},"plan_start_date":{"type":"date"},"planned_work":{"type":"float"},"work_center":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"work_unit":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}}}},"settings":{"index":{"routing":{"allocation":{"include":{"_tier_preference":"data_content"}}},"number_of_shards":"1","provided_name":"tupu_dim_ps_network_activity","creation_date":"1785811578896","number_of_replicas":"1","uuid":"TdcLzzKKSVW7amw5wWwyuw","version":{"created":"8500003"}}}}}
+{
+  "tupu_dim_ps_network_activity": {
+    "aliases": {},
+    "mappings": {
+      "properties": {
+        "Activity": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Network": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "ActivityDescription": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "ActivityType": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "ControlKey": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "WorkCenter": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "PlannedWork": {
+          "type": "float"
+        },
+        "WorkUnit": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "PlannedStartDate": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "PlannedFinishDate": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Duration": {
+          "type": "float"
+        },
+        "DurationUnit": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "ObjectNumber": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "routing": {
+          "allocation": {
+            "include": {
+              "_tier_preference": "data_content"
+            }
+          }
+        },
+        "number_of_shards": "1",
+        "number_of_replicas": "1"
+      }
+    }
+  }
+}

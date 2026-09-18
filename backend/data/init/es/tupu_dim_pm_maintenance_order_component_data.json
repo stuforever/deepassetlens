@@ -1,0 +1,502 @@
+[
+ {
+  "MaintenanceOrder": "MO4000001",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100003",
+  "RequirementQuantity": 1.32,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000001",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100024",
+  "RequirementQuantity": 5.06,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000001",
+  "MaintenanceOrderComponent": "0030",
+  "Material": "100031",
+  "RequirementQuantity": 11.5,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000002",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100007",
+  "RequirementQuantity": 11.68,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000002",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100027",
+  "RequirementQuantity": 11.61,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000002",
+  "MaintenanceOrderComponent": "0030",
+  "Material": "100053",
+  "RequirementQuantity": 6.8,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000003",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100048",
+  "RequirementQuantity": 9.34,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000003",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100001",
+  "RequirementQuantity": 4.43,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000003",
+  "MaintenanceOrderComponent": "0030",
+  "Material": "100043",
+  "RequirementQuantity": 1.18,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000004",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100054",
+  "RequirementQuantity": 2.31,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000004",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100006",
+  "RequirementQuantity": 9.05,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000005",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100024",
+  "RequirementQuantity": 5.37,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000005",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100034",
+  "RequirementQuantity": 3.19,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000006",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100054",
+  "RequirementQuantity": 1.07,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000006",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100032",
+  "RequirementQuantity": 2.57,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000006",
+  "MaintenanceOrderComponent": "0030",
+  "Material": "100054",
+  "RequirementQuantity": 4.19,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000007",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100035",
+  "RequirementQuantity": 11.0,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000008",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100011",
+  "RequirementQuantity": 4.63,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000009",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100039",
+  "RequirementQuantity": 10.22,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000009",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100006",
+  "RequirementQuantity": 9.69,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000009",
+  "MaintenanceOrderComponent": "0030",
+  "Material": "100020",
+  "RequirementQuantity": 3.33,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000010",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100032",
+  "RequirementQuantity": 11.31,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000010",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100040",
+  "RequirementQuantity": 3.46,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000011",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100046",
+  "RequirementQuantity": 11.11,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000012",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100021",
+  "RequirementQuantity": 1.9,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000012",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100025",
+  "RequirementQuantity": 10.04,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000012",
+  "MaintenanceOrderComponent": "0030",
+  "Material": "100010",
+  "RequirementQuantity": 8.87,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000013",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100053",
+  "RequirementQuantity": 10.32,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000014",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100041",
+  "RequirementQuantity": 6.69,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000014",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100023",
+  "RequirementQuantity": 1.93,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000015",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100039",
+  "RequirementQuantity": 2.17,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000015",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100051",
+  "RequirementQuantity": 4.56,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000016",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100036",
+  "RequirementQuantity": 2.01,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000016",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100048",
+  "RequirementQuantity": 2.67,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000017",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100054",
+  "RequirementQuantity": 2.87,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000018",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100036",
+  "RequirementQuantity": 4.2,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000018",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100028",
+  "RequirementQuantity": 6.36,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000019",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100012",
+  "RequirementQuantity": 10.6,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000019",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100041",
+  "RequirementQuantity": 4.0,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000020",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100047",
+  "RequirementQuantity": 4.6,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000021",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100005",
+  "RequirementQuantity": 2.5,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000021",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100005",
+  "RequirementQuantity": 5.69,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000022",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100057",
+  "RequirementQuantity": 3.46,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000023",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100053",
+  "RequirementQuantity": 4.21,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000024",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100035",
+  "RequirementQuantity": 6.61,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000024",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100014",
+  "RequirementQuantity": 2.86,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已预留",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000025",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100042",
+  "RequirementQuantity": 2.36,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000026",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100043",
+  "RequirementQuantity": 11.33,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000027",
+  "MaintenanceOrderComponent": "0010",
+  "Material": "100006",
+  "RequirementQuantity": 5.29,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "已发料",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ },
+ {
+  "MaintenanceOrder": "MO4000027",
+  "MaintenanceOrderComponent": "0020",
+  "Material": "100038",
+  "RequirementQuantity": 2.4,
+  "UnitOfMeasure": "EA",
+  "ComponentStatus": "待采购",
+  "ItemCategory": "L库存件",
+  "api_get": "Maintenance Order Component (A2X, V4)"
+ }
+]

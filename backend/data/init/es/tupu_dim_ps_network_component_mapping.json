@@ -1,1 +1,115 @@
-{"tupu_dim_ps_network_component":{"aliases":{},"mappings":{"properties":{"activity_number":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"base_unit":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"component_id":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"description":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"item_category":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"material_number":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"network_number":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"plant":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"requirement_date":{"type":"date"},"requirement_quantity":{"type":"float"},"reservation_number":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}}}},"settings":{"index":{"routing":{"allocation":{"include":{"_tier_preference":"data_content"}}},"number_of_shards":"1","provided_name":"tupu_dim_ps_network_component","creation_date":"1785811579209","number_of_replicas":"1","uuid":"HkuQD22gTXO-RbSj-dxjzQ","version":{"created":"8500003"}}}}}
+{
+  "tupu_dim_ps_network_component": {
+    "aliases": {},
+    "mappings": {
+      "properties": {
+        "Component": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Network": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Activity": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Material": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "ComponentDescription": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "RequirementQuantity": {
+          "type": "float"
+        },
+        "BaseUnit": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "RequirementDate": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Plant": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "ItemCategory": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Reservation": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "routing": {
+          "allocation": {
+            "include": {
+              "_tier_preference": "data_content"
+            }
+          }
+        },
+        "number_of_shards": "1",
+        "number_of_replicas": "1"
+      }
+    }
+  }
+}

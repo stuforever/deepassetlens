@@ -1,0 +1,502 @@
+[
+ {
+  "PurchaseRequisition": "61000000",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请001",
+  "CompanyCode": "1010",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-05-04",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000001",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请002",
+  "CompanyCode": "1011",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-06-20",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000002",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请003",
+  "CompanyCode": "1012",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-08-07",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000003",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请004",
+  "CompanyCode": "1013",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-06-21",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000004",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请005",
+  "CompanyCode": "1014",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-04-11",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000005",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请006",
+  "CompanyCode": "1015",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-02-28",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000006",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请007",
+  "CompanyCode": "1016",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-05-15",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000007",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请008",
+  "CompanyCode": "1017",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-02-07",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000008",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请009",
+  "CompanyCode": "1018",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-05-31",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000009",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请010",
+  "CompanyCode": "1019",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-03-05",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000010",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请011",
+  "CompanyCode": "1020",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-07-07",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000011",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请012",
+  "CompanyCode": "1021",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-06-20",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000012",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请013",
+  "CompanyCode": "1022",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-02-02",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000013",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请014",
+  "CompanyCode": "1023",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-04-26",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000014",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请015",
+  "CompanyCode": "1024",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-02-04",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000015",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请016",
+  "CompanyCode": "1025",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-05-06",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000016",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请017",
+  "CompanyCode": "1026",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-06-20",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000017",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请018",
+  "CompanyCode": "1027",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-02-03",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000018",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请019",
+  "CompanyCode": "1028",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-03-28",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000019",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请020",
+  "CompanyCode": "1029",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-08-15",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000020",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请021",
+  "CompanyCode": "1030",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-06-11",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000021",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请022",
+  "CompanyCode": "1031",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-02-21",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000022",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请023",
+  "CompanyCode": "1032",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-01-23",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000023",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请024",
+  "CompanyCode": "1033",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-03-13",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000024",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请025",
+  "CompanyCode": "1034",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-06-15",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000025",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请026",
+  "CompanyCode": "1035",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-02-20",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000026",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请027",
+  "CompanyCode": "1036",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-04-26",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000027",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请028",
+  "CompanyCode": "1037",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-02-09",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000028",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请029",
+  "CompanyCode": "1038",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-07-02",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000029",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请030",
+  "CompanyCode": "1039",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-04-24",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000030",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请031",
+  "CompanyCode": "1040",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-01-25",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000031",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请032",
+  "CompanyCode": "1041",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-08-03",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000032",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请033",
+  "CompanyCode": "1042",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-05-25",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000033",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请034",
+  "CompanyCode": "1043",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-02-04",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000034",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请035",
+  "CompanyCode": "1044",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-02-17",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000035",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请036",
+  "CompanyCode": "1045",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-04-16",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000036",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请037",
+  "CompanyCode": "1046",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-08-09",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000037",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请038",
+  "CompanyCode": "1047",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-07-02",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000038",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请039",
+  "CompanyCode": "1048",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-04-14",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000039",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请040",
+  "CompanyCode": "1049",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-07-31",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000040",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请041",
+  "CompanyCode": "1010",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-04-20",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000041",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请042",
+  "CompanyCode": "1011",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-01-29",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000042",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请043",
+  "CompanyCode": "1012",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-02-12",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000043",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请044",
+  "CompanyCode": "1013",
+  "CreatedByUser": "需求员-吴",
+  "CreationDate": "2026-02-16",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000044",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请045",
+  "CompanyCode": "1014",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-02-25",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000045",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请046",
+  "CompanyCode": "1015",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-05-10",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000046",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请047",
+  "CompanyCode": "1016",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-04-30",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000047",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请048",
+  "CompanyCode": "1017",
+  "CreatedByUser": "需求员-郑",
+  "CreationDate": "2026-08-19",
+  "ReleaseStatus": "已审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000048",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请049",
+  "CompanyCode": "1018",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-02-25",
+  "ReleaseStatus": "已下达",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ },
+ {
+  "PurchaseRequisition": "61000049",
+  "PurchaseRequisitionType": "ZNB标准",
+  "PurReqnDescription": "工程物资需求申请050",
+  "CompanyCode": "1019",
+  "CreatedByUser": "需求员-周",
+  "CreationDate": "2026-07-20",
+  "ReleaseStatus": "待审批",
+  "api_get": "Purchase Requisition (A2X, V4)"
+ }
+]

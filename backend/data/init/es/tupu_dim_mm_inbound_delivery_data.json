@@ -1,0 +1,502 @@
+[
+ {
+  "InboundDelivery": "18000000",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO101",
+  "DeliveryDate": "2026-01-13",
+  "ActualGoodsMovementDate": "2026-03-26",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000001",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO102",
+  "DeliveryDate": "2026-01-26",
+  "ActualGoodsMovementDate": "2026-05-08",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000002",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO103",
+  "DeliveryDate": "2026-05-02",
+  "ActualGoodsMovementDate": "2026-05-07",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000003",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO104",
+  "DeliveryDate": "2026-06-26",
+  "ActualGoodsMovementDate": "2026-01-28",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000004",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO105",
+  "DeliveryDate": "2026-01-14",
+  "ActualGoodsMovementDate": "2026-06-07",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000005",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO106",
+  "DeliveryDate": "2026-08-18",
+  "ActualGoodsMovementDate": "2026-06-01",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000006",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO107",
+  "DeliveryDate": "2026-04-16",
+  "ActualGoodsMovementDate": "2026-01-01",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000007",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO108",
+  "DeliveryDate": "2026-06-13",
+  "ActualGoodsMovementDate": "2026-07-14",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000008",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO109",
+  "DeliveryDate": "2026-01-01",
+  "ActualGoodsMovementDate": "2026-04-13",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000009",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO110",
+  "DeliveryDate": "2026-05-16",
+  "ActualGoodsMovementDate": "2026-03-24",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000010",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO111",
+  "DeliveryDate": "2026-02-22",
+  "ActualGoodsMovementDate": "2026-04-12",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000011",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO112",
+  "DeliveryDate": "2026-07-07",
+  "ActualGoodsMovementDate": "2026-06-19",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000012",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO113",
+  "DeliveryDate": "2026-05-19",
+  "ActualGoodsMovementDate": "2026-03-11",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000013",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO114",
+  "DeliveryDate": "2026-05-29",
+  "ActualGoodsMovementDate": "2026-03-27",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000014",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO115",
+  "DeliveryDate": "2026-05-16",
+  "ActualGoodsMovementDate": "2026-08-14",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000015",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO116",
+  "DeliveryDate": "2026-05-15",
+  "ActualGoodsMovementDate": "2026-07-24",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000016",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO117",
+  "DeliveryDate": "2026-03-29",
+  "ActualGoodsMovementDate": "2026-06-12",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000017",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO118",
+  "DeliveryDate": "2026-08-22",
+  "ActualGoodsMovementDate": "2026-06-14",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000018",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO119",
+  "DeliveryDate": "2026-05-15",
+  "ActualGoodsMovementDate": "2026-08-22",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000019",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO120",
+  "DeliveryDate": "2026-04-26",
+  "ActualGoodsMovementDate": "2026-07-17",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000020",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO121",
+  "DeliveryDate": "2026-04-12",
+  "ActualGoodsMovementDate": "2026-03-26",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000021",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO122",
+  "DeliveryDate": "2026-03-08",
+  "ActualGoodsMovementDate": "2026-05-02",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000022",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO123",
+  "DeliveryDate": "2026-07-30",
+  "ActualGoodsMovementDate": "2026-05-15",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000023",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO124",
+  "DeliveryDate": "2026-01-09",
+  "ActualGoodsMovementDate": "2026-01-31",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000024",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO125",
+  "DeliveryDate": "2026-01-01",
+  "ActualGoodsMovementDate": "2026-03-01",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000025",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO126",
+  "DeliveryDate": "2026-07-19",
+  "ActualGoodsMovementDate": "2026-04-18",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000026",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO127",
+  "DeliveryDate": "2026-04-29",
+  "ActualGoodsMovementDate": "2026-03-17",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000027",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO128",
+  "DeliveryDate": "2026-05-17",
+  "ActualGoodsMovementDate": "2026-05-17",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000028",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO129",
+  "DeliveryDate": "2026-08-15",
+  "ActualGoodsMovementDate": "2026-08-14",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000029",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO130",
+  "DeliveryDate": "2026-05-02",
+  "ActualGoodsMovementDate": "2026-04-29",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000030",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO131",
+  "DeliveryDate": "2026-07-28",
+  "ActualGoodsMovementDate": "2026-02-26",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000031",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO132",
+  "DeliveryDate": "2026-01-29",
+  "ActualGoodsMovementDate": "2026-05-10",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000032",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO133",
+  "DeliveryDate": "2026-06-27",
+  "ActualGoodsMovementDate": "2026-02-10",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000033",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO134",
+  "DeliveryDate": "2026-06-19",
+  "ActualGoodsMovementDate": "2026-07-17",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000034",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO135",
+  "DeliveryDate": "2026-08-08",
+  "ActualGoodsMovementDate": "2026-07-22",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000035",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO136",
+  "DeliveryDate": "2026-05-31",
+  "ActualGoodsMovementDate": "2026-06-15",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000036",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO137",
+  "DeliveryDate": "2026-06-14",
+  "ActualGoodsMovementDate": "2026-02-12",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000037",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO138",
+  "DeliveryDate": "2026-01-21",
+  "ActualGoodsMovementDate": "2026-03-24",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000038",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO139",
+  "DeliveryDate": "2026-07-27",
+  "ActualGoodsMovementDate": "2026-05-08",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000039",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO140",
+  "DeliveryDate": "2026-08-27",
+  "ActualGoodsMovementDate": "2026-02-21",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000040",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO101",
+  "DeliveryDate": "2026-01-30",
+  "ActualGoodsMovementDate": "2026-03-28",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000041",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO102",
+  "DeliveryDate": "2026-06-05",
+  "ActualGoodsMovementDate": "2026-05-24",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000042",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO103",
+  "DeliveryDate": "2026-05-19",
+  "ActualGoodsMovementDate": "2026-07-29",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000043",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO104",
+  "DeliveryDate": "2026-04-04",
+  "ActualGoodsMovementDate": "2026-03-13",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000044",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO105",
+  "DeliveryDate": "2026-01-13",
+  "ActualGoodsMovementDate": "2026-05-01",
+  "GoodsReceiptStatus": "已收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000045",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO106",
+  "DeliveryDate": "2026-06-01",
+  "ActualGoodsMovementDate": "2026-06-11",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000046",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO107",
+  "DeliveryDate": "2026-08-05",
+  "ActualGoodsMovementDate": "2026-05-12",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000047",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO108",
+  "DeliveryDate": "2026-05-05",
+  "ActualGoodsMovementDate": "2026-08-15",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000048",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO109",
+  "DeliveryDate": "2026-08-20",
+  "ActualGoodsMovementDate": "2026-05-19",
+  "GoodsReceiptStatus": "部分收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ },
+ {
+  "InboundDelivery": "18000049",
+  "DeliveryType": "EL供应商交货",
+  "Supplier": "V0001",
+  "PurchasingOrganization": "PO110",
+  "DeliveryDate": "2026-06-22",
+  "ActualGoodsMovementDate": "2026-01-04",
+  "GoodsReceiptStatus": "未收货",
+  "api_get": "Inbound Delivery (A2X, V4)"
+ }
+]

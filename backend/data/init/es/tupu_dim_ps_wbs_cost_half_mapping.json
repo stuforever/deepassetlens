@@ -1,1 +1,115 @@
-{"tupu_dim_ps_wbs_cost_half":{"aliases":{},"mappings":{"properties":{"actual_cost":{"type":"keyword"},"committed_cost":{"type":"keyword"},"cost_element":{"type":"keyword"},"cost_id":{"type":"keyword"},"currency":{"type":"keyword"},"fiscal_year":{"type":"keyword"},"id":{"type":"integer"},"planned_cost":{"type":"keyword"},"posting_date":{"type":"keyword"},"variance":{"type":"keyword"},"wbs_element":{"type":"keyword"}}},"settings":{"index":{"routing":{"allocation":{"include":{"_tier_preference":"data_content"}}},"number_of_shards":"1","provided_name":"tupu_dim_ps_wbs_cost_half","creation_date":"1785836799357","number_of_replicas":"1","uuid":"5SYfNMxyRju8Uq4dRZS-lQ","version":{"created":"8500003"}}}}}
+{
+  "tupu_dim_ps_wbs_cost_half": {
+    "aliases": {},
+    "mappings": {
+      "properties": {
+        "Id": {
+          "type": "long"
+        },
+        "CostId": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "WBSElement": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "FiscalYear": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "CostElement": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "ActualCost": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "CommittedCost": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "PlannedCost": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Variance": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "Currency": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "PostingDate": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "routing": {
+          "allocation": {
+            "include": {
+              "_tier_preference": "data_content"
+            }
+          }
+        },
+        "number_of_shards": "1",
+        "number_of_replicas": "1"
+      }
+    }
+  }
+}

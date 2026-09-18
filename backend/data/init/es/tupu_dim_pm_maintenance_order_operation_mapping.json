@@ -1,0 +1,75 @@
+{
+ "mappings": {
+  "properties": {
+   "MaintenanceOrder": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "MaintenanceOrderOperation": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "OperationText": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "WorkCenter": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "PlannedWork": {
+    "type": "double"
+   },
+   "ActualWork": {
+    "type": "double"
+   },
+   "NumberOfCapacities": {
+    "type": "long"
+   },
+   "OperationStatus": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   },
+   "ExpectedStartDate": {
+    "type": "date"
+   },
+   "ExpectedEndDate": {
+    "type": "date"
+   },
+   "api_get": {
+    "type": "text",
+    "fields": {
+     "keyword": {
+      "type": "keyword",
+      "ignore_above": 256
+     }
+    }
+   }
+  }
+ }
+}

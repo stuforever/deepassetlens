@@ -1,0 +1,402 @@
+[
+ {
+  "Plant": "P1001",
+  "PlantName": "北京一次设备厂",
+  "CompanyCode": "1010",
+  "City": "北京",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1002",
+  "PlantName": "上海二次设备厂",
+  "CompanyCode": "1011",
+  "City": "上海",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1003",
+  "PlantName": "广州计量厂",
+  "CompanyCode": "1012",
+  "City": "广州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1004",
+  "PlantName": "深圳线缆厂",
+  "CompanyCode": "1013",
+  "City": "深圳",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1005",
+  "PlantName": "成都运维厂",
+  "CompanyCode": "1014",
+  "City": "成都",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1006",
+  "PlantName": "杭州一次设备厂",
+  "CompanyCode": "1015",
+  "City": "杭州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1007",
+  "PlantName": "武汉二次设备厂",
+  "CompanyCode": "1016",
+  "City": "武汉",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1008",
+  "PlantName": "西安计量厂",
+  "CompanyCode": "1017",
+  "City": "西安",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1009",
+  "PlantName": "南京线缆厂",
+  "CompanyCode": "1018",
+  "City": "南京",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1010",
+  "PlantName": "苏州运维厂",
+  "CompanyCode": "1019",
+  "City": "苏州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1011",
+  "PlantName": "天津一次设备厂",
+  "CompanyCode": "1020",
+  "City": "天津",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1012",
+  "PlantName": "重庆二次设备厂",
+  "CompanyCode": "1021",
+  "City": "重庆",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1013",
+  "PlantName": "郑州计量厂",
+  "CompanyCode": "1022",
+  "City": "郑州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1014",
+  "PlantName": "长沙线缆厂",
+  "CompanyCode": "1023",
+  "City": "长沙",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1015",
+  "PlantName": "沈阳运维厂",
+  "CompanyCode": "1024",
+  "City": "沈阳",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1016",
+  "PlantName": "哈尔滨一次设备厂",
+  "CompanyCode": "1025",
+  "City": "哈尔滨",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1017",
+  "PlantName": "兰州二次设备厂",
+  "CompanyCode": "1026",
+  "City": "兰州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1018",
+  "PlantName": "乌鲁木齐计量厂",
+  "CompanyCode": "1027",
+  "City": "乌鲁木齐",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1019",
+  "PlantName": "福州线缆厂",
+  "CompanyCode": "1028",
+  "City": "福州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1020",
+  "PlantName": "昆明运维厂",
+  "CompanyCode": "1029",
+  "City": "昆明",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1021",
+  "PlantName": "北京一次设备厂",
+  "CompanyCode": "1030",
+  "City": "北京",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1022",
+  "PlantName": "上海二次设备厂",
+  "CompanyCode": "1031",
+  "City": "上海",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1023",
+  "PlantName": "广州计量厂",
+  "CompanyCode": "1032",
+  "City": "广州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1024",
+  "PlantName": "深圳线缆厂",
+  "CompanyCode": "1033",
+  "City": "深圳",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1025",
+  "PlantName": "成都运维厂",
+  "CompanyCode": "1034",
+  "City": "成都",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1026",
+  "PlantName": "杭州一次设备厂",
+  "CompanyCode": "1035",
+  "City": "杭州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1027",
+  "PlantName": "武汉二次设备厂",
+  "CompanyCode": "1036",
+  "City": "武汉",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1028",
+  "PlantName": "西安计量厂",
+  "CompanyCode": "1037",
+  "City": "西安",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1029",
+  "PlantName": "南京线缆厂",
+  "CompanyCode": "1038",
+  "City": "南京",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1030",
+  "PlantName": "苏州运维厂",
+  "CompanyCode": "1039",
+  "City": "苏州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1031",
+  "PlantName": "天津一次设备厂",
+  "CompanyCode": "1040",
+  "City": "天津",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1032",
+  "PlantName": "重庆二次设备厂",
+  "CompanyCode": "1041",
+  "City": "重庆",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1033",
+  "PlantName": "郑州计量厂",
+  "CompanyCode": "1042",
+  "City": "郑州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1034",
+  "PlantName": "长沙线缆厂",
+  "CompanyCode": "1043",
+  "City": "长沙",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1035",
+  "PlantName": "沈阳运维厂",
+  "CompanyCode": "1044",
+  "City": "沈阳",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1036",
+  "PlantName": "哈尔滨一次设备厂",
+  "CompanyCode": "1045",
+  "City": "哈尔滨",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1037",
+  "PlantName": "兰州二次设备厂",
+  "CompanyCode": "1046",
+  "City": "兰州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1038",
+  "PlantName": "乌鲁木齐计量厂",
+  "CompanyCode": "1047",
+  "City": "乌鲁木齐",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1039",
+  "PlantName": "福州线缆厂",
+  "CompanyCode": "1048",
+  "City": "福州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1040",
+  "PlantName": "昆明运维厂",
+  "CompanyCode": "1049",
+  "City": "昆明",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1041",
+  "PlantName": "北京一次设备厂",
+  "CompanyCode": "1050",
+  "City": "北京",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1042",
+  "PlantName": "上海二次设备厂",
+  "CompanyCode": "1051",
+  "City": "上海",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1043",
+  "PlantName": "广州计量厂",
+  "CompanyCode": "1052",
+  "City": "广州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1044",
+  "PlantName": "深圳线缆厂",
+  "CompanyCode": "1053",
+  "City": "深圳",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1045",
+  "PlantName": "成都运维厂",
+  "CompanyCode": "1054",
+  "City": "成都",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1046",
+  "PlantName": "杭州一次设备厂",
+  "CompanyCode": "1055",
+  "City": "杭州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1047",
+  "PlantName": "武汉二次设备厂",
+  "CompanyCode": "1056",
+  "City": "武汉",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1048",
+  "PlantName": "西安计量厂",
+  "CompanyCode": "1057",
+  "City": "西安",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1049",
+  "PlantName": "南京线缆厂",
+  "CompanyCode": "1058",
+  "City": "南京",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ },
+ {
+  "Plant": "P1050",
+  "PlantName": "苏州运维厂",
+  "CompanyCode": "1059",
+  "City": "苏州",
+  "Status": "启用",
+  "api_get": "Plant (A2X, V4)"
+ }
+]

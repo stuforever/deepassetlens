@@ -1,0 +1,452 @@
+[
+ {
+  "MaintenancePlan": "PLAN-2024-0001",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 9,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0001",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 9,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0002",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 9,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0002",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 4,
+  "CycleUnit": "季",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0002",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 8,
+  "CycleUnit": "月",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0003",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 12,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0003",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 9,
+  "CycleUnit": "月",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0003",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 11,
+  "CycleUnit": "月",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0004",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 5,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0004",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 5,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0004",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 2,
+  "CycleUnit": "季",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0005",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 2,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0005",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 12,
+  "CycleUnit": "月",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0005",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 4,
+  "CycleUnit": "年",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0006",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 12,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0006",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 7,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0006",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 4,
+  "CycleUnit": "季",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0007",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 2,
+  "CycleUnit": "季",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0007",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 2,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0008",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 9,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0008",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 3,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0008",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 11,
+  "CycleUnit": "季",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0009",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 7,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0009",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 12,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0009",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 6,
+  "CycleUnit": "季",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0010",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 4,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0011",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 5,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0012",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 4,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0013",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 2,
+  "CycleUnit": "季",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0014",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 1,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0014",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 11,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0015",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 3,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0016",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 2,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0016",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 2,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0017",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 7,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0018",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 5,
+  "CycleUnit": "季",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0018",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 6,
+  "CycleUnit": "月",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0019",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 4,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0019",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 1,
+  "CycleUnit": "月",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0019",
+  "MaintenancePlanItem": "003",
+  "CycleFrequency": 4,
+  "CycleUnit": "季",
+  "CycleSequence": 3,
+  "StrategyText": "年度大修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0020",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 9,
+  "CycleUnit": "季",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0021",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 2,
+  "CycleUnit": "季",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0022",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 12,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0022",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 10,
+  "CycleUnit": "年",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0023",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 8,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0023",
+  "MaintenancePlanItem": "002",
+  "CycleFrequency": 4,
+  "CycleUnit": "月",
+  "CycleSequence": 2,
+  "StrategyText": "季度检修策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0024",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 9,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0025",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 5,
+  "CycleUnit": "季",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0026",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 5,
+  "CycleUnit": "月",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ },
+ {
+  "MaintenancePlan": "PLAN-2024-0027",
+  "MaintenancePlanItem": "001",
+  "CycleFrequency": 10,
+  "CycleUnit": "年",
+  "CycleSequence": 1,
+  "StrategyText": "月度保养策略",
+  "api_get": "Maintenance Plan Item (A2X, V4)"
+ }
+]
