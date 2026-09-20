@@ -1097,6 +1097,28 @@ function TutorHomeChatInner() {
             <SaveToNotebookModal open={showSaveModal} payload={chatSavePayload} messages={chatSaveMessages as never} onClose={handleCloseSaveModal} />
           </Suspense>
           <FilePreviewDrawer open={previewSource !== null} source={previewSource} onClose={handleClosePreview} />
+            {/* 三轨M7(U2) §3.3：sishu 右栏信任设施——课本章节/教学设置/书库（活动面板顶部区） */}
+            <div data-testid="sishu-trust-panel" className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+              <div className="mb-2 text-xs font-semibold text-[var(--foreground)]">学情上下文</div>
+              <div className="flex flex-col gap-1">
+                {[
+                  { label: "课本章节", path: "/settings/curriculum/chapters" },
+                  { label: "教学设置", path: "/e/sishu/admin/settings" },
+                  { label: "书库", path: "/e/sishu/book" },
+                ].map((e) => (
+                  <button
+                    key={e.label}
+                    data-testid={`sishu-trust-${e.label}`}
+                    type="button"
+                    onClick={() => navigate(e.path)}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-[var(--foreground)] hover:bg-[var(--muted)]"
+                  >
+                    <BookMarked className="h-3.5 w-3.5 text-amber-600" />
+                    {e.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           <SessionViewerPanel
             ref={viewerPanelRef}
             open={viewerPanelOpen && previewSource === null}
