@@ -5,7 +5,7 @@
  * 名称列固定左、操作列固定右由调用方在 columns 配置，本组件不强制。
  */
 import React, { useState } from 'react';
-import { Table, Alert, Segmented, Skeleton } from 'antd';
+import { Table, Alert, Segmented, Skeleton, Empty } from 'antd';
 import type { TableProps } from 'antd';
 import { tokens } from '../../theme/tokens';
 
@@ -31,6 +31,10 @@ interface DataTableShellProps<T> {
   showDensityToggle?: boolean;
   /** 加载中；透传 Table.loading（B4：加载且无数据时显示骨架屏） */
   loading?: boolean;
+  /** 三轨M9(U4)：空态主操作（antd Empty + 主按钮——C 模板硬门） */
+  emptyAction?: React.ReactNode;
+  /** 三轨M9(U4)：空态描述文案 */
+  emptyText?: string;
   /** 错误状态；传入则替代表格渲染（通常传 <ErrorState />） */
   error?: React.ReactNode;
   style?: React.CSSProperties;
@@ -43,6 +47,8 @@ function DataTableShell<T extends object = any>({
   showDensityToggle = true,
   loading,
   error,
+  emptyAction,
+  emptyText,
   style,
 }: DataTableShellProps<T>) {
   const [compact, setCompact] = useState(() => loadDensity(initialCompact));
@@ -106,6 +112,15 @@ function DataTableShell<T extends object = any>({
           <Table<T>
             size={size}
             loading={!!loading}
+            locale={{
+              emptyText: (
+                <div style={{ padding: '32px 0' }} data-testid="table-empty">
+                  <Empty description={emptyText || '暂无数据'}>
+                    {emptyAction}
+                  </Empty>
+                </div>
+              ),
+            }}
             style={{ background: tokens.colors.bgContent, borderRadius: tokens.radius.card }}
             {...tableProps}
           />

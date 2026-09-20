@@ -156,7 +156,20 @@ body {
 
 
 /* ---------------------------------------------------------------------------
- * 三轨M9(U4)：C 表格型全局基线——行 hover 高亮 + 表头吸顶（13 管理页同享）
+ * 
+/* 三轨M9(U4)：操作列 hover 显现——默认透明，行 hover/单元格 hover 时浮现 */
+.ant-table-cell.dal-action-col .ant-btn,
+.ant-table-cell.dal-action-col a {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.ant-table-row:hover .ant-table-cell.dal-action-col .ant-btn,
+.ant-table-row:hover .ant-table-cell.dal-action-col a,
+.ant-table-cell.dal-action-col:hover .ant-btn,
+.ant-table-cell.dal-action-col:hover a {
+  opacity: 1;
+}
+三轨M9(U4)：C 表格型全局基线——行 hover 高亮 + 表头吸顶（13 管理页同享）
  * ------------------------------------------------------------------------- */
 .ant-table-tbody > tr.ant-table-row:hover > td {
   background: color-mix(in srgb, var(--color-primary, #2563eb) 6%, transparent);
