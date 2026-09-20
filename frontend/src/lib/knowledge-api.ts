@@ -4,6 +4,14 @@ import { invalidateClientCache, withClientCache } from "./client-cache";
 
 const KNOWLEDGE_CACHE_PREFIX = "knowledge:";
 
+function encodeKbPathSegments(parts: string[]): string {
+  // 三轨M10(:490/:501)：过滤空段与 "."/".."（encodeURIComponent 不编码 → 路径穿越面）
+  return parts
+    .filter((s) => s && s !== "." && s !== "..")
+    .map((s) => encodeURIComponent(s))
+    .join("/");
+}
+
 export interface KnowledgeBaseSummary {
   id?: string;
   name: string;
@@ -172,6 +180,7 @@ export async function listKnowledgeBases(options?: { force?: boolean }) {
       const response = await apiFetch(apiUrl("/api/v1/knowledge/list"), {
         cache: "no-store",
       });
+      if (!response.ok) throw new Error(`knowledge/list ${response.status}`); // 三轨M10(:172)
       const data = await response.json();
       return Array.isArray(data)
         ? data
@@ -195,6 +204,7 @@ export async function listRagProviders(options?: { force?: boolean }) {
           cache: "no-store",
         },
       );
+      if (!response.ok) throw new Error(`rag-providers ${response.status}`); // 三轨M10(:192)
       const data = await response.json();
       return Array.isArray(data?.providers) ? data.providers : [];
     },
@@ -214,6 +224,7 @@ export async function getKnowledgeUploadPolicy(options?: { force?: boolean }) {
           cache: "no-store",
         },
       );
+      if (!response.ok) throw new Error(`supported-file-types ${response.status}`); // 三轨M10(:211)
       const data = await response.json();
       return normalizeUploadPolicy(data);
     },
@@ -487,10 +498,7 @@ export function knowledgeBaseFilePath(
   kbName: string,
   filename: string,
 ): string {
-  return `/api/v1/knowledge/${encodeURIComponent(kbName)}/files/${filename
-    .split("/")
-    .map(encodeURIComponent)
-    .join("/")}`;
+  return `/api/v1/knowledge/${encodeURIComponent(kbName)}/files/${encodeKbPathSegments(filename.split("/"))}`;
 }
 
 /** Build the `/api/v1/...` path for extracted plain-text preview of a raw KB file. */
@@ -498,10 +506,7 @@ export function knowledgeBaseFilePreviewTextPath(
   kbName: string,
   filename: string,
 ): string {
-  return `/api/v1/knowledge/${encodeURIComponent(kbName)}/file-preview-text/${filename
-    .split("/")
-    .map(encodeURIComponent)
-    .join("/")}`;
+  return `/api/v1/knowledge/${encodeURIComponent(kbName)}/file-preview-text/${encodeKbPathSegments(filename.split("/"))}`;
 }
 
 export interface KnowledgeTaskResponse {

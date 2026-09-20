@@ -376,7 +376,8 @@ async function postSessionAction(
   action: "archive" | "resume" | "delete",
   sessionKey: string,
 ): Promise<void> {
-  await apiFetch(
+  // 三轨M10(:379)：res.ok 检查——archive/resume/delete 失败不再静默
+  const res = await apiFetch(
     apiUrl(
       `/api/v1/partners/${encodeURIComponent(partnerId)}/sessions/${action}`,
     ),
@@ -386,6 +387,7 @@ async function postSessionAction(
       body: JSON.stringify({ session_key: sessionKey }),
     },
   );
+  if (!res.ok) throw new Error(`session ${action} failed: ${res.status}`);
 }
 
 export function archivePartnerSession(partnerId: string, sessionKey: string) {
