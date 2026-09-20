@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -449,6 +451,45 @@ def execute_integration_sql(payload: IntegrationSqlExecuteRequest, db: Session =
 # 统一对象取数接口（第一阶段，按 source_mode 分发三引擎）
 # --------------------------------------------------------------------------- #
 
+
+
+# --------------------------------------------------------------------------- #
+# C1（三轨M1）：物理表取数 SQL 构造——值参数化 + 表/列标识符白名单
+# ---------------------------------------------------------------------------
+
+_SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def validate_sql_identifier(name: str) -> str:
+    """SQL 标识符白名单校验（表名/列名共用）：^[A-Za-z_][A-Za-z0-9_]*$，非法即 400。"""
+    if not isinstance(name, str) or not _SQL_IDENTIFIER_RE.match(name):
+        raise HTTPException(status_code=400, detail=f"非法 SQL 标识符: {str(name)[:60]}")
+    return name
+
+
+def build_biz_table_sql(table: str, filters, limit: int = 500):
+    """物理表取数 SQL 构造（C1 修复——替代 f-string 拼接）。
+
+    表名与 filters 键走 validate_sql_identifier 白名单；filters 值一律绑定参数
+    （防单引号逃逸/`;` 叠加语句；dict/list/None 此前会把 Python repr 拼进 SQL，
+    现改为 400 拒收）。返回 (sql, params)。
+    """
+    table = validate_sql_identifier(table)
+    clauses = []
+    params: dict = {}
+    for i, (k, v) in enumerate((filters or {}).items()):
+        col = validate_sql_identifier(str(k))
+        if v is None or isinstance(v, (dict, list, tuple, set)):
+            raise HTTPException(status_code=400, detail=f"filters[{k}] 值类型不支持")
+        params[f"p{i}"] = v
+        clauses.append(f'"{col}" = :p{i}')
+    sql = f'SELECT * FROM "{table}"'
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += f" LIMIT {int(limit)}"
+    return sql, params
+
+
 class EntityDataRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = None
 
@@ -477,15 +518,12 @@ def get_entity_data(entity_code: str, payload: EntityDataRequest, db: Session = 
         # 实体业务数据已迁 PG，走业务引擎（DataSourceConfig 默认源，db_type=postgresql）
         from app.services.sql_executor import _get_biz_engine
         table = ent.entity_en_name or entity_code
-        sql = f'SELECT * FROM "{table}"'
-        if filters:
-            where = " AND ".join(f'"{k}"=\'{v}\'' for k, v in filters.items())
-            sql += f" WHERE {where}"
-        sql += " LIMIT 500"
+        # C1（三轨M1）：值参数化+标识符白名单（原 f-string 拼接存在注入面）
+        sql, bind_params = build_biz_table_sql(table, filters, limit=500)
         try:
             _eng = _get_biz_engine()
             with _eng.connect() as _conn:
-                rows = _conn.execute(text(sql)).mappings().all()
+                rows = _conn.execute(text(sql), bind_params).mappings().all()
             columns = list(rows[0].keys()) if rows else []
             result = {"columns": columns, "rows": [[(v.isoformat() if hasattr(v, 'isoformat') else v) for v in r.values()] for r in rows], "row_count": len(rows)}
         except Exception as e:
@@ -543,7 +581,8 @@ def preview_entity_data(entity_id: str, limit: int = 20, db: Session = Depends(g
     try:
         if source_mode == "physical_table":
             # PostgreSQL: SELECT * FROM "table" LIMIT n
-            sql = f'SELECT * FROM "{table}" LIMIT {limit}'
+            # C1（三轨M1）：表名白名单校验（DB 字段二次注入面）
+            sql, _prev_params = build_biz_table_sql(table, None, limit=limit)
             eng = _get_biz_engine()
             with eng.connect() as conn:
                 rows = conn.execute(text(sql)).mappings().all()

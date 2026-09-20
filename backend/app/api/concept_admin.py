@@ -151,7 +151,8 @@ def export_graph_to_excel(mode: Optional[str] = None, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 
-def _clear_graph_data(db: Session, mode: Optional[str] = None) -> Dict[str, int]:
+def _clear_graph_data(db: Session, mode: Optional[str] = None, auto_commit: bool = True) -> Dict[str, int]:
+    """C3（三轨M1）：auto_commit=False 时清空不提交——供 clear+import 同事务原子化。"""
     """清空图谱结构数据。指定 mode 时仅清空当前模式（master=L1/L2, activity=L0/L3/L4），否则清全部。
     MySQL InnoDB 外键为 RESTRICT，必须子先父后删除；概念自引用按层级深度优先（深层先删）。
     返回已删除的 concept/entity 计数。
@@ -214,7 +215,8 @@ def _clear_graph_data(db: Session, mode: Optional[str] = None) -> Dict[str, int]
         for lv in level_order:
             deleted_concepts += db.query(Concept).filter(Concept.level == lv).delete(synchronize_session=False)
 
-    db.commit()
+    if auto_commit:
+        db.commit()
     deleted_entities = len(scope_entity_ids) if scope_entity_ids is not None else 'all'
     return {"concepts": deleted_concepts, "entities": deleted_entities}
 
@@ -285,11 +287,15 @@ async def import_graph_from_excel(mode: Optional[str] = None, clear: bool = Fals
     """导入图谱结构数据；指定模式时仅影响当前模式的分类、实体、属性。
     clear=True 时先清空当前模式数据再导入（清空重导入）。
     """
+    contents = await file.read()
+    # C3（三轨M1）：文件读取与解析校验先于清空——损坏文件在触碰图谱数据前即被拒
+    try:
+        excel_data = pd.read_excel(io.BytesIO(contents), sheet_name=None)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"文件解析失败: {type(e).__name__}")
     try:
         if clear:
-            _clear_graph_data(db, mode)
-        contents = await file.read()
-        excel_data = pd.read_excel(io.BytesIO(contents), sheet_name=None)
+            _clear_graph_data(db, mode, auto_commit=False)
         # 导入计数（供前端反馈，避免"0 行也显示成功"的静默失败）
         counts = {"concepts": 0, "entities": 0, "entities_skipped": 0, "attributes": 0, "relations": 0}
 
@@ -344,7 +350,7 @@ async def import_graph_from_excel(mode: Optional[str] = None, clear: bool = Fals
                     )
                     db.add(new_concept)
                     db.flush()  # autoflush=False：显式刷新，使后续 L2/L4 的父级查找能查到本轮新建的父概念
-            db.commit()
+            db.flush()  # C3：阶段内只 flush，统一提交
 
         # 2. 导入实体
         if '实体清单' in excel_data:
@@ -404,7 +410,7 @@ async def import_graph_from_excel(mode: Optional[str] = None, clear: bool = Fals
                 entity = db.query(Entity).filter(Entity.id == entity_id).first()
                 if entity:
                     _update_entity_concept_links(db, str(entity.id), [str(entity.concept_id)], mode=mode)
-            db.commit()
+            db.flush()  # C3：阶段内只 flush，统一提交
 
         # 3. 导入实体属性
         if '实体属性' in excel_data:
@@ -426,7 +432,7 @@ async def import_graph_from_excel(mode: Optional[str] = None, clear: bool = Fals
                     })
                 entity.properties_schema = new_props
                 counts["attributes"] += len(new_props)
-            db.commit()
+            db.flush()  # C3：阶段内只 flush，统一提交
 
         # 4. 导入实体关系
         # 模式导入下不处理关系，避免跨主数据/业务活动互相污染。
@@ -475,12 +481,13 @@ async def import_graph_from_excel(mode: Optional[str] = None, clear: bool = Fals
                 else:
                     db.add(EntityRelation(**rel_data))
                 counts["relations"] += 1
-            db.commit()
+            db.flush()  # C3：阶段内只 flush，统一提交
 
         # clear+import 会重建实体（uuid 变更），按 entity_code 重链建模表/初始化数据/映射规则，避免断链
         if clear:
             _relink_entity_dependencies(db)
 
+        db.commit()  # C3（三轨M1）：全部阶段成功后统一提交——任一阶段失败走 rollback 零残留
         total = counts["concepts"] + counts["entities"] + counts["attributes"] + counts["relations"]
         # 模式不匹配判定：文件里有实体但全部找不到所属概念（概念/实体均为 0）
         mode_mismatch = counts["entities"] == 0 and counts["entities_skipped"] > 0

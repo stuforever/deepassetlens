@@ -670,15 +670,22 @@ def test_sync_neo4j_all_trigger_returns_m05_stats(monkeypatch):
 
     fake_session = _fake_sync_session()
     monkeypatch.setattr("app.services.graph_query_neo4j.sync_all_to_neo4j", _fake_sync)
+    # M1 起：重建类端点挂管理员门——直呼形态补 admin 桩（契约=非 admin 403）
+    class _AdminU:
+        sub = "m06"
+        def is_admin(self):
+            return True
+    monkeypatch.setattr(data_sync, "get_current_user", lambda request: _AdminU())
+
     monkeypatch.setattr(data_sync, "SessionLocal", lambda: fake_session)
-    res = data_sync.sync_neo4j_all(force=True)
+    res = data_sync.sync_neo4j_all(force=True, request=object())
     assert res == {"ok": True, "concepts_synced": 3, "entities_synced": 2,
                    "total_nodes": 9, "total_relations": 12}   # M05 统计原样返回
     assert len(calls) == 1
     assert calls[0]["force"] is True and calls[0]["db"] is fake_session
     assert fake_session.closed is True
     # force=False 透传
-    res2 = data_sync.sync_neo4j_all(force=False)
+    res2 = data_sync.sync_neo4j_all(force=False, request=object())
     assert res2["ok"] is True and calls[1]["force"] is False
 
 
@@ -712,11 +719,18 @@ def test_vector_triggers_and_stats_same_service(monkeypatch):
     monkeypatch.setattr(eavs, "sync_attribute_vectors", _fake_attr_sync)
     monkeypatch.setattr(eavs, "get_entity_vector_stats", _fake_entity_stats)
     monkeypatch.setattr(eavs, "get_attribute_vector_stats", _fake_attr_stats)
+    # M1 起：重建类端点挂管理员门——直呼形态补 admin 桩（契约=非 admin 403）
+    class _AdminU:
+        sub = "m06"
+        def is_admin(self):
+            return True
+    monkeypatch.setattr(data_sync, "get_current_user", lambda request: _AdminU())
+
     monkeypatch.setattr(data_sync, "SessionLocal", lambda: fake_session)
 
-    r1 = data_sync.sync_entity_vectors_api(force=True)
+    r1 = data_sync.sync_entity_vectors_api(force=True, request=object())
     assert r1 == {"code": 200, "synced_entities": 5, "force": True}
-    r2 = data_sync.sync_attribute_vectors_api(force=False)
+    r2 = data_sync.sync_attribute_vectors_api(force=False, request=object())
     assert r2 == {"code": 200, "synced_attributes": 7, "force": False}
     assert fake_session.closed is True
     # 触发与 stats 同源：触发参数状态在 stats 读数中一致可见
