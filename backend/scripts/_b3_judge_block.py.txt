@@ -1,0 +1,72 @@
+_JUDGE_ZH_SYSTEM = (
+    "你是批改测验作答的助教：严谨、具体、对学习者友好。基于题目、参考答案与解析，"
+    "对学习者的作答给出针对性判定与反馈。\n"
+    "输出格式：\n"
+    "1) 第一行给判定结论——✅ 正确 / ⚠️ 部分正确 / ❌ 不正确——并附一句关键依据；\n"
+    "2) 接着分条说明：作答中正确的部分、错误或遗漏的部分、应当如何修正；\n"
+    "3) 若该题存在多种合理答案，须承认学习者作答里的合理成分；\n"
+    "4) 点评必须紧扣学习者提交的内容本身，不得空泛。\n"
+    "5) 使用中文。"
+)
+_JUDGE_EN_SYSTEM = (
+    "You grade quiz submissions as a teaching assistant: rigorous, specific, and "
+    "encouraging. Use the question, reference answer, and explanation to assess the "
+    "learner's answer.\n"
+    "Output format:\n"
+    "1) First line: the verdict — ✅ Correct / ⚠️ Partially correct / ❌ Incorrect — plus "
+    "one sentence with the key reason;\n"
+    "2) Then itemize: what was right, what was wrong or missing, and how to fix it;\n"
+    "3) If multiple reasonable answers exist, acknowledge the valid parts of the submission;\n"
+    "4) Address the learner's actual submission — never generic;\n"
+    "5) Reply in English."
+)
+
+
+def _judge_user_prompt(*, language: str, question: str, question_type: str,
+                       options, correct_answer: str, explanation: str,
+                       user_answer: str, has_image: bool, image_count: int = 0) -> str:
+    """判分 user prompt（自研拼装——字段面与措辞自主定义）。"""
+    zh = language != "en"
+    NL = chr(10)
+    opt_lines = ""
+    if options:
+        try:
+            opt_lines = NL.join(f"  {k}. {v}" for k, v in options.items())
+        except Exception:
+            opt_lines = ""
+    parts = [(f"题目类型：{question_type or 'unknown'}" if zh
+              else f"Question type: {question_type or 'unknown'}"),
+             (f"题干：{NL}{question}" if zh else f"Question:{NL}{question}")]
+    if opt_lines:
+        parts.append((f"选项：{NL}" if zh else f"Options:{NL}") + opt_lines)
+    if correct_answer:
+        parts.append((f"参考答案：{NL}" if zh else f"Reference answer:{NL}") + correct_answer)
+    if explanation:
+        parts.append((f"参考解析：{NL}" if zh else f"Reference explanation:{NL}") + explanation)
+    empty_note = "（未提供文字作答）" if zh else "(no typed answer provided)"
+    parts.append((f"学习者作答：{NL}" if zh else f"Learner's answer:{NL}")
+                 + (user_answer.strip() if user_answer and user_answer.strip() else empty_note))
+    if has_image:
+        note = (f"学习者另附了 {image_count} 张图片，请结合图片内容一并判定。"
+                if zh else
+                f"The learner attached {image_count} image(s); grade with the image content in mind.")
+        parts.append(note)
+    parts.append("请给出针对该作答的判定与反馈。" if zh else "Provide the verdict and feedback for this submission.")
+    return NL.join(parts)
+
+
+async def _judge_multimodal_content(*, text: str, image_records: list) -> list:
+    """判分多模态 content 组装（自研）：base64→data_url；http(s) 直传；
+    本地 /api/attachments 路径批14 平台附件面落地前不做字节回源（如实降级为 URL 直传）。"""
+    content: list = [{"type": "text", "text": text}]
+    for rec in image_records:
+        b64 = rec.get("base64") or ""
+        url = rec.get("url") or ""
+        mime = rec.get("mime_type") or "image/png"
+        if b64:
+            content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
+        elif url:
+            content.append({"type": "image_url", "image_url": {"url": url}})
+    return content
+
+

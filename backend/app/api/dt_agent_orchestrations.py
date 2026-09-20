@@ -56,6 +56,83 @@ def _evt(type_, source, stage, content="", metadata=None, session_id=None,
             "seq": seq, "timestamp": time.time()}
 
 
+# ---------------------------------------------------------------------------
+# v4批3 3.1：判分自研（E-24① 收口）——评分提示词与多模态构造均为平台自撰实现
+# （语义规格=判定首行结论+分条反馈+多解承认+针对作答；行为以批0 黑盒基线重放对拍，
+# 容差±5+理由语义等价）。vendor quiz_judge 导入清零，物理文件随批16 树删。
+# ---------------------------------------------------------------------------
+_JUDGE_ZH_SYSTEM = (
+    "你是批改测验作答的助教：严谨、具体、对学习者友好。基于题目、参考答案与解析，"
+    "对学习者的作答给出针对性判定与反馈。\n"
+    "输出格式：\n"
+    "1) 第一行给判定结论——✅ 正确 / ⚠️ 部分正确 / ❌ 不正确——并附一句关键依据；\n"
+    "2) 接着分条说明：作答中正确的部分、错误或遗漏的部分、应当如何修正；\n"
+    "3) 若该题存在多种合理答案，须承认学习者作答里的合理成分；\n"
+    "4) 点评必须紧扣学习者提交的内容本身，不得空泛。\n"
+    "5) 使用中文。"
+)
+_JUDGE_EN_SYSTEM = (
+    "You grade quiz submissions as a teaching assistant: rigorous, specific, and "
+    "encouraging. Use the question, reference answer, and explanation to assess the "
+    "learner's answer.\n"
+    "Output format:\n"
+    "1) First line: the verdict — ✅ Correct / ⚠️ Partially correct / ❌ Incorrect — plus "
+    "one sentence with the key reason;\n"
+    "2) Then itemize: what was right, what was wrong or missing, and how to fix it;\n"
+    "3) If multiple reasonable answers exist, acknowledge the valid parts of the submission;\n"
+    "4) Address the learner's actual submission — never generic;\n"
+    "5) Reply in English."
+)
+
+
+def _judge_user_prompt(*, language: str, question: str, question_type: str,
+                       options, correct_answer: str, explanation: str,
+                       user_answer: str, has_image: bool, image_count: int = 0) -> str:
+    """判分 user prompt（自研拼装——字段面与措辞自主定义）。"""
+    zh = language != "en"
+    NL = chr(10)
+    opt_lines = ""
+    if options:
+        try:
+            opt_lines = NL.join(f"  {k}. {v}" for k, v in options.items())
+        except Exception:
+            opt_lines = ""
+    parts = [(f"题目类型：{question_type or 'unknown'}" if zh
+              else f"Question type: {question_type or 'unknown'}"),
+             (f"题干：{NL}{question}" if zh else f"Question:{NL}{question}")]
+    if opt_lines:
+        parts.append((f"选项：{NL}" if zh else f"Options:{NL}") + opt_lines)
+    if correct_answer:
+        parts.append((f"参考答案：{NL}" if zh else f"Reference answer:{NL}") + correct_answer)
+    if explanation:
+        parts.append((f"参考解析：{NL}" if zh else f"Reference explanation:{NL}") + explanation)
+    empty_note = "（未提供文字作答）" if zh else "(no typed answer provided)"
+    parts.append((f"学习者作答：{NL}" if zh else f"Learner's answer:{NL}")
+                 + (user_answer.strip() if user_answer and user_answer.strip() else empty_note))
+    if has_image:
+        note = (f"学习者另附了 {image_count} 张图片，请结合图片内容一并判定。"
+                if zh else
+                f"The learner attached {image_count} image(s); grade with the image content in mind.")
+        parts.append(note)
+    parts.append("请给出针对该作答的判定与反馈。" if zh else "Provide the verdict and feedback for this submission.")
+    return NL.join(parts)
+
+
+async def _judge_multimodal_content(*, text: str, image_records: list) -> list:
+    """判分多模态 content 组装（自研）：base64→data_url；http(s) 直传；
+    本地 /api/attachments 路径批14 平台附件面落地前不做字节回源（如实降级为 URL 直传）。"""
+    content: list = [{"type": "text", "text": text}]
+    for rec in image_records:
+        b64 = rec.get("base64") or ""
+        url = rec.get("url") or ""
+        mime = rec.get("mime_type") or "image/png"
+        if b64:
+            content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
+        elif url:
+            content.append({"type": "image_url", "image_url": {"url": url}})
+    return content
+
+
 async def dispatch(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
     """按 skill_code 派发到编排实现（批1 chat+批3 三件+批4 三件）。"""
     code = req.skill_code
@@ -160,7 +237,7 @@ def user_prefix_of(req) -> str:
 
 
 async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
-                        *, on_first_content=None) -> AsyncGenerator[Dict[str, Any], None]:
+                        *, on_first_content=None, stage_label: str = "answer") -> AsyncGenerator[Dict[str, Any], None]:
     """共享 agent 流循环（批1 run_chat 主体抽取——事件翻译表逐帧同型）。"""
     from app.services.tupu_deepagent import get_tupu_agent
     agent = await get_tupu_agent(connection_id="", expert_id=EXPERT_ID)
@@ -204,7 +281,7 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
                         fa_args_acc.append(str(tcc_args))
                 reasoning = (getattr(chunk, "additional_kwargs", {}) or {}).get("reasoning_content")
                 if reasoning:
-                    yield _evt("thinking", "agent", "answer", content=reasoning,
+                    yield _evt("thinking", "agent", stage_label, content=reasoning,
                                session_id=session_id, turn_id=turn_id)
                     continue
                 c = getattr(chunk, "content", "")
@@ -215,7 +292,7 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
                         if on_first_content is not None:
                             for close_ev in on_first_content():
                                 yield close_ev
-                    yield _evt("content", "agent", "answer", content=c,
+                    yield _evt("content", "agent", stage_label, content=c,
                                session_id=session_id, turn_id=turn_id)
                 continue
 
@@ -236,7 +313,7 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
                     if fa and not content_acc:
                         for i in range(0, len(fa), 64):
                             content_acc.append(fa[i:i + 64])
-                            yield _evt("content", "agent", "answer", content=fa[i:i + 64],
+                            yield _evt("content", "agent", stage_label, content=fa[i:i + 64],
                                        session_id=session_id, turn_id=turn_id)
                     elif fa:
                         tail = "".join(content_acc)
@@ -284,7 +361,7 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
             fa = "".join(fa_args_acc)
         if fa.strip():
             for i in range(0, len(fa), 64):
-                yield _evt("content", "agent", "answer", content=fa[i:i + 64],
+                yield _evt("content", "agent", stage_label, content=fa[i:i + 64],
                            session_id=session_id, turn_id=turn_id)
             final_content = fa.strip()
     if not final_content:
@@ -299,7 +376,7 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
                 fa = str(sr)
             if fa.strip():
                 for i in range(0, len(fa), 64):
-                    yield _evt("content", "agent", "answer", content=fa[i:i + 64],
+                    yield _evt("content", "agent", stage_label, content=fa[i:i + 64],
                                session_id=session_id, turn_id=turn_id)
                 final_content = fa.strip()
         except Exception as e:
@@ -641,6 +718,7 @@ async def run_quiz(req, session_id: str, turn_id: str, user_prefix: str) -> Asyn
     req._user_prefix = user_prefix
     cfg = _cfg(req)
     action = str(cfg.get("action") or "generate")
+    kb_block_q = ref_block_q = ""
     gen = _prepare(req, session_id, turn_id)
     while True:
         try:
@@ -648,19 +726,17 @@ async def run_quiz(req, session_id: str, turn_id: str, user_prefix: str) -> Asyn
         except StopAsyncIteration:
             break
         if isinstance(ev, tuple):
+            kb_block_q, ref_block_q, _ = ev
             break
         yield ev
 
     if action == "judge":
-        # 判题分支（E-24②）：vendor quiz_judge 语义吸收——题面/作答/图片→回分帧。
+        # 判题分支（v4批3 3.1：自研评分提示词——vendor quiz_judge 导入清零，黑盒重放对拍）。
         yield _evt("stage_start", "bridge", "judge", content="AI 判分中",
                    session_id=session_id, turn_id=turn_id)
-        from app.vendor.deeptutor.api.routers.quiz_judge import (
-            _JUDGE_SYSTEM_PROMPTS, _build_judge_user_prompt,
-        )
         lang = str(cfg.get("language") or "zh")
         has_image = bool(cfg.get("user_answer_images"))
-        user_prompt = _build_judge_user_prompt(
+        user_prompt = _judge_user_prompt(
             language=lang,
             question=str(cfg.get("question") or req.message or ""),
             question_type=str(cfg.get("question_type") or ""),
@@ -672,13 +748,12 @@ async def run_quiz(req, session_id: str, turn_id: str, user_prefix: str) -> Asyn
         )
         acc: List[str] = []
         try:
-            system_prompt = _JUDGE_SYSTEM_PROMPTS.get(lang, _JUDGE_SYSTEM_PROMPTS["zh"])
+            system_prompt = _JUDGE_EN_SYSTEM if lang == "en" else _JUDGE_ZH_SYSTEM
             from app.services.llm_client import get_chat_model
             model = get_chat_model(temperature=0.1, streaming=True)
             user_msg: Dict[str, Any] = {"role": "user", "content": user_prompt}
             if has_image:
-                from app.vendor.deeptutor.api.routers.quiz_judge import _build_multimodal_user_content
-                parts = await _build_multimodal_user_content(
+                parts = await _judge_multimodal_content(
                     text=user_prompt,
                     image_records=[img for img in (cfg.get("user_answer_images") or [])
                                    if isinstance(img, dict)])
@@ -750,23 +825,26 @@ async def run_quiz(req, session_id: str, turn_id: str, user_prefix: str) -> Asyn
 
     yield _evt("stage_start", "bridge", "generate", content="结构化出题中",
                session_id=session_id, turn_id=turn_id)
-    quiz_system = (
-        "你是出题引擎。按配置与素材生成结构化试卷，返回 JSON：\n"
+    quiz_directive = (
+        "[quiz 模式]\n你是出题引擎。按配置与素材生成结构化试卷，返回 JSON：\n"
         "{\"questions\": [{\"question\": \"题干\", \"question_type\": \"multiple_choice|fill_blank|short_answer|math_proof\", "
         "\"options\": {\"A\": \"...\", \"B\": \"...\"} 或 null, \"correct_answer\": \"正确答案\", "
         "\"explanation\": \"解析\", \"difficulty\": \"基础|提高|挑战\"}]}\n"
-        "只输出 JSON。题目必须与配置/素材语义一致，不出超纲题。")
-    quiz_user = (plan_note + (f"[mimic 源试卷]\n{mimic_text[:6000]}\n\n" if mimic_text else "")
+        "只输出 JSON。题目必须与配置/素材语义一致，不出超纲题。\n\n")
+    parts: List[str] = []
+    if kb_block_q:
+        parts.append(kb_block_q + "\n\n")
+    if ref_block_q:
+        parts.append(ref_block_q)
+    parts.append(quiz_directive + plan_note
+                 + (f"[mimic 源试卷]\n{mimic_text[:6000]}\n\n" if mimic_text else "")
                  + (req.message or "按配置出题"))
     acc = []
     try:
-        model = _llm_stream_text(quiz_system, quiz_user, temperature=0.3)
-        async for chunk in model:
-            c = getattr(chunk, "content", "")
-            if isinstance(c, str) and c:
-                acc.append(c)
-                yield _evt("content", "agent", "generate", content=c,
-                           session_id=session_id, turn_id=turn_id)
+        async for ev in _agent_stream(req, session_id, turn_id, parts, stage_label="generate"):
+            if ev.get("type") == "content":
+                acc.append(ev.get("content", ""))
+            yield ev
     except Exception as e:
         logger.exception("[bridge] quiz 出题失败")
         yield _evt("error", "agent", "generate", content=str(e),
@@ -926,6 +1004,16 @@ _RESEARCH_SYSTEM_MERGE = (
     "你是研究汇总者。把各节正文合并为一篇结构化研究报告（Markdown：标题+导语+各节+结论），不改写事实。")
 
 
+async def _agent_text(req, session_id: str, turn_id: str, parts: List[str]) -> str:
+    """v4批3 3.2：research 相位换芯助手——agent 循环静默采集（outline/section/merge
+    原本即静默直驱，帧序不变；agent 循环=平台唯一引擎裁定，§2.1）。"""
+    acc: List[str] = []
+    async for ev in _agent_stream(req, session_id, turn_id, parts):
+        if ev.get("type") == "content":
+            acc.append(ev.get("content", ""))
+    return "".join(acc)
+
+
 async def run_research(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
     """research 编排（批4）：大纲→分节生成（逐节 progress 事件）→汇总。
     DT 子代理编排语义吸收为分节独立生成+进度事件（E-24③：进程内顺序分节，
@@ -951,13 +1039,11 @@ async def run_research(req, session_id: str, turn_id: str, user_prefix: str) -> 
                session_id=session_id, turn_id=turn_id)
     outline: Dict[str, Any] = {}
     try:
-        from app.services.llm_client import get_chat_model
-        resp = get_chat_model(temperature=0.2).invoke([
-            {"role": "system", "content": _RESEARCH_SYSTEM_OUTLINE},
-            {"role": "user", "content": f"主题：{topic}\nmode={mode} depth={depth}\n" +
-                                        (f"\n[知识库素材]\n{kb_block}" if kb_block else "")}])
-        txt = str(resp.content)
-        outline = json.loads(txt[txt.find("{"):txt.rfind("}") + 1])
+        outline_raw = await _agent_text(req, session_id, turn_id, [
+            _RESEARCH_SYSTEM_OUTLINE,
+            f"主题：{topic}\nmode={mode} depth={depth}\n" +
+            (f"\n[知识库素材]\n{kb_block}" if kb_block else "")])
+        outline = json.loads(outline_raw[outline_raw.find("{"):outline_raw.rfind("}") + 1])
     except Exception as e:
         logger.exception("[bridge] research 大纲失败")
         yield _evt("error", "agent", "outline", content=str(e),
@@ -980,14 +1066,11 @@ async def run_research(req, session_id: str, turn_id: str, user_prefix: str) -> 
                    session_id=session_id, turn_id=turn_id)
         sec_acc: List[str] = []
         try:
-            model = _llm_stream_text(_RESEARCH_SYSTEM_SECTION,
-                                     f"主题：{outline.get('title', topic)}\n"
-                                     f"小节：{sec.get('heading')}\n要点：{json.dumps(sec.get('points') or [], ensure_ascii=False)}",
-                                     temperature=0.3)
-            async for chunk in model:
-                c = getattr(chunk, "content", "")
-                if isinstance(c, str) and c:
-                    sec_acc.append(c)
+            sec_text = await _agent_text(req, session_id, turn_id, [
+                _RESEARCH_SYSTEM_SECTION,
+                f"主题：{outline.get('title', topic)}\n"
+                f"小节：{sec.get('heading')}\n要点：{json.dumps(sec.get('points') or [], ensure_ascii=False)}"])
+            sec_acc.append(sec_text)
         except Exception as e:
             logger.warning(f"[bridge] research 第{i + 1}节失败: {e}")
         section_texts.append("## " + str(sec.get("heading")) + "\n\n" + "".join(sec_acc).strip())
@@ -995,11 +1078,9 @@ async def run_research(req, session_id: str, turn_id: str, user_prefix: str) -> 
     yield _evt("stage_start", "bridge", "merge", content="汇总成文",
                session_id=session_id, turn_id=turn_id)
     try:
-        from app.services.llm_client import get_chat_model
-        resp = get_chat_model(temperature=0.2).invoke([
-            {"role": "system", "content": _RESEARCH_SYSTEM_MERGE},
-            {"role": "user", "content": f"标题：{outline.get('title', topic)}\n\n" + "\n\n".join(section_texts)}])
-        merged = str(resp.content).strip()
+        merged = (await _agent_text(req, session_id, turn_id, [
+            _RESEARCH_SYSTEM_MERGE,
+            f"标题：{outline.get('title', topic)}\n\n" + "\n\n".join(section_texts)])).strip()
     except Exception as e:
         merged = "\n\n".join(section_texts)
         logger.warning(f"[bridge] research 汇总降级直拼: {e}")

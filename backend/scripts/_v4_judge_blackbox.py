@@ -95,10 +95,14 @@ SAMPLES = [
 ]
 
 
+mode_global = {"phase": "pre"}
+
+
 def judge_one(sample: dict) -> dict:
     """经桥跑一条判分样本，返回 {sample, result_text, done_ok, elapsed_s}。"""
+    skill = "sishu/quiz" if mode_global["phase"] == "post" else "tutor/quiz"
     body = {
-        "skill_code": "tutor/quiz",
+        "skill_code": skill,
         "action": "judge",
         "session_id": None,
         "message": sample.get("question") or "(题面为空)",
@@ -142,7 +146,8 @@ def judge_one(sample: dict) -> dict:
             "done_ok": done_ok, "elapsed_s": round(time.time() - t0, 1)}
 
 
-def record() -> None:
+def record(out_path: Path, phase: str) -> None:
+    mode_global["phase"] = phase
     outs = []
     for i, s in enumerate(SAMPLES, 1):
         r = judge_one(s)
@@ -153,14 +158,15 @@ def record() -> None:
                                "bridge_skill": "tutor/quiz", "action": "judge",
                                "tolerance": TOLERANCE, "samples": outs},
                               ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"saved {len(outs)} samples -> {OUT}")
+    print(f"saved {len(outs)} samples -> {out_path}")
 
 
 def replay() -> None:
+    """批3 重放：批0 基线（pre）vs 批3 重写态（post，skill=sishu/quiz）逐例并排 diff。"""
     base = json.loads(OUT.read_text(encoding="utf-8"))
+    mode_global["phase"] = "post"
     diffs, misses = [], []
-    for s in base["samples"]:
-        orig = s
+    for orig in base["samples"]:
         sample = {"id": orig["id"], "kind": orig["kind"], "question_type": orig["question_type"],
                   **orig["request"],
                   "user_answer_images": [{"base64": TINY_PNG}] if orig.get("has_image") else None}
@@ -179,7 +185,9 @@ def replay() -> None:
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "record"
     if mode == "record":
-        record()
+        record(OUT, "pre")
+    elif mode == "record-post":
+        record(OUT.parent / "judge_blackbox_v4b3.json", "post")
     elif mode == "replay":
         replay()
     else:
