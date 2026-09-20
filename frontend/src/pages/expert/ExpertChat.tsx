@@ -12,6 +12,7 @@ import { Button, Drawer, Input, Popconfirm, Select, Space, Spin, Typography, mes
 import {
   ApiOutlined, ApartmentOutlined, ArrowDownOutlined, BookOutlined, ClearOutlined,
   DatabaseOutlined, ExperimentOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
+  RocketOutlined, EditOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import ConversationMessageList from '../../components/conversation/ConversationMessageList';
 import { DATA_INTELLIGENCE_SCENE_CONFIG } from '../../components/conversation/sceneConfigs';
@@ -27,7 +28,7 @@ import type { ChatMessage, ChatMessagePayload } from '../../components/conversat
 import { thinkReducer, decisionCommittedReducer } from '../../utils/thinkStreamReducer';
 import { buildFinalDeliveryView, resolveFinalAnswer } from '../../utils/finalDelivery';
 import RouteSimulator from '../../components/conversation/contractCards/RouteSimulator';
-import { tokens } from '../../theme/tokens';
+import { tokens, spaceColors } from '../../theme/tokens';
 
 const { Text } = Typography;
 
@@ -1223,7 +1224,40 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
             {inputCard}
           </div>
 
-          {/* 2×2 建议卡（带图标，hover 抬升 S2；规格 maxWidth 720） */}
+          {/* 三轨M7(U2) §3.3：sishu 空间首页宫格——7 功能入口下沉，首条消息发出后随欢迎页退场 */}
+          {slug === 'sishu' && (
+            <div
+              data-testid="sishu-space-grid"
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, width: '100%', maxWidth: 720 }}
+            >
+              {[
+                { label: '书籍', path: '/e/sishu/book', icon: <BookOutlined /> },
+                { label: '自主学习', path: '/e/sishu/self-learning', icon: <RocketOutlined /> },
+                { label: 'AI写作', path: '/e/sishu/co-writer', icon: <EditOutlined /> },
+                { label: '伙伴/推送', path: '/e/sishu/partners', icon: <TeamOutlined /> },
+                { label: '母题库', path: '/e/sishu/admin/mother-questions', icon: <BookOutlined /> },
+                { label: '书源', path: '/e/sishu/admin/book', icon: <DatabaseOutlined /> },
+                { label: '教学设置', path: '/e/sishu/admin/settings', icon: <SettingOutlined /> },
+              ].map((e) => (
+                <div
+                  key={e.label}
+                  data-testid={`sishu-grid-${e.label}`}
+                  onClick={() => navigate(e.path)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                    padding: '14px 8px', borderRadius: tokens.radius.card,
+                    background: 'var(--bg-content)', border: `1px solid ${tokens.colors.border}`,
+                    cursor: 'pointer', boxShadow: tokens.elevation.s1,
+                  }}
+                >
+                  <span style={{ fontSize: 18, color: spaceColors.sishu }}>{e.icon}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{e.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {slug !== 'sishu' && (
+          /* 2×2 建议卡（带图标，hover 抬升 S2；规格 maxWidth 720） */
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: 720 }}>
             {SUGGESTIONS.map((item, i) => (
               <div
@@ -1248,6 +1282,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
     </div>
