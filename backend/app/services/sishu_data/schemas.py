@@ -70,6 +70,43 @@ _LEARNING = [
       UNIQUE (user_id, chapter_id))""",
 ]
 
+# 母题域（v4批6：vendor mother_questions JSON store 184 题迁移——与 learning_* 窄表
+# sishu_mother_questions（批2 改名，错题联动）异实体同名，族名 sishu_mq_* 避撞（E-60））
+_MOTHER = [
+    """CREATE TABLE IF NOT EXISTS sishu_mq_docs (
+      mq_id VARCHAR(64) PRIMARY KEY,
+      doc JSONB NOT NULL,                      -- vendor MotherQuestion 全字段（形状冻结 index.json）
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      subject VARCHAR(32),
+      grade VARCHAR(32),
+      knowledge_point_id VARCHAR(128),
+      mastery_status VARCHAR(32),
+      simhash VARCHAR(64),
+      update_time BIGINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now())""",
+    """CREATE TABLE IF NOT EXISTS sishu_question_variants (
+      vq_id VARCHAR(64) PRIMARY KEY,
+      mother_id VARCHAR(64) NOT NULL,
+      doc JSONB NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      update_time BIGINT)""",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_status ON sishu_mq_docs (status)",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_kp ON sishu_mq_docs (knowledge_point_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_vq_mother ON sishu_question_variants (mother_id)",
+    # 复习状态/标签/attempt（vendor rs/tags/att JSON 文件迁移）
+    """CREATE TABLE IF NOT EXISTS sishu_mq_review_state (
+      mq_id VARCHAR(64) PRIMARY KEY,
+      doc JSONB NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS sishu_mq_tags (
+      name VARCHAR(64) PRIMARY KEY,
+      color VARCHAR(16),
+      doc JSONB NOT NULL DEFAULT '{}'::jsonb)""",
+    """CREATE TABLE IF NOT EXISTS sishu_mq_attempts (
+      attempt_id VARCHAR(64) PRIMARY KEY,
+      mother_id VARCHAR(64),
+      doc JSONB NOT NULL)""",
+]
+
 # 笔记族（chat_history.db notebook 三表批6 迁移；typed 列面迁移时扩）
 _NOTEBOOK = [
     """CREATE TABLE IF NOT EXISTS sishu_notebook_entries (
@@ -260,7 +297,7 @@ _INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_sishu_curriculum_assets_dom_key ON sishu_curriculum_assets (domain, key)",
 ]
 
-DDL: list[str] = (_LEARNING + _NOTEBOOK + _BOOK + _SESSIONS + _CURRICULUM
+DDL: list[str] = (_LEARNING + _MOTHER + _NOTEBOOK + _BOOK + _SESSIONS + _CURRICULUM
                   + _MISC + _INDEXES)
 
 
