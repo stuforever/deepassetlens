@@ -154,10 +154,11 @@ def record(out_path: Path, phase: str) -> None:
         outs.append(r)
         print(f"[{i}/{len(SAMPLES)}] {r['id']} ok={r['done_ok']} {r['elapsed_s']}s "
               f"result[:60]={r['result_text'][:60]!r}")
-    OUT.write_text(json.dumps({"date": time.strftime("%Y-%m-%d %H:%M"),
-                               "bridge_skill": "tutor/quiz", "action": "judge",
-                               "tolerance": TOLERANCE, "samples": outs},
-                              ensure_ascii=False, indent=1), encoding="utf-8")
+    out_path.write_text(json.dumps({"date": time.strftime("%Y-%m-%d %H:%M"),
+                                    "bridge_skill": "sishu/quiz" if phase == "post" else "tutor/quiz",
+                                    "action": "judge", "phase": phase,
+                                    "tolerance": TOLERANCE, "samples": outs},
+                                   ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"saved {len(outs)} samples -> {out_path}")
 
 

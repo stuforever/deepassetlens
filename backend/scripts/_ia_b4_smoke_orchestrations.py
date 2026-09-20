@@ -42,7 +42,7 @@ def types_of(evs):
 
 
 # ---- quiz TC1 出题 ----
-evs = stream("tutor/quiz", "出两道数据资产选择题", {"question_types": ["multiple_choice"], "questionCount": 2})
+evs = stream("sishu/quiz", "出两道数据资产选择题", {"question_types": ["multiple_choice"], "questionCount": 2})
 t = types_of(evs)
 cards = [e for e in evs if e.get("type") == "question_card"]
 check("quiz TC1 题卡×2", len(cards) == 2, str(t))
@@ -51,7 +51,7 @@ res = [e for e in evs if e.get("type") == "result"]
 check("quiz TC1 result count=2", res and (res[0].get("metadata") or {}).get("count") == 2, str(t[-4:]))
 
 # ---- quiz TC2 判题 ----
-evs = stream("tutor/quiz", "判断我的作答", {
+evs = stream("sishu/quiz", "判断我的作答", {
     "action": "judge", "language": "zh",
     "question": "3+5×2 等于多少？", "question_type": "fill_blank",
     "options": None, "correct_answer": "13", "explanation": "先乘后加",
@@ -63,12 +63,12 @@ check("quiz TC2 判分语义", any(k in judge_txt for k in ["错误", "不正确
 check("quiz TC2 result(action=judge)", any(e.get("type") == "result" and (e.get("metadata") or {}).get("action") == "judge" for e in evs), str(t[-4:]))
 
 # ---- quiz TC3 mimic 负例 ----
-evs = stream("tutor/quiz", "仿制这份试卷", {"action": "mimic"})
+evs = stream("sishu/quiz", "仿制这份试卷", {"action": "mimic"})
 t = types_of(evs)
 check("quiz TC3 无PDF error", "error" in t and "PDF" in "".join(e.get("content", "") for e in evs if e.get("type") == "error"), str(t))
 
 # ---- visualize TC1 svg ----
-evs = stream("tutor/visualize", "画正弦函数曲线示意", {"render_mode": "svg", "quality": "standard"})
+evs = stream("sishu/visualize", "画正弦函数曲线示意", {"render_mode": "svg", "quality": "standard"})
 t = types_of(evs)
 arts = [e for e in evs if e.get("type") == "artifact"]
 svg_art = [a for a in arts if "<svg" in str((a.get("metadata") or {}).get("content", ""))]
@@ -76,7 +76,7 @@ check("visualize TC1 artifact svg", len(svg_art) == 1, f"arts={len(arts)} types=
 check("visualize TC1 done ok", "done" in t and not any(e.get("type") == "error" for e in evs), str(t[-4:]))
 
 # ---- research TC1 全链 ----
-evs = stream("tutor/research", "数据资产管理的研究现状", {"mode": "report", "depth": "standard"})
+evs = stream("sishu/research", "数据资产管理的研究现状", {"mode": "report", "depth": "standard"})
 t = types_of(evs)
 outline = [e for e in evs if e.get("type") == "outline"]
 prog = [e for e in evs if e.get("type") == "progress"]

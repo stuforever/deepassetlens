@@ -842,6 +842,10 @@ async def run_quiz(req, session_id: str, turn_id: str, user_prefix: str) -> Asyn
     acc = []
     try:
         async for ev in _agent_stream(req, session_id, turn_id, parts, stage_label="generate"):
+            # v4批3：抑制 agent 循环自带的 result/done 帧（chat 语义）——本编排末尾自产
+            # 题卡/summary/result/done（帧序=L6 契约）。
+            if ev.get("type") in ("result", "done"):
+                continue
             if ev.get("type") == "content":
                 acc.append(ev.get("content", ""))
             yield ev
@@ -1011,6 +1015,8 @@ async def _agent_text(req, session_id: str, turn_id: str, parts: List[str]) -> s
     async for ev in _agent_stream(req, session_id, turn_id, parts):
         if ev.get("type") == "content":
             acc.append(ev.get("content", ""))
+        elif ev.get("type") == "result" and ev.get("content"):
+            acc.append(ev.get("content", ""))
     return "".join(acc)
 
 
@@ -1043,7 +1049,9 @@ async def run_research(req, session_id: str, turn_id: str, user_prefix: str) -> 
             _RESEARCH_SYSTEM_OUTLINE,
             f"主题：{topic}\nmode={mode} depth={depth}\n" +
             (f"\n[知识库素材]\n{kb_block}" if kb_block else "")])
-        outline = json.loads(outline_raw[outline_raw.find("{"):outline_raw.rfind("}") + 1])
+        # agent 循环输出可能带尾文/多段——raw_decode 取首个完整 JSON 对象
+        _t = outline_raw[outline_raw.find("{"):]
+        outline, _ = json.JSONDecoder().raw_decode(_t)
     except Exception as e:
         logger.exception("[bridge] research 大纲失败")
         yield _evt("error", "agent", "outline", content=str(e),
