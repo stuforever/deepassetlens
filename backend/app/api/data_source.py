@@ -59,6 +59,9 @@ def _to_uuid(val):
         raise HTTPException(status_code=400, detail=f"无效的ID格式: {val}")
 
 
+
+_PASSWORD_MASK = "******"  # 三轨M2/S3：响应统一掩码；掩码值=保持原密码（前端仅填新密码时提交）
+
 @router.get("/data-sources")
 def list_data_sources(db: Session = Depends(get_db)):
     items = db.query(DataSourceConfig).all()
@@ -73,7 +76,7 @@ def list_data_sources(db: Session = Depends(get_db)):
                 "port": i.port,
                 "database": i.database,
                 "username": i.username,
-                "password": i.password,
+                "password": _PASSWORD_MASK,
                 "description": i.description,
                 "is_default": i.is_default,
                 "enabled": i.enabled,
@@ -101,7 +104,7 @@ def get_data_source(ds_id: str, db: Session = Depends(get_db)):
             "port": item.port,
             "database": item.database,
             "username": item.username,
-            "password": item.password,
+            "password": _PASSWORD_MASK,
             "description": item.description,
             "is_default": item.is_default,
             "enabled": item.enabled,
@@ -122,7 +125,7 @@ def create_data_source(payload: DataSourceCreateRequest, db: Session = Depends(g
         port=payload.port or 3306,
         database=payload.database,
         username=payload.username,
-        password=payload.password,
+        password=("" if payload.password == _PASSWORD_MASK else payload.password),
         description=payload.description,
         is_default=payload.is_default or False,
         doris_catalog_name=payload.doris_catalog_name,
@@ -150,6 +153,8 @@ def update_data_source(ds_id: str, payload: DataSourceUpdateRequest, db: Session
         db.query(DataSourceConfig).update({DataSourceConfig.is_default: False})
 
     for field, value in payload.dict(exclude_unset=True).items():
+        if field == "password" and value == _PASSWORD_MASK:
+            continue  # 三轨M2/S3：掩码值=保持原密码
         setattr(item, field, value)
 
     db.commit()

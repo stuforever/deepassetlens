@@ -140,11 +140,7 @@ def execute_sql(payload: ExecuteRequest, db: Session = Depends(get_db)):
     sql = (payload.sql or "").strip()
     if not sql:
         raise HTTPException(status_code=400, detail="SQL不能为空")
-    low = sql.lower()
-    if not (low.startswith("select") or low.startswith("with")):
-        raise HTTPException(status_code=400, detail="只允许 SELECT/WITH 查询")
-    if any(kw in low for kw in ["insert ", "update ", "delete ", "drop ", "alter ", "create "]):
-        raise HTTPException(status_code=400, detail="禁止 DDL/DML")
+    assert_readonly_sql(sql)  # 三轨M2/S1：空白归一化+词边界+危险函数封禁
     endpoints = duckdb_engine.load_endpoints_from_db(db)
     if not endpoints:
         raise HTTPException(status_code=400, detail="尚未配置任何API端点")
@@ -388,6 +384,7 @@ class IntegrationSqlExecuteRequest(BaseModel):
 @router.post("/integration-sql/verify")
 def verify_integration_sql(payload: IntegrationSqlVerifyRequest):
     """验证 integration_sql 执行（Doris 引擎，限100行）"""
+    assert_readonly_sql(payload.sql)  # 三轨M2/S2：Doris 侧与 DuckDB 侧同款只读守卫
     from app.services.doris_engine import test_integration_sql
     result = test_integration_sql(payload.sql, payload.catalog)
     return {"code": 200, "data": result}
@@ -458,6 +455,54 @@ def execute_integration_sql(payload: IntegrationSqlExecuteRequest, db: Session =
 # ---------------------------------------------------------------------------
 
 _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+_SQL_FORBIDDEN_RE = re.compile(
+    r"\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|copy|attach|detach|"
+    r"pragma|install|load|export|call|set|begin|commit|rollback|merge|replace)\b", re.IGNORECASE)
+_SQL_DANGEROUS_FUNC_RE = re.compile(
+    r"\b(read_csv_auto|read_json_auto|read_json|read_parquet|read_text|read_blob|read_xlsx|"
+    r"read_csv|glob|parquet_scan|csv_scan|iceberg_scan|load|install|export|call)\s*\(",
+    re.IGNORECASE)
+
+
+def _strip_leading_comments(sql: str) -> str:
+    """剥离前导空白与注释（块注释/行注释），用于起始关键字判定。"""
+    s = sql
+    while True:
+        s2 = s.lstrip()
+        if s2.startswith("/*"):
+            end = s2.find("*/")
+            if end < 0:
+                return ""
+            s = s2[end + 2:]
+            continue
+        if s2.startswith("--"):
+            nl = s2.find("\n")
+            if nl < 0:
+                return ""
+            s = s2[nl + 1:]
+            continue
+        return s2
+
+
+def assert_readonly_sql(sql: str) -> str:
+    """只读守卫（三轨M2/S1+S2 共享——DuckDB 侧 execute_sql 与 Doris 侧 verify/ai-rewrite 同款）：
+
+    1. 空白归一化+前导注释剥离后必须以 SELECT/WITH 起始（	/
+ 绕过空白闭合）；
+    2. DML/DDL/工具语句按词边界封禁（INSERT	INTO 类绕过闭合）；
+    3. DuckDB 文件读取/扩展函数调用封禁（read_csv_auto/glob/load/install 等）。
+    非法即 HTTPException 400。
+    """
+    low = _strip_leading_comments(sql or "").lower()
+    if not re.match(r"^(select|with)\b", low):
+        raise HTTPException(status_code=400, detail="只允许 SELECT/WITH 查询")
+    if _SQL_FORBIDDEN_RE.search(low):
+        raise HTTPException(status_code=400, detail="禁止 DDL/DML/工具语句")
+    if _SQL_DANGEROUS_FUNC_RE.search(low):
+        raise HTTPException(status_code=400, detail="禁止文件读取/扩展函数调用")
+    return sql
 
 
 def validate_sql_identifier(name: str) -> str:

@@ -7,6 +7,8 @@
 - /doris/catalogs       POST    创建 Catalog（DB + 执行 CREATE CATALOG）
 - /doris/catalogs/{name} DELETE 删除 Catalog（执行 DROP CATALOG + DB 删除）
 """
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -52,6 +54,9 @@ def _default_config() -> dict:
     }
 
 
+
+_PASSWORD_MASK = "******"  # 三轨M2/S4：响应统一掩码；掩码值=保持原密码
+
 @router.get("/doris/config")
 def get_doris_config(db: Session = Depends(get_db)):
     """获取 Doris 连接配置（DB 首行，无则默认值）"""
@@ -64,7 +69,7 @@ def get_doris_config(db: Session = Depends(get_db)):
             "host": cfg.host,
             "port": cfg.port,
             "user": cfg.user,
-            "password": cfg.password,
+            "password": _PASSWORD_MASK,
             "database": cfg.database,
             "charset": cfg.charset,
             "connect_timeout": cfg.connect_timeout,
@@ -80,6 +85,8 @@ def put_doris_config(payload: DorisConfigRequest, db: Session = Depends(get_db))
         d = _default_config()
         for k, v in payload.dict(exclude_unset=True).items():
             if v is not None:
+                if k == "password" and v == _PASSWORD_MASK:
+                    v = ""  # 三轨M2/S4：新建遇掩码哨兵→存空串（无原密码可保持）
                 d[k] = v
         cfg = DorisConfig(
             host=d["host"], port=d["port"], user=d["user"], password=d["password"],
@@ -89,6 +96,8 @@ def put_doris_config(payload: DorisConfigRequest, db: Session = Depends(get_db))
     else:
         for k, v in payload.dict(exclude_unset=True).items():
             if v is not None:
+                if k == "password" and v == _PASSWORD_MASK:
+                    continue  # 三轨M2/S4：掩码值=保持原密码
                 setattr(cfg, k, v)
     db.commit()
     db.refresh(cfg)
@@ -104,7 +113,7 @@ def put_doris_config(payload: DorisConfigRequest, db: Session = Depends(get_db))
     except Exception:
         pass
     return {"code": 200, "data": {
-        "host": cfg.host, "port": cfg.port, "user": cfg.user, "password": cfg.password,
+        "host": cfg.host, "port": cfg.port, "user": cfg.user, "password": _PASSWORD_MASK,
         "database": cfg.database, "charset": cfg.charset, "connect_timeout": cfg.connect_timeout,
     }}
 
@@ -176,6 +185,23 @@ def list_catalogs(db: Session = Depends(get_db)):
 @router.post("/doris/catalogs")
 def create_catalog(payload: CatalogCreateRequest, db: Session = Depends(get_db)):
     """创建 Catalog（jdbc/es）：DB 插入 + 执行 CREATE CATALOG（失败回滚 DB）。变更联动 reset_pool。"""
+    # 三轨M2/S5：入参白名单校验（原样透传引擎前收口）
+    if not re.match(r"^[A-Za-z0-9_]{1,64}$", payload.name or ""):
+        raise HTTPException(status_code=400, detail="Catalog 名仅允许 1-64 位字母/数字/下划线")
+    ctype = (payload.catalog_type or "jdbc").lower()
+    if ctype not in ("jdbc", "es", "internal"):
+        raise HTTPException(status_code=400, detail=f"不支持 catalog_type: {ctype}")
+    for fld, val, cap in [("jdbc_url", payload.jdbc_url, 512), ("driver_class", payload.driver_class, 256),
+                          ("driver_url", payload.driver_url, 512), ("es_hosts", payload.es_hosts, 512),
+                          ("jdbc_user", payload.jdbc_user, 128), ("es_user", payload.es_user, 128),
+                          ("jdbc_password", payload.jdbc_password, 256), ("es_password", payload.es_password, 256)]:
+        if val and len(val) > cap:
+            raise HTTPException(status_code=400, detail=f"{fld} 超长（上限 {cap}）")
+    if ctype == "jdbc":
+        if not payload.jdbc_url or not payload.jdbc_url.lower().startswith("jdbc:"):
+            raise HTTPException(status_code=400, detail="jdbc 类型必须提供 jdbc: 前缀的 jdbc_url")
+        if not (payload.driver_class or "").strip():
+            raise HTTPException(status_code=400, detail="jdbc 类型必须提供 driver_class")
     existing = db.query(DorisCatalog).filter(DorisCatalog.name == payload.name).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"Catalog {payload.name} 已纳管")
@@ -187,7 +213,7 @@ def create_catalog(payload: CatalogCreateRequest, db: Session = Depends(get_db))
         payload.jdbc_password or "",
         payload.driver_class or "",
         payload.driver_url or "",
-        payload.catalog_type or "jdbc",
+        ctype,
         payload.es_hosts or "",
         payload.es_user or "",
         payload.es_password or "",
@@ -197,7 +223,7 @@ def create_catalog(payload: CatalogCreateRequest, db: Session = Depends(get_db))
     # 成功后写 DB
     cat = DorisCatalog(
         name=payload.name,
-        catalog_type=payload.catalog_type or "jdbc",
+        catalog_type=ctype,
         jdbc_url=payload.jdbc_url,
         jdbc_user=payload.jdbc_user,
         jdbc_password=payload.jdbc_password,

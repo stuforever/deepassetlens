@@ -5,6 +5,7 @@ SSE 回 DT StreamEvent 形状（frontend/src/lib/unified-ws.ts L18-44 十四型�
 h5_user 存在→会话记录写 vendor session store（批6 接线）；SkillExecLog 记派发。
 台账登记：SkillExecLog.created_via='agent'（模型 CheckConstraint 白名单
 manual/agent/workflow/schedule/debug——计划模板 'bridge' 违约修正）。"""
+import asyncio
 import json
 import time
 import uuid
@@ -56,7 +57,7 @@ async def capability(req: CapabilityRequest):
             SkillVersion.version_id == skill.current_version_id).first()
         db.add(SkillExecLog(log_id=log_id, skill_id=skill.skill_id,
                             version_id=version.version_id if version else None,
-                            execution_code=req.skill_code, input_data=req.model_dump(),
+                            execution_code=req.skill_code, input_data=_sanitize_log_input(req.model_dump()),
                             status="running", created_via="agent"))
         db.commit()
     finally:
@@ -99,6 +100,9 @@ async def capability(req: CapabilityRequest):
                     if not last_user:
                         raise ValueError("nothing_to_regenerate")
                     regen_content = str(last_user.get("content") or "")
+                    # 三轨M2/H8：regenerate 同样开新 turn——后续 append_turn_event(turn_id)
+                    # 依赖该行（vendor sqlite 契约：turn 不存在抛 Turn not found）。
+                    await store.create_turn(session_id, capability=req.skill_code)
                 else:
                     if not req.session_id:
                         await store.create_session(title=(req.message or "新对话")[:40],
@@ -108,6 +112,13 @@ async def capability(req: CapabilityRequest):
                                             capability=req.skill_code,
                                             attachments=req.attachments)
             except Exception as e:
+                # 三轨M2/H7：已进入的隔离上下文必须先退出再置空（原实现直接置 None
+                # 导致 __exit__ 永不被调，用户隔离上下文泄漏到后续请求）。
+                if h5_ctx is not None:
+                    try:
+                        h5_ctx.__exit__(type(e), e, e.__traceback__)
+                    except Exception:
+                        pass
                 h5_ctx = None
                 store = None
                 ev = _evt("error", "bridge", "session_store", content=f"h5 会话隔离失败: {e}",
@@ -132,6 +143,20 @@ async def capability(req: CapabilityRequest):
                         final_text = ev["content"]
                     yield f"event: {ev['type']}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
                 _finish_log(log_id)
+            except (GeneratorExit, asyncio.CancelledError):
+                # 三轨M2/H9：客户端断连（StreamingResponse 关闭生成器在 yield 点抛
+                # GeneratorExit/CancelledError，均非 Exception 子类）——记账必达+
+                # assistant 收尾消息落库，再 re-raise（GeneratorExit 必须上抛）。
+                _finish_log(log_id, ok=False, err="client disconnected")
+                try:
+                    if store is not None:
+                        _text = final_text or "".join(acc)
+                        if _text:
+                            await store.add_message(session_id, "assistant", _text,
+                                                    capability=req.skill_code)
+                except Exception:
+                    pass
+                raise
             except Exception as e:  # dispatch 抛异常→记账后 error 事件收尾
                 _finish_log(log_id, ok=False, err=str(e))
                 ev = _evt("error", "bridge", "dispatch", content=str(e),
@@ -153,6 +178,16 @@ async def capability(req: CapabilityRequest):
                     pass
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+def _sanitize_log_input(d: dict) -> dict:
+    """三轨M2/S6：访问码脱敏后记账——code/x_access_code 掩码，其余字段原样。"""
+    out = dict(d or {})
+    if out.get("code"):
+        out["code"] = "******"
+    if out.get("x_access_code"):
+        out["x_access_code"] = "******"
+    return out
 
 
 def _sse_err(log_id, msg):
