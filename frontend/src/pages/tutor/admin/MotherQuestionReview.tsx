@@ -146,7 +146,7 @@ export default function MotherQuestionReview() {
           {completed > 0 ? '今天的复习任务已完成' : '所有题目都不需要复习'}
         </p>
         <Button
-          onClick={() => navigate('/e/tutor/admin/mother-questions')}
+          onClick={() => navigate('/e/sishu/admin/mother-questions')}
           data-testid="mq-review-back"
         >
           返回母题库
@@ -301,7 +301,7 @@ export default function MotherQuestionReview() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
         <Button
           icon={<LeftOutlined />}
-          onClick={() => navigate('/e/tutor/admin/mother-questions')}
+          onClick={() => navigate('/e/sishu/admin/mother-questions')}
           data-testid="mq-review-exit"
         >
           退出

@@ -161,7 +161,7 @@ export const routes: RouteConfig[] = [
     { path: '/settings/curriculum/chapters', element: settingsPage(SettingsCurriculumChapters), label: '章节管理', menuKey: 'settings:curriculum-chapters', hideInMenu: true },
     { path: '/settings/curriculum/knowledge-points', element: settingsPage(SettingsCurriculumKnowledgePoints), label: '知识点管理', menuKey: 'settings:curriculum-knowledge-points', hideInMenu: true },
   ] as unknown as RouteConfig[]),
-  // ⑤R R1（批12）：旧 tutor 后台骨架 /e/tutor/admin 退役（AdminHome/AdminZones 删除；
+  // ⑤R R1（批12）：旧 tutor 后台骨架 /e/sishu/admin 退役（AdminHome/AdminZones 删除；
   // 后台三项顶级入口=ExpertPages 注册 adminTop 件；legacy 键 e:{slug}:admin 由 App.tsx 回落 chat）
   { path: '*', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
 ];

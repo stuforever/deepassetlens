@@ -2,7 +2,7 @@
  * NotebookPage 笔记本页（题库）——原仓 app/(utility)/notebook/page.tsx 1:1 移植。
  *
  * ⑤R R3 补建（F2 9.1「笔记本」复查发现仅有 picker 组件链、页面本体缺位——
- * spec 2.6 #7 规划 /e/tutor/notebook）。数据源 question-notebook API（后端
+ * spec 2.6 #7 规划 /e/sishu/notebook）。数据源 question-notebook API（后端
  * question_notebook.router 已挂载，活探 200）。
  *
  * 等价替换清单（同 H5Me/批8 规则）：
@@ -15,7 +15,7 @@
  * - fetch(apiUrl(x)) → fetch(x)（notebook-api.ts 同源替换已完成）；
  * - Tailwind → 内联样式逐项对位（CSS 变量带 fallback，同 MemoryWorkbench 先例）；
  *   hover:/dark: 变体随共享层先例省略；
- * - 原会话深链 `/?session=X` → `/e/tutor/chat?session=X`（tupu ExpertChat 消费同名参数，
+ * - 原会话深链 `/?session=X` → `/e/sishu/chat?session=X`（tupu ExpertChat 消费同名参数，
  *   平台等价接线见 ExpertChat.tsx R3 注记）；
  * - window.confirm 中文文案逐字保留（t("Delete this entry?")→「确定删除此条目吗？」）。
  * - 交互逐字未改：分类管理折叠/新建/重命名（inline+Enter/Escape/blur）/删除、
@@ -751,7 +751,7 @@ export default function NotebookPage() {
                   <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <Link
-                        to={`/e/tutor/chat?session=${encodeURIComponent(item.session_id)}`}
+                        to={`/e/sishu/chat?session=${encodeURIComponent(item.session_id)}`}
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 6, border: `1px solid ${BORDER}`, background: "rgba(0,0,0,0.02)", padding: "4px 10px", color: MUTED_FG, transition: "background 0.2s" }}
                       >
                         <ExportOutlined style={{ fontSize: 10 }} />
@@ -759,7 +759,7 @@ export default function NotebookPage() {
                       </Link>
                       {item.followup_session_id && (
                         <Link
-                          to={`/e/tutor/chat?session=${encodeURIComponent(item.followup_session_id)}`}
+                          to={`/e/sishu/chat?session=${encodeURIComponent(item.followup_session_id)}`}
                           style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 6, border: `1px solid ${BORDER}`, background: "rgba(0,0,0,0.02)", padding: "4px 10px", color: MUTED_FG, transition: "background 0.2s" }}
                         >
                           <MessageOutlined style={{ fontSize: 10 }} />

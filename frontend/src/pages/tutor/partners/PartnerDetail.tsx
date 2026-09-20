@@ -1,6 +1,6 @@
 /**
  * PartnerDetail 伙伴详情页——原仓 DeepTutor web/app/(workspace)/partners/[partnerId]/page.tsx（412 行）
- * 1:1 移植（批6 6.3）。tupu 路由 /e/tutor/partners/detail?id=X（接线批注册）；
+ * 1:1 移植（批6 6.3）。tupu 路由 /e/sishu/partners/detail?id=X（接线批注册）；
  * partnerId 来源：props { partnerId } 优先，否则 useSearchParams ?id=（tupu 无路径参数段，
  * 源 useParams<{partnerId}> 等价替换）。?tab= 深链保留。
  *
@@ -21,7 +21,7 @@
  * - "use client" 删除；next/link → react-router-dom Link；next/navigation 的 useParams/
  *   useSearchParams/useRouter → props ?id= / react-router useSearchParams / useNavigate；
  *   Next 专用 Suspense 包裹（仅 Next 流式约束所需）按 RR6 等价直接渲染，省略；
- * - 路由映射：/partners → /e/tutor/partners；
+ * - 路由映射：/partners → /e/sishu/partners；
  * - lucide → @ant-design/icons：ArrowLeft→ArrowLeftOutlined、Archive→ContainerOutlined
  *   （MemorySection 先例）、BookmarkPlus→SaveOutlined（保存语义就近）、Download→DownloadOutlined、
  *   Loader2→LoadingOutlined(spin)、MessageCircle→MessageOutlined、Play→CaretRightOutlined
@@ -238,7 +238,7 @@ export default function PartnerDetail({
       return;
     try {
       await destroyPartner(partnerId);
-      navigate("/e/tutor/partners");
+      navigate("/e/sishu/partners");
     } catch (e) {
       setToast(e instanceof Error ? e.message : "删除失败");
     }
@@ -274,7 +274,7 @@ export default function PartnerDetail({
         <p style={{ margin: 0, fontSize: 14, color: MUTED_FG }}>
           未找到该伙伴
         </p>
-        <Link to="/e/tutor/partners" style={{ fontSize: 13, color: PRIMARY }}>
+        <Link to="/e/sishu/partners" style={{ fontSize: 13, color: PRIMARY }}>
           返回伙伴
         </Link>
       </div>
@@ -301,7 +301,7 @@ export default function PartnerDetail({
         }}
       >
         <Link
-          to="/e/tutor/partners"
+          to="/e/sishu/partners"
           aria-label="返回伙伴"
           style={{
             display: "inline-flex",

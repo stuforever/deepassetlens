@@ -149,7 +149,7 @@ function MotherQuestionsContent() {
   useEffect(() => {
     if (searchParams.get('photo') === '1' && !photoRedirecting.current) {
       photoRedirecting.current = true;
-      navigate('/e/tutor/admin/mother-questions/photo', { replace: true });
+      navigate('/e/sishu/admin/mother-questions/photo', { replace: true });
     }
   }, [searchParams, navigate]);
 
@@ -190,15 +190,15 @@ function MotherQuestionsContent() {
           <span style={{ fontSize: 14, color: MUTED, fontWeight: 400 }}>（共 {total} 题）</span>
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <Button onClick={() => navigate('/e/tutor/admin/mother-questions/review')} data-testid="mq-review-btn" icon={<UndoOutlined />} style={{ background: '#f0fdf4', borderColor: '#bbf7d0', color: '#15803d' }}>复习</Button>
-          <Button onClick={() => navigate('/e/tutor/admin/mother-questions/trash')} data-testid="mq-trash-btn" icon={<DeleteOutlined />}>回收站</Button>
+          <Button onClick={() => navigate('/e/sishu/admin/mother-questions/review')} data-testid="mq-review-btn" icon={<UndoOutlined />} style={{ background: '#f0fdf4', borderColor: '#bbf7d0', color: '#15803d' }}>复习</Button>
+          <Button onClick={() => navigate('/e/sishu/admin/mother-questions/trash')} data-testid="mq-trash-btn" icon={<DeleteOutlined />}>回收站</Button>
           <Button onClick={() => setShowExport(true)} data-testid="mq-export-btn" icon={<FileTextOutlined />}>导出</Button>
           <Button onClick={() => setShowClaim(true)} data-testid="mq-claim-btn" icon={<SendOutlined />} style={{ background: '#f0f9ff', borderColor: '#bae6fd', color: '#0369a1' }}>认领给孩子</Button>
-          <Button onClick={() => navigate('/e/tutor/admin/settings/curriculum')} data-testid="mq-settings-btn" icon={<AppstoreOutlined />}>设置管理</Button>
-          <Button onClick={() => navigate('/e/tutor/admin/mother-questions/analysis')} data-testid="mq-analysis-btn" icon={<BarChartOutlined />}>分析</Button>
-          <Button onClick={() => navigate('/e/tutor/admin/mother-questions/photo-center')} data-testid="mq-photo-center-btn" icon={<ScanOutlined />}>拍照中心</Button>
-          <Button onClick={() => navigate('/e/tutor/admin/mother-questions/photo')} data-testid="mq-photo-btn" icon={<CameraOutlined />} style={{ background: '#faf5ff', borderColor: '#e9d5ff', color: '#7e22ce' }}>拍照录入</Button>
-          <Button type="primary" onClick={() => navigate('/e/tutor/admin/mother-questions/new')} data-testid="mq-add-btn" icon={<PlusOutlined />}>新增母题</Button>
+          <Button onClick={() => navigate('/e/sishu/admin/settings/curriculum')} data-testid="mq-settings-btn" icon={<AppstoreOutlined />}>设置管理</Button>
+          <Button onClick={() => navigate('/e/sishu/admin/mother-questions/analysis')} data-testid="mq-analysis-btn" icon={<BarChartOutlined />}>分析</Button>
+          <Button onClick={() => navigate('/e/sishu/admin/mother-questions/photo-center')} data-testid="mq-photo-center-btn" icon={<ScanOutlined />}>拍照中心</Button>
+          <Button onClick={() => navigate('/e/sishu/admin/mother-questions/photo')} data-testid="mq-photo-btn" icon={<CameraOutlined />} style={{ background: '#faf5ff', borderColor: '#e9d5ff', color: '#7e22ce' }}>拍照录入</Button>
+          <Button type="primary" onClick={() => navigate('/e/sishu/admin/mother-questions/new')} data-testid="mq-add-btn" icon={<PlusOutlined />}>新增母题</Button>
         </div>
       </div>
 
@@ -307,8 +307,8 @@ function MotherQuestionsContent() {
             <MotherCard
               key={m.id}
               m={m}
-              onOpen={() => navigate(`/e/tutor/admin/mother-questions/${m.id}`)}
-              onEdit={() => navigate(`/e/tutor/admin/mother-questions/${m.id}?edit=1`)}
+              onOpen={() => navigate(`/e/sishu/admin/mother-questions/${m.id}`)}
+              onEdit={() => navigate(`/e/sishu/admin/mother-questions/${m.id}?edit=1`)}
               onDelete={async () => {
                 if (!window.confirm('确认删除？')) return;
                 await fetch(`/api/v1/mother-questions/${m.id}`, { method: 'DELETE' });

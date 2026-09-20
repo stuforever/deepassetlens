@@ -96,11 +96,11 @@ export default function CoWriterHomePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  // 源 router.push(`/co-writer/${doc.id}`) 的 tupu 等价：参数路由 /e/tutor/co-writer/:docId
+  // 源 router.push(`/co-writer/${doc.id}`) 的 tupu 等价：参数路由 /e/sishu/co-writer/:docId
   // （IA批6 expertPages 注册，KeepAlive 路径切换才换渲染——?doc= 仅改查询不触发路由，已实测）。
   const goEdit = useCallback(
     (docId: string) => {
-      navigate(`/e/tutor/co-writer/${encodeURIComponent(docId)}`);
+      navigate(`/e/sishu/co-writer/${encodeURIComponent(docId)}`);
     },
     [navigate],
   );

@@ -1,6 +1,6 @@
 /**
  * PartnersList 伙伴列表页——原仓 DeepTutor web/app/(workspace)/partners/page.tsx（252 行）
- * 1:1 移植（批6 6.3）。tupu 路由 /e/tutor/partners（navigation.tsx 既有占位 e:tutor:partners）。
+ * 1:1 移植（批6 6.3）。tupu 路由 /e/sishu/partners（navigation.tsx 既有占位 e:sishu:partners）。
  *
  * 页面区块（与源逐块对拍）：
  * 1. 页头：标题「伙伴」+ 副标题（管理员/非管理员双文案）+ 管理员「新建伙伴」主色入口（PlusOutlined）；
@@ -13,10 +13,10 @@
  *
  * 等价替换清单：
  * - "use client" 删除；next/link → react-router-dom Link；next/navigation useRouter → useNavigate；
- * - 路由映射：/partners/new → /e/tutor/partners/new；/partners/[id] → /e/tutor/partners/detail?id=X
- *   （tupu 接线口径：详情经 ?id= 传参）；/home?agent=X → /e/tutor/chat?agent=X（NotebookPage
- *   「/home 即对话」先例）；/agents → /e/tutor/agents；
- * - lucide → @ant-design/icons：HeartHandshake→TeamOutlined（伙伴语义就近，与导航 e:tutor:partners
+ * - 路由映射：/partners/new → /e/sishu/partners/new；/partners/[id] → /e/sishu/partners/detail?id=X
+ *   （tupu 接线口径：详情经 ?id= 传参）；/home?agent=X → /e/sishu/chat?agent=X（NotebookPage
+ *   「/home 即对话」先例）；/agents → /e/sishu/agents；
+ * - lucide → @ant-design/icons：HeartHandshake→TeamOutlined（伙伴语义就近，与导航 e:sishu:partners
  *   同图标）、Loader2→LoadingOutlined(spin)、Plus→PlusOutlined；
  * - useTranslation t(键) → locales/zh/app.json 中文值逐字直用；"Stopped" 未收录键保留英文原文
  *   （i18next 缺键回退行为一致）；
@@ -103,9 +103,9 @@ export default function PartnersList() {
   const openPartner = useCallback(
     async (partner: PartnerInfo) => {
       if (isAdmin) {
-        // 源 router.push(`/partners/${id}`) → tupu 参数路由 /e/tutor/partners/:partnerId（IA批6）
+        // 源 router.push(`/partners/${id}`) → tupu 参数路由 /e/sishu/partners/:partnerId（IA批6）
         navigate(
-          `/e/tutor/partners/${encodeURIComponent(partner.partner_id)}`,
+          `/e/sishu/partners/${encodeURIComponent(partner.partner_id)}`,
         );
         return;
       }
@@ -131,11 +131,11 @@ export default function PartnersList() {
             })
           ).name;
         }
-        navigate(`/e/tutor/chat?agent=${encodeURIComponent(name)}`);
+        navigate(`/e/sishu/chat?agent=${encodeURIComponent(name)}`);
       } catch {
         // Couldn't auto-connect (e.g. the name clashes with an existing KB) —
         // fall back to My Agents, where the partner can be connected by hand.
-        navigate("/e/tutor/agents");
+        navigate("/e/sishu/agents");
       } finally {
         setBusyId(null);
       }
@@ -208,7 +208,7 @@ export default function PartnersList() {
         </div>
         {isAdmin ? (
           <Link
-            to="/e/tutor/partners/new"
+            to="/e/sishu/partners/new"
             style={{
               display: "inline-flex",
               flexShrink: 0,
@@ -281,7 +281,7 @@ export default function PartnersList() {
           </p>
           {isAdmin ? (
             <Link
-              to="/e/tutor/partners/new"
+              to="/e/sishu/partners/new"
               style={{
                 marginTop: 16,
                 display: "inline-flex",

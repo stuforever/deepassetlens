@@ -45,7 +45,7 @@ export default function MotherQuestionAnalysis() {
         <Button
           type="text"
           icon={<ArrowLeftOutlined style={{ fontSize: 20 }} />}
-          onClick={() => navigate('/e/tutor/admin/mother-questions')}
+          onClick={() => navigate('/e/sishu/admin/mother-questions')}
           data-testid="mq-back-btn"
         />
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }} data-testid="mq-analysis-title">

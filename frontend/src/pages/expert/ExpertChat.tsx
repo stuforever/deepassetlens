@@ -85,7 +85,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   // ⑤补补-2：欢迎语动态数（仅 tutor——wenshu 不调接口零变化）
   const [tutorProfile, setTutorProfile] = useState<{ due_count: number; streak_days: number } | null>(null);
   useEffect(() => {
-    if (slug !== 'tutor') return;
+    if (slug !== 'sishu') return;
     (async () => {
       try {
         const r = await fetch('/api/tutor/profile');
@@ -115,7 +115,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     }
   }, []);
   // ⑤R R3：会话深链（?session=）——原仓 home 消费 /?session=X 恢复会话；tupu 等价物为
-  // 笔记本页「原始会话/追问对话」链接落点（/e/tutor/chat?session=X）。sessions 为
+  // 笔记本页「原始会话/追问对话」链接落点（/e/sishu/chat?session=X）。sessions 为
   // localStorage 同步载入（store init），直接命中即切换。
   useEffect(() => {
     const m = location.search.match(/[?&]session=([^&]+)/);
@@ -937,7 +937,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     let sid = activeSession?.id;
     if (!sid) {
       // IA 件批2 2.2：会话创建写入专家维度（slug 同 L280 expert_id 同源；string 收窄 ExpertId）
-      sid = createNewSession(slug === 'tutor' || slug === 'tutor-h5' ? slug : 'wenshu');
+      sid = createNewSession(slug === 'sishu' || slug === 'tutor-h5' ? slug : 'wenshu');
     }
     setQuestion('');
 
@@ -1184,7 +1184,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
               {card?.ui_config?.welcome?.tagline ?? '一句话问数 · 受控执行 · 全程可审计'}
             </div>
             {/* ⑤补补-2：tutor 欢迎语动态数（画像聚合 /api/tutor/profile——N 题待复习/M 天连续） */}
-            {slug === 'tutor' && tutorProfile && (tutorProfile.due_count > 0 || tutorProfile.streak_days > 0) && (
+            {slug === 'sishu' && tutorProfile && (tutorProfile.due_count > 0 || tutorProfile.streak_days > 0) && (
               <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.info }}>
                 今日有 {tutorProfile.due_count} 题待复习，已连续学习 {tutorProfile.streak_days} 天
               </div>

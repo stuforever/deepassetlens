@@ -8,8 +8,8 @@
  * - "use client"/next/dynamic 删除（MarkdownRenderer 直接 import 本目录移植件，
  *   trackSourceLines 在该件内真实生效——滚动同步数据面）；
  * - next/navigation → react-router-dom：useRouter.push → useNavigate；
- *   router.push("/co-writer") → navigate("/e/tutor/co-writer")（tupu AI 写作列表页，
- *   navigation.tsx menuKey e:tutor:co-writer 同路径）；useParams → props/?doc=；
+ *   router.push("/co-writer") → navigate("/e/sishu/co-writer")（tupu AI 写作列表页，
+ *   navigation.tsx menuKey e:sishu:co-writer 同路径）；useParams → props/?doc=；
  * - lucide → @ant-design/icons 映射表（size/strokeWidth→style.fontSize；
  *   antd 图标无 strokeWidth 参数，登记省略）：
  *   ArrowRight→ArrowRightOutlined、ArrowUpRight→ExportOutlined（外链语义）、
@@ -1783,7 +1783,7 @@ export default function CowriterEditor({ docId: docIdProp }: { docId?: string })
         </p>
         <button
           type="button"
-          onClick={() => navigate("/e/tutor/co-writer")}
+          onClick={() => navigate("/e/sishu/co-writer")}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -1868,7 +1868,7 @@ export default function CowriterEditor({ docId: docIdProp }: { docId?: string })
         >
           <button
             type="button"
-            onClick={() => navigate("/e/tutor/co-writer")}
+            onClick={() => navigate("/e/sishu/co-writer")}
             title={"返回文档列表"}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = MUTED;

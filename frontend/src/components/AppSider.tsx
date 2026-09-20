@@ -36,16 +36,16 @@ const OPEN_KEYS_STORAGE = 'dal_sider_open_keys_v2';
 // IA 批3 根因3：存储键升级 dal_sider_open_keys→_v2（旧键弃读，防旧 openKeys 值串组）
 
 /** 三空间组键→专家 slug（ACL use 显隐判定用） */
-const EXPERT_GROUP_SLUGS: Record<string, 'wenshu' | 'tutor' | 'tutor-h5'> = {
+const EXPERT_GROUP_SLUGS: Record<string, 'wenshu' | 'sishu' | 'tutor-h5'> = {
   expert_wenshu: 'wenshu',
-  expert_tutor: 'tutor',
+  expert_tutor: 'sishu',
   expert_tutor_h5: 'tutor-h5',
 };
 
 /**
  * 根据 menuKey 找到所属分组 key。
  * IA 批3 根因1 修复：NAV_GROUPS 已含三空间组（e: 键入表）——遍历天然覆盖；
- * 另加专家页键回落（e:tutor-h5:*→expert_tutor_h5、e:tutor:*→expert_tutor、e:wenshu:*→expert_wenshu），
+ * 另加专家页键回落（e:tutor-h5:*→expert_tutor_h5、e:sishu:*→expert_tutor、e:wenshu:*→expert_wenshu），
  * 覆盖 EXPERT_PAGES 注册表内 menuKey（详情路由等不在 NAV_GROUPS 的键）。
  */
 function findGroupKey(menuKey: string): string | undefined {
@@ -55,7 +55,7 @@ function findGroupKey(menuKey: string): string | undefined {
   if (menuKey.startsWith('e:')) {
     const slug = menuKey.split(':')[1] || '';
     if (slug === 'tutor-h5') return 'expert_tutor_h5';
-    if (slug === 'tutor') return 'expert_tutor';
+    if (slug === 'sishu') return 'expert_tutor';
     if (slug === 'wenshu') return 'expert_wenshu';
   }
   return undefined;
@@ -146,10 +146,10 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
         }
       };
       const [uw, ut, uh5, mt] = await Promise.all([
-        ask('wenshu', 'use'), ask('tutor', 'use'), ask('tutor-h5', 'use'), ask('tutor', 'manage'),
+        ask('wenshu', 'use'), ask('sishu', 'use'), ask('tutor-h5', 'use'), ask('sishu', 'manage'),
       ]);
       if (alive) {
-        setExpertAcl({ wenshu: uw, tutor: ut, 'tutor-h5': uh5 });
+        setExpertAcl({ wenshu: uw, sishu: ut, 'tutor-h5': uh5 });
         setTutorManageVisible(mt);
       }
     })();
@@ -173,11 +173,11 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
   useEffect(() => {
     void refreshH5Sessions();
   }, [refreshH5Sessions, location.pathname]);
-  // 当前路由所属专家（/e/tutor-h5/* → tutor-h5；/e/tutor/* → tutor；其余 → wenshu）
+  // 当前路由所属专家（/e/tutor-h5/* → tutor-h5；/e/sishu/* → tutor；其余 → wenshu）
   const currentExpert: ExpertId = location.pathname.startsWith('/e/tutor-h5')
     ? 'tutor-h5'
-    : location.pathname.startsWith('/e/tutor')
-      ? 'tutor'
+    : location.pathname.startsWith('/e/sishu')
+      ? 'sishu'
       : 'wenshu';
   // 组名=专家卡名实时取（拉取失败回退静态名）；组顺序=当前专家组置顶，其余按固定序
   const groupNameOf = (id: ExpertId, fallback: string) =>
@@ -224,7 +224,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
           icon: <g.icon />,
           label: card?.name || g.title,
           children: g.items
-            .filter((it) => !(it.menuKey === 'e:tutor:partners' && !tutorManageVisible))
+            .filter((it) => !(it.menuKey === 'e:sishu:partners' && !tutorManageVisible))
             .map((it) => ({
               key: it.menuKey,
               icon: <it.icon />,
@@ -306,7 +306,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px' }}>
               {([
                 { gid: 'wenshu' as ExpertId, label: groupNameOf('wenshu', '数据探索') },
-                { gid: 'tutor' as ExpertId, label: groupNameOf('tutor', '私塾先生') },
+                { gid: 'sishu' as ExpertId, label: groupNameOf('sishu', '私塾先生') },
                 { gid: 'tutor-h5' as ExpertId, label: groupNameOf('tutor-h5', '私塾先生h5') },
               ]).map(({ gid, label }) => {
                 const isOpen = !!sessionGroupsOpen[gid];
@@ -345,7 +345,7 @@ const AppSider: React.FC<AppSiderProps> = ({ collapsed, onToggle, selectedKey, o
                     {isOpen && gid !== 'tutor-h5' && platformRows.map((s) => (
                       <div
                         key={s.id}
-                        onClick={() => { setActiveSessionId(s.id); gid === 'tutor' ? navigate('/e/tutor/chat') : onSelect('home'); }}
+                        onClick={() => { setActiveSessionId(s.id); gid === 'sishu' ? navigate('/e/sishu/chat') : onSelect('home'); }}
                         className="dal-session-row"
                         style={{
                           padding: '6px 8px', cursor: 'pointer', borderRadius: 4, marginBottom: 1,

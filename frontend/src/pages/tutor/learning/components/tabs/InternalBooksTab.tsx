@@ -42,7 +42,7 @@ export function InternalBooksTab({ chapterId, chapterName }: {
   const openBook = (bookId: string, pageId?: string) => {
     // Deep-link straight into the book reader (not the library list).
     const q = pageId ? `book=${bookId}&page=${pageId}` : `book=${bookId}`;
-    navigate(`/e/tutor/book?${q}`);
+    navigate(`/e/sishu/book?${q}`);
   };
 
   const handleGenerate = async () => {

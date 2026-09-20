@@ -92,18 +92,18 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '私塾先生',
     icon: ReadOutlined,
     items: [
-      { menuKey: 'e:tutor:chat', label: '对话', path: '/e/tutor/chat', icon: CommentOutlined },
+      { menuKey: 'e:sishu:chat', label: '对话', path: '/e/sishu/chat', icon: CommentOutlined },
       // 引擎批5 5.5：书籍工作台（DT book 页 1:1——书库/创建器/阅读器三态）
-      { menuKey: 'e:tutor:book', label: '书籍', path: '/e/tutor/book', icon: BookOutlined },
+      { menuKey: 'e:sishu:book', label: '书籍', path: '/e/sishu/book', icon: BookOutlined },
       // IA批6 6.3：placeholder 解除——页面已注册 EXPERT_PAGES.tutor（co-writer/self-learning=use、partners=manage）
-      { menuKey: 'e:tutor:self-learning', label: '自主学习', path: '/e/tutor/self-learning', icon: RocketOutlined },
-      { menuKey: 'e:tutor:co-writer', label: 'AI写作', path: '/e/tutor/co-writer', icon: EditOutlined },
+      { menuKey: 'e:sishu:self-learning', label: '自主学习', path: '/e/sishu/self-learning', icon: RocketOutlined },
+      { menuKey: 'e:sishu:co-writer', label: 'AI写作', path: '/e/sishu/co-writer', icon: EditOutlined },
       // 管理三项列空间菜单（menuKey=TUTOR_ADMIN_PAGES 注册表现状键——KeepAlive 稳定）
-      { menuKey: 'e:tutor:admin:mq', label: '母题库管理', path: '/e/tutor/admin/mother-questions', icon: BookOutlined },
-      { menuKey: 'e:tutor:admin:book', label: '书源管理', path: '/e/tutor/admin/book', icon: BookOutlined },
-      { menuKey: 'e:tutor:admin:settings', label: '教学设置', path: '/e/tutor/admin/settings', icon: SettingOutlined },
+      { menuKey: 'e:sishu:admin:mq', label: '母题库管理', path: '/e/sishu/admin/mother-questions', icon: BookOutlined },
+      { menuKey: 'e:sishu:admin:book', label: '书源管理', path: '/e/sishu/admin/book', icon: BookOutlined },
+      { menuKey: 'e:sishu:admin:settings', label: '教学设置', path: '/e/sishu/admin/settings', icon: SettingOutlined },
       // 伙伴/推送（IA批6 6.3 就绪；空间内显隐按 manage——3.3）
-      { menuKey: 'e:tutor:partners', label: '伙伴/推送', path: '/e/tutor/partners', icon: TeamOutlined },
+      { menuKey: 'e:sishu:partners', label: '伙伴/推送', path: '/e/sishu/partners', icon: TeamOutlined },
     ],
   },
   {
@@ -238,20 +238,20 @@ export const pathToMenuKey: Record<string, string> = (() => {
   out['/knowledge'] = 'vector_manage';
   // IA 件批1 1.3：tutor-h5 迁移旧路径别名（14 条静态——KeepAlive 架构无 Navigate，
   // 沿 /knowledge→/vector 先例=pathToMenuKey 别名；含参数旧路径走 expertPages LEGACY_H5_ALIASES）
-  out['/e/tutor/h5'] = 'e:tutor-h5:home';
-  out['/e/tutor/h5/chat'] = 'e:tutor-h5:chat';
-  out['/e/tutor/h5/learn'] = 'e:tutor-h5:learn';
-  out['/e/tutor/h5/learn/textbook'] = 'e:tutor-h5:learn:textbook';
-  out['/e/tutor/h5/classroom'] = 'e:tutor-h5:classroom';
-  out['/e/tutor/h5/review'] = 'e:tutor-h5:review';
-  out['/e/tutor/h5/wrong'] = 'e:tutor-h5:wrong';
-  out['/e/tutor/h5/wrongbook'] = 'e:tutor-h5:wrongbook';
-  out['/e/tutor/h5/paths'] = 'e:tutor-h5:paths';
-  out['/e/tutor/h5/report'] = 'e:tutor-h5:report';
-  out['/e/tutor/h5/atlas'] = 'e:tutor-h5:atlas';
-  out['/e/tutor/h5/me'] = 'e:tutor-h5:me';
-  out['/e/tutor/h5/share'] = 'e:tutor-h5:share';
-  out['/e/tutor/notebook'] = 'e:tutor-h5:notebook';
+  out['/e/sishu/h5'] = 'e:tutor-h5:home';
+  out['/e/sishu/h5/chat'] = 'e:tutor-h5:chat';
+  out['/e/sishu/h5/learn'] = 'e:tutor-h5:learn';
+  out['/e/sishu/h5/learn/textbook'] = 'e:tutor-h5:learn:textbook';
+  out['/e/sishu/h5/classroom'] = 'e:tutor-h5:classroom';
+  out['/e/sishu/h5/review'] = 'e:tutor-h5:review';
+  out['/e/sishu/h5/wrong'] = 'e:tutor-h5:wrong';
+  out['/e/sishu/h5/wrongbook'] = 'e:tutor-h5:wrongbook';
+  out['/e/sishu/h5/paths'] = 'e:tutor-h5:paths';
+  out['/e/sishu/h5/report'] = 'e:tutor-h5:report';
+  out['/e/sishu/h5/atlas'] = 'e:tutor-h5:atlas';
+  out['/e/sishu/h5/me'] = 'e:tutor-h5:me';
+  out['/e/sishu/h5/share'] = 'e:tutor-h5:share';
+  out['/e/sishu/notebook'] = 'e:tutor-h5:notebook';
   // IA批5：设置中心子页 path→menuKey（页签切换；hideInMenu 不进侧栏）
   for (const p of SETTINGS_PAGES) out[p.path] = p.key;
   return out;

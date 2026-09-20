@@ -223,7 +223,7 @@ export default function TutorHomeChat() {
   );
 }
 
-/** 桥 session_id ↔ 平台 store 会话（2.6 会话源：expertId='tutor'；桥 id 映射模块级，刷新后按标题首条回认）。 */
+/** 桥 session_id ↔ 平台 store 会话（2.6 会话源：expertId='sishu'；桥 id 映射模块级，刷新后按标题首条回认）。 */
 const bridgeToStoreSession = new Map<string, string>();
 
 function usePlatformSessionBridge(agentSessionId: string | null, title: string) {
@@ -844,7 +844,7 @@ function TutorHomeChatInner() {
 
   const cancelStreamingTurn = useCallback(() => stop(), [stop]);
   const handleMessagesClick = useCallback(() => { /* DT：点击消息区收浮层（菜单关闭由组件内部处理） */ }, []);
-  const navigateToHome = useCallback(() => navigate("/e/tutor", { replace: true }), [navigate]);
+  const navigateToHome = useCallback(() => navigate("/e/sishu", { replace: true }), [navigate]);
 
   /* ---- 新会话 ---- */
   const newSession = useCallback(() => { reset(); navigateToHome(); }, [reset, navigateToHome]);

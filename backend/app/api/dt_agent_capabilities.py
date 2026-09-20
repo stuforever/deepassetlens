@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v2/skills")
 
 
 class CapabilityRequest(BaseModel):
-    skill_code: str                       # "tutor/chat" 等 8 技能
+    skill_code: str                       # "sishu/chat" 等 8 技能
     action: Optional[str] = None          # quiz: "judge"（批4）
     session_id: Optional[str] = None
     message: str

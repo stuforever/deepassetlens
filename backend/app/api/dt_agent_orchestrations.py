@@ -32,7 +32,7 @@ TOOL_WHITELIST = {"web_search"}
 # 裁定②舍弃件（永拒，不进白名单）：geogebra_analysis/paper_search/imagegen/videogen
 DISCARDED_TOOLS = {"geogebra_analysis", "paper_search", "imagegen", "videogen"}
 
-EXPERT_ID = "tutor"
+EXPERT_ID = "sishu"
 
 # 批3：wrong-intake 确认卡挂起态（桥进程内——确认轮同 session_id 取回）
 _WRONG_INTAKE_PENDING: Dict[str, Dict[str, Any]] = {}
@@ -59,35 +59,35 @@ def _evt(type_, source, stage, content="", metadata=None, session_id=None,
 async def dispatch(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
     """按 skill_code 派发到编排实现（批1 chat+批3 三件+批4 三件）。"""
     code = req.skill_code
-    if code == "tutor/chat":
+    if code == "sishu/chat":
         async for ev in run_chat(req, session_id, turn_id, user_prefix):
             yield ev
         return
-    if code == "tutor/solve":
+    if code == "sishu/solve":
         async for ev in run_solve(req, session_id, turn_id, user_prefix):
             yield ev
         return
-    if code == "tutor/mastery":
+    if code == "sishu/mastery":
         async for ev in run_mastery(req, session_id, turn_id, user_prefix):
             yield ev
         return
-    if code == "tutor/wrong-intake":
+    if code == "sishu/wrong-intake":
         async for ev in run_wrong_intake(req, session_id, turn_id, user_prefix):
             yield ev
         return
-    if code == "tutor/quiz":
+    if code == "sishu/quiz":
         async for ev in run_quiz(req, session_id, turn_id, user_prefix):
             yield ev
         return
-    if code == "tutor/visualize":
+    if code == "sishu/visualize":
         async for ev in run_visualize(req, session_id, turn_id, user_prefix):
             yield ev
         return
-    if code == "tutor/research":
+    if code == "sishu/research":
         async for ev in run_research(req, session_id, turn_id, user_prefix):
             yield ev
         return
-    if code == "tutor/book-generate":
+    if code == "sishu/book-generate":
         async for ev in run_book_generate(req, session_id, turn_id, user_prefix):
             yield ev
         return

@@ -36,7 +36,7 @@ export function KnowledgePointsTab({ overview, chapterId }: { overview: ChapterO
       const d = await fetch(apiUrl(`/api/v1/curriculum/knowledge-points/${kid}/chapters`)).then((r) => r.json());
       const items = d?.items || [];
       if (items.length > 0) {
-        navigate(`/e/tutor/self-learning?chapter_id=${items[0].chapter_id}`);
+        navigate(`/e/sishu/self-learning?chapter_id=${items[0].chapter_id}`);
       }
     } catch {
       // 忽略跳转失败

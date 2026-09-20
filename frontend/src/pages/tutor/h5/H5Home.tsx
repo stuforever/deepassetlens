@@ -281,7 +281,7 @@ export default function H5Home() {
                 ? lastLearn.href.replace(/^\/h5/, "/e/tutor-h5")
                 : lastLearn.href.startsWith("/e/tutor-h5")
                   ? lastLearn.href
-                  : lastLearn.href.startsWith("/e/tutor/h5")
+                  : lastLearn.href.startsWith("/e/sishu/h5")
                     ? lastLearn.href.replace(/^\/e\/tutor\/h5/, "/e/tutor-h5") // IA批1 迁移前存档旧前缀归一
                     : "/e/tutor-h5/learn",
               u,

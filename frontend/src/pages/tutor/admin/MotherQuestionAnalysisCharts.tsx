@@ -383,7 +383,7 @@ export default function MotherQuestionAnalysisCharts({
                     {retentionData.lowest_retention.map((q) => (
                       <li key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, borderBottom: '1px solid #f0f0f0', paddingBottom: 4 }}>
                         <button
-                          onClick={() => navigate(`/e/tutor/admin/mother-questions/${q.id}`)}
+                          onClick={() => navigate(`/e/sishu/admin/mother-questions/${q.id}`)}
                           onMouseEnter={(e) => { e.currentTarget.style.color = PRIMARY; e.currentTarget.style.textDecoration = 'underline'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.color = 'inherit'; e.currentTarget.style.textDecoration = 'none'; }}
                           style={{ flex: 1, textAlign: 'left', cursor: 'pointer', border: 'none', background: 'none', padding: 0, color: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14 }}

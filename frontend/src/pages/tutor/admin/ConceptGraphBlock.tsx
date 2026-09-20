@@ -7,7 +7,7 @@
  *     概念图 · {{concepts}} 个概念 · {{relations}} 条关系；
  *   "Chapter index"→章节索引、"(No chapters yet)"→（暂无章节）。
  * next/link <Link href="/book?book=..&page=.."> → react-router-dom useNavigate +
- * <a onClick={() => navigate('/e/tutor/admin/book?book=..&page=..')}>（query 编码保留）。
+ * <a onClick={() => navigate('/e/sishu/admin/book?book=..&page=..')}>（query 编码保留）。
  * lucide Compass → CompassOutlined；MarkdownRenderer → LiteMarkdown（'./dtMarkdown'，
  * variant 忽略）；@/lib/book-types → './book-types'；Tailwind → 内联样式
  * （grid 两列 minmax(0,1fr)/minmax(0,260px)、line-clamp-2、max-h-[60vh]）。
@@ -238,7 +238,7 @@ export default function ConceptGraphBlock({
               return (
                 <li key={chapter.id}>
                   <ChapterLink
-                    navigateTo={`/e/tutor/admin/book?book=${encodeURIComponent(bookId)}&page=${encodeURIComponent(chapter.page_id)}`}
+                    navigateTo={`/e/sishu/admin/book?book=${encodeURIComponent(bookId)}&page=${encodeURIComponent(chapter.page_id)}`}
                   >
                     {label}
                   </ChapterLink>

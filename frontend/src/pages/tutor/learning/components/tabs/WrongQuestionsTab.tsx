@@ -39,7 +39,7 @@ export function WrongQuestionsTab({ chapterId, chapterName }: { chapterId: strin
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">{t("{{count}} wrong questions total", { count: items.length })}</span>
         <button
-          onClick={() => navigate(`/e/tutor/admin/mother-questions/new?chapter_id=${chapterId}`)}
+          onClick={() => navigate(`/e/sishu/admin/mother-questions/new?chapter_id=${chapterId}`)}
           data-testid="wrong-question-add"
           className="px-3 py-1 rounded border text-sm hover:bg-accent flex items-center gap-1"
         >
@@ -58,7 +58,7 @@ export function WrongQuestionsTab({ chapterId, chapterName }: { chapterId: strin
             <div
               key={m.id}
               className="p-3 rounded-lg border bg-card cursor-pointer hover:bg-accent transition"
-              onClick={() => navigate(`/e/tutor/admin/mother-questions/${m.id}`)}
+              onClick={() => navigate(`/e/sishu/admin/mother-questions/${m.id}`)}
               data-testid="wrong-question-item"
             >
               <div className="flex items-center justify-between mb-1">

@@ -80,7 +80,7 @@ function SelfLearningContent() {
     const params = new URLSearchParams();
     params.set("chapter_id", chapter.id);
     params.set("textbook_id", textbook.id);
-    navigate(`/e/tutor/self-learning?${params.toString()}`, { replace: true });
+    navigate(`/e/sishu/self-learning?${params.toString()}`, { replace: true });
   }, [navigate]);
 
   if (loading) {

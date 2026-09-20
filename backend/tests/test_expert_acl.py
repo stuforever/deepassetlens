@@ -33,14 +33,14 @@ def test_twin_user_resolves_per_request(clean_twin):
     add = twins["wrong_question_add"]
     query = twins["wrong_question_query"]
 
-    set_runtime("tutor", U1, "s1", "t1")
+    set_runtime("sishu", U1, "s1", "t1")
     r1 = json.loads(add.invoke({"variant_text": "u1 专属错题题面"}))
     assert r1.get("wq_id")
     q1 = json.loads(query.invoke({}))
     assert any("u1 专属" in x["variant_text"] for x in q1["items"])
     reset()
 
-    set_runtime("tutor", U2, "s2", "t2")
+    set_runtime("sishu", U2, "s2", "t2")
     add.invoke({"variant_text": "u2 专属错题题面"})
     q2 = json.loads(query.invoke({}))
     texts2 = json.dumps(q2, ensure_ascii=False)
@@ -150,12 +150,12 @@ def test_执法点1_列表过滤_nonadmin只见授权集(acl_env, monkeypatch):
     monkeypatch.setattr(acl_env, "get_current_user", lambda request: _mk_user("tdd-u1", ["viewer"]))
     resp = list_experts(req, enabled=None)
     rows = {r["expert_id"] for r in resp["items"]}
-    assert "wenshu" in rows and "tutor" not in rows            # 种子命中/tutor 私有
-    _grant_expert("tdd-u1", "tutor", ["use"])                  # 赋权→下次调用可见
+    assert "wenshu" in rows and "sishu" not in rows            # 种子命中/tutor 私有
+    _grant_expert("tdd-u1", "sishu", ["use"])                  # 赋权→下次调用可见
     resp2 = list_experts(req, enabled=None)
     rows2 = {r["expert_id"] for r in resp2["items"]}
-    assert "tutor" in rows2
-    _revoke_expert("tdd-u1", "tutor")
+    assert "sishu" in rows2
+    _revoke_expert("tdd-u1", "sishu")
 
 
 def test_执法点2_chat入口_未授403(acl_env, monkeypatch):
@@ -165,32 +165,32 @@ def test_执法点2_chat入口_未授403(acl_env, monkeypatch):
     # 未授 user→403
     monkeypatch.setattr(acl_env, "get_current_user", lambda request: _mk_user("tdd-u2", ["viewer"]))
     with pytest.raises(HTTPException) as ei:
-        acl_env.ensure_expert_allowed(req, "tutor", "use")
+        acl_env.ensure_expert_allowed(req, "sishu", "use")
     assert "未获专家授权" in ei.value.detail
     # grant use→过
-    _grant_expert("tdd-u2", "tutor", ["use"])
-    acl_env.ensure_expert_allowed(req, "tutor", "use")             # 不抛=过
+    _grant_expert("tdd-u2", "sishu", ["use"])
+    acl_env.ensure_expert_allowed(req, "sishu", "use")             # 不抛=过
     # 回权即时（spec A2）：DELETE→下一请求 403（无缓存残留）
-    _revoke_expert("tdd-u2", "tutor")
+    _revoke_expert("tdd-u2", "sishu")
     with pytest.raises(HTTPException):
-        acl_env.ensure_expert_allowed(req, "tutor", "use")
+        acl_env.ensure_expert_allowed(req, "sishu", "use")
     # admin 一票通过
     monkeypatch.setattr(acl_env, "get_current_user", lambda request: _mk_user("tdd-ad", ["admin"]))
-    acl_env.ensure_expert_allowed(req, "tutor", "use")
+    acl_env.ensure_expert_allowed(req, "sishu", "use")
 
 
 def test_执法点3_专家域API_manage分层(acl_env, monkeypatch):
     """专家域 API：use 过/manage 不过；manage 双动作过（A-4 分层对齐）。"""
     from fastapi import HTTPException, Request
     req = Request({"type": "http", "method": "GET", "url": "", "headers": [], "query_string": b""})
-    _grant_expert("tdd-u3", "tutor", ["use"])
+    _grant_expert("tdd-u3", "sishu", ["use"])
     monkeypatch.setattr(acl_env, "get_current_user", lambda request: _mk_user("tdd-u3", ["viewer"]))
-    acl_env.ensure_expert_allowed(req, "tutor", "use")             # use 过
+    acl_env.ensure_expert_allowed(req, "sishu", "use")             # use 过
     with pytest.raises(HTTPException):
-        acl_env.ensure_expert_allowed(req, "tutor", "manage")      # manage 不过
-    _grant_expert("tdd-u3", "tutor", ["use", "manage"])
-    acl_env.ensure_expert_allowed(req, "tutor", "manage")          # 双动作过
-    _revoke_expert("tdd-u3", "tutor")
+        acl_env.ensure_expert_allowed(req, "sishu", "manage")      # manage 不过
+    _grant_expert("tdd-u3", "sishu", ["use", "manage"])
+    acl_env.ensure_expert_allowed(req, "sishu", "manage")          # 双动作过
+    _revoke_expert("tdd-u3", "sishu")
 
 
 def test_执法点4_auth0全通_匿名admin(acl_env, monkeypatch):
@@ -203,5 +203,5 @@ def test_执法点4_auth0全通_匿名admin(acl_env, monkeypatch):
     req = Request({"type": "http", "method": "GET", "url": "", "headers": [], "query_string": b""})
     monkeypatch.setattr(ea, "get_current_user",
                         lambda request: _mk_user("anonymous", ["admin"]))
-    ea.ensure_expert_allowed(req, "tutor", "use")                  # 不抛=全通
-    ea.ensure_expert_allowed(req, "tutor", "manage")
+    ea.ensure_expert_allowed(req, "sishu", "use")                  # 不抛=全通
+    ea.ensure_expert_allowed(req, "sishu", "manage")

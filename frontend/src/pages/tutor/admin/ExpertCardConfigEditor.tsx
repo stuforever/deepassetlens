@@ -34,7 +34,7 @@ const ExpertCardConfigEditor: React.FC = () => {
 
   const load = async () => {
     try {
-      const res = await expertsApi.get('tutor');
+      const res = await expertsApi.get('sishu');
       const c = (res.data as ExpertCard) || null;
       setCard(c);
       if (c) {
@@ -87,7 +87,7 @@ const ExpertCardConfigEditor: React.FC = () => {
   const patch = async (fields: Record<string, unknown>) => {
     setSaving(true);
     try {
-      const r = await expertsApi.update('tutor', fields);
+      const r = await expertsApi.update('sishu', fields);
       message.success(`已保存（version ${r.data?.version ?? '?'})`);
       await load();
     } catch (e: any) {

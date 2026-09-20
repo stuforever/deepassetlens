@@ -20,7 +20,7 @@
  *    ProcessLogs→'./ProcessLogs'、FileDropZone→'./FileDropZone'（props 签名与源一致）、
  *    KbUpdateHistory→'./KbUpdateHistory'。
  * 【③语义迁移——tutor 域知识库】判定 isTutorKb（rag_provider === 'tutor_dt' 或
- * pointer_params.source === 'tutor'，均经 props 传入的 kb 判定）：
+ * pointer_params.source === 'sishu'，均经 props 传入的 kb 判定）：
  *  - isTutorKb 时不渲染上传卡（标题说明/阻断与错误提示/FileDropZone/上传按钮整体），
  *    替换为诚实处置卡「文档管理（教学域通道）」；
  *  - 其余（任务日志/进度条/更新历史）tutor 行照常渲染。

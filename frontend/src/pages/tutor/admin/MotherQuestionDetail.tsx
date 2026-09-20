@@ -225,7 +225,7 @@ export default function MotherQuestionDetail() {
     try {
       await fetch(`/api/v1/mother-questions/${mid}`, { method: 'DELETE' });
       message.success('已删除');
-      navigate('/e/tutor/admin/mother-questions');
+      navigate('/e/sishu/admin/mother-questions');
     } catch { message.error('删除失败'); }
   };
 
@@ -341,7 +341,7 @@ export default function MotherQuestionDetail() {
       {/* ---- Header ---- */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-          <Button type="text" onClick={() => navigate('/e/tutor/admin/mother-questions')} data-testid="mq-back-btn" style={{ flexShrink: 0, padding: 8 }} icon={<ArrowLeftOutlined style={{ fontSize: 20 }} />} />
+          <Button type="text" onClick={() => navigate('/e/sishu/admin/mother-questions')} data-testid="mq-back-btn" style={{ flexShrink: 0, padding: 8 }} icon={<ArrowLeftOutlined style={{ fontSize: 20 }} />} />
           <span style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4, color: '#fff', flexShrink: 0, backgroundColor: subjColor }}>{SUBJECT_DISPLAY[m.subject || 'other']}</span>
           <h1 data-testid="mq-detail-title" style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', margin: 0 }}>
             <QuestionCircleOutlined style={{ color: PRIMARY, flexShrink: 0 }} />{m.title}
@@ -370,7 +370,7 @@ export default function MotherQuestionDetail() {
               <Button onClick={transferToCorrect} loading={transferring} icon={<CheckCircleOutlined />} data-testid="mq-transfer-correct-btn" style={{ color: '#059669' }}>转正确题</Button>
             </>
           )}
-          <Button type="primary" onClick={() => navigate('/e/tutor/admin/book')} data-testid="mq-generate-video-btn" icon={<ThunderboltOutlined />}>生成视频</Button>
+          <Button type="primary" onClick={() => navigate('/e/sishu/admin/book')} data-testid="mq-generate-video-btn" icon={<ThunderboltOutlined />}>生成视频</Button>
           <Button onClick={load} data-testid="mq-reload-btn" icon={<ReloadOutlined />} />
         </div>
       </div>
@@ -509,7 +509,7 @@ export default function MotherQuestionDetail() {
                   ) : (
                     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {similarQs.map((s, i) => (
-                        <li key={i} style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 4, fontSize: 14, cursor: 'pointer' }} onClick={() => navigate(`/e/tutor/admin/mother-questions/${s.id}`)}>
+                        <li key={i} style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 4, fontSize: 14, cursor: 'pointer' }} onClick={() => navigate(`/e/sishu/admin/mother-questions/${s.id}`)}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                             <span style={{ fontWeight: 500 }}>{s.title}</span>
                             <span style={{ fontSize: 12, color: MUTED }}>相似度 {Math.round(s.similarity * 100)}%</span>
@@ -527,7 +527,7 @@ export default function MotherQuestionDetail() {
             <section style={CARD}>
               <h2 style={mb12TitleStyle()}><VideoCameraOutlined style={{ color: PRIMARY }} /> 教学视频</h2>
               <p style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>已生成 {m.video_count} 个视频。</p>
-              <Button type="primary" size="small" onClick={() => navigate('/e/tutor/admin/book')} icon={<ThunderboltOutlined />}>生成教学视频</Button>
+              <Button type="primary" size="small" onClick={() => navigate('/e/sishu/admin/book')} icon={<ThunderboltOutlined />}>生成教学视频</Button>
             </section>
 
             {/* 变式题列表 */}

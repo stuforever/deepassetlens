@@ -2,7 +2,7 @@
  * 知识库详情容器（IA批4 复刻——源 DeepTutor web/components/knowledge/KnowledgeBaseDetail.tsx 1:1，antd 重建）。
  * 区块：空态卡 / 头卡（返回行 · 标题+徽标行 · 元信息行 · 重试动作 · 分区导航）/ 分区体（files 主从全宽 + add/versions/settings 居中）。
  * ④语义迁移（B0 增量迁进复刻页对应位，见 docs/superpowers/plans/2026-09-16 三专家门户批4 4.4）：
- *   判定 isTutorKb（rag_provider==='tutor_dt' 或 pointer_params.source==='tutor'）；
+ *   判定 isTutorKb（rag_provider==='tutor_dt' 或 pointer_params.source==='sishu'）；
  *   ② tutor 分支提示（元信息行下，与 connected 提示同位置，注册表镜像说明+pointer_params）；
  *   ④ connected 提示行 gate（connected 文案行加 !isTutorKb，不得盖 tutor 行）；
  *   ③ isTutorKb 隐藏「添加文档」（上传文档）入口并显示 ② 提示。

@@ -639,7 +639,7 @@ export default function MotherQuestionPhotoCenter() {
     setSaving(false);
     if (failCount === 0) {
       message.success(`已保存 ${okCount} 道题`);
-      setTimeout(() => navigate('/e/tutor/admin/mother-questions'), 1500);
+      setTimeout(() => navigate('/e/sishu/admin/mother-questions'), 1500);
     } else {
       message.warning(`成功 ${okCount} 道，失败 ${failCount} 道`);
     }
@@ -654,7 +654,7 @@ export default function MotherQuestionPhotoCenter() {
       <style>{HOVER_CSS}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 40, background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/e/tutor/admin/mother-questions')} data-testid="mq-back-btn" />
+          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/e/sishu/admin/mother-questions')} data-testid="mq-back-btn" />
           <div style={{ fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }} data-testid="mq-pc-title">
             <CameraOutlined style={{ color: '#1677ff' }} /> 拍照中心（整页切多题）
           </div>

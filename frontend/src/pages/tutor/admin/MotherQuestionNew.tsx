@@ -45,7 +45,7 @@ function NewQuestionContent() {
             if (!res2.ok) throw new Error();
             const data2 = await res2.json();
             message.success('母题已创建');
-            navigate(`/e/tutor/admin/mother-questions/${data2.id}`);
+            navigate(`/e/sishu/admin/mother-questions/${data2.id}`);
             return;
           }
           setSaving(false);
@@ -55,7 +55,7 @@ function NewQuestionContent() {
       }
       const data = await res.json();
       message.success('母题已创建');
-      navigate(`/e/tutor/admin/mother-questions/${data.id}`);
+      navigate(`/e/sishu/admin/mother-questions/${data.id}`);
     } catch {
       message.error('保存失败');
     } finally {
@@ -68,7 +68,7 @@ function NewQuestionContent() {
       {/* 顶部栏 */}
       <div style={{ position: 'sticky', top: 0, zIndex: 40, background: '#fff', borderBottom: '1px solid #d9d9d9', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Button type="text" onClick={() => navigate('/e/tutor/admin/mother-questions')} icon={<ArrowLeftOutlined style={{ fontSize: 20 }} />} data-testid="mq-back-btn" />
+          <Button type="text" onClick={() => navigate('/e/sishu/admin/mother-questions')} icon={<ArrowLeftOutlined style={{ fontSize: 20 }} />} data-testid="mq-back-btn" />
           <h1 style={{ fontSize: 18, fontWeight: 600, margin: 0 }} data-testid="mq-new-title">{photoMode ? '拍照录入母题' : '新增母题'}</h1>
         </div>
         <Button

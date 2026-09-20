@@ -16,7 +16,7 @@ export function AIResourceTab({ chapterId, chapterName, textbookName }: { chapte
       desc: t("Visualize this chapter's knowledge structure with Mermaid/SVG"),
       color: "text-blue-600 bg-blue-50 dark:bg-blue-950/30",
       prompt: t("Generate a concept map based on \"{{textbook}}\" and \"{{chapter}}\", showing relationships between core knowledge points.", { textbook: textbookName, chapter: chapterName }),
-      action: () => navigate(`/e/tutor/chat?prompt=${encodeURIComponent(t("Generate a concept map based on \"{{textbook}}\" and \"{{chapter}}\", showing relationships between core knowledge points.", { textbook: textbookName, chapter: chapterName }))}&capability=visualize`),
+      action: () => navigate(`/e/sishu/chat?prompt=${encodeURIComponent(t("Generate a concept map based on \"{{textbook}}\" and \"{{chapter}}\", showing relationships between core knowledge points.", { textbook: textbookName, chapter: chapterName }))}&capability=visualize`),
     },
     {
       icon: Video,
@@ -24,7 +24,7 @@ export function AIResourceTab({ chapterId, chapterName, textbookName }: { chapte
       desc: t("Demonstrate this chapter's core concepts with a math animation"),
       color: "text-purple-600 bg-purple-50 dark:bg-purple-950/30",
       prompt: t("Create an animation for \"{{chapter}}\" demonstrating the dynamic process of the core concept.", { chapter: chapterName }),
-      action: () => navigate(`/e/tutor/chat?prompt=${encodeURIComponent(t("Create an animation for \"{{chapter}}\" demonstrating the dynamic process of the core concept.", { chapter: chapterName }))}&capability=visualize`),
+      action: () => navigate(`/e/sishu/chat?prompt=${encodeURIComponent(t("Create an animation for \"{{chapter}}\" demonstrating the dynamic process of the core concept.", { chapter: chapterName }))}&capability=visualize`),
     },
     {
       icon: Code2,
@@ -32,7 +32,7 @@ export function AIResourceTab({ chapterId, chapterName, textbookName }: { chapte
       desc: t("HTML interactive practice page"),
       color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30",
       prompt: t("Create an interactive learning page for \"{{chapter}}\" with practice and instant feedback.", { chapter: chapterName }),
-      action: () => navigate(`/e/tutor/chat?prompt=${encodeURIComponent(t("Create an interactive learning page for \"{{chapter}}\" with practice and instant feedback.", { chapter: chapterName }))}&capability=visualize`),
+      action: () => navigate(`/e/sishu/chat?prompt=${encodeURIComponent(t("Create an interactive learning page for \"{{chapter}}\" with practice and instant feedback.", { chapter: chapterName }))}&capability=visualize`),
     },
     {
       icon: PenTool,
@@ -40,7 +40,7 @@ export function AIResourceTab({ chapterId, chapterName, textbookName }: { chapte
       desc: t("Let AI solve questions related to this chapter"),
       color: "text-amber-600 bg-amber-50 dark:bg-amber-950/30",
       prompt: t("Explain the core knowledge points and solution methods of \"{{chapter}}\".", { chapter: chapterName }),
-      action: () => navigate(`/e/tutor/chat?prompt=${encodeURIComponent(t("Explain the core knowledge points and solution methods of \"{{chapter}}\".", { chapter: chapterName }))}`),
+      action: () => navigate(`/e/sishu/chat?prompt=${encodeURIComponent(t("Explain the core knowledge points and solution methods of \"{{chapter}}\".", { chapter: chapterName }))}`),
     },
   ];
 

@@ -12,7 +12,7 @@ const RequireExpert: React.FC<{
   children: React.ReactNode;
   action?: 'use' | 'manage';          // 后台=manage，功能页=use
   expertId?: string;                   // 专家 slug（单专家域路由显式传）
-}> = ({ children, action = 'manage', expertId = 'tutor' }) => {
+}> = ({ children, action = 'manage', expertId = 'sishu' }) => {
   const { user, authReady } = useContext(AuthCtx);
   const [allowed, setAllowed] = useState<boolean | null>(null);
 

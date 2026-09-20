@@ -1,6 +1,6 @@
 /**
  * PartnersNew 新建伙伴向导页——原仓 DeepTutor web/app/(workspace)/partners/new/page.tsx（526 行）
- * 1:1 移植（批6 6.3）。tupu 路由 /e/tutor/partners/new。
+ * 1:1 移植（批6 6.3）。tupu 路由 /e/sishu/partners/new。
  *
  * 五步全页向导：身份(Identity) → 灵魂(Soul) → 心智(Mind：主/备模型+工具) → 资料库(Library：资产)
  * → 审阅(Review)。一屏一决策；频道在创建后于伙伴详情「频道」Tab 接入。
@@ -21,7 +21,7 @@
  *
  * 等价替换清单：
  * - "use client" 删除；next/link → react-router-dom Link；next/navigation useRouter → useNavigate；
- * - 路由映射：/partners → /e/tutor/partners；创建成功 /partners/[id] → /e/tutor/partners/detail?id=X；
+ * - 路由映射：/partners → /e/sishu/partners；创建成功 /partners/[id] → /e/sishu/partners/detail?id=X；
  * - lucide → @ant-design/icons：ArrowLeft→ArrowLeftOutlined、ArrowRight→ArrowRightOutlined、
  *   Check→CheckOutlined、Loader2→LoadingOutlined(spin)、Sparkles→ThunderboltOutlined（仓内先例）；
  * - useTranslation t(键) → locales/zh/app.json 中文值逐字直用（"Ready to meet {{name}}?" /
@@ -204,8 +204,8 @@ export default function PartnersNew() {
       });
       // Land in the chat tab — the partner is ready to talk to right away
       // (any provisioning misses are visible on the Configure tab's library).
-      // 源 /partners/[id] → tupu 参数路由 /e/tutor/partners/:partnerId（IA批6）
-      navigate(`/e/tutor/partners/${encodeURIComponent(result.partner_id)}`);
+      // 源 /partners/[id] → tupu 参数路由 /e/sishu/partners/:partnerId（IA批6）
+      navigate(`/e/sishu/partners/${encodeURIComponent(result.partner_id)}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "创建失败");
       setCreating(false);
@@ -281,7 +281,7 @@ export default function PartnersNew() {
         }}
       >
         <Link
-          to="/e/tutor/partners"
+          to="/e/sishu/partners"
           style={{
             display: "inline-flex",
             alignItems: "center",

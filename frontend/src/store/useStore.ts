@@ -30,7 +30,7 @@ export type Session = {
 };
 
 /** IA 件批2：会话所属专家（三专家门户；h5 组不走本 store——vendor sessions API 单列） */
-export type ExpertId = 'wenshu' | 'tutor' | 'tutor-h5';
+export type ExpertId = 'wenshu' | 'sishu' | 'tutor-h5';
 
 export function newSession(expertId: ExpertId = 'wenshu'): Session {
   const id = `free_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -44,7 +44,8 @@ function loadSessions(): Session[] {
       const parsed = JSON.parse(raw) as Session[];
       if (Array.isArray(parsed) && parsed.length > 0) {
         // IA 件批2 迁移规则（终审裁定④）：旧会话无 expertId → 默认 'wenshu'（诚实账8：不做猜测式迁移）
-        return parsed.map((s) => ({ ...s, expertId: s.expertId || 'wenshu' }));
+        // v4批1（裁定③）：旧会话 expertId='tutor' → 'sishu'（E-41 改名兼容，同映射模式）
+        return parsed.map((s) => ({ ...s, expertId: s.expertId === 'tutor' ? 'sishu' : (s.expertId || 'wenshu') }));
       }
     }
   } catch { /* ignore */ }

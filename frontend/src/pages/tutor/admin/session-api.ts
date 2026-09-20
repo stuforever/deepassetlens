@@ -9,10 +9,14 @@
  *    内联到本文件（定义逐字保留、不对外导出，导出面与原 session-api.ts 完全
  *    一致，未裁剪任何函数）；
  * 3) 仅新增本文件头注释；
+ * 4) tupu 适配（2026-09-18，C3 补网）：全部裸 fetch 增补 authHeaders() Bearer 注入
+ *    （原仓 cookie 会话在 tupu auth=1 Bearer 执法下恒 401 -> expectJson 硬跳 /login）；
  * 其余 endpoint 路径 / method / headers / body / query / 导出名逐字保留。
  */
 
 // ---- 以下类型按使用面内联自 DeepTutor web/lib/unified-ws.ts（定义逐字保留）----
+
+import { getStoredToken } from "../../../auth/oidc";
 
 type StreamEventType =
   | "stage_start"
@@ -242,6 +246,17 @@ async function expectJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+// tupu 适配（2026-09-18 C3 补网）：后端执法只认 Bearer（auth=1 新常态），本文件原为
+// cookie 裸 fetch，未带 token 的 sessions 调用一律 401 -> expectJson 硬跳 /login 死循环。
+function authHeaders(): Record<string, string> {
+  try {
+    const t = getStoredToken();
+    return t ? { Authorization: `${t.token_type} ${t.access_token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function listSessions(
   limit = 50,
   offset = 0,
@@ -256,6 +271,7 @@ export async function listSessions(
     async () => {
       const response = await fetch(`/api/v1/sessions?${qs.toString()}`, {
         cache: "no-store",
+        headers: authHeaders(),
       });
       const data = await expectJson<{ sessions: SessionSummary[] }>(response);
       return data.sessions ?? [];
@@ -276,6 +292,7 @@ export async function getSession(
   const response = await fetch(`/api/v1/sessions/${sessionId}${qs}`, {
     cache: "no-store",
     signal,
+    headers: authHeaders(),
   });
   return expectJson<SessionDetail>(response);
 }
@@ -286,7 +303,7 @@ export async function updateSessionTitle(
 ): Promise<SessionDetail> {
   const response = await fetch(`/api/v1/sessions/${sessionId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ title }),
   });
   const data = await expectJson<{ session: SessionDetail }>(response);
@@ -297,6 +314,7 @@ export async function updateSessionTitle(
 export async function deleteSession(sessionId: string): Promise<void> {
   const response = await fetch(`/api/v1/sessions/${sessionId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   await expectJson<{ deleted: boolean }>(response);
   invalidateClientCache("sessions:");
@@ -309,7 +327,7 @@ export async function recordQuizResults(
 ): Promise<void> {
   const response = await fetch(`/api/v1/sessions/${sessionId}/quiz-results`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ answers, turn_id: turnId || "" }),
   });
   await expectJson<{ recorded: boolean }>(response);
@@ -321,7 +339,7 @@ export async function deleteMessage(
 ): Promise<void> {
   const response = await fetch(
     `/api/v1/sessions/${sessionId}/messages/${messageId}`,
-    { method: "DELETE" },
+    { method: "DELETE", headers: authHeaders() },
   );
   await expectJson<{ deleted: boolean }>(response);
 }
@@ -334,7 +352,7 @@ export async function updateBranchSelection(
     `/api/v1/sessions/${sessionId}/branch-selection`,
     {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ selected_branches: selectedBranches }),
     },
   );

@@ -91,7 +91,7 @@ const SkillManagerV2: React.FC = () => {
           if (!expertFilter) return true;
           // ?expert=wenshu → scenarios/ 命名空间（数据探索个性技能）；tutor → tutor/（引擎批1 八技能真列表）
           if (expertFilter === 'wenshu') return s.skill_code.startsWith('scenarios/');
-          if (expertFilter === 'tutor') return s.skill_code.startsWith('tutor/');
+          if (expertFilter === 'sishu') return s.skill_code.startsWith('tutor/');
           return false;
         });
       setSkills(list);

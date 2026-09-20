@@ -40,7 +40,7 @@ def client(monkeypatch, tmp_path):
                         {"rows": None, "ts": 0.0, "version": None,
                          "lock": _threading.Lock()})
     seed = TestSess()
-    seed.add(ExpertProfile(expert_id="tutor", name="tutor", enabled=True,
+    seed.add(ExpertProfile(expert_id="sishu", name="sishu", enabled=True,
                            entry_kind="chat", system_prompt="s", version=1))
     seed.commit()
     seed.close()
@@ -54,7 +54,7 @@ def client(monkeypatch, tmp_path):
 
 
 def _patch_card(client, payload):
-    return client.patch("/api/experts/tutor", json=payload)
+    return client.patch("/api/experts/sishu", json=payload)
 
 
 def test_patch_suggestions_ok(client):
@@ -92,7 +92,7 @@ def test_patch_params_fsrs_subkey_out_422(client):
 
 def test_get_card_serializes_both_fields(client):
     _patch_card(client, {"suggestions": ["甲"], "params": {"fsrs": {"desired_retention": 0.85}}})
-    r = client.get("/api/experts/tutor")
+    r = client.get("/api/experts/sishu")
     assert r.status_code == 200, r.text
     card = r.json().get("data", r.json())
     assert card.get("suggestions") == ["甲"]

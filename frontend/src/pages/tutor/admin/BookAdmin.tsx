@@ -1,5 +1,5 @@
 /**
- * ⑤R F1（批8）：书源管理页 /e/tutor/admin/book——1:1 复刻原仓 DeepTutor
+ * ⑤R F1（批8）：书源管理页 /e/sishu/admin/book——1:1 复刻原仓 DeepTutor
  * web/app/(workspace)/book/page.tsx（书目列表 → 创建器 → 主线编辑 → 阅读器
  * 四视图 + 处理进度时间线 + 聊天面板 + 深链 ?book=&page= 全保留）。
  * 技术栈替换：next/navigation → react-router-dom（useSearchParams 深链语义不变，
