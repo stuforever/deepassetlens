@@ -204,12 +204,14 @@ const DorisConfigPage: React.FC = () => {
     { title: '创建时间', dataIndex: 'created_at', render: (v: string) => v || '-' },
     {
       title: '操作',
+      onCell: () => ({ className: 'dal-action-col' }),  // 三轨M9：操作列 hover 显现
       render: (_: any, r: Catalog) => (
         <Space size={4} wrap>
           <Button size="small" icon={<ExperimentOutlined />} loading={probing === r.name} onClick={() => probeCatalog(r.name)}>探活</Button>
           <Button size="small" icon={<ReloadOutlined />} loading={refreshing === r.name} onClick={() => refreshCatalog(r.name)}>刷新</Button>
+          {/* 三轨M9：危险操作收「更多」标红 */}
           <Popconfirm title={`确认删除 Catalog ${r.name}？（Doris 与本地记录一并删除）`} onConfirm={() => deleteCatalog(r.name)}>
-            <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            <Button size="small" danger type="text" icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
