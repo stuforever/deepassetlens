@@ -44,7 +44,7 @@ def review_card(user_id: str, kind: str, item_id: str, rating: int, now: float =
 def due_cards(user_id: str, kind: str | None = None, limit: int = 20) -> list[dict]:
     """fsrs_due 的引擎（读面）：due<=now 按 due 升序。"""
     q = ("SELECT card_id, kind, item_id, stability, difficulty, reps, lapses, due, last_review "
-         "FROM learning_review_cards WHERE user_id=:u AND due <= now()")
+         "FROM sishu_review_cards WHERE user_id=:u AND due <= now()")
     params: dict[str, Any] = {"u": user_id}
     if kind:
         q += " AND kind=:k"
@@ -61,11 +61,11 @@ def mastery_query(user_id: str, knowledge_point_id: str) -> dict:
     with pg_session() as s:
         card = s.execute(text(
             "SELECT card_id, stability, difficulty, reps, lapses, due, last_review "
-            "FROM learning_review_cards WHERE kind='knowledge_point' AND item_id=:i AND user_id=:u"),
+            "FROM sishu_review_cards WHERE kind='knowledge_point' AND item_id=:i AND user_id=:u"),
             {"i": knowledge_point_id, "u": user_id}).mappings().first()
         history = s.execute(text(
-            "SELECT r.rating, r.scheduled_interval, r.reviewed_at FROM learning_review_records r "
-            "JOIN learning_review_cards c ON c.card_id=r.card_id "
+            "SELECT r.rating, r.scheduled_interval, r.reviewed_at FROM sishu_review_records r "
+            "JOIN sishu_review_cards c ON c.card_id=r.card_id "
             "WHERE c.kind='knowledge_point' AND c.item_id=:i AND c.user_id=:u ORDER BY r.reviewed_at ASC"),
             {"i": knowledge_point_id, "u": user_id}).mappings().all()
     from app.services.learning.mastery import compute_mastery

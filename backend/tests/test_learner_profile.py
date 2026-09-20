@@ -20,7 +20,7 @@ def _mk_card(card_id: str, kind: str, item_id: str, *, stability: float, days_ag
     now = datetime.now(timezone.utc)
     with _engine.begin() as c:
         c.execute(text(
-            "INSERT INTO learning_review_cards (card_id, kind, item_id, user_id, stability, "
+            "INSERT INTO sishu_review_cards (card_id, kind, item_id, user_id, stability, "
             "difficulty, reps, lapses, due, last_review) VALUES "
             "(:cid, :kind, :item, :uid, :st, 5.0, :reps, :lapses, :due, :lr) ON CONFLICT (card_id) DO UPDATE "
             "SET stability=:st, reps=:reps, lapses=:lapses, due=:due, last_review=:lr"),
@@ -43,7 +43,7 @@ def _mk_record(card_id: str, days_ago: float):
     now = datetime.now(timezone.utc)
     with _engine.begin() as c:
         c.execute(text(
-            "INSERT INTO learning_review_records (card_id, user_id, rating, scheduled_interval, reviewed_at) "
+            "INSERT INTO sishu_review_records (card_id, user_id, rating, scheduled_interval, reviewed_at) "
             "VALUES (:cid, :uid, 3, 1.0, :at)"),
             {"cid": card_id, "uid": UID, "at": now - timedelta(days=days_ago)})
 
@@ -51,15 +51,15 @@ def _mk_record(card_id: str, days_ago: float):
 def _mk_record_at(card_id: str, at: datetime):
     with _engine.begin() as c:
         c.execute(text(
-            "INSERT INTO learning_review_records (card_id, user_id, rating, scheduled_interval, reviewed_at) "
+            "INSERT INTO sishu_review_records (card_id, user_id, rating, scheduled_interval, reviewed_at) "
             "VALUES (:cid, :uid, 3, 1.0, :at)"),
             {"cid": card_id, "uid": UID, "at": at})
 
 
 def _cleanup():
     with _engine.begin() as c:
-        c.execute(text("DELETE FROM learning_review_records WHERE user_id=:u"), {"u": UID})
-        c.execute(text("DELETE FROM learning_review_cards WHERE user_id=:u"), {"u": UID})
+        c.execute(text("DELETE FROM sishu_review_records WHERE user_id=:u"), {"u": UID})
+        c.execute(text("DELETE FROM sishu_review_cards WHERE user_id=:u"), {"u": UID})
 
 
 @pytest.fixture()

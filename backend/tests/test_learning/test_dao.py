@@ -14,10 +14,10 @@ _UID = "tutor-dao-test"
 @pytest.fixture()
 def _clean():
     with _engine.begin() as c:
-        c.execute(text("DELETE FROM learning_review_cards WHERE user_id=:u"), {"u": _UID})
+        c.execute(text("DELETE FROM sishu_review_cards WHERE user_id=:u"), {"u": _UID})
     yield
     with _engine.begin() as c:
-        c.execute(text("DELETE FROM learning_review_cards WHERE user_id=:u"), {"u": _UID})
+        c.execute(text("DELETE FROM sishu_review_cards WHERE user_id=:u"), {"u": _UID})
 
 
 def test_dao_three_states(_clean):
@@ -47,7 +47,7 @@ def test_rebuild_from_records(_clean):
     assert live["reps"] == 3 and live["lapses"] == 1
     # 模拟 FSRS 状态损坏（行为契约：行级重建的触发场景）
     with _engine.begin() as c:
-        c.execute(text("UPDATE learning_review_cards SET stability=-1, reps=0, lapses=99 "
+        c.execute(text("UPDATE sishu_review_cards SET stability=-1, reps=0, lapses=99 "
                        "WHERE card_id=:c"), {"c": out1["card_id"]})
     rebuilt = dao.rebuild_card_from_records(_UID, "mother_question", "mq-dao")
     # 重放终态与损坏前 live 状态一致（浮点 1e-6 容差）

@@ -194,7 +194,15 @@ def execute_api_sql(sql: str) -> dict:
 
 @mcp.tool()
 def execute_entity_api(entity_code: str, filters: dict = {}) -> dict:
-    """执行对象 API 映射（对象来源 API 时用，伪逻辑 SQL + 过滤条件自动下推）。"""
+    """执行对象 API 映射（对象来源 API 时用，伪逻辑 SQL + 过滤条件自动下推）。
+    filters 格式（值类型决定匹配方式；禁止把条件整段当字符串传入）：
+      - {"列": 值}                              精确匹配（=）
+      - {"列": {"contains": "子串"}}            包含匹配（LIKE '%子串%'）——名称/描述类模糊搜索用这个
+      - {"列": {"_like": "前缀%"}}              通配匹配（LIKE 原样，"like" 同义）
+      - {"列": [v1, v2]}                        IN 匹配
+      - {"列": {"_range": [[">=", a], ["<=", b]]}}  范围匹配
+    例：execute_entity_api(entity_code="dim_ps_project_def",
+                           filters={"ProjectDescription": {"contains": "李钢柱"}})"""
     return _with_result_ref(dispatch_kg_action("execute_entity_api", {"entity_code": entity_code, "filters": filters or {}}))
 
 

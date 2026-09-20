@@ -2,7 +2,7 @@
 """⑤批1 纯函数 + ⑤补补-2：learner_profile 真实现——PG 读取面（learning_dao 同库）。
 
 - streak：review_records 按 `reviewed_at::date` DISTINCT 连续区间（今天/昨天为锚回溯）；
-- due：learning_review_cards due<=now 清单；
+- due：sishu_review_cards due<=now 清单；
 - weak：kind=knowledge_point 卡 retention 升序 top-5（FSRS 幂衰减近似 R(t,S)=(1+t/(3S))^-0.5）；
 - kp_mastery：reps>0 卡 (reps-lapses)/reps clamp 0..1；
 - 算法件（exercise_selector）消费面不变：kp_mastery/weak_points/strong_points/due_reviews。
@@ -36,7 +36,7 @@ def _streak_days(user_id: str) -> int:
     """连续复习天数（reviewed_at::date DISTINCT；锚=今天，昨天也算连续起点）。"""
     with _engine.begin() as c:
         rows = c.execute(text(
-            "SELECT DISTINCT reviewed_at::date AS d FROM learning_review_records "
+            "SELECT DISTINCT reviewed_at::date AS d FROM sishu_review_records "
             "WHERE user_id=:u ORDER BY d DESC LIMIT 400"),
             {"u": user_id}).mappings().all()
     days = {r["d"] for r in rows}
@@ -72,11 +72,11 @@ def build_learner_profile(user_id: str = "default") -> Any:
     with _engine.begin() as c:
         cards = c.execute(text(
             "SELECT kind, item_id, stability, reps, lapses, due, last_review "
-            "FROM learning_review_cards WHERE user_id=:u"),
+            "FROM sishu_review_cards WHERE user_id=:u"),
             {"u": uid}).mappings().all()
         p.streak_days = _streak_days(uid)
         p.today_reviews = int(c.execute(text(
-            "SELECT count(*) AS n FROM learning_review_records "
+            "SELECT count(*) AS n FROM sishu_review_records "
             "WHERE user_id=:u AND reviewed_at::date = CURRENT_DATE"),
             {"u": uid}).mappings().first()["n"])
 

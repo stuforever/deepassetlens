@@ -23,7 +23,7 @@ def clean_twin():
     yield
     with _engine.begin() as c:
         for u in (U1, U2):
-            c.execute(text("DELETE FROM learning_wrong_questions WHERE user_id=:u"), {"u": u})
+            c.execute(text("DELETE FROM sishu_wrong_questions WHERE user_id=:u"), {"u": u})
 
 
 def test_twin_user_resolves_per_request(clean_twin):

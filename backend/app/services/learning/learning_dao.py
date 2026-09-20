@@ -21,7 +21,7 @@ def progress_aggregate() -> list[dict]:
         rows = s.execute(text(
             "SELECT user_id, count(*) AS cards, "
             "count(*) FILTER (WHERE due <= to_timestamp(:now)) AS due_now "
-            "FROM learning_review_cards GROUP BY user_id ORDER BY user_id"),
+            "FROM sishu_review_cards GROUP BY user_id ORDER BY user_id"),
             {"now": now}).mappings().all()
     out: list[dict] = []
     for r in rows:
@@ -46,7 +46,7 @@ def get_card(user_id: str, kind: str, item_id: str) -> Optional[dict]:
             "SELECT stability, difficulty, reps, lapses, "
             "EXTRACT(EPOCH FROM due) AS due, "
             "EXTRACT(EPOCH FROM last_review) AS last_review "
-            "FROM learning_review_cards WHERE kind=:k AND item_id=:i AND user_id=:u"),
+            "FROM sishu_review_cards WHERE kind=:k AND item_id=:i AND user_id=:u"),
             {"k": kind, "i": item_id, "u": user_id}).mappings().first()
         if not row:
             return None
@@ -61,7 +61,7 @@ def upsert_card(user_id: str, kind: str, item_id: str, st: dict) -> str:
     card_id = f"{kind}:{item_id}:{user_id}"
     with pg_session() as s:
         s.execute(text("""
-            INSERT INTO learning_review_cards (card_id, kind, item_id, user_id,
+            INSERT INTO sishu_review_cards (card_id, kind, item_id, user_id,
                 stability, difficulty, reps, lapses, due, last_review)
             VALUES (:c, :k, :i, :u, :st, :df, :r, :l,
                     to_timestamp(:d), to_timestamp(:lr))
@@ -78,7 +78,7 @@ def upsert_card(user_id: str, kind: str, item_id: str, st: dict) -> str:
 def append_record(card_id: str, user_id: str, rating: int, interval: float) -> None:
     """流水：review_records 是对账原料+恢复锚（⑤a §二）。"""
     with pg_session() as s:
-        s.execute(text("INSERT INTO learning_review_records (card_id, user_id, rating, "
+        s.execute(text("INSERT INTO sishu_review_records (card_id, user_id, rating, "
                        "scheduled_interval) VALUES (:c, :u, :r, :si)"),
                   {"c": card_id, "u": user_id, "r": rating, "si": interval})
 
@@ -88,7 +88,7 @@ def list_records(user_id: str, kind: str, item_id: str) -> list[dict]:
     with pg_session() as s:
         rows = s.execute(text(
             "SELECT r.rating, EXTRACT(EPOCH FROM r.reviewed_at) AS reviewed_at "
-            "FROM learning_review_records r WHERE r.card_id=:c ORDER BY r.id ASC"),
+            "FROM sishu_review_records r WHERE r.card_id=:c ORDER BY r.id ASC"),
             {"c": f"{kind}:{item_id}:{user_id}"}).mappings().all()
     return [{"rating": int(r["rating"]), "reviewed_at": float(r["reviewed_at"])} for r in rows]
 
@@ -140,7 +140,7 @@ def wrong_question_add(user_id: str, variant_text: str, mother_question_id: str 
     wq_id = str(_u.uuid4())
     with pg_session() as s:
         s.execute(text(
-            "INSERT INTO learning_wrong_questions (wq_id, user_id, mother_question_id, "
+            "INSERT INTO sishu_wrong_questions (wq_id, user_id, mother_question_id, "
             "variant_text, error_context, question, my_answer, error_type, source) "
             "VALUES (:w, :u, :m, :v, :e, CAST(:q AS JSON), :ma, :et, :src)"),
             {"w": wq_id, "u": user_id, "m": mother_question_id or "",
@@ -160,13 +160,13 @@ def mother_question_find_or_create(keywords: str, knowledge_point_id: str = "",
         row = None
         if kw:
             row = s.execute(text(
-                "SELECT mq_id, title, knowledge_point_id FROM learning_mother_questions "
+                "SELECT mq_id, title, knowledge_point_id FROM sishu_mother_questions "
                 "WHERE title ILIKE :pat OR archetype_text ILIKE :pat "
                 "ORDER BY mq_id LIMIT 1"),
                 {"pat": f"%{kw}%"}).mappings().first()
         if row is None and knowledge_point_id:
             row = s.execute(text(
-                "SELECT mq_id, title, knowledge_point_id FROM learning_mother_questions "
+                "SELECT mq_id, title, knowledge_point_id FROM sishu_mother_questions "
                 "WHERE knowledge_point_id=:kp ORDER BY mq_id LIMIT 1"),
                 {"kp": knowledge_point_id}).mappings().first()
         if row is not None:
@@ -201,7 +201,7 @@ def wrong_question_update(user_id: str, wq_id: str, patch: dict) -> Optional[dic
     params.update({"w": wq_id, "u": user_id})
     with pg_session() as s:
         row = s.execute(text(
-            f"UPDATE learning_wrong_questions SET {sets} WHERE wq_id=:w AND user_id=:u "
+            f"UPDATE sishu_wrong_questions SET {sets} WHERE wq_id=:w AND user_id=:u "
             "RETURNING wq_id, status, error_type, my_answer, resolved_at"),
             params).mappings().first()
     return dict(row) if row else None
@@ -211,7 +211,7 @@ def wrong_question_soft_delete(user_id: str, wq_id: str) -> bool:
     """⑤补补-5 管理面：软删——status 置 resolved + variant_text 前缀 [已删除]（可追溯）。"""
     with pg_session() as s:
         row = s.execute(text(
-            "UPDATE learning_wrong_questions SET status='resolved', resolved_at=now(), "
+            "UPDATE sishu_wrong_questions SET status='resolved', resolved_at=now(), "
             "variant_text = '[已删除] ' || variant_text "
             "WHERE wq_id=:w AND user_id=:u AND variant_text NOT LIKE '[已删除]%' "
             "RETURNING wq_id"),
@@ -224,8 +224,8 @@ def wrong_question_query(user_id: str, status: str = "", limit: int = 20,
     q = ("SELECT wq.wq_id, wq.mother_question_id, wq.variant_text, wq.error_context, wq.status, "
          "wq.wrong_at, wq.resolved_at, wq.question, wq.my_answer, wq.error_type, wq.source, "
          "mq.knowledge_point_id AS mother_kp "
-         "FROM learning_wrong_questions wq "
-         "LEFT JOIN learning_mother_questions mq ON mq.mq_id = wq.mother_question_id "
+         "FROM sishu_wrong_questions wq "
+         "LEFT JOIN sishu_mother_questions mq ON mq.mq_id = wq.mother_question_id "
          "WHERE wq.user_id=:u")
     params: dict = {"u": user_id}
     if status in ("open", "resolved"):
@@ -256,7 +256,7 @@ def mother_questions_by_kps(kps: list[str]) -> list[dict]:
     with pg_session() as s:
         rows = s.execute(text(
             "SELECT mq_id, title, archetype_text, knowledge_point_id, variant_count "
-            "FROM learning_mother_questions WHERE enabled=TRUE "
+            "FROM sishu_mother_questions WHERE enabled=TRUE "
             "AND knowledge_point_id = ANY(:kps)"),
             {"kps": list(kps)}).mappings().all()
     return [dict(r) for r in rows]
@@ -270,7 +270,7 @@ def mother_question_create(title: str, archetype_text: str, knowledge_point_id: 
     mq_id = f"mq-{uuid.uuid4().hex[:12]}"
     with pg_session() as s:
         s.execute(text(
-            "INSERT INTO learning_mother_questions "
+            "INSERT INTO sishu_mother_questions "
             "(mq_id, title, archetype_text, knowledge_point_id) "
             "VALUES (:mid, :title, :arch, :kp)"),
             {"mid": mq_id, "title": title, "arch": archetype_text, "kp": knowledge_point_id})
@@ -288,7 +288,7 @@ def mother_question_update(mq_id: str, patch: dict) -> Optional[dict]:
     fields["mid"] = mq_id
     with pg_session() as s:
         row = s.execute(text(
-            f"UPDATE learning_mother_questions SET {sets} WHERE mq_id = :mid "
+            f"UPDATE sishu_mother_questions SET {sets} WHERE mq_id = :mid "
             "RETURNING mq_id, title, archetype_text, knowledge_point_id, variant_count, enabled"),
             fields).mappings().first()
     return dict(row) if row else None
@@ -298,7 +298,7 @@ def mother_question_delete(mq_id: str) -> bool:
     """母题删（admin，物理删——母题是管理数据，非专家卡「只关不删」语义）。"""
     with pg_session() as s:
         row = s.execute(text(
-            "DELETE FROM learning_mother_questions WHERE mq_id = :mid RETURNING mq_id"),
+            "DELETE FROM sishu_mother_questions WHERE mq_id = :mid RETURNING mq_id"),
             {"mid": mq_id}).first()
     return row is not None
 
@@ -309,11 +309,11 @@ def mother_questions_list(kp: str = "", limit: int = 100) -> list[dict]:
         if kp:
             rows = s.execute(text(
                 "SELECT mq_id, title, archetype_text, knowledge_point_id, variant_count, enabled "
-                "FROM learning_mother_questions WHERE knowledge_point_id = :kp ORDER BY mq_id LIMIT :n"),
+                "FROM sishu_mother_questions WHERE knowledge_point_id = :kp ORDER BY mq_id LIMIT :n"),
                 {"kp": kp, "n": limit}).mappings().all()
         else:
             rows = s.execute(text(
                 "SELECT mq_id, title, archetype_text, knowledge_point_id, variant_count, enabled "
-                "FROM learning_mother_questions ORDER BY mq_id LIMIT :n"),
+                "FROM sishu_mother_questions ORDER BY mq_id LIMIT :n"),
                 {"n": limit}).mappings().all()
     return [dict(r) for r in rows]

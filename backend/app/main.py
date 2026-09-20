@@ -241,8 +241,8 @@ async def lifespan(app: FastAPI):
         logger.warning(f"[startup] capabilities 列迁移异常（不阻启动）: {_cap_err}")
     # ⑤批1（spec §二 Runbook 步骤1）：教学引擎 PG 四表（幂等；失败不阻启动——教学工具
     # 面返回可读错误，L1/L2/L3 记忆不受影响）。
-    # ⑤R R1（批12）：四表冻结（learning_review_cards/learning_review_records/
-    # learning_wrong_questions/learning_mother_questions 保留不迁移不删除；
+    # ⑤R R1（批12）：四表冻结（sishu_review_cards/sishu_review_records/
+    # sishu_wrong_questions/sishu_mother_questions 保留不迁移不删除；
     # 先行版端点/工具面已退役，表=专家域数据自隔离铁律下的冻结存档，M00 已登记）。
     try:
         from app.services.learning.pg import ensure_tables

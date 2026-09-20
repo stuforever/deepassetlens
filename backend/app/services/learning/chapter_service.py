@@ -46,7 +46,7 @@ def chapter_overview(chapter_id: str, user_id: str) -> Optional[dict]:
     if kp_codes:
         with _engine.begin() as c:
             rows = c.execute(text(
-                "SELECT item_id, stability, reps, lapses, due FROM learning_review_cards "
+                "SELECT item_id, stability, reps, lapses, due FROM sishu_review_cards "
                 "WHERE user_id=:u AND kind='knowledge_point' AND item_id = ANY(:kps)"),
                 {"u": user_id, "kps": kp_codes}).mappings().all()
             for r in rows:
@@ -57,8 +57,8 @@ def chapter_overview(chapter_id: str, user_id: str) -> Optional[dict]:
                 }
             wrong = [dict(r) for r in c.execute(text(
                 "SELECT wq.wq_id, wq.variant_text, wq.status, wq.wrong_at, wq.mother_question_id "
-                "FROM learning_wrong_questions wq "
-                "JOIN learning_mother_questions mq ON mq.mq_id = wq.mother_question_id "
+                "FROM sishu_wrong_questions wq "
+                "JOIN sishu_mother_questions mq ON mq.mq_id = wq.mother_question_id "
                 "WHERE wq.user_id=:u AND mq.knowledge_point_id = ANY(:kps) "
                 "ORDER BY wq.wrong_at DESC LIMIT 20"),
                 {"u": user_id, "kps": kp_codes}).mappings().all()]
@@ -103,7 +103,7 @@ def path_overview(user_id: str) -> dict:
     if kp_codes:
         with _engine.begin() as c:
             for r in c.execute(text(
-                "SELECT item_id, stability, reps, lapses, last_review FROM learning_review_cards "
+                "SELECT item_id, stability, reps, lapses, last_review FROM sishu_review_cards "
                 "WHERE user_id=:u AND kind='knowledge_point' AND item_id = ANY(:kps)"),
                 {"u": user_id, "kps": kp_codes}).mappings().all():
                 cards[r["item_id"]] = dict(r)
