@@ -265,7 +265,12 @@ def mother_questions_by_kps(kps: list[str]) -> list[dict]:
 # ---------- ⑤补补-1：母题 CRUD（题库 admin 端点族数据面） ----------
 
 def mother_question_create(title: str, archetype_text: str, knowledge_point_id: str) -> dict:
-    """母题入库（admin）。mq_id 缺省生成；enabled 缺省 TRUE。"""
+    """母题入库（admin）。mq_id 缺省生成；enabled 缺省 TRUE。
+
+    v4批6 6.4 双轨消除：doc 单源=sishu_mq_docs（h5 错题本读面），窄表
+    sishu_mother_questions 同 id 投影（wrong_questions FK/JOIN 面）——
+    chat 录题与 h5 错题本同一数据面（6.7 双轨消除断言）。
+    """
     import uuid
     mq_id = f"mq-{uuid.uuid4().hex[:12]}"
     with pg_session() as s:
@@ -274,6 +279,14 @@ def mother_question_create(title: str, archetype_text: str, knowledge_point_id: 
             "(mq_id, title, archetype_text, knowledge_point_id) "
             "VALUES (:mid, :title, :arch, :kp)"),
             {"mid": mq_id, "title": title, "arch": archetype_text, "kp": knowledge_point_id})
+    from app.services.sishu.learning.mq_models import MotherQuestion
+    from app.services.sishu_data.mq_store import MotherQuestionStorePG
+
+    MotherQuestionStorePG().create_mother(MotherQuestion(
+        id=mq_id, title=title,
+        question_text=archetype_text or title,
+        knowledge_point_id=knowledge_point_id or None,
+    ))
     return {"mq_id": mq_id, "title": title, "archetype_text": archetype_text,
             "knowledge_point_id": knowledge_point_id, "variant_count": 0, "enabled": True}
 

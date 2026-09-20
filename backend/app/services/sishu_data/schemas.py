@@ -57,6 +57,8 @@ _LEARNING = [
       kind VARCHAR(32),
       payload JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now())""",
+    "ALTER TABLE sishu_practice_gen ADD COLUMN IF NOT EXISTS chapter_id VARCHAR(128) DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_practice_gen_ch ON sishu_practice_gen (user_id, chapter_id)",
     """CREATE TABLE IF NOT EXISTS sishu_learner_profile (
       user_id VARCHAR(128) PRIMARY KEY,
       payload JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -71,10 +73,13 @@ _LEARNING = [
 ]
 
 # 母题域（v4批6：vendor mother_questions JSON store 184 题迁移——与 learning_* 窄表
-# sishu_mother_questions（批2 改名，错题联动）异实体同名，族名 sishu_mq_* 避撞（E-60））
+# sishu_mother_questions（批2 改名，错题联动）异实体同名，族名 sishu_mq_* 避撞（E-60））。
+# user_id（批6 6.B）：?u= data-class 隔离单轨列——vendor 经 user_context 切目录，PG 换列
+# （local-admin=桌缺省；h5_<slug>=H5 用户）；存量行经 DEFAULT 回填（迁移源=admin 仓）。
 _MOTHER = [
     """CREATE TABLE IF NOT EXISTS sishu_mq_docs (
       mq_id VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',
       doc JSONB NOT NULL,                      -- vendor MotherQuestion 全字段（形状冻结 index.json）
       status VARCHAR(20) NOT NULL DEFAULT 'active',
       subject VARCHAR(32),
@@ -86,28 +91,48 @@ _MOTHER = [
       created_at TIMESTAMPTZ NOT NULL DEFAULT now())""",
     """CREATE TABLE IF NOT EXISTS sishu_question_variants (
       vq_id VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',
       mother_id VARCHAR(64) NOT NULL,
       doc JSONB NOT NULL,
       status VARCHAR(20) NOT NULL DEFAULT 'active',
       update_time BIGINT)""",
     "CREATE INDEX IF NOT EXISTS idx_sishu_mq_status ON sishu_mq_docs (status)",
     "CREATE INDEX IF NOT EXISTS idx_sishu_mq_kp ON sishu_mq_docs (knowledge_point_id)",
+    # 既有部署升级（CREATE 内新列对老表幂等补齐——先于依赖 user_id 的索引执行）
+    "ALTER TABLE sishu_mq_docs ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "ALTER TABLE sishu_question_variants ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "ALTER TABLE sishu_mq_review_state ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "ALTER TABLE sishu_mq_tags ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "ALTER TABLE sishu_mq_attempts ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_user ON sishu_mq_docs (user_id)",
     "CREATE INDEX IF NOT EXISTS idx_sishu_vq_mother ON sishu_question_variants (mother_id)",
-    # 复习状态/标签/attempt（vendor rs/tags/att JSON 文件迁移）
+    "CREATE INDEX IF NOT EXISTS idx_sishu_vq_user ON sishu_question_variants (user_id)",
+    # 复习状态/标签/attempt/review_log（vendor rs/tags/att/review_log JSON 文件迁移）
     """CREATE TABLE IF NOT EXISTS sishu_mq_review_state (
       mq_id VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',
       doc JSONB NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS sishu_mq_tags (
       name VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',
       color VARCHAR(16),
       doc JSONB NOT NULL DEFAULT '{}'::jsonb)""",
     """CREATE TABLE IF NOT EXISTS sishu_mq_attempts (
       attempt_id VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',
       mother_id VARCHAR(64),
       doc JSONB NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS sishu_mq_review_log (
+      seq BIGSERIAL PRIMARY KEY,
+      user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',
+      doc JSONB NOT NULL)""",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_review_log_user ON sishu_mq_review_log (user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_attempts_user ON sishu_mq_attempts (user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_review_state_user ON sishu_mq_review_state (user_id)",
 ]
 
-# 笔记族（chat_history.db notebook 三表批6 迁移；typed 列面迁移时扩）
+# 笔记族（chat_history.db notebook 三表批6 迁移；typed 列面=批6 6.C 扩——
+# payload 全文档+过滤热列；epoch 列保留 sqlite REAL 语义（排序/快照））
 _NOTEBOOK = [
     """CREATE TABLE IF NOT EXISTS sishu_notebook_entries (
       id BIGSERIAL PRIMARY KEY,
@@ -115,11 +140,22 @@ _NOTEBOOK = [
       title TEXT,
       payload JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now())""",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS session_id VARCHAR(128) DEFAULT ''",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS session_title TEXT DEFAULT ''",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS turn_id VARCHAR(128) DEFAULT ''",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS question_id VARCHAR(128) DEFAULT ''",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS is_correct BOOLEAN DEFAULT FALSE",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS bookmarked BOOLEAN DEFAULT FALSE",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS created_at_epoch DOUBLE PRECISION DEFAULT 0",
+    "ALTER TABLE sishu_notebook_entries ADD COLUMN IF NOT EXISTS updated_at_epoch DOUBLE PRECISION DEFAULT 0",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_nb_entries_session ON sishu_notebook_entries (user_id, session_id, created_at_epoch DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_nb_entries_bookmarked ON sishu_notebook_entries (user_id, bookmarked, created_at_epoch DESC)",
     """CREATE TABLE IF NOT EXISTS sishu_notebook_categories (
       id BIGSERIAL PRIMARY KEY,
       user_id VARCHAR(128) NOT NULL,
       name TEXT,
       payload JSONB NOT NULL DEFAULT '{}'::jsonb)""",
+    "ALTER TABLE sishu_notebook_categories ADD COLUMN IF NOT EXISTS created_at_epoch DOUBLE PRECISION DEFAULT 0",
     """CREATE TABLE IF NOT EXISTS sishu_notebook_entry_categories (
       entry_id BIGINT NOT NULL,
       category_id BIGINT NOT NULL,

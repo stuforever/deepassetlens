@@ -349,15 +349,41 @@ app.include_router(memory.router)  # 自带 prefix="/api/memory"（记忆插槽�
 # ⑤R B1（唯一交棒 批3.1）：vendor 子树挂载——原 prefix，端点契约不变。
 # tutor_routers=(router, prefix, tags, deps) 逐对对齐原仓 main.py 挂载表（随批次增长）；
 # 静态挂载照原仓 L342-376（workspace 根走 DEEPTUTOR_HOME=DT_TUTOR_WORKSPACE_ROOT 单点）。
+# v4批6 6.C+6.6：学习数据域七域换平台路由（sishu_learning 包，require_expert+binding 全挂
+# ——执行面零 vendor 导入），vendor 对应六行摘除（curriculum/knowledge/book 等仍 vendor）。
 from app.vendor.deeptutor.api.tutor_routers import static_mounts as _dt_static_mounts
 from app.vendor.deeptutor.api.tutor_routers import tutor_routers as _dt_tutor_routers
 
+# 批6 摘行集：tags 元组首元素标识（与 tutor_routers 装配表逐字对应）
+_SISHU_BATCH6_UNMOUNTED = {
+    "mother-questions", "learner-profile", "mastery-path",
+    "self-learning", "notebook", "question-notebook",
+}
+
+from app.api import sishu_learning as _sishu_learning
+from app.api.sishu_learning._enforce import SISHU_ROUTER_DEPS as _sishu_deps
+
+for _r, _prefix, _tags in _sishu_learning.SISHU_MOUNTS:
+    app.include_router(_r, prefix=_prefix, tags=_tags, dependencies=_sishu_deps)
+
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
+    if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
+        continue  # v4批6 6.6：七域 vendor 行摘除（平台 sishu_learning 承接同前缀）
     app.include_router(_r, prefix=_prefix, tags=_tags, dependencies=_deps)
 from fastapi.staticfiles import StaticFiles as _DtStaticFiles
 
+# 批6 6.3：mother-questions/files 静态挂载平台化（vendor static_mounts 对应项跳过，
+# 平台经移植 path_service 解析同一目录——与 vendor 数据零漂移）。
+from app.services.sishu.services.path_service import get_path_service as _sishu_gps
+
 for _mp, _mdir, _mname in _dt_static_mounts():
+    if _mname == "mother-question-images":
+        continue
     app.mount(_mp, _DtStaticFiles(directory=str(_mdir)), name=_mname)
+_mq_img_dir = _sishu_gps().get_workspace_dir() / "mother_questions" / "images"
+_mq_img_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/api/v1/mother-questions/files", _DtStaticFiles(directory=str(_mq_img_dir)),
+          name="mother-question-images")
 
 # MCP Server（业务工具标准化，deepagent 和外部 client 共用，SSE 传输 /mcp/sse）
 from app.mcp_server import mount_mcp
