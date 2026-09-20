@@ -15,7 +15,7 @@ import { SyncOutlined, CompressOutlined, CloseOutlined } from '@ant-design/icons
 import { useStore } from '../store/useStore';
 import { conceptApi } from '../services/api';
 import ModelTreeManager from './ModelTreeManager';
-import { tokens } from '../theme/tokens';
+import { tokens, entitySemanticColors } from '../theme/tokens';
 import { StatusTag } from './shell';
 
 const { Text } = Typography;
@@ -616,10 +616,10 @@ const ForceCanvas: React.FC = () => {
         </Tooltip>
         <Button size="small" icon={<SyncOutlined />} onClick={() => fetchGraphData()}>刷新</Button>
           </div>
-          {/* B3 美化：左下固定图例卡（节点色 = 实体类别色，概念 = 主色） */}
+          {/* 三轨M8(U3) §4.1：图例并入右下悬浮卡（与小地图同区；概念=语义紫） */}
           <div
             style={{
-              position: 'absolute', left: 12, bottom: 12, zIndex: 20,
+              position: 'absolute', right: 12, bottom: 12, zIndex: 20,
               padding: '8px 12px', borderRadius: tokens.radius.card,
               background: 'rgba(255,255,255,.9)',
               WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)',
@@ -634,7 +634,7 @@ const ForceCanvas: React.FC = () => {
               </div>
             ))}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tokens.colors.textSecondary, lineHeight: '20px' }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, border: `2px solid ${tokens.colors.primary}`, background: tokens.colors.primaryBg, flexShrink: 0 }} />
+              <span style={{ width: 10, height: 10, borderRadius: 3, border: `2px solid ${tokens.entitySemanticColors.concept}`, background: tokens.colors.primaryBg, flexShrink: 0 }} />
               概念分类
             </div>
           </div>
