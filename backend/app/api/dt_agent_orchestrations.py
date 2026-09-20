@@ -948,7 +948,7 @@ async def run_visualize(req, session_id: str, turn_id: str, user_prefix: str) ->
                    metadata={"ok": True, "render_mode": render_mode})
         return
 
-    # manim 分支：代码→沙箱（vendor SandboxService——runner=DEEPTUTOR_SANDBOX_RUNNER_URL）
+    # manim 分支：代码→沙箱（v4批4：平台 SandboxClient 9385 直连——vendor SandboxService 清零）
     manim_system = ("你是 manim 代码引擎。生成单文件 manim Community 版脚本（Scene 类名 Main），"
                     "渲染参数由调用方注入。只输出 Python 代码。")
     code_acc = []
@@ -967,15 +967,24 @@ async def run_visualize(req, session_id: str, turn_id: str, user_prefix: str) ->
     code = "".join(code_acc).strip().removeprefix("```python").removeprefix("```").removesuffix("```")
     exec_res: Dict[str, Any] = {}
     try:
-        from app.vendor.deeptutor.services.sandbox.service import SandboxService
-        from app.vendor.deeptutor.services.sandbox.spec import ExecRequest, ResourceLimits
-        svc = SandboxService()
-        script_name = "manim_scene.py"
+        import base64 as _b64
+        from app.services.sandbox_client import SandboxClient
+        client = SandboxClient(timeout_s=300)
+        # 平台 runner 契约：代码须含 main()；manim 源码 b64 嵌入落盘后经 CLI 渲染
+        # （平台镜像无 manim/subsystem 受限时→runner_error→走下方 degraded 通道，4.3 登记）。
+        code_b64 = _b64.b64encode(code.encode("utf-8")).decode("ascii")
         out_flag = "-ql" if render_mode == "manim_video" else "-qm"
-        req_exec = ExecRequest(
-            command=f"bash -lc \"cat > /tmp/{script_name} << 'PYEOF'\n{code}\nPYEOF\nmanim {out_flag} /tmp/{script_name} Main\"",
-            limits=ResourceLimits(timeout_s=300, memory_mb=2048, max_output_chars=20_000, cpu_seconds=300))
-        result = await svc.run(req_exec, user_id=user_prefix or "anonymous")
+        script = (
+            "import base64, subprocess, sys\n"
+            "def main():\n"
+            f"    src = base64.b64decode('{code_b64}').decode('utf-8')\n"
+            "    open('/tmp/manim_scene.py', 'w', encoding='utf-8').write(src)\n"
+            f"    r = subprocess.run(['manim', '{out_flag}', '/tmp/manim_scene.py', 'Main'],\n"
+            "                       capture_output=True, text=True, timeout=270)\n"
+            "    print(r.stdout[-6000:])\n"
+            "    sys.stderr.write(r.stderr[-6000:])\n"
+            "    raise SystemExit(r.returncode)\n")
+        result = await client.execute(script)
         exec_res = {"exit_code": result.exit_code, "stdout": result.stdout[-2000:], "stderr": result.stderr[-2000:],
                     "error": result.error, "timed_out": result.timed_out}
     except Exception as e:
