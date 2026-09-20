@@ -173,6 +173,8 @@ export async function saveLlmDirectory(
   next: CatalogService,
   prevRows: LLMConnectionRow[],
 ): Promise<{ rows: LLMConnectionRow[]; block: CatalogService }> {
+  // 三轨M10(:222)：逐行操作包 try/catch——单行失败计数告警不再整体抛出半完成态
+  const saveErrors: string[] = [];
   const prevById = new Map(prevRows.map((r) => [r.id, r]));
   const nextRowIds = new Set<string>();
   const takenNames = new Set<string>();
@@ -214,38 +216,53 @@ export async function saveLlmDirectory(
           ...(model.context_window_detected_at != null ? { context_window_detected_at: model.context_window_detected_at } : {}),
         },
       };
-      if (rowId) {
-        takenNames.add(connName);
-        nextRowIds.add(rowId);
-        // 交棒 §5.3(b)：update=原始行+覆盖映射字段——extra_config 先铺原值再覆盖
-        // 映射键，保住 4coding 行 mode_profiles 等既有键不被抹掉。
-        await llmAdminApi.updateConnection(rowId, {
-          ...baseFields,
-          extra_config: { ...rowExtra(prevRow!), ...baseFields.extra_config },
-        });
-      } else {
-        const created = await llmAdminApi.createConnection({
-          ...NEW_CONNECTION_DEFAULTS,
-          ...baseFields,
-          enabled: true,
-          description: '引擎批8：/llm-config ③直连管理',
-        });
-        const createdRow = (created.data as { data?: LLMConnectionRow })?.data;
-        if (createdRow) {
-          takenNames.add(createdRow.name);
-          nextRowIds.add(createdRow.id);
+      try {
+        if (rowId) {
+          takenNames.add(connName);
+          nextRowIds.add(rowId);
+          // 交棒 §5.3(b)：update=原始行+覆盖映射字段——extra_config 先铺原值再覆盖
+          // 映射键，保住 4coding 行 mode_profiles 等既有键不被抹掉。
+          await llmAdminApi.updateConnection(rowId, {
+            ...baseFields,
+            extra_config: { ...rowExtra(prevRow!), ...baseFields.extra_config },
+          });
+        } else {
+          const created = await llmAdminApi.createConnection({
+            ...NEW_CONNECTION_DEFAULTS,
+            ...baseFields,
+            enabled: true,
+            description: '引擎批8：/llm-config ③直连管理',
+          });
+          const createdRow = (created.data as { data?: LLMConnectionRow })?.data;
+          if (createdRow) {
+            takenNames.add(createdRow.name);
+            nextRowIds.add(createdRow.id);
+          } else {
+            saveErrors.push(`create ${profile.name}: 响应缺行`);
+          }
         }
+      } catch (e) {
+        saveErrors.push(`${rowId ? 'update' : 'create'} ${profile.name}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   }
 
   for (const row of prevRows) {
     if (!nextRowIds.has(row.id)) {
-      await llmAdminApi.deleteConnection(row.id);
+      try {
+        await llmAdminApi.deleteConnection(row.id);
+      } catch (e) {
+        // 三轨M10(:242)：并发已删（404）不再中途炸——记录后继续对账
+        saveErrors.push(`delete ${row.name}: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
   }
 
   const rows = await fetchLlmConnectionRows();
+  if (saveErrors.length) {
+    // eslint-disable-next-line no-console
+    console.warn('[llmDirectory] 保存存在失败行（部分成功可恢复）:', saveErrors);
+  }
   return { rows, block: rowsToLlmService(rows) };
 }
 
