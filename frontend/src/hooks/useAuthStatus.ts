@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { fetchAuthStatus } from "../lib/auth";
 
 export interface AuthStatusState {
+  /** 三轨M6 顺手修(:44)：请求失败（网络/5xx）置 true——与「认证未开启」可区分 */
+  failed?: boolean;
   /** Whether auth is enabled on the backend. */
   enabled: boolean;
   /** Whether the current session is authenticated. */
@@ -46,6 +48,15 @@ function loadAuthStatus(): Promise<AuthStatusState> {
         authenticated: Boolean(status?.authenticated),
         isAdmin: status?.role === "admin",
         loading: false,
+        failed: false,
+      }))
+      .catch(() => ({
+        // 三轨M6 顺手修(:44)：失败态不再折叠成「未开启认证」——failed=true 供 UI 区分
+        enabled: false,
+        authenticated: false,
+        isAdmin: false,
+        loading: false,
+        failed: true,
       }))
       .finally(() => {
         inflight = null;

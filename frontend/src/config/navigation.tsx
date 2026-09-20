@@ -40,6 +40,8 @@ import {
   TrophyOutlined,
   BarChartOutlined,
   ProfileOutlined,
+  HomeOutlined,
+  MobileOutlined,
 } from '@ant-design/icons';
 
 export interface NavItem {
@@ -62,107 +64,72 @@ export const HOME_NAV_ITEM: NavItem = {
   menuKey: 'portal',
   label: '专家门户',
   path: '/',
-  icon: SearchOutlined,
+  icon: HomeOutlined,
 };
 
 export const NAV_GROUPS: NavGroup[] = [
-  // ── IA 批3 3.1：三空间组（静态注册——根因2 修复；组名回退由 AppSider 卡名实时取覆盖）──
+  // ── 三轨M6(U1) 侧栏 4 区重构（ui-audit 规格 §2.2）：7 组 47 项 → 4 区——
+  // h5 12 项移出桌面侧栏（桌面唯一展台入口）；sishu 功能页留路由经门户专家卡进入；
+  // sishu 管理三项保留在工作区（裁定原文「保留在空间组内」）。
   {
-    key: 'expert_wenshu',
-    title: '数据探索专家',
-    icon: SearchOutlined,
+    key: 'workspace_group',
+    title: '工作区',
+    icon: CommentOutlined,
     items: [
-      { menuKey: 'e:wenshu:chat', label: '对话', path: '/e/wenshu/chat', icon: CommentOutlined },
+      { menuKey: 'e:wenshu:chat', label: '数据探索对话', path: '/e/wenshu/chat', icon: CommentOutlined },
+      { menuKey: 'e:sishu:chat', label: '私塾先生对话', path: '/e/sishu/chat', icon: ReadOutlined },
+      { menuKey: 'e:tutor-h5:chat', label: 'h5 展台', path: '/e/tutor-h5/chat', icon: MobileOutlined },
+      { menuKey: 'e:sishu:admin:mq', label: '母题库管理', path: '/e/sishu/admin/mother-questions', icon: BookOutlined },
+      { menuKey: 'e:sishu:admin:book', label: '书源管理', path: '/e/sishu/admin/book', icon: BookOutlined },
+      { menuKey: 'e:sishu:admin:settings', label: '教学设置', path: '/e/sishu/admin/settings', icon: SettingOutlined },
+    ],
+  },
+  {
+    key: 'asset_group',
+    title: '资产管理',
+    icon: DatabaseOutlined,
+    items: [
+      // 建模
       { menuKey: 'graph', label: '图谱管理', path: '/graph', icon: ShareAltOutlined },
       { menuKey: 'tree_model', label: '四区建模', path: '/tree-model', icon: PartitionOutlined },
       { menuKey: 'matrix_model', label: '资产矩阵', path: '/matrix', icon: TableOutlined },
       { menuKey: 'gallery', label: '图库', path: '/gallery', icon: DeploymentUnitOutlined },
       { menuKey: 'entity_relation_manage', label: '实体关系', path: '/entity-relation', icon: NodeIndexOutlined },
+      // 数据
       { menuKey: 'master_data', label: '主数据', path: '/master-data', icon: DatabaseOutlined },
       { menuKey: 'activity_data', label: '活动数据', path: '/activity', icon: NodeIndexOutlined },
       { menuKey: 'source', label: '来源表管理', path: '/source', icon: TableOutlined },
       { menuKey: 'mapping', label: '映射管理', path: '/mapping', icon: BranchesOutlined },
+      // 接入
       { menuKey: 'datasource', label: '数据源', path: '/datasource', icon: CloudServerOutlined },
-      { menuKey: 'metric_manager', label: '指标管理', path: '/metrics', icon: UnorderedListOutlined },
       { menuKey: 'doris_config', label: 'Doris 配置', path: '/doris-config', icon: DatabaseOutlined },
+      // 语义
+      { menuKey: 'metric_manager', label: '指标管理', path: '/metrics', icon: UnorderedListOutlined },
     ],
   },
   {
-    key: 'expert_tutor',
-    title: '私塾先生',
-    icon: ReadOutlined,
-    items: [
-      { menuKey: 'e:sishu:chat', label: '对话', path: '/e/sishu/chat', icon: CommentOutlined },
-      // 引擎批5 5.5：书籍工作台（DT book 页 1:1——书库/创建器/阅读器三态）
-      { menuKey: 'e:sishu:book', label: '书籍', path: '/e/sishu/book', icon: BookOutlined },
-      // IA批6 6.3：placeholder 解除——页面已注册 EXPERT_PAGES.tutor（co-writer/self-learning=use、partners=manage）
-      { menuKey: 'e:sishu:self-learning', label: '自主学习', path: '/e/sishu/self-learning', icon: RocketOutlined },
-      { menuKey: 'e:sishu:co-writer', label: 'AI写作', path: '/e/sishu/co-writer', icon: EditOutlined },
-      // 管理三项列空间菜单（menuKey=TUTOR_ADMIN_PAGES 注册表现状键——KeepAlive 稳定）
-      { menuKey: 'e:sishu:admin:mq', label: '母题库管理', path: '/e/sishu/admin/mother-questions', icon: BookOutlined },
-      { menuKey: 'e:sishu:admin:book', label: '书源管理', path: '/e/sishu/admin/book', icon: BookOutlined },
-      { menuKey: 'e:sishu:admin:settings', label: '教学设置', path: '/e/sishu/admin/settings', icon: SettingOutlined },
-      // 伙伴/推送（IA批6 6.3 就绪；空间内显隐按 manage——3.3）
-      { menuKey: 'e:sishu:partners', label: '伙伴/推送', path: '/e/sishu/partners', icon: TeamOutlined },
-    ],
-  },
-  {
-    key: 'expert_tutor_h5',
-    title: '私塾先生h5',
-    icon: ReadOutlined,
-    items: [
-      // 12 项（终审裁定③：首页/我的/教材学/书路径 hideInMenu 保留路由，不入菜单）
-      { menuKey: 'e:tutor-h5:chat', label: '对话', path: '/e/tutor-h5/chat', icon: CommentOutlined },
-      { menuKey: 'e:tutor-h5:learn', label: '自主学习', path: '/e/tutor-h5/learn', icon: ReadOutlined },
-      { menuKey: 'e:tutor-h5:classroom', label: '课堂', path: '/e/tutor-h5/classroom', icon: VideoCameraOutlined },
-      { menuKey: 'e:tutor-h5:review', label: '复习', path: '/e/tutor-h5/review', icon: RedoOutlined },
-      { menuKey: 'e:tutor-h5:wrong', label: '错题录入', path: '/e/tutor-h5/wrong', icon: FormOutlined },
-      { menuKey: 'e:tutor-h5:wrongbook', label: '错题本', path: '/e/tutor-h5/wrongbook', icon: BookOutlined },
-      { menuKey: 'e:tutor-h5:paths', label: '精通之路', path: '/e/tutor-h5/paths', icon: TrophyOutlined },
-      { menuKey: 'e:tutor-h5:report', label: '学情报告', path: '/e/tutor-h5/report', icon: BarChartOutlined },
-      { menuKey: 'e:tutor-h5:atlas', label: '知识地图', path: '/e/tutor-h5/atlas', icon: ApartmentOutlined },
-      { menuKey: 'e:tutor-h5:book', label: '教材阅读', path: '/e/tutor-h5/book', icon: BookOutlined },
-      { menuKey: 'e:tutor-h5:notebook', label: '笔记本', path: '/e/tutor-h5/notebook', icon: ProfileOutlined },
-      { menuKey: 'e:tutor-h5:share', label: '分享', path: '/e/tutor-h5/share', icon: ShareAltOutlined },
-    ],
-  },
-  // ── 技能配置（SkillManagerV2 读 ?expert= 查询参数过滤——3.5，不新建页面）──
-  {
-    key: 'skills_group',
-    title: '技能配置',
+    key: 'platform_group',
+    title: '平台能力',
     icon: RocketOutlined,
     items: [
       { menuKey: 'skills', label: '通用技能', path: '/skills', icon: RocketOutlined },
       { menuKey: 'skills:wenshu', label: '数据探索个性技能', path: '/skills?expert=wenshu', icon: DatabaseOutlined },
       { menuKey: 'skills:tutor', label: '私塾先生个性技能', path: '/skills?expert=tutor', icon: ReadOutlined },
+      { menuKey: 'vector_manage', label: '知识库管理', path: '/vector', icon: BookOutlined },
+      { menuKey: 'golden_qa', label: '金标锚定管理', path: '/golden-qa', icon: FileSearchOutlined },
     ],
   },
-  // ── 后台配置（原 capability/system 组治理项并入；键全部现状不变——E-1）──
   {
-    key: 'admin_group',
-    title: '后台配置',
+    key: 'system_group',
+    title: '系统',
     icon: SettingOutlined,
     items: [
       { menuKey: 'governance', label: '运行观测', path: '/governance', icon: FundOutlined },
       { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
-      // ⑤R F4（批11）11.1：「向量管理」→「知识库管理」（/vector；/knowledge 别名经 pathToMenuKey）
-      { menuKey: 'vector_manage', label: '知识库管理', path: '/vector', icon: BookOutlined },
-      { menuKey: 'golden_qa', label: '金标锚定管理', path: '/golden-qa', icon: FileSearchOutlined },
-      // 记忆插槽②批6：记忆管理（admin-only 页）
-      { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
       { menuKey: 'llmconfig', label: 'LLM 配置', path: '/llm-config', icon: SettingOutlined },
-      { menuKey: 'security_controls', label: '安全控制中心', path: '/security-controls', icon: PoweroffOutlined },
-      // ⑥-2a B-2：专家赋权管理面（admin-only）
+      { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
       { menuKey: 'expert_grants', label: '专家赋权', path: '/expert-grants', icon: TeamOutlined },
-    ],
-  },
-  // ── 设置中心（批5 页就绪前 placeholder——5.3 复刻后解除）──
-  {
-    key: 'settings_group',
-    title: '设置中心',
-    icon: SettingOutlined,
-    items: [
-      // IA批5 5.3：设置中心 31 页复刻落地——placeholder 解除，主菜单仅此一个入口（子页 hideInMenu）
+      { menuKey: 'security_controls', label: '安全控制中心', path: '/security-controls', icon: PoweroffOutlined },
       { menuKey: 'settings_hub', label: '设置中心', path: '/settings', icon: SettingOutlined },
     ],
   },

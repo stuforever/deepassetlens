@@ -37,12 +37,22 @@ export interface TokenBundle {
 
 let _config: OidcConfig | null = null;
 
+let _configPromise: Promise<OidcConfig> | null = null;
 export async function fetchAuthConfig(): Promise<OidcConfig> {
+  // 三轨M6 顺手修(:48)：进行中请求缓存（并发去重）——修复 fail-open 时序
+  //（模块加载期同步 isAuthEnabled() 常在配置请求完成前→误判免认证）。
   if (_config) return _config;
-  const r = await fetch('/api/v1/auth/config');
-  const json = await r.json();
-  _config = json.data as OidcConfig;
-  return _config;
+  if (!_configPromise) {
+    _configPromise = (async () => {
+      const r = await fetch('/api/v1/auth/config');
+      if (!r.ok) throw new Error('auth/config ' + r.status);
+      const json = await r.json();
+      if (!json?.data) throw new Error('auth/config 响应结构异常');
+      _config = json.data as OidcConfig;
+      return _config;
+    })().catch((e) => { _configPromise = null; throw e; });
+  }
+  return _configPromise;
 }
 
 export function isAuthEnabled(): boolean {
@@ -141,6 +151,8 @@ export async function exchangeCode(code: string, state: string): Promise<TokenBu
     throw new Error(`Token 交换失败 ${r.status}: ${txt}`);
   }
   const json = await r.json();
+  // 三轨M6 顺手修(:143)：token 端点响应字段校验——缺 access_token 视为失败（防 undefined 头扩散）
+  if (!json.access_token) throw new Error('token 端点响应缺 access_token');
   const bundle: TokenBundle = {
     access_token: json.access_token,
     id_token: json.id_token,
@@ -150,7 +162,8 @@ export async function exchangeCode(code: string, state: string): Promise<TokenBu
     obtained_at: Math.floor(Date.now() / 1000),
     scope: json.scope,
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(bundle));
+  // 三轨M6 顺手修(:153)：refresh_token 不落 localStorage（全仓无消费面——纯泄露面）
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...bundle, refresh_token: undefined }));
 
   // 清理 PKCE 工作内存
   sessionStorage.removeItem(VERIFIER_KEY);

@@ -6,7 +6,8 @@
  * Handles light/dark theme with localStorage fallback and system preference detection
  */
 
-export type Theme = "light" | "dark" | "glass" | "snow";
+// 三轨M6(U1) D2：主题砍到单主题（snow/默认蓝）——历史类型名保留（存储兼容），运行时恒 light
+export type Theme = "light";
 
 export const THEME_STORAGE_KEY = "deeptutor-theme";
 
@@ -33,6 +34,7 @@ function notifyThemeChange(theme: Theme): void {
 /**
  * Get the stored theme from localStorage
  */
+// D2：历史存储值（dark/glass/snow）一律归一为 light
 export function getStoredTheme(): Theme | null {
   if (typeof window === "undefined") return null;
 
@@ -44,7 +46,7 @@ export function getStoredTheme(): Theme | null {
       stored === "glass" ||
       stored === "snow"
     ) {
-      return stored;
+      return "light";  // 历史值归一
     }
   } catch (e) {
     // Silently fail - localStorage may be disabled
@@ -74,11 +76,8 @@ export function saveThemeToStorage(theme: Theme): boolean {
  * get "dark". Must stay in sync with the inline ThemeScript fallback.
  */
 export function getSystemTheme(): Theme {
-  if (typeof window === "undefined") return "snow";
-
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "snow";
+  // D2：单主题——系统偏好不再分流（恒 light/默认）
+  return "light";
 }
 
 /**
@@ -89,15 +88,9 @@ export function applyThemeToDocument(theme: Theme): void {
 
   const html = document.documentElement;
 
+  // D2：单主题——只清历史主题类，不再挂任何 dark/glass/snow 分支
   html.classList.remove("dark", "theme-glass", "theme-snow");
-
-  if (theme === "dark") {
-    html.classList.add("dark");
-  } else if (theme === "glass") {
-    html.classList.add("dark", "theme-glass");
-  } else if (theme === "snow") {
-    html.classList.add("theme-snow");
-  }
+  void theme;
 }
 
 /**
@@ -112,11 +105,10 @@ export function initializeTheme(): Theme {
     return stored;
   }
 
-  // Fall back to system preference
-  const systemTheme = getSystemTheme();
-  applyThemeToDocument(systemTheme);
-  saveThemeToStorage(systemTheme);
-  return systemTheme;
+  // D2：单主题——系统偏好不再分流主题
+  applyThemeToDocument("light");
+  saveThemeToStorage("light");
+  return "light";
 }
 
 /**
@@ -124,6 +116,6 @@ export function initializeTheme(): Theme {
  */
 export function setTheme(theme: Theme): void {
   applyThemeToDocument(theme);
-  saveThemeToStorage(theme);
-  notifyThemeChange(theme);
+  saveThemeToStorage("light");
+  notifyThemeChange("light");
 }

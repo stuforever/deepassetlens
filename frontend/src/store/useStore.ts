@@ -45,7 +45,7 @@ function loadSessions(): Session[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         // IA 件批2 迁移规则（终审裁定④）：旧会话无 expertId → 默认 'wenshu'（诚实账8：不做猜测式迁移）
         // v4批1（裁定③）：旧会话 expertId='tutor' → 'sishu'（E-41 改名兼容，同映射模式）
-        return parsed.map((s) => ({ ...s, expertId: s.expertId === 'tutor' ? 'sishu' : (s.expertId || 'wenshu') }));
+        return parsed.map((s) => ({ ...s, expertId: (s.expertId as string) === 'tutor' ? 'sishu' : (s.expertId || 'wenshu') }));
       }
     }
   } catch { /* ignore */ }

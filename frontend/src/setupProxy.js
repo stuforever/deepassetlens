@@ -29,6 +29,9 @@ module.exports = function (app) {
         // 防止 nginx / 中间层缓冲
         proxyReq.setHeader('X-Accel-Buffering', 'no');
         proxyReq.setHeader('Cache-Control', 'no-cache');
+        // 三轨M6 顺手修(:33)：请求方向声明不接收压缩——上游若 gzip，浏览器收到的
+        // 字节流经 delete content-encoding 后会当明文解析（SSE 乱码/断流根因）。
+        proxyReq.setHeader('Accept-Encoding', 'identity');
       },
       onProxyRes(proxyRes, req, res) {
         // 给浏览器一个明确的"别 buffer 我"的信号

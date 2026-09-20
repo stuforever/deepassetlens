@@ -13,7 +13,6 @@ import {
   SettingSection,
   SettingsPageHeader,
 } from '../../components/settings/shared';
-import { ThemePreviewCard } from '../../components/settings/ThemePreviewCard';
 import { Toggle } from '../../components/settings/Toggle';
 
 type CodeBlockThemeId = string;
@@ -99,12 +98,10 @@ const previewPreStyle: React.CSSProperties = {
 
 export default function AppearanceSettingsPage() {
   const {
-    theme,
     language,
     codeBlockTheme,
     codeBlockShowLineNumbers,
     codeBlockWrapLongLines,
-    updateTheme,
     updateLanguage,
     updateCodeBlockTheme,
     updateCodeBlockShowLineNumbers,
@@ -182,47 +179,6 @@ export default function AppearanceSettingsPage() {
             </div>
           }
         />
-      </SettingSection>
-
-      <SettingSection
-        title="主题"
-        testId="appearance-section-theme"
-        description="选择配色和界面风格。每个卡片预览对应主题的实际效果。"
-      >
-        <div style={{ padding: '16px 0' }}>
-          {/* Order is intentional: Default (pure-white neutral, the default
-              selection; theme id "snow" kept for stored preferences) →
-              warm-light Cream → warm-dark Dark → cool-dark Glass. */}
-          <Row gutter={[12, 12]} data-testid="appearance-theme-grid">
-            {(
-              [
-                { id: 'snow', label: '默认' },
-                { id: 'light', label: '奶油' },
-                { id: 'dark', label: '深色' },
-                { id: 'glass', label: '琉璃' },
-              ] as const
-            ).map(({ id, label }) => (
-              <Col key={id} xs={12} sm={6}>
-                <ThemePreviewCard
-                  theme={id}
-                  label={label}
-                  selected={theme === id}
-                  onSelect={updateTheme}
-                />
-              </Col>
-            ))}
-          </Row>
-          <p
-            style={{
-              marginTop: 16,
-              fontSize: 11.5,
-              lineHeight: 1.625,
-              color: 'rgba(0, 0, 0, 0.4)',
-            }}
-          >
-            Default is a clean pure-white theme with a blue accent. Cream is warm and paper-like with a terracotta accent. Dark keeps Cream's warmth on near-black. Glass adds translucent purple panels on a deep gradient.
-          </p>
-        </div>
       </SettingSection>
 
       <SettingSection

@@ -129,12 +129,29 @@ body {
   background: transparent;
 }
 
-/* 页签条/侧栏等场景下，去除默认 ul 外边距 */
-ul,
-ol {
+/* 三轨M6 顺手修(:133)：ul/ol 重置原为全局——AI 答案阅读区丢编号/圆点。
+   收敛到 UI 容器（页签条/侧栏/菜单），阅读区显式恢复列表样式。 */
+.dal-tabs ul,
+.dal-tabs ol,
+.dal-sider ul,
+.dal-sider ol,
+.ant-tabs-nav ul,
+.ant-tabs-nav ol,
+.ant-menu ul,
+.ant-menu ol {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.dal-reading ul,
+.dal-reading ol {
+  margin: revert;
+  padding: revert;
+  list-style: revert;
+}
+.dal-reading li {
+  list-style: revert;
 }
 
 /* ---------------------------------------------------------------------------

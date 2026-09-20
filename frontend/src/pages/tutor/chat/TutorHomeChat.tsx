@@ -231,7 +231,7 @@ function usePlatformSessionBridge(agentSessionId: string | null, title: string) 
   const updateSession = useStore((s) => s.updateSession);
   useEffect(() => {
     if (!agentSessionId || bridgeToStoreSession.has(agentSessionId)) return;
-    const id = createNewSession("tutor");
+    const id = createNewSession("sishu"); // 三轨M6：批1 改名漏网（ExpertId 无 tutor——旧值致会话专家归属错乱）
     updateSession(id, { title: title.trim().slice(0, 80) || "新对话" });
     bridgeToStoreSession.set(agentSessionId, id);
   }, [agentSessionId, title, createNewSession, updateSession]);
@@ -287,7 +287,23 @@ function TutorHomeChatInner() {
   const capBtnRef = useRef<HTMLButtonElement>(null);
   const spaceMenuRef = useRef<HTMLDivElement>(null);
   const spaceBtnRef = useRef<HTMLButtonElement>(null);
-  const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
+  // 三轨M6：useMeasuredHeight 改 callback ref 契约——提供 {current} 兼容桥
+  const composerRefCompat = useRef<HTMLDivElement | null>(null);
+  const composerHeight = useMeasuredHeight<HTMLDivElement>().height;
+  const composerRef = useMemo(
+    () =>
+      Object.assign((el: HTMLDivElement | null) => {
+        composerRefCompat.current = el;
+      }, {
+        get current() {
+          return composerRefCompat.current;
+        },
+        set current(v: HTMLDivElement | null) {
+          composerRefCompat.current = v;
+        },
+      }),
+    [],
+  );
   const prefillInputRef = useRef<((text: string) => void) | null>(null);
 
   // Capabilities / tools / KB / LLM / persona / memory / refs selection state

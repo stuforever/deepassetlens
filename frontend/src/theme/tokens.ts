@@ -228,6 +228,14 @@ export const antdComponents: ThemeConfig['components'] = {
   },
 };
 
+/* ---------- 三轨M6(U1) §2.4：空间色 token（落点仅三处：侧栏空间组图标着色、
+ * 激活项左 3px 色条、对话页页头 3px 色条；DT 域内容区不动——路线 B 边界） ---------- */
+export const spaceColors = {
+  wenshu: '#2563EB', // 数据探索 蓝
+  sishu: '#D97706',  // 私塾先生 琥珀
+  h5: '#0891B2',     // 私塾先生h5 青
+} as const;
+
 /* ---------- 聚合导出（自定义组件消费） ---------- */
 export const tokens = {
   colors,
@@ -241,4 +249,5 @@ export const tokens = {
   brandGradient,
   chartPalette,
   motion,
+  spaceColors,
 } as const;

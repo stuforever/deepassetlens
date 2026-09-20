@@ -65,9 +65,8 @@ interface AppShellContextValue {
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 
 export function AppShellProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    return getStoredTheme() ?? getSystemTheme();
-  });
+  // 三轨M6(U1) D2：单主题——theme 状态恒 light（历史存储只读不再生效）
+  const [theme, setThemeState] = useState<Theme>(() => "light");
   // Always start with "en" to match SSR; hydrate from localStorage after mount
   const [language, setLanguageState] = useState<AppLanguage>("en");
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(

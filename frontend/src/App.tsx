@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Input, AutoComplete, ConfigProvider, Badge } from 'antd';
+import { Layout, Input, AutoComplete, ConfigProvider, Spin } from 'antd';
 import { SearchOutlined, ThunderboltFilled } from '@ant-design/icons';
 import zhCN from 'antd/locale/zh_CN';
 
@@ -22,7 +22,9 @@ import { expertPageRoutes, matchExpertPage } from './config/expertPages';
 
 const { Header, Content } = Layout;
 
-const PINNED_KEY = 'home';
+// 三轨M6(U1) D1：A 模板页（对话型）取消页签——切走即卸载（ChatGPT 一致），历史入口=侧栏最近对话
+const TABLESS_MENU_KEYS = (menuKey: string): boolean =>
+  menuKey === 'portal' || menuKey === 'home' || /^e:[^:]+:chat$/.test(menuKey);
 
 const App: React.FC = () => {
   const navigate = useNavigate();
@@ -30,14 +32,17 @@ const App: React.FC = () => {
   const setCanvasMode = useStore((state) => state.setCanvasMode);
   const setActiveMenuKey = useStore((state) => state.setActiveMenuKey);
 
-  const currentMenu = pathToMenuKey[location.pathname] || 'home';
+  // 三轨M6(U1) D1：/home → / 重定向（老链接兼容；pathToMenuKey.home 保留仅作映射）
+  useEffect(() => {
+    if (location.pathname === '/home') navigate('/', { replace: true });
+  }, [location.pathname, navigate]);
+
+  const currentMenu = pathToMenuKey[location.pathname] || (location.pathname.startsWith('/e/') ? '' : 'portal');
 
   const [collapsed, setCollapsed] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [pageTabs, setPageTabs] = useState<PageTab[]>([
-    { key: PINNED_KEY, label: MENU_LABELS[PINNED_KEY] || '首页', menuKey: PINNED_KEY },
-  ]);
-  const [activeTabKey, setActiveTabKey] = useState(PINNED_KEY);
+  const [pageTabs, setPageTabs] = useState<PageTab[]>([]);
+  const [activeTabKey, setActiveTabKey] = useState('');
 
   // ⑤R F1：参数路由（:mid 等）页签记忆——切回页签时导航到最后一次真实路径（字面 ':mid' 不可导航）
   const lastPathByMenuKey = useRef<Map<string, string>>(new Map());
@@ -105,12 +110,14 @@ const App: React.FC = () => {
       const menuKey = isAdminPath ? `e:${slug}:admin` : (pageCfg ? pageCfg.menuKey : `e:${slug}:chat`);
       const label = isAdminPath ? `${slug} 后台` : (pageCfg ? pageCfg.label : `专家 ${slug}`);
       if (menuKey.startsWith('e:')) lastPathByMenuKey.current.set(menuKey, location.pathname);
-      setPageTabs((prev) => {
-        if (prev.find((t) => t.key === menuKey)) return prev;
-        const newTabs = [...prev, { key: menuKey, label, menuKey }];
-        return newTabs.length > 12 ? newTabs.slice(newTabs.length - 12) : newTabs;
-      });
-      setActiveTabKey(menuKey);
+      if (!TABLESS_MENU_KEYS(menuKey)) {
+        setPageTabs((prev) => {
+          if (prev.find((t) => t.key === menuKey)) return prev;
+          const newTabs = [...prev, { key: menuKey, label, menuKey }];
+          return newTabs.length > 12 ? newTabs.slice(newTabs.length - 12) : newTabs;
+        });
+        setActiveTabKey(menuKey);
+      }
       setActiveMenuKey(menuKey);
       return;
     }
@@ -121,19 +128,20 @@ const App: React.FC = () => {
     else if (menuKey === 'matrix_model') setCanvasMode('matrix');
     else if (menuKey === 'gallery') setCanvasMode('neo4j');
     const label = MENU_LABELS[menuKey] || menuKey;
-    setPageTabs((prev) => {
-      if (prev.find((t) => t.key === menuKey)) return prev;
-      const newTabs = [...prev, { key: menuKey, label, menuKey }];
-      return newTabs.length > 12 ? newTabs.slice(newTabs.length - 12) : newTabs;
-    });
-    setActiveTabKey(menuKey);
+    if (!TABLESS_MENU_KEYS(menuKey)) {
+      setPageTabs((prev) => {
+        if (prev.find((t) => t.key === menuKey)) return prev;
+        const newTabs = [...prev, { key: menuKey, label, menuKey }];
+        return newTabs.length > 12 ? newTabs.slice(newTabs.length - 12) : newTabs;
+      });
+      setActiveTabKey(menuKey);
+    }
     setActiveMenuKey(menuKey);
   }, [location.pathname, setCanvasMode, setActiveMenuKey, navigate]);
 
   // 关闭页签
   const closeTab = useCallback(
     (targetKey: string) => {
-      if (targetKey === PINNED_KEY) return;
       setPageTabs((prev) => {
         const filtered = prev.filter((t) => t.key !== targetKey);
         return filtered.length === 0 ? prev : filtered;
@@ -141,9 +149,9 @@ const App: React.FC = () => {
       setActiveTabKey((cur) => {
         if (cur === targetKey) {
           const filtered = pageTabs.filter((t) => t.key !== targetKey);
-          const next = filtered[filtered.length - 1] || { key: PINNED_KEY, menuKey: PINNED_KEY };
-          navigate(menuKeyToPath[next.menuKey] || '/home');
-          return next.key;
+          const next = filtered[filtered.length - 1];
+          if (next && next.menuKey) navigate(menuKeyToPath[next.menuKey] || '/');
+          return next ? next.key : '';
         }
         return cur;
       });
@@ -153,7 +161,7 @@ const App: React.FC = () => {
 
   const closeOthers = useCallback(
     (keepKey: string) => {
-      setPageTabs((prev) => prev.filter((t) => t.key === keepKey || t.key === PINNED_KEY));
+      setPageTabs((prev) => prev.filter((t) => t.key === keepKey));
     },
     []
   );
@@ -170,9 +178,9 @@ const App: React.FC = () => {
   );
 
   const closeAll = useCallback(() => {
-    setPageTabs([{ key: PINNED_KEY, label: MENU_LABELS[PINNED_KEY] || '首页', menuKey: PINNED_KEY }]);
-    setActiveTabKey(PINNED_KEY);
-    navigate('/home');
+    setPageTabs([]);
+    setActiveTabKey('');
+    navigate('/');
   }, [navigate]);
 
   // 全局 navigate 事件（非菜单入口跳转）
@@ -192,8 +200,20 @@ const App: React.FC = () => {
 
   const headerTitle = useMemo(() => 'DeepAssetLens', []);
 
-  // B1 美化：环境徽标（dev=warning 色点 / prod=success 色点）
-  const isProdEnv = process.env.NODE_ENV === 'production' && process.env.REACT_APP_ENV !== 'dev';
+  // 三轨M6(U1) §2.1：⌘K/Ctrl+K 全局聚焦搜索（window keydown 一处）
+  const searchRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        const el = document.querySelector<HTMLInputElement>('.dal-global-search input, input.dal-global-search');
+        (el || searchRef.current)?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  void searchRef;
 
   return (
     <ConfigProvider
@@ -251,7 +271,6 @@ const App: React.FC = () => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space.s4 }}>
-            <Badge status={isProdEnv ? 'success' : 'warning'} text={isProdEnv ? '生产' : '开发'} />
             <AutoComplete
               value={searchText}
               onChange={setSearchText}
@@ -260,8 +279,9 @@ const App: React.FC = () => {
                 switchToMenu(value);
                 setSearchText('');
               }}
-              style={{ width: 260 }}
-              placeholder="搜索页面…"
+              style={{ width: 320 }}
+              placeholder="搜索页面…（Ctrl+K）"
+              data-testid="global-search"
             >
               <Input
                 className="dal-global-search"
@@ -294,19 +314,50 @@ const App: React.FC = () => {
               minWidth: 0,
             }}
           >
-            <AppTabs
-              pageTabs={pageTabs}
-              activeTabKey={activeTabKey}
-              routes={routes}
-              canvasMenuKeys={CANVAS_MENU_KEYS}
-              needsOpenTarget={NEEDS_OPEN_TARGET}
-              onSwitch={switchToMenu}
-              onClose={closeTab}
-              onCloseOthers={closeOthers}
-              onCloseRight={closeRight}
-              onCloseAll={closeAll}
-              onOpenTarget={handleOpenTarget}
-            />
+            {TABLESS_MENU_KEYS(currentMenu) ? (
+              /* 三轨M6(U1) D1：tabless 直渲单实例（不进 KeepAlive 多开——切走即卸载） */
+              (() => {
+                const tablessRoute =
+                  routes.find((r) => r.menuKey === currentMenu)
+                  || (currentMenu.startsWith('e:') ? routes.find((r) => r.menuKey === 'expert_chat') : undefined);
+                if (!tablessRoute) return null;
+                const TComp = tablessRoute.element;
+                const isCanvas = CANVAS_MENU_KEYS.has(tablessRoute.menuKey);
+                return (
+                  <div
+                    style={{
+                      display: 'flex', flex: 1, overflow: 'hidden',
+                      flexDirection: 'column', minHeight: 0,
+                      padding: isCanvas ? 0 : tokens.layout.contentPadding,
+                    }}
+                  >
+                    <Suspense fallback={
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </div>
+                    }>
+                      {NEEDS_OPEN_TARGET.has(tablessRoute.menuKey)
+                        ? <TComp onOpenTarget={handleOpenTarget} />
+                        : <TComp />}
+                    </Suspense>
+                  </div>
+                );
+              })()
+            ) : (
+              <AppTabs
+                pageTabs={pageTabs}
+                activeTabKey={activeTabKey}
+                routes={routes}
+                canvasMenuKeys={CANVAS_MENU_KEYS}
+                needsOpenTarget={NEEDS_OPEN_TARGET}
+                onSwitch={switchToMenu}
+                onClose={closeTab}
+                onCloseOthers={closeOthers}
+                onCloseRight={closeRight}
+                onCloseAll={closeAll}
+                onOpenTarget={handleOpenTarget}
+              />
+            )}
           </Content>
         </Layout>
       </Layout>

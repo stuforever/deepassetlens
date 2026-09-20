@@ -178,9 +178,11 @@ export function mergeWithDefaults<T extends Record<string, any>>(
       continue;
     }
 
-    // Only copy if value is not undefined
-    if (persistedState[key] !== undefined) {
-      result[key] = persistedState[key] as T[keyof T];
+    // 三轨M6 顺手修(:181)：null 一并跳过（存储被清空/损坏的 null 不再覆盖有效默认值）；
+    // 原型链键（__proto__/constructor）拒绝合并——localStorage JSON 不可信输入防线
+    const v = persistedState[key];
+    if (v !== undefined && v !== null && key !== ("__proto__" as keyof T)) {
+      result[key] = v as T[keyof T];
     }
   }
 
