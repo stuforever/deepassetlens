@@ -23,7 +23,7 @@ def check(name, cond, detail=""):
 
 
 def stream(config):
-    body = {"skill_code": "tutor/book-generate", "message": str(config.get("type") or "create"),
+    body = {"skill_code": "sishu/book-generate", "message": str(config.get("type") or "create"),
             "tools": [], "knowledge_bases": [], "attachments": [], "history_references": [],
             "config": config}
     r = requests.post(BASE, json=body, stream=True, timeout=900)

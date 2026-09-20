@@ -1125,131 +1125,45 @@ def _ws_frame(event: Any) -> Dict[str, Any]:
 
 
 async def run_book_generate(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
-    """book 生成编排（批5 5.4，E-25）：vendor BookEngine 数据面直驱（零触）——
+    """book 生成编排（v4批5 5.1：平台建书引擎——PG sishu_book_* 产物，E-25 收口）。
     op=create/confirm_proposal/confirm_spine/compile_page/regenerate_block；
-    StreamBus 泵→桥帧 metadata.ws_event（vendor WS 帧同型），终帧 metadata.ws_result=
-    vendor WS handler 同款 result 形状。接口面=lib/book-api.ts requestOverBridge。"""
+    帧契约=vendor book_event 同型（PROGRESS content=kind, metadata={kind,**data}），
+    终帧 metadata.ws_result=vendor WS handler 同款 result 形状（前端零改）。"""
     cfg = _cfg(req)
     op = str(cfg.get("type") or "create")
-    import asyncio as _asyncio
-    from deeptutor.book import BookProposal, Spine, get_book_engine
-    from deeptutor.core.stream import StreamEventType
-    from deeptutor.core.stream_bus import StreamBus
+    req._user_prefix = user_prefix
+
+    from app.services.sishu_data import book_gen
+
+    async def _complete(parts: List[str]) -> str:
+        return await _agent_text(req, session_id, turn_id, parts)
+
+    got_result: Dict[str, Any] | None = None
     try:
-        from deeptutor.book.streaming import SOURCE as BOOK_SOURCE
-    except Exception:
-        BOOK_SOURCE = None
-    try:
-        from deeptutor.multi_user.context import set_current_user
-        set_current_user(user_prefix)
-    except Exception:
-        pass
-    engine = get_book_engine()
-
-    async def _run_op(bus: StreamBus):
-        if op == "create":
-            return await engine.create_book(
-                user_intent=str(cfg.get("user_intent") or ""),
-                chat_session_id=str(cfg.get("chat_session_id") or ""),
-                chat_selections=cfg.get("chat_selections") or [],
-                notebook_refs=cfg.get("notebook_refs") or [],
-                knowledge_bases=cfg.get("knowledge_bases") or [],
-                question_categories=[int(c) for c in (cfg.get("question_categories") or [])],
-                question_entries=[int(e) for e in (cfg.get("question_entries") or [])],
-                language=str(cfg.get("language") or "en"),
-                stream=bus)
-        if op == "confirm_proposal":
-            edited = BookProposal.model_validate(cfg["proposal"]) if cfg.get("proposal") else None
-            return await engine.confirm_proposal(
-                book_id=str(cfg.get("book_id") or ""), edited_proposal=edited, stream=bus)
-        if op == "confirm_spine":
-            edited_spine = Spine.model_validate(cfg["spine"]) if cfg.get("spine") else None
-            return await engine.confirm_spine(
-                book_id=str(cfg.get("book_id") or ""), edited_spine=edited_spine,
-                auto_compile=bool(cfg.get("auto_compile", True)), stream=bus)
-        if op == "compile_page":
-            return await engine.compile_page(
-                book_id=str(cfg.get("book_id") or ""), page_id=str(cfg.get("page_id") or ""),
-                stream=bus, force=bool(cfg.get("force", False)))
-        if op == "regenerate_block":
-            return await engine.regenerate_block(
-                book_id=str(cfg.get("book_id") or ""), page_id=str(cfg.get("page_id") or ""),
-                block_id=str(cfg.get("block_id") or ""),
-                params_override=cfg.get("params_override"), stream=bus)
-        raise ValueError(f"Unknown book op: {op}")
-
-    bus = StreamBus()
-    q: "asyncio.Queue[Any]" = _asyncio.Queue()
-
-    async def _pump() -> None:
-        try:
-            async for ev in bus.subscribe():
-                if BOOK_SOURCE is not None and getattr(ev, "source", "") != BOOK_SOURCE:
-                    continue
-                q.put_nowait(ev)
-        except Exception:
-            pass
-        finally:
-            q.put_nowait(None)
-
-    pump = _asyncio.create_task(_pump())
-    op_task = _asyncio.create_task(_run_op(bus))
-    op_error: Any = None
-    result: Any = None
-    # 泵送循环：op 进行中随到随发（vendor WS 同款流面）；op 完成后短窗排水尾帧。
-    while not op_task.done():
-        getq = _asyncio.ensure_future(q.get())
-        waitop = _asyncio.ensure_future(_asyncio.shield(op_task))
-        done, _pending = await _asyncio.wait({getq, waitop}, return_when=_asyncio.FIRST_COMPLETED)
-        if getq in done:
-            ev = getq.result()
-            if ev is not None:
+        async for fr in book_gen.book_op(req, session_id, turn_id, op, cfg, _complete):
+            if "ws_result" in fr:
+                got_result = fr["ws_result"]
+                continue
+            ws_event = fr.get("ws_event")
+            if ws_event:
                 yield _evt("progress", "agent", "book", content="book 事件",
-                           metadata={"ws_event": _ws_frame(ev)},
+                           metadata={"ws_event": ws_event},
                            session_id=session_id, turn_id=turn_id)
-        elif not getq.done():
-            getq.cancel()
-    while True:  # 尾部排水（引擎收尾帧 + 哨兵）
-        try:
-            ev = await _asyncio.wait_for(q.get(), timeout=2.0)
-        except _asyncio.TimeoutError:
-            break
-        if ev is not None:
-            yield _evt("progress", "agent", "book", content="book 事件",
-                       metadata={"ws_event": _ws_frame(ev)},
-                       session_id=session_id, turn_id=turn_id)
-    pump.cancel()
-    await _asyncio.gather(pump, return_exceptions=True)
-    try:
-        result = op_task.result()
     except Exception as e:
         logger.exception("[bridge] book op %s 失败", op)
-        op_error = e
-        result = None
-
-    ws_result: Any = None
-    if result is not None and op_error is None:
-        dumps = lambda m: m.model_dump(mode="json")
-        if op == "create":
-            book, proposal = result
-            ws_result = {"type": "create_result", "book": dumps(book), "proposal": dumps(proposal)}
-        elif op == "confirm_proposal":
-            book, spine = result
-            ws_result = {"type": "confirm_proposal_result", "book": dumps(book), "spine": dumps(spine)}
-        elif op == "confirm_spine":
-            ws_result = {"type": "confirm_spine_result", "pages": [dumps(p) for p in result]}
-        elif op == "compile_page":
-            ws_result = {"type": "compile_page_result", "page": dumps(result)}
-        elif op == "regenerate_block":
-            ws_result = {"type": "regenerate_block_result", "block": dumps(result) if result else None}
-    if op_error is not None or ws_result is None:
-        yield _evt("error", "agent", "book", content=str(op_error or f"book op {op} 无结果"),
+        yield _evt("error", "agent", "book", content=str(e),
+                   session_id=session_id, turn_id=turn_id)
+        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"ok": False})
+        return
+    if got_result is None:
+        yield _evt("error", "agent", "book", content=f"book op {op} 无结果",
                    session_id=session_id, turn_id=turn_id)
         yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
                    metadata={"ok": False})
         return
     yield _evt("result", "agent", "book", content=f"book {op} 完成",
-               metadata={"ws_result": ws_result, "op": op},
+               metadata={"ws_result": got_result, "op": op},
                session_id=session_id, turn_id=turn_id)
     yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
                metadata={"ok": True, "op": op})
