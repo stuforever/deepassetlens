@@ -30,7 +30,7 @@ export const SourceFormModal: React.FC<SourceFormModalProps> = (p) => (
     onOk={p.onOk}
     onCancel={p.onCancel}
     width={650}
-    destroyOnHidden
+    destroyOnClose  /* 三轨M9(:33 顺手)：antd 5.12 无 destroyOnHidden（静默失效）——改 5.12 有效 API */
   >
     <Form form={p.form} layout="vertical">
       {['1', '2', '3'].includes(p.activeTab) && (
@@ -127,7 +127,7 @@ export const SourceDetailModal: React.FC<SourceDetailModalProps> = (p) => (
       {p.currentRecord && (
         <Descriptions column={2} bordered size="small">
           <Descriptions.Item label={TERMS.sourceTableEnName} span={1}><StatusTag preset="info">{p.currentRecord.enName}</StatusTag></Descriptions.Item>
-          <Descriptions.Item label={TERMS.sourceTableCnName} span={1}>{p.tableInfo.table_cn || p.currentRecord.cnName}</Descriptions.Item>
+          <Descriptions.Item label={TERMS.sourceTableCnName} span={1}>{p.tableInfo?.table_cn || p.currentRecord.cnName}</Descriptions.Item> /* 三轨M9(:130) 空值保护 */
           <Descriptions.Item label="系统名称">{p.currentRecord.sysName}</Descriptions.Item>
           <Descriptions.Item label="表类型"><StatusTag preset="success">{p.currentRecord.type}</StatusTag></Descriptions.Item>
         </Descriptions>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Input, Button, Space, Card, Tooltip, Typography } from 'antd';
 import { PlusOutlined, CopyOutlined, BulbOutlined } from '@ant-design/icons';
 import { StatusTag } from './shell';
@@ -22,6 +22,15 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
   variables = []
 }) => {
   const [content, setContent] = useState(value);
+  // 三轨M9 顺手修(:24)：受控同步——父组件更新 value（表单重置/模板切换/回填）反映到编辑器
+  // （比较后再 set，避免与用户输入互相覆盖）。
+  const prevValueRef = useRef(value);
+  useEffect(() => {
+    if (value !== prevValueRef.current) {
+      prevValueRef.current = value;
+      setContent(value);
+    }
+  }, [value]);
   const [detectedVariables, setDetectedVariables] = useState<string[]>([]);
   const [customVariables, setCustomVariables] = useState<string[]>([]);
 
