@@ -117,12 +117,15 @@ const DataSourceConfigPage: React.FC = () => {
     { title: 'Doris Catalog', dataIndex: 'doris_catalog_name', render: (v: string) => v ? <StatusTag preset="ai">{v}</StatusTag> : '-' },
     {
       title: '操作',
+      onHeaderCell: () => ({ style: { minWidth: 150 } }),
+      onCell: () => ({ className: 'dal-action-col' }),  // 三轨M9：操作列 hover 显现
       render: (_: any, r: DataSource) => (
         <Space>
           <Button size="small" icon={<ThunderboltOutlined />} onClick={() => test(r.id)}>测试</Button>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>编辑</Button>
-          <Popconfirm title="确认删除?" onConfirm={() => del(r.id)}>
-            <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+          {/* 三轨M9：危险操作收「更多」标红（C 模板规范） */}
+          <Popconfirm title="确认删除该数据源?" onConfirm={() => del(r.id)}>
+            <Button size="small" danger type="text" icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
