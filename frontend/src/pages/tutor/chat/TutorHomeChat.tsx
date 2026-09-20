@@ -899,9 +899,36 @@ function TutorHomeChatInner() {
           {/* 消息区（DT L1982-2075 1:1） */}
           <div className="flex w-full flex-1 min-h-0 flex-col">
             {!hasMessages ? (
-              <div className="animate-fade-in flex w-full flex-1 min-h-0 items-end justify-center px-6 pb-14">
+              <div className="animate-fade-in flex w-full flex-1 min-h-0 flex-col items-center justify-center px-6 pb-8 gap-8">
                 <div className="flex w-full max-w-[960px] items-center justify-center gap-4">
                   <h1 className="font-serif text-[40px] font-medium leading-[1.1] tracking-[-0.015em] text-[var(--foreground)]">{t(welcomeGreeting)}</h1>
+                </div>
+                {/* 三轨M7(U2) §3.3：sishu 空间首页宫格——7 功能入口下沉，首条消息后宫格退场 */}
+                <div
+                  data-testid="sishu-space-grid"
+                  className="grid w-full max-w-[720px] gap-2.5"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}
+                >
+                  {[
+                    { label: "书籍", path: "/e/sishu/book" },
+                    { label: "自主学习", path: "/e/sishu/self-learning" },
+                    { label: "AI写作", path: "/e/sishu/co-writer" },
+                    { label: "伙伴/推送", path: "/e/sishu/partners" },
+                    { label: "母题库", path: "/e/sishu/admin/mother-questions" },
+                    { label: "书源", path: "/e/sishu/admin/book" },
+                    { label: "教学设置", path: "/e/sishu/admin/settings" },
+                  ].map((entry) => (
+                    <button
+                      key={entry.label}
+                      data-testid={`sishu-grid-${entry.label}`}
+                      type="button"
+                      onClick={() => navigate(entry.path)}
+                      className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-2 py-3.5 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                    >
+                      <BookMarked className="h-4.5 w-4.5 text-amber-600" />
+                      <span className="text-xs text-[var(--foreground)]">{entry.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : (

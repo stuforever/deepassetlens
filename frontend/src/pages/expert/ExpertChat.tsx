@@ -15,6 +15,7 @@ import {
   RocketOutlined, EditOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import ConversationMessageList from '../../components/conversation/ConversationMessageList';
+import UnifiedComposer from '../../components/chat/UnifiedComposer';
 import { DATA_INTELLIGENCE_SCENE_CONFIG } from '../../components/conversation/sceneConfigs';
 import {
   dataIntelligenceApi,
@@ -1003,33 +1004,15 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
 
   // 输入卡片（两种状态共用；B2 美化：S3 阴影 + 聚焦主色描边环 + 渐变发送钮）
   const inputCard = (
-    <div
-      className="dal-composer"
-      style={{
-        borderRadius: 12,
-        border: '1px solid var(--color-border)',
-        background: 'var(--bg-content)',
-        overflow: 'hidden',
-        boxShadow: tokens.elevation.s3,
-      }}
-    >
-      <Input.TextArea
-        value={question}
-        onChange={(e) => setQuestion(e.target.value)}
-        rows={2}
-        placeholder={card?.ui_config?.placeholder ?? '想问什么数据？'}
-        autoSize={{ minRows: 2, maxRows: 6 }}
-        bordered={false}
-        onPressEnter={(e) => {
-          if (!e.shiftKey) {
-            e.preventDefault();
-            if (!isBusy && question.trim()) handleSubmit();
-          }
-        }}
-        style={{ padding: '14px 16px 4px', resize: 'none' }}
-      />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 8px 6px 12px' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <UnifiedComposer
+      testId="expert-composer"
+      value={question}
+      onChange={setQuestion}
+      onSubmit={() => { if (!isBusy && question.trim()) handleSubmit(); }}
+      placeholder={card?.ui_config?.placeholder ?? '想问什么数据？'}
+      disabled={isBusy}
+      leftSlot={
+        <>
           <Select
             size="small"
             variant="borderless"
@@ -1041,7 +1024,6 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
             options={llmConnections.map((c: any) => ({ label: c.name || c.model_name || c.id, value: c.id }))}
             popupMatchSelectWidth={180}
           />
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Shift+Enter 换行</span>
           <Button
             size="small"
             type="text"
@@ -1051,34 +1033,10 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           >
             审计模拟
           </Button>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isBusy ? (
-            /* P3 修正：Stop 白底红边（规格），非 antd danger 实心 */
-            <Button
-              size="small"
-              icon={<StopOutlined />}
-              onClick={handleStop}
-              aria-label="停止生成"
-              style={{ background: 'var(--bg-content)', borderColor: tokens.colors.error, color: tokens.colors.error, width: 32, height: 32, borderRadius: tokens.radius.card }}
-            />
-          ) : (
-            /* P3 修正：发送钮方形 32 / r8（规格），渐变填充保持 */
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlayCircleOutlined />}
-              className="dal-send-btn"
-              onClick={handleSubmit}
-              disabled={!question.trim()}
-              aria-label="发送"
-              style={{ background: tokens.brandGradient, borderColor: 'transparent', width: 32, height: 32, borderRadius: tokens.radius.card }}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
+        </>
+      }
+    />
+  );;
 
   // ⑥ 专家地基①：卡 loading 期间 Spin；卡读失败上屏（不降级 wenshu，spec §十）
   if (cardError) {
@@ -1097,8 +1055,11 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     );
   }
 
+  // 三轨M7(U2) §3.3：sishu 右栏信任设施（课本章节/教学设置/书库——可折叠）
+  const [trustOpen, setTrustOpen] = useState<boolean>(() => slug === 'sishu');
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-page)' }}>
+    <div style={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 批13-P：受控路由模拟器收进「审计模拟」按钮（Drawer），不再常驻问答页顶部 */}
       <Drawer
         title={<Space><ExperimentOutlined /> 受控路由模拟器（审计）</Space>}
@@ -1284,6 +1245,54 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           </div>
           )}
         </div>
+      )}
+    </div>
+      {slug === 'sishu' && trustOpen && (
+        <div
+          data-testid="sishu-trust-panel"
+          style={{
+            width: 232, flexShrink: 0, borderLeft: `1px solid ${tokens.colors.border}`,
+            background: 'var(--bg-content)', padding: 16, overflowY: 'auto',
+            borderTop: `3px solid ${spaceColors.sishu}`,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: tokens.fontWeight.semibold }}>学情上下文</span>
+            <Button size="small" type="text" onClick={() => setTrustOpen(false)}>收起</Button>
+          </div>
+          {[
+            { label: '课本章节', path: '/settings/curriculum/chapters' },
+            { label: '教学设置', path: '/e/sishu/admin/settings' },
+            { label: '书库', path: '/e/sishu/book' },
+          ].map((e) => (
+            <div
+              key={e.label}
+              data-testid={`sishu-trust-${e.label}`}
+              onClick={() => navigate(e.path)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+                borderRadius: tokens.radius.default, cursor: 'pointer', fontSize: 13,
+                color: 'var(--text-primary)',
+              }}
+              onMouseEnter={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'var(--bg-muted)'; }}
+              onMouseLeave={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+            >
+              <BookOutlined style={{ color: spaceColors.sishu }} />
+              {e.label}
+            </div>
+          ))}
+        </div>
+      )}
+      {slug === 'sishu' && !trustOpen && (
+        <Button
+          size="small"
+          type="text"
+          data-testid="sishu-trust-open"
+          onClick={() => setTrustOpen(true)}
+          style={{ position: 'absolute', top: 60, right: 8, zIndex: 5 }}
+        >
+          学情
+        </Button>
       )}
     </div>
   );
