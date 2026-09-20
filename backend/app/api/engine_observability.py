@@ -157,6 +157,11 @@ def explain(payload: ExplainRequest):
         from app.services.engine_errors import apply_error_class
         return {"code": 500, "data": apply_error_class({"error": str(e)})}
     finally:
+        # 三轨M3/8：SWITCH 联邦 catalog 后归还池前复位（2026-08-21 线上回归同源防线）
+        try:
+            doris_engine._reset_connection_catalog(cur)
+        except Exception:
+            pass
         conn.close()
 
 

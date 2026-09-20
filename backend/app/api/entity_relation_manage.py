@@ -74,6 +74,14 @@ def _norm_uuid_str(v: Optional[str], field_name: str = "id") -> Optional[str]:
     return s
 
 
+def _sanitize_cell(v):
+    """三轨M3 顺手修（:571）：Excel 公式注入防线——以 = + - @ 制表符开头的单元格前置单引号。"""
+    s = _clean_text(v) if v is not None else ""
+    if isinstance(s, str) and s[:1] in ("=", "+", "-", "@", "	"):
+        return "'" + s
+    return s
+
+
 def _clean_text(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -578,8 +586,12 @@ def export_entity_relations_excel(
 
 
 @router.post("/entity-relation-manager/import/excel")
-async def import_entity_relations_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    contents = await file.read()
+def import_entity_relations_excel(file: UploadFile = File(...), db: Session = Depends(get_db),
+                                  max_upload_bytes: int = 10 * 1024 * 1024):
+    """三轨M3/6：改同步 def（FastAPI 自动入线程池，不再阻塞事件循环）+ 上传 10MB 上限。"""
+    contents = file.file.read()  # 同步 def：走底层 SpooledTemporaryFile 同步读
+    if len(contents) > max_upload_bytes:
+        raise HTTPException(status_code=413, detail="上传文件超过 10MB 上限")
     excel_data = pd.read_excel(io.BytesIO(contents), sheet_name=None)
     if "实体关系清单" not in excel_data:
         raise HTTPException(status_code=400, detail="Excel must contain sheet 实体关系清单")

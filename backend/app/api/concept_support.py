@@ -170,10 +170,10 @@ def _norm_uuid_str(v: Optional[str], field_name: str = "id") -> Optional[str]:
     if len(s) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", s):
         s = f"{s[:8]}-{s[8:12]}-{s[12:16]}-{s[16:20]}-{s[20:]}"
     try:
-        uuid.UUID(s)
+        u = uuid.UUID(s)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid {field_name} format")
-    return s
+    return str(u)  # 三轨M3（:172 顺手修）：返回规范形式（小写+连字符），花括号/urn/大写归一
 
 
 def _build_matrix_relation_name(master_entity: Optional[Entity], activity_entity: Optional[Entity]) -> str:
@@ -247,8 +247,18 @@ def _update_entity_concept_links(db: Session, entity_id: str, concept_ids: List[
     
     # 2. 建立新关联（去重）
     unique_cids = list(set(concept_ids or []))
+    added = set()
     for cid in unique_cids:
         cid_norm = _norm_uuid_str(cid, "concept_id")
         if cid_norm:
+            added.add(cid_norm)
             db.add(EntityConceptLink(entity_id=entity_id, concept_id=cid_norm))
+    db.flush()
+    # 三轨M3/4：清理幸存旧链接——mode 区间外未被删除、且不属于新集合的残链
+    survivors = db.query(EntityConceptLink).filter(
+        EntityConceptLink.entity_id == entity_id).all()
+    for lk in survivors:
+        cid_str = str(lk.concept_id)
+        if cid_str not in added:
+            db.query(EntityConceptLink).filter(EntityConceptLink.id == lk.id).delete(synchronize_session=False)
     db.flush()

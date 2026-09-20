@@ -417,12 +417,25 @@ def update_entity(entity_id: str, entity_update: EntityUpdate, db: Session = Dep
         raise HTTPException(status_code=404, detail="Entity not found")
     
     update_data = entity_update.dict(exclude_unset=True, exclude={'concept_ids'})
+    # 三轨M3/1：concept_id 与 create 对齐——归一化+必须指向存在的 L2/L4 概念
+    if update_data.get("concept_id") is not None:
+        _cid = _norm_uuid_str(str(update_data["concept_id"]), "concept_id")
+        _parent = db.query(Concept).filter(Concept.id == _cid).first() if _cid else None
+        if not _parent or _parent.level not in [2, 4]:
+            raise HTTPException(status_code=400, detail="concept_id 必须指向存在的 L2/L4 概念")
+        update_data["concept_id"] = _cid
     for key, value in update_data.items():
         setattr(db_entity, key, value)
-        
+
+    def _mode_of(concept_id: str) -> str:
+        _c = db.query(Concept).filter(Concept.id == concept_id).first()
+        return 'master' if _c and _c.level == 2 else 'activity'
+
     if entity_update.concept_ids is not None:
-        # 强制更新多概念关联
-        mode = 'master' if db_entity.concept_id and db_entity.concept_id in [str(c.id) for c in db.query(Concept.id).filter(Concept.level.in_([1, 2])).all()] else 'activity'
+        # 强制更新多概念关联（mode 以父概念层级判定——L2=master，与 create 一致）
+        if not db_entity.concept_id:
+            raise HTTPException(status_code=400, detail="实体缺少父级概念，无法更新挂载")
+        mode = _mode_of(str(db_entity.concept_id))
         cids = list(set(entity_update.concept_ids))
         # 确保当前的父级 concept_id 也在关联列表中
         if db_entity.concept_id and db_entity.concept_id not in cids:
@@ -430,7 +443,7 @@ def update_entity(entity_id: str, entity_update: EntityUpdate, db: Session = Dep
         _update_entity_concept_links(db, entity_id, cids, mode=mode)
     elif "concept_id" in update_data:
         # 如果只改了父级，确保父级在关联中
-        mode = 'master' if db_entity.concept_id and db_entity.concept_id in [str(c.id) for c in db.query(Concept.id).filter(Concept.level.in_([1, 2])).all()] else 'activity'
+        mode = _mode_of(str(db_entity.concept_id))
         links = db.query(EntityConceptLink).filter(EntityConceptLink.entity_id == entity_id).all()
         curr_cids = [str(l.concept_id) for l in links]
         if str(db_entity.concept_id) not in curr_cids:

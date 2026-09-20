@@ -109,11 +109,11 @@ def _excel_bytes(rows, sheet="实体关系清单"):
 
 
 def _import_rows(db, rows):
-    """行字典 → 实体关系清单 xlsx → 走真实导入端点（异步端点以 asyncio.run 驱动）。"""
+    """行字典 → 实体关系清单 xlsx → 走真实导入端点（三轨M3/6 起为同步 def——直呼）。"""
     from app.api.entity_relation_manage import import_entity_relations_excel
     buf = _excel_bytes(rows)
-    return asyncio.run(import_entity_relations_excel(
-        file=UploadFile(file=buf, filename="m04t.xlsx"), db=db))
+    return import_entity_relations_excel(
+        file=UploadFile(file=buf, filename="m04t.xlsx"), db=db)
 
 
 def _drain_stream(resp):
@@ -306,8 +306,8 @@ def test_relation_excel_roundtrip_consistency():
     # 全新库（同种子）导入：三行全建、零 skip
     db2 = _sqlite_db()
     _seed_pair(db2)
-    res = asyncio.run(import_entity_relations_excel(
-        file=UploadFile(file=io.BytesIO(content), filename="entity_relations.xlsx"), db=db2))
+    res = import_entity_relations_excel(
+        file=UploadFile(file=io.BytesIO(content), filename="entity_relations.xlsx"), db=db2)
     assert res["code"] == 200, res
     assert res["data"]["created_count"] == 3, res
     assert res["data"]["skipped_rows"] == [], res

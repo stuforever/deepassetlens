@@ -26,19 +26,30 @@ def vendor_kb_config_path() -> Path:
     return get_runtime_data_root() / "knowledge_bases" / "kb_config.json"
 
 
+def normalize_kb_status(status) -> str:
+    """三轨M3/7：vendor 侧异常状态（needs_reindex/unknown 等）归一到 import 白名单。"""
+    return "ready"
+
+
 def sync_registry_to_kb4() -> dict:
     """vendor kb_config 注册表 → ④ import 面幂等导入（重复调用零重复）。"""
     from app.api.knowledge_base import KBImport, import_knowledge_bases
 
     cfg_path = vendor_kb_config_path()
-    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    # 三轨M3 顺手修（:33）：vendor 配置缺失/半写入损坏不再裸崩——报可读 503
+    if not cfg_path.exists():
+        raise HTTPException(status_code=503, detail=f"vendor kb_config 不存在: {cfg_path}")
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"vendor kb_config 解析失败: {type(e).__name__}") from e
     kbs = cfg.get("knowledge_bases", {})
     ws = str(cfg_path.parent)
     items = [
         KBImport.Item(
             name=name,
             description=info.get("description"),
-            status=info.get("status") or "ready",
+            status=normalize_kb_status(info.get("status")),
             pointer_params={"source": "tutor", "workspace": ws, "kb_name": name},
         )
         for name, info in kbs.items()

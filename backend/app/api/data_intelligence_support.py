@@ -55,7 +55,7 @@ def _extract_customer_names_from_input(user_input: str) -> list:
         return []
     import re as _re
     # 匹配 "客户001"、"客户003"、"客户A" 等（中文"客户"+字母数字标识）
-    _matches = _re.findall(r'客户([A-Za-z0-9]+)', user_input)
+    _matches = _re.findall(r'客户(?!ID|NO|APP|号|名称)([A-Za-z0-9]{2,})', user_input)
     if not _matches:
         return []
     # 去重保序
@@ -101,7 +101,10 @@ def _safe_error_summary(err) -> str:
     """提取安全的错误摘要：取首行、压缩空白、截断，避免把内部细节全量暴露给用户。"""
     if not err:
         return "未知错误"
-    s = str(err).strip().splitlines()[0].strip()
+    s = str(err).strip()
+    if not s:
+        return "未知错误"  # 三轨M3/9：空消息异常（如 ValueError()）不再 IndexError 崩溃
+    s = s.splitlines()[0].strip()
     s = " ".join(s.split())
     return (s[:160] + "...") if len(s) > 160 else (s or "未知错误")
 

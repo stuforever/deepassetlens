@@ -170,7 +170,9 @@ async def clear_freeplan_memory(thread_id: str, request: Request):
                 return {"status": "ok", "thread_id": thread_id, "cleared": True, "note": "deleted via raw SQL"}
             except Exception as e2:
                 logger.error(f"[FreePlan] 降级删除也失败: {e2}")
-                raise HTTPException(status_code=500, detail=f"清除记忆失败(降级删除也失败): {e2}")
+                raise HTTPException(status_code=500, detail=f"清除记忆失败(降级删除也失败): {e2}") from e2
+    except HTTPException:
+        raise  # 三轨M3/5：内层 HTTPException 原样上抛（语义/状态码不被二次包装淹没）
     except Exception as e:
         logger.error(f"[FreePlan] 清除 checkpoint 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"清除记忆失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清除记忆失败: {e}") from e

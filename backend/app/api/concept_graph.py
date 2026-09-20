@@ -47,95 +47,102 @@ def sync_hierarchy_to_neo4j():
 
         driver = _get_driver()
         with driver.session() as s:
-            # 1. 清旧 L4/L4X
-            s.run("MATCH (n) WHERE n.level IN ['L4', 'L4X'] DETACH DELETE n").consume()
+            # 三轨M3/2：全步骤单事务——任一失败整体回滚，不留中间态
+            tx = s.begin_transaction()
+            try:
+                # 1. 清旧 L4/L4X（三轨M3/2：限定本链 chain_type——BZ/遗留空值，不再误删他链同类节点）
+                tx.run("MATCH (n) WHERE n.level IN ['L4', 'L4X'] AND coalesce(n.chain_type, 'BZ') = 'BZ' DETACH DELETE n").consume()
 
-            # 2. 链根
-            s.run("""
-                MERGE (r:ChainRoot:Category {code: 'ROOT_MD'})
-                SET r.name = '主数据链根', r.level = 'ROOT', r.chain_type = 'MD'
-            """).consume()
-            s.run("""
-                MERGE (r:ChainRoot:Category {code: 'ROOT_BZ'})
-                SET r.name = '业务链根', r.level = 'ROOT', r.chain_type = 'BZ'
-            """).consume()
+                # 2. 链根
+                tx.run("""
+                    MERGE (r:ChainRoot:Category {code: 'ROOT_MD'})
+                    SET r.name = '主数据链根', r.level = 'ROOT', r.chain_type = 'MD'
+                """).consume()
+                tx.run("""
+                    MERGE (r:ChainRoot:Category {code: 'ROOT_BZ'})
+                    SET r.name = '业务链根', r.level = 'ROOT', r.chain_type = 'BZ'
+                """).consume()
 
-            # 3. L1/L2/L2X → ROOT_MD, L3 → ROOT_BZ
-            s.run("""
-                MATCH (n:Category) WHERE n.level IN ['L1', 'L2', 'L2X']
-                MATCH (r:ChainRoot {code: 'ROOT_MD'})
-                MERGE (n)-[:BELONGS_TO_CHAIN]->(r)
-            """).consume()
-            s.run("""
-                MATCH (n:Category) WHERE n.level = 'L3'
-                MATCH (r:ChainRoot {code: 'ROOT_BZ'})
-                MERGE (n)-[:BELONGS_TO_CHAIN]->(r)
-            """).consume()
+                # 3. L1/L2/L2X → ROOT_MD, L3 → ROOT_BZ
+                tx.run("""
+                    MATCH (n:Category) WHERE n.level IN ['L1', 'L2', 'L2X']
+                    MATCH (r:ChainRoot {code: 'ROOT_MD'})
+                    MERGE (n)-[:BELONGS_TO_CHAIN]->(r)
+                """).consume()
+                tx.run("""
+                    MATCH (n:Category) WHERE n.level = 'L3'
+                    MATCH (r:ChainRoot {code: 'ROOT_BZ'})
+                    MERGE (n)-[:BELONGS_TO_CHAIN]->(r)
+                """).consume()
 
-            # 4. L4 + HAS_PARENT → L3
-            l4_count = 0
-            for l3_code, l3_spec in spec.items():
-                for l4 in l3_spec.get("L4", []):
-                    s.run("""
-                        MERGE (n:Category:Entity {code: $code})
-                        SET n.level = 'L4',
-                            n.name = $name,
-                            n.chain_type = 'BZ',
-                            n.entity_type = 'category'
-                    """, code=l4["code"], name=l4["name"])
-                    s.run("""
-                        MATCH (l4:Category {code: $l4}), (l3:Category {code: $l3})
-                        MERGE (l4)-[:HAS_PARENT]->(l3)
-                    """, l4=l4["code"], l3=l3_code)
-                    l4_count += 1
+                # 4. L4 + HAS_PARENT → L3
+                l4_count = 0
+                for l3_code, l3_spec in spec.items():
+                    for l4 in l3_spec.get("L4", []):
+                        tx.run("""
+                            MERGE (n:Category:Entity {code: $code})
+                            SET n.level = 'L4',
+                                n.name = $name,
+                                n.chain_type = 'BZ',
+                                n.entity_type = 'category'
+                        """, code=l4["code"], name=l4["name"])
+                        tx.run("""
+                            MATCH (l4:Category {code: $l4}), (l3:Category {code: $l3})
+                            MERGE (l4)-[:HAS_PARENT]->(l3)
+                        """, l4=l4["code"], l3=l3_code)
+                        l4_count += 1
 
-            # 5. L4X + HAS_PARENT → L4 + RELATES_TO → L2X
-            l4x_count = 0
-            rel_count = 0
-            for l3_code, l3_spec in spec.items():
-                for l4x in l3_spec.get("L4X", []):
-                    s.run("""
-                        MERGE (n:Category:Entity {code: $code})
-                        SET n.level = 'L4X',
-                            n.name = $name,
-                            n.chain_type = 'BZ',
-                            n.entity_type = 'leaf'
-                    """, code=l4x["code"], name=l4x["name"])
-                    s.run("""
-                        MATCH (l4x:Category {code: $l4x}), (l4:Category {code: $l4})
-                        MERGE (l4x)-[:HAS_PARENT]->(l4)
-                    """, l4x=l4x["code"], l4=l4x["parent"])
-                    l4x_count += 1
+                # 5. L4X + HAS_PARENT → L4 + RELATES_TO → L2X
+                l4x_count = 0
+                rel_count = 0
+                for l3_code, l3_spec in spec.items():
+                    for l4x in l3_spec.get("L4X", []):
+                        tx.run("""
+                            MERGE (n:Category:Entity {code: $code})
+                            SET n.level = 'L4X',
+                                n.name = $name,
+                                n.chain_type = 'BZ',
+                                n.entity_type = 'leaf'
+                        """, code=l4x["code"], name=l4x["name"])
+                        tx.run("""
+                            MATCH (l4x:Category {code: $l4x}), (l4:Category {code: $l4})
+                            MERGE (l4x)-[:HAS_PARENT]->(l4)
+                        """, l4x=l4x["code"], l4=l4x["parent"])
+                        l4x_count += 1
 
-                    if l4x.get("relates_to"):
-                        s.run("""
-                            MATCH (l4x:Category {code: $l4x}), (l2x:Category {code: $l2x})
-                            MERGE (l4x)-[r:RELATES_TO]->(l2x)
-                            SET r.created_at = timestamp(),
-                                r.relation_category = 'cross_chain'
-                        """, l4x=l4x["code"], l2x=l4x["relates_to"])
-                        rel_count += 1
+                        if l4x.get("relates_to"):
+                            tx.run("""
+                                MATCH (l4x:Category {code: $l4x}), (l2x:Category {code: $l2x})
+                                MERGE (l4x)-[r:RELATES_TO]->(l2x)
+                                SET r.created_at = timestamp(),
+                                    r.relation_category = 'cross_chain'
+                            """, l4x=l4x["code"], l2x=l4x["relates_to"])
+                            rel_count += 1
 
-            # 6. 传递闭包
-            closure_count = s.run("""
-                MATCH (l4x:Category)-[:RELATES_TO]->(l2x:Category)
-                MATCH (l4x)-[:HAS_PARENT*1..2]->(l4:Category)
-                MATCH (l2x)-[:HAS_PARENT*1..2]->(l2:Category)
-                WHERE l4.level IN ['L4', 'L3'] AND l2.level IN ['L2', 'L1']
-                MERGE (l4)-[r2:RELATES_TO]->(l2)
-                ON CREATE SET r2.derived_from = 'transitive_closure',
-                              r2.relation_category = 'cross_chain_derived'
-                RETURN count(r2) AS cnt
-            """).single()["cnt"]
+                # 6. 传递闭包
+                closure_count = tx.run("""
+                    MATCH (l4x:Category)-[:RELATES_TO]->(l2x:Category)
+                    MATCH (l4x)-[:HAS_PARENT*1..2]->(l4:Category)
+                    MATCH (l2x)-[:HAS_PARENT*1..2]->(l2:Category)
+                    WHERE l4.level IN ['L4', 'L3'] AND l2.level IN ['L2', 'L1']
+                    MERGE (l4)-[r2:RELATES_TO]->(l2)
+                    ON CREATE SET r2.derived_from = 'transitive_closure',
+                                  r2.relation_category = 'cross_chain_derived'
+                    RETURN count(r2) AS cnt
+                """).single()["cnt"]
 
-            # 7. 反向
-            back_count = s.run("""
-                MATCH (a)-[r:RELATES_TO]->(b)
-                MERGE (b)-[r2:RELATED_BY]->(a)
-                ON CREATE SET r2.derived_from = 'reverse'
-                RETURN count(r2) AS cnt
-            """).single()["cnt"]
+                # 7. 反向
+                back_count = tx.run("""
+                    MATCH (a)-[r:RELATES_TO]->(b)
+                    MERGE (b)-[r2:RELATED_BY]->(a)
+                    ON CREATE SET r2.derived_from = 'reverse'
+                    RETURN count(r2) AS cnt
+                """).single()["cnt"]
 
+                tx.commit()
+            except Exception:
+                tx.rollback()
+                raise
         return {
             "message": "Successfully synced business chain hierarchy to Neo4j",
             "l4_count": l4_count,
@@ -539,8 +546,10 @@ def get_subgraph_by_l1(
                             "label": "所属", "edge_type": "concept_entity_link",
                         })
                 # 打点关系边（L2实体 -> L4实体）
+                emitted_rel_ids = set()  # 三轨M3/3：er-{id} 幂等——实体间关系循环跳过已输出
                 for r in matrix_rels:
                     if str(r.target_entity_id) in node_ids:
+                        emitted_rel_ids.add(f"er-{r.id}")
                         edges.append({
                             "id": f"er-{r.id}",
                             "source": str(r.source_entity_id), "target": str(r.target_entity_id),
@@ -564,6 +573,8 @@ def get_subgraph_by_l1(
                 EntityRelation.target_entity_id.in_(list(entity_id_set)),
             ).all()
             for rel in rels:
+                if f"er-{rel.id}" in emitted_rel_ids:
+                    continue  # 三轨M3/3：同 id 已在打点关系输出——去重
                 edge_type = "entity_generation" if (rel.relation_category or "") == "打点维护" else "entity_relation"
                 edges.append({
                     "id": f"er-{rel.id}",
