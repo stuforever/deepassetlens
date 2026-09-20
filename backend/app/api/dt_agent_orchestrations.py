@@ -1025,7 +1025,11 @@ async def _agent_text(req, session_id: str, turn_id: str, parts: List[str]) -> s
         if ev.get("type") == "content":
             acc.append(ev.get("content", ""))
         elif ev.get("type") == "result" and ev.get("content"):
-            acc.append(ev.get("content", ""))
+            # 三轨M4：content 帧已 1:1 流出全文时 result 帧不重复并入——
+            # 否则 outline 相位 json.loads 切片横跨双份 JSON 必炸（"Extra data"）。
+            rc = str(ev.get("content") or "")
+            if "".join(acc).strip() != rc.strip():
+                acc.append(rc)
     return "".join(acc)
 
 
