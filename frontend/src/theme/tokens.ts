@@ -123,6 +123,14 @@ export const chartPalette = [
   '#D97706', '#DC2626', '#64748B', '#BE185D',
 ] as const;
 
+/* ---------- 三轨M8(U3)：画布实体语义色（五页共用——§四统一，消灭两套并存） ---------- */
+export const entitySemanticColors = {
+  master: '#2563EB',  // 主数据 蓝
+  activity: '#0891B2', // 活动 青
+  data: '#DC2626',     // 数据 红
+  concept: '#7C3AED',  // 概念 紫
+} as const;
+
 /* ---------- 动效 token（新增） ---------- */
 export const motion = {
   duration: { fast: 120, base: 200, slow: 320 },
@@ -249,5 +257,6 @@ export const tokens = {
   brandGradient,
   chartPalette,
   motion,
+  entitySemanticColors,
   spaceColors,
 } as const;

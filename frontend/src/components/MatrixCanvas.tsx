@@ -256,6 +256,7 @@ const MatrixCanvas: React.FC = () => {
                 <Checkbox
                   checked={isLinked}
                   onChange={(ev) => handleToggle(ev, record.id, ent.id)}
+                  style={{ transform: 'scale(1.286)' }}  // 三轨M8 §4.3：默认 14px→18px 命中面
                 />
                 {isLinked && (
                   <Button
@@ -396,6 +397,7 @@ const MatrixCanvas: React.FC = () => {
         <Table
           dataSource={pagedDataSource}
           columns={tableColumns}
+          sticky  /* 三轨M8 §4.3：分组表头冻结——横滚不丢上下文 */
           pagination={{
             current: page,
             pageSize: pageSize,

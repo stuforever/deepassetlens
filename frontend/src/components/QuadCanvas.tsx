@@ -172,7 +172,19 @@ const QuadCanvas: React.FC = () => {
     );
   };
 
-  const emptyHint = (txt: string) => <div style={{ color: 'var(--border-strong)', fontSize: 12, padding: '12px 8px', textAlign: 'center' }}>{txt}</div>;
+  // 三轨M8(U3) §4.2：空列虚线引导占位（「拖实体到此」动线引导）
+  const emptyHint = (txt: string) => (
+    <div
+      style={{
+        margin: '8px', padding: '24px 8px', textAlign: 'center', fontSize: 12,
+        color: 'var(--text-tertiary)', border: '2px dashed var(--border-strong)',
+        borderRadius: 'var(--radius, 12px)',
+      }}
+    >
+      {txt}
+      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--border-strong)' }}>拖实体到此</div>
+    </div>
+  );
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-content)' }}>

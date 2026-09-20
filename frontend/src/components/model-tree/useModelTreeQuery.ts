@@ -5,7 +5,7 @@
  * + 选择(selectedKey/expandedKeys) + 关系过滤(relationFilter) + refreshData + 初始加载效果。
  * 容器仍负责：metaMap/selectedMeta 派生、建模跳转效果、关系高亮效果、详情加载效果、全部 CRUD 业务。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { message } from 'antd';
 import { conceptApi, entityApi } from '../../services/api';
 import { buildTree, findFirstKey, type Mode } from './modelTree';
@@ -48,21 +48,26 @@ export function useModelTreeQuery(args: { mode: Mode; config: ModelTreeQueryConf
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [relationFilter, setRelationFilter] = useState<'all' | 'manual' | 'matrix'>('all');
 
+  // 三轨M8 顺手修(:54)：过期响应防护——mode/config 快速变化或并发 refreshData 时，
+  // 先发后至的旧响应不再覆盖新批次结果（请求序号守卫）。
+  const requestSeqRef = useRef(0);
   const refreshData = useCallback(async (keepKey = true) => {
+    const seq = ++requestSeqRef.current;
     setLoading(true);
     try {
       const [conceptRes, entityRes] = await Promise.all([
         conceptApi.getConcepts(undefined, config.includeLevel0),
         entityApi.listEntities(),
       ]);
+      if (seq !== requestSeqRef.current) return; // 过期响应丢弃
       const allConcepts = conceptRes.data || [];
       const filteredConcepts = allConcepts.filter((item: any) => config.levels.includes(item.level));
       const entityItems = entityRes.data?.data?.items || [];
       setConcepts(filteredConcepts);
       setAllEntities(entityItems);
 
-      const nextTree = buildTree(filteredConcepts, mode).treeData;
-      const nextMetaMap = buildTree(filteredConcepts, mode).metaMap;
+      // 顺手修（:64）：buildTree 单次调用解构（原两次全量建树）
+      const { treeData: nextTree, metaMap: nextMetaMap } = buildTree(filteredConcepts, mode);
       const nextFirstKey = findFirstKey(nextTree);
 
       // 如果有 initialEntityId，定位到该实体并展开父节点
@@ -94,7 +99,8 @@ export function useModelTreeQuery(args: { mode: Mode; config: ModelTreeQueryConf
     } finally {
       setLoading(false);
     }
-  }, [config.includeLevel0, config.levels, mode, initialEntityId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.includeLevel0, config.levels.join(','), mode, initialEntityId]);
 
   useEffect(() => {
     refreshData(false);

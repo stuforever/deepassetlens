@@ -44,12 +44,16 @@ export function extractMathAnimatorResult(
   if (!resultMetadata) return null;
   const artifacts = Array.isArray(resultMetadata.artifacts)
     ? resultMetadata.artifacts.filter((item): item is MathAnimatorArtifact => {
-        return Boolean(
-          item &&
-          typeof item === "object" &&
-          "type" in item &&
-          "url" in item &&
-          "filename" in item,
+        // 三轨M8 顺手修(:46)：值类型校验收紧——仅键存在不构成合法 artifact
+        if (!item || typeof item !== "object") return false;
+        const rec = item as Record<string, unknown>;
+        return (
+          typeof rec.type === "string" &&
+          rec.type.length > 0 &&
+          typeof rec.url === "string" &&
+          rec.url.length > 0 &&
+          typeof rec.filename === "string" &&
+          rec.filename.length > 0
         );
       })
     : [];

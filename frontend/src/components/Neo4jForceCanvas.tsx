@@ -46,7 +46,7 @@ const Neo4jForceCanvas: React.FC = () => {
         e.edge_type === 'concept_hierarchy' && e.target === 'L1-CUSTOMER'
       ).length;
       setStats({ nodes: nodes.length, edges: edges.length, l2Children });
-      message.success(`已加载 Neo4j 图数据：${nodes.length} 节点 / ${edges.length} 边`);
+      message.success(`已加载 Neo4j 图数据：${nodes.length} 节点 / ${edges.length} 边`, 3); // 三轨M8：3s 自动消失（横幅改 toast）
     } catch (error) {
       console.error('Failed to fetch Neo4j graph data:', error);
       message.error('获取 Neo4j 图数据失败，请检查 Neo4j 服务状态');
