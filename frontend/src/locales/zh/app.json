@@ -3361,5 +3361,8 @@
   "Wrong question confirmation": "错题确认卡",
   "Correct answer": "正确答案",
   "Error type": "错因归类",
-  "Confirm and save": "确认并入库"
+  "Confirm and save": "确认并入库",
+  "Wrong Intake": "错题录入",
+  "Record wrong questions through natural dialogue": "通过自然对话录入错题",
+  "Generate charts, diagrams, interactive pages, or math animations": "生成图表、图形、交互页面或数学动画"
 }

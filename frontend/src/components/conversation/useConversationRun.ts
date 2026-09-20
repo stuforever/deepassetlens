@@ -99,9 +99,17 @@ export const useConversationRun = (sceneConfig: ConversationSceneConfig) => {
     setMessages([]);
     setConversationId('');
     setLoading(false);
+    loadingRef.current = false;  // 三轨M7(:114) 并发闸复位
   };
 
+  // 三轨M7 顺手修(:114)：并发防护——loading 中再提交直接忽略（防重复 Run/重复消息）；
+  // 提交前收尾上一条流的 loading（closeEventSource 后旧助手消息不再滞留转圈）。
+  const loadingRef = useRef(false);
   const submitMessage = async (args: { userText: string; runtimeState?: Record<string, any>; overrides?: Partial<ConversationSubmitOptions> }) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    // 上一条流若仍开着（并发前窗口）——收尾其助手消息 loading，避免永久转圈
+    setMessages((prev) => prev.map((m) => (m.loading ? { ...m, loading: false } : m)));
     const derivedOptions = sceneConfig.runtime?.buildSubmitOptions({
       userText: args.userText,
       runtimeState: args.runtimeState,
@@ -280,6 +288,7 @@ export const useConversationRun = (sceneConfig: ConversationSceneConfig) => {
       listenJsonEvent('run.failed', (payload) => {
         closeEventSource();
         setLoading(false);
+        loadingRef.current = false;  // 三轨M7(:114) 并发闸复位
         updateAssistantMessage(assistantMessageId, (prev) => ({
           ...prev,
           loading: false,
@@ -296,6 +305,9 @@ export const useConversationRun = (sceneConfig: ConversationSceneConfig) => {
 
       eventSource.addEventListener('stream.end', async () => {
         closeEventSource();
+        // 三轨M7 顺手修(:297)：终取两调失败不再裸抛（未处理 rejection+loading 永挂）
+        // ——finally 复位 loading，catch 回退既有累计文本。
+        try {
         const finalRunRes = await runApi.getRun(runId);
         const finalRunData = finalRunRes.data?.data || {};
         const finalEventsRes = await runApi.getRunEvents(runId);
@@ -313,7 +325,17 @@ export const useConversationRun = (sceneConfig: ConversationSceneConfig) => {
             stream_events: finalEvents.length > 0 ? finalEvents : prev.payload?.stream_events || [],
           },
         }));
+        } catch (e) {
+          updateAssistantMessage(assistantMessageId, (prev) => ({
+            ...prev,
+            loading: false,
+            payload: { ...(prev.payload || {}), stream_error: String(e) },
+          }));
+        }
+        // eslint-disable-next-line no-useless-catch
+        
         setLoading(false);
+        loadingRef.current = false;  // 三轨M7(:114) 并发闸复位
       });
 
       eventSource.onerror = async () => {
@@ -339,6 +361,7 @@ export const useConversationRun = (sceneConfig: ConversationSceneConfig) => {
           },
         }));
         setLoading(false);
+        loadingRef.current = false;  // 三轨M7(:114) 并发闸复位
       };
     } catch (error: any) {
       closeEventSource();
@@ -354,6 +377,7 @@ export const useConversationRun = (sceneConfig: ConversationSceneConfig) => {
         },
       }));
       setLoading(false);
+      loadingRef.current = false;  // 三轨M7(:114) 并发闸复位
       message.error(options.errorToastText || error?.response?.data?.detail || error?.message || '执行失败');
     }
   };

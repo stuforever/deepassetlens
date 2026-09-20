@@ -3327,5 +3327,8 @@
   "Wrong question confirmation": "Wrong question confirmation",
   "Correct answer": "Correct answer",
   "Error type": "Error type",
-  "Confirm and save": "Confirm and save"
+  "Confirm and save": "Confirm and save",
+  "Wrong Intake": "Wrong Intake",
+  "Record wrong questions through natural dialogue": "Record wrong questions through natural dialogue",
+  "Generate charts, diagrams, interactive pages, or math animations": "Generate charts, diagrams, interactive pages, or math animations"
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   BookOpen,
   Check,
@@ -66,12 +66,19 @@ export default function BookReferencePicker({
   const [loadingBooks, setLoadingBooks] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // 三轨M7 顺手修(:69)：ref 持有最新 initialReferences——播种只在「开→关→开」边界发生，
+  // 父组件打开期间传新数组引用不再整体覆盖用户进行中的勾选。
+  const initialRefsRef = useRef(initialReferences);
+  useEffect(() => {
+    initialRefsRef.current = initialReferences;
+  }, [initialReferences]);
+
   useEffect(() => {
     if (!open) return;
     let mounted = true;
     // Re-seed selection each time the picker opens.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelected(initialReferences);
+    setSelected(initialRefsRef.current);
     setLoadingBooks(true);
     void bookApi
       .list()

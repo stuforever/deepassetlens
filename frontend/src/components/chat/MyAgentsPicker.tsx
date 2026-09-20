@@ -131,6 +131,7 @@ export default function MyAgentsPicker({
   const [query, setQuery] = useState("");
   const [activeAgent, setActiveAgent] = useState<string>(ALL);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [loadError, setLoadError] = useState<string | null>(null); // 三轨M7(:173)
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<PreviewState | null>(null);
 
@@ -170,11 +171,13 @@ export default function MyAgentsPicker({
         setSessions(data);
         setAgents(reg);
         setPartnerAgents(partnerData.filter((p): p is PartnerAgent => !!p));
-      } catch {
+      } catch (e) {
         if (mounted) {
           setSessions([]);
           setAgents([]);
           setPartnerAgents([]);
+          // 三轨M7 顺手修(:173)：失败不再静默——错误态可见（区分「为空」与「出错」）
+          setLoadError(e instanceof Error ? e.message : String(e));
         }
       } finally {
         if (mounted) setLoading(false);

@@ -22,6 +22,7 @@ export default function PersonaPicker({
 }: PersonaPickerProps) {
   const { t } = useTranslation();
   const [personas, setPersonas] = useState<PersonaInfo[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null); // 三轨M7(:43)
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(initialPersona);
   const [query, setQuery] = useState("");
@@ -42,8 +43,12 @@ export default function PersonaPicker({
       try {
         const items = await listPersonas({ force: true });
         if (mounted) setPersonas(items);
-      } catch {
-        if (mounted) setPersonas([]);
+        if (mounted) setLoadError(null);
+      } catch (e) {
+        // 三轨M7 顺手修(:43)：失败不再静默清空——错误态可见+保留既有数据
+        if (mounted) {
+          setLoadError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
         if (mounted) setLoading(false);
       }
