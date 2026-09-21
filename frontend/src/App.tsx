@@ -16,7 +16,10 @@ import {
 import { useStore } from './store/useStore';
 import { antdThemeToken, antdComponents, tokens } from './theme/tokens';
 import UserBadge from './components/UserBadge';
-import AppSider from './components/AppSider';
+import ActivityBar, { type ShellPanel } from './components/shell/ActivityBar';
+import NavPanel from './components/shell/NavPanel';
+import ChatPanel from './components/shell/ChatPanel';
+import SettingsPanel from './components/shell/SettingsPanel';
 import AppTabs, { type PageTab } from './components/AppTabs';
 import { expertPageRoutes, matchExpertPage } from './config/expertPages';
 
@@ -39,7 +42,8 @@ const App: React.FC = () => {
 
   const currentMenu = pathToMenuKey[location.pathname] || (location.pathname.startsWith('/e/') ? '' : 'portal');
 
-  const [collapsed, setCollapsed] = useState(false);
+  // v3 §二：图标条+滑出面板（ActivityBar/NavPanel/ChatPanel/SettingsPanel）——Esc 收起
+  const [shellPanel, setShellPanel] = useState<ShellPanel>(null);
   const [searchText, setSearchText] = useState('');
   const [pageTabs, setPageTabs] = useState<PageTab[]>([]);
   const [activeTabKey, setActiveTabKey] = useState('');
@@ -95,6 +99,15 @@ const App: React.FC = () => {
         }))
     ).slice(0, 10);
   }, [searchText]);
+
+  // v3 §二：Esc 收起滑出面板
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShellPanel(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // 路由变化 -> 同步页签/画布模式/激活 key
   useEffect(() => {
@@ -295,13 +308,16 @@ const App: React.FC = () => {
         </Header>
 
         <Layout style={{ flexDirection: 'row', overflow: 'hidden', flex: 1, minHeight: 0 }}>
-          {/* 左侧导航 */}
-          <AppSider
-            collapsed={collapsed}
-            onToggle={() => setCollapsed((c) => !c)}
-            selectedKey={currentMenu}
-            onSelect={switchToMenu}
+          {/* 左侧：图标条 + 滑出面板（v3 §二；Esc/再点收起） */}
+          <ActivityBar
+            activePanel={shellPanel}
+            onToggle={(p) => setShellPanel(shellPanel === p ? null : p)}
           />
+          {shellPanel === 'console' && (
+            <NavPanel visible onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />
+          )}
+          {shellPanel === 'chat' && <ChatPanel onClose={() => setShellPanel(null)} />}
+          {shellPanel === 'settings' && <SettingsPanel onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />}
           {/* 内容区：页签 + KeepAlive */}
           <Content
             style={{

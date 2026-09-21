@@ -10,7 +10,7 @@
  * semantic_metric/capability/system 的 items 全部并入下组；现状键为准，口径差登记 E-1）。
  * 三空间组静态注册=下拉 bug 根因2 修复（结构永不依赖网络）；组内 adminTop 项语义见 3.3/3.4。
  */
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import {
   SearchOutlined,
   ApartmentOutlined,
@@ -67,8 +67,7 @@ export const HOME_NAV_ITEM: NavItem = {
   icon: HomeOutlined,
 };
 
-export const NAV_GROUPS: NavGroup[] = [
-  // ── 三轨M6(U1) 侧栏 4 区重构（ui-audit 规格 §2.2）：7 组 47 项 → 4 区——
+export const NAV_GROUPS: NavGroup[] = [  // ── 三轨M6(U1) 侧栏 4 区重构（ui-audit 规格 §2.2）：7 组 47 项 → 4 区——
   // h5 12 项移出桌面侧栏（桌面唯一展台入口）；sishu 功能页留路由经门户专家卡进入；
   // sishu 管理三项保留在工作区（裁定原文「保留在空间组内」）。
   {
@@ -168,6 +167,49 @@ const SETTINGS_PAGES: Array<{ key: string; label: string; path: string }> = [
   { key: 'settings:curriculum-textbooks', label: '课本管理', path: '/settings/curriculum/textbooks' },
   { key: 'settings:curriculum-chapters', label: '章节管理', path: '/settings/curriculum/chapters' },
   { key: 'settings:curriculum-knowledge-points', label: '知识点管理', path: '/settings/curriculum/knowledge-points' },
+];
+
+/**
+ * v3 §二（迁移完成后精简入口）：管理台面板分组平铺——六组 18 项。
+ * menuKey 全部复用 NAV_GROUPS/既有注册表实测键（Task 1 逐项核对：
+ * entity_relation_manage/datasource/doris_config/vector_manage/master_data/activity_data/
+ * source/mapping/metric_manager/governance/engine_workbench/llmconfig/memory_admin/
+ * expert_grants/security_controls/e:sishu:admin:* ——计划示意键（entity_relation/doris/
+ * master/activity/lineage/metric/engine/llm/memory/grants/security/sishu_*）均不存在，已换实）。
+ * 「图谱画布」=Task 6 图谱 4 合 1 单入口（/graph 页内四视图）；「技能管理」=3 合 1（/skills?expert=）。
+ */
+export interface NavPanelItem { menuKey: string; label: string; icon: ReactNode; }
+export interface NavPanelGroup { title: string; items: NavPanelItem[]; }
+export const NAV_PANEL_GROUPS: NavPanelGroup[] = [
+  { title: '数据建模', items: [
+    { menuKey: 'graph', label: '图谱画布', icon: <ShareAltOutlined /> },
+    { menuKey: 'entity_relation_manage', label: '实体关系', icon: <NodeIndexOutlined /> } ] },
+  { title: '数据接入', items: [
+    { menuKey: 'datasource', label: '数据源', icon: <CloudServerOutlined /> },
+    { menuKey: 'doris_config', label: 'Doris 配置', icon: <DatabaseOutlined /> } ] },
+  { title: '平台能力', items: [
+    { menuKey: 'skills', label: '技能管理', icon: <RocketOutlined /> },
+    { menuKey: 'vector_manage', label: '知识库', icon: <BookOutlined /> },
+    { menuKey: 'golden_qa', label: '金标锚定', icon: <FileSearchOutlined /> } ] },
+  { title: '数据资产', items: [
+    { menuKey: 'master_data', label: '主数据', icon: <DatabaseOutlined /> },
+    { menuKey: 'activity_data', label: '活动数据', icon: <NodeIndexOutlined /> },
+    { menuKey: 'source', label: '来源表', icon: <TableOutlined /> },
+    { menuKey: 'mapping', label: '映射管理', icon: <BranchesOutlined /> },
+    { menuKey: 'metric_manager', label: '指标管理', icon: <UnorderedListOutlined /> } ] },
+  { title: '治理与系统', items: [
+    { menuKey: 'governance', label: '运行观测', icon: <FundOutlined /> },
+    { menuKey: 'engine_workbench', label: '引擎台', icon: <ThunderboltOutlined /> },
+    { menuKey: 'llmconfig', label: 'LLM 配置', icon: <SettingOutlined /> },
+    { menuKey: 'memory_admin', label: '记忆', icon: <BookOutlined /> },
+    { menuKey: 'expert_grants', label: '专家赋权', icon: <TeamOutlined /> },
+    { menuKey: 'security_controls', label: '安全中心', icon: <PoweroffOutlined /> } ] },
+  { title: '私塾管理', items: [
+    { menuKey: 'e:sishu:admin:mq', label: '母题库', icon: <BookOutlined /> },
+    { menuKey: 'e:sishu:admin:book', label: '书源', icon: <ReadOutlined /> },
+    { menuKey: 'e:sishu:admin:settings', label: '教学设置', icon: <SettingOutlined /> },
+    // { menuKey: 'h5_publish', label: 'H5 发布管理', icon: <MobileOutlined /> },  // Task 5 落地后启用
+  ] },
 ];
 
 /** menuKey -> label（页签标题、面包屑用） */
