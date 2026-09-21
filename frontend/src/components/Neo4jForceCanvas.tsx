@@ -193,7 +193,7 @@ const Neo4jForceCanvas: React.FC = () => {
   return (
     <Card
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-      bodyStyle={{ flex: 1, padding: 0, position: 'relative' }}
+      styles={{ body: { flex: 1, padding: 0, position: 'relative' } }}
     >
       <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
         <Space>

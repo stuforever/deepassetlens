@@ -191,7 +191,7 @@ const LineageGraph: React.FC<LineageGraphProps> = ({ visible = false, onClose, d
       onCancel={onClose}
       footer={null}
       width={width}
-      bodyStyle={{ height }}
+      styles={{ body: { height } }}
       destroyOnHidden
     >
       <div ref={containerRef} style={{ width: '100%', height: '100%', background: 'var(--bg-subtle)' }} />

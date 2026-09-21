@@ -177,7 +177,7 @@ export default function SqlIntegrationTab({ entityId }: { entityId?: string }) {
       ) : (
         <Row gutter={12}>
           <Col span={8}>
-            <Card title={<Space><DatabaseOutlined />对象列表<StatusTag preset="success">sql_integration</StatusTag></Space>} size="small" bodyStyle={{ overflowY: 'auto', maxHeight: 'calc(100vh - 240px)' }}>
+            <Card title={<Space><DatabaseOutlined />对象列表<StatusTag preset="success">sql_integration</StatusTag></Space>} size="small" styles={{ body: { overflowY: 'auto', maxHeight: 'calc(100vh - 240px)' } }}>
               <Input allowClear prefix={<SearchOutlined />} placeholder="按名称/编码搜索" value={filterText} onChange={e => setFilterText(e.target.value)} style={{ marginBottom: 8 }} />
               <List size="small" dataSource={filteredEntities} locale={{ emptyText: filteredEntities.length ? '无匹配对象' : '无 sql_integration 对象' }}
                 renderItem={(e: any) => (

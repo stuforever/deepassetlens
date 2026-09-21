@@ -272,7 +272,7 @@ const MixedEditor: React.FC<MixedEditorProps> = ({
             title="代码编辑器" 
             size="small"
             style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-            bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0 }}
+            styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 0 } }}
           >
             <TextArea
               value={data.code}
@@ -326,7 +326,7 @@ const MixedEditor: React.FC<MixedEditorProps> = ({
             }
             size="small"
             style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-            bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0 }}
+            styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 0 } }}
           >
             {/* 依赖搜索和添加 */}
             <div style={{ padding: '12px', borderBottom: '1px solid var(--color-border)' }}>

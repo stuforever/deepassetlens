@@ -875,6 +875,8 @@ function TutorHomeChatInner() {
     <QuizFollowupProvider>
       <GeogebraTabProvider>
         <div className="relative flex h-full w-full items-stretch overflow-hidden">
+        {/* v3 §2.4 空间色：对话页页头 3px 色条（sishu 琥珀） */}
+        <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#D97706', zIndex: 5 }} />
         <div
           className="chat-preview-shell flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
           data-preview-open={previewSource !== null ? "true" : "false"}

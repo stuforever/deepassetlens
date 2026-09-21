@@ -816,7 +816,7 @@ export default function BookChatPanel({
             data-testid="book-chat-input"
             placeholder="询问本页内容…"
             rows={1}
-            bordered={false}
+            variant="borderless"
             onPaste={handlePaste}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}

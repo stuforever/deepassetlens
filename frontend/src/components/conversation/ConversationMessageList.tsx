@@ -89,7 +89,7 @@ const MessageRow = React.memo<{
     ) : null}
     <Card
       size="small"
-      bordered={false}
+      variant="borderless"
       style={{
         width: msg.role === 'user' ? 'min(1200px, 72%)' : '100%',
         maxWidth: '100%',
@@ -97,7 +97,7 @@ const MessageRow = React.memo<{
         boxShadow: 'none',
       }}
       title={undefined}
-      bodyStyle={msg.role === 'user' ? { padding: '6px 12px' } : { padding: '0' }}
+      styles={{ body: msg.role === 'user' ? { padding: '6px 12px' } : { padding: '0' } }}
     >
       {msg.role === 'user' ? (
         /* B2 美化：用户问题 = 左主色竖线 + 文本 + 12px 时间戳，与回答区分 */

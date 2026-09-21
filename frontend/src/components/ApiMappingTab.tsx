@@ -119,7 +119,7 @@ function EntityApiMappingSection({ entityId }: { entityId?: string }) {
         <Col span={8}>
           <Card title={<Space><DatabaseOutlined />对象API映射</Space>} size="small"
             extra={<Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>新增</Button>}
-            bodyStyle={{ overflowY: 'auto', maxHeight: 'calc(100vh - 320px)' }}>
+            styles={{ body: { overflowY: 'auto', maxHeight: 'calc(100vh - 320px)' } }}>
             <Input allowClear prefix={<SearchOutlined />} placeholder="按对象名称/编码搜索" value={filterText} onChange={e => setFilterText(e.target.value)} style={{ marginBottom: 8 }} />
             <List size="small" loading={loading} dataSource={filteredMappings} locale={{ emptyText: '暂无对象API映射，点新增配置' }}
               renderItem={(m: any) => (
@@ -343,7 +343,7 @@ function ApiEndpointSection() {
               <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>新增</Button>
               <Button size="small" icon={<ClearOutlined />} onClick={() => handleInvalidate()} title="清空 API 内存缓存">清缓存</Button>
             </Space>}
-            bodyStyle={{ overflowY: 'auto', maxHeight: 'calc(100vh - 320px)' }}>
+            styles={{ body: { overflowY: 'auto', maxHeight: 'calc(100vh - 320px)' } }}>
             {cacheStats ? (
               <div style={{ marginBottom: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--color-fill-1, #F9FAFB)', fontSize: 12, color: 'var(--text-tertiary, #64748B)' }}>
                 <Space size="large" wrap>
@@ -405,7 +405,7 @@ function ApiEndpointSection() {
               placeholder="选择左侧端点后自动生成 SQL，或在此手写联邦查询 SQL" />
           </Card>
           {result?.pushed_down && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--color-success)' }}>下推参数: {JSON.stringify(result.pushed_down)}</div>}
-          <Card title="执行结果" size="small" style={{ marginTop: 8 }} bodyStyle={{ overflowY: 'auto', maxHeight: '260px' }}>
+          <Card title="执行结果" size="small" style={{ marginTop: 8 }} styles={{ body: { overflowY: 'auto', maxHeight: '260px' } }}>
             {result?.columns?.length ? <Table columns={resultColumns} dataSource={resultData} rowKey="_key" size="small" pagination={{ pageSize: 10 }} scroll={{ x: 'max-content', y: 260 }} /> : <Empty description="执行SQL后显示结果" />}
           </Card>
         </Col>

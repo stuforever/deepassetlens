@@ -1,6 +1,6 @@
 /**
  * 外观设置（1:1 复刻自原仓 web/app/(utility)/settings/appearance/page.tsx）：
- * 界面语言（en/zh 分段按钮）、主题四卡（默认/奶油/深色/琉璃）、代码块
+ * 界面语言（en/zh 分段按钮）、代码块
  * （实时预览 + 语法主题下拉 + 行号开关 + 长行换行开关）。
  * next/dynamic RichCodeBlock → 本文件内联 pre 预览（等价 antd 重建）；
  * CODE_BLOCK_THEME_OPTIONS 内联（原 @/components/common/code-block-themes 选项表）。

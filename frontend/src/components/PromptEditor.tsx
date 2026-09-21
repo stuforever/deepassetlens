@@ -128,7 +128,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
         title="变量面板"
         size="small"
         style={{ width: 280, display: 'flex', flexDirection: 'column' }}
-        bodyStyle={{ flex: 1, overflow: 'auto' }}
+        styles={{ body: { flex: 1, overflow: 'auto' } }}
       >
         <div style={{ marginBottom: 12 }}>
           <Text type="secondary" style={{ fontSize: '12px' }}>

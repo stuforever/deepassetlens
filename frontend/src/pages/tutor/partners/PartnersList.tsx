@@ -316,7 +316,7 @@ export default function PartnersList() {
                     borderColor: BORDER,
                     opacity: busy ? 0.6 : undefined,
                   }}
-                  bodyStyle={{
+                  styles={{ body: {
                     height: "100%",
                     boxSizing: "border-box",
                     display: "flex",
@@ -324,7 +324,7 @@ export default function PartnersList() {
                     gap: 12,
                     padding: 16,
                     cursor: busy ? "default" : "pointer",
-                  }}
+                  } }}
                   onClick={() => {
                     if (!busy) void openPartner(partner);
                   }}

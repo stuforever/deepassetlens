@@ -653,7 +653,7 @@ const ModelTreeManager: React.FC<Props> = ({ mode, pageTitle, readOnly = false, 
     <Layout style={{ height: '100%', background: 'transparent' }}>
       <Card
         style={{ width: '100%', maxWidth: '100%', height: '100%', display: 'flex', flexDirection: 'column', boxShadow: embedded ? 'none' : undefined, overflow: 'hidden' }}
-        bodyStyle={{ padding: 0, flex: 1, overflow: 'hidden' }}
+        styles={{ body: { padding: 0, flex: 1, overflow: 'hidden' } }}
         title={pageTitle}
         extra={
           <Space wrap>

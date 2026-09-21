@@ -949,7 +949,7 @@ const FreePlanChat: React.FC = () => {
         rows={2}
         placeholder="想问什么数据？"
         autoSize={{ minRows: 2, maxRows: 6 }}
-        bordered={false}
+        variant="borderless"
         onPressEnter={(e) => {
           if (!e.shiftKey) {
             e.preventDefault();

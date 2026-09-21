@@ -1088,6 +1088,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
 
   return (
     <div style={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      {/* v3 §2.4 空间色：对话页页头 3px 色条（wenshu 蓝） */}
+      <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: spaceColors.wenshu, zIndex: 5 }} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 批13-P：受控路由模拟器收进「审计模拟」按钮（Drawer），不再常驻问答页顶部 */}
       <Drawer
