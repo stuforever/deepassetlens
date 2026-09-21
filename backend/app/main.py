@@ -381,6 +381,12 @@ app.include_router(_sishu_curriculum_router, prefix="/api/v1/curriculum", tags=[
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
         continue  # v4批6 6.6：七域 vendor 行摘除（平台 sishu_learning 承接同前缀）
+    # 三轨M16(批10)：knowledge/voice/imports/attachments vendor 保留挂载但补执法
+    # （协议 F⑤——不扩造，登记为主；前端消费面经 vendor 栈 sishu port 服务）
+    if _tags and _tags[0] in ("knowledge", "voice", "imports", "attachments") and _deps is None:
+        app.include_router(_r, prefix=_prefix, tags=_tags,
+                           dependencies=[Depends(_sishu_deps[0].dependency)])
+        continue
     app.include_router(_r, prefix=_prefix, tags=_tags, dependencies=_deps)
 from fastapi.staticfiles import StaticFiles as _DtStaticFiles
 
