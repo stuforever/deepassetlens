@@ -361,6 +361,12 @@ _SISHU_BATCH6_UNMOUNTED = {
     "mother-questions", "learner-profile", "mastery-path",
     "self-learning", "notebook", "question-notebook", "book", "sessions",
     "personas", "capabilities", "voice", "memory",
+    # 批14深水：四小域平台面承接 vendor 行摘除
+    "h5-links", "h5-settings", "imports", "attachments",
+    # 批14深水：零消费域显式卸挂登记（前端 grep 0 文件+后端非 vendor 消费 0——
+    # dashboard/wechat-push/space-mcp/space-cli-apps/plugins/agent-config；
+    # multi-user 同为零消费但属 auth 邻接面，批15 C5 探针组 gate 后再登记卸挂）
+    "dashboard", "wechat-push", "space-mcp", "space-cli-apps", "plugins", "agent-config",
 }
 
 from app.api import sishu_learning as _sishu_learning
@@ -415,16 +421,37 @@ app.include_router(_sishu_voice_router, prefix="/api/v1/voice", tags=["voice"], 
 from app.api.sishu_memory import router as _sishu_memory_router
 app.include_router(_sishu_memory_router, prefix="/api/v1/memory", tags=["memory"], dependencies=_sishu_deps)
 
+# 批14深水(1/4)：h5-links 平台路由——vendor h5_links.py links 面 3 端点 1:1
+# （compat h5/paths 同源解析 data/h5_links.json，零漂移）。
+from app.api.sishu_h5_links import router as _sishu_h5_links_router
+app.include_router(_sishu_h5_links_router, prefix="/api/v1/h5-links", tags=["h5-links"], dependencies=_sishu_deps)
+
+# 批14深水(2/4)：h5-settings 平台路由——vendor h5_links.settings_router 2 端点 1:1。
+from app.api.sishu_h5_links import settings_router as _sishu_h5_settings_router
+app.include_router(_sishu_h5_settings_router, prefix="/api/v1/h5-settings", tags=["h5-settings"], dependencies=_sishu_deps)
+
+# 批14深水(3/4)：imports 平台路由——vendor imports.py 2 端点 1:1（sqlite_store 1902 行
+# 单件移植=vendor sqlite 会话库零漂移写径；vendor session 全包 turn_runtime 闭包=远期池不整搬）。
+from app.api.sishu_imports import router as _sishu_imports_router
+app.include_router(_sishu_imports_router, prefix="/api/v1/imports", tags=["imports"], dependencies=_sishu_deps)
+
+# 批14深水(4/4)：attachments 平台路由——vendor attachments.py 1 端点 1:1
+# （GET /api/attachments/{sid}/{aid}/{filename}，storage 移植包同名件承接）。
+from app.api.sishu_attachments import router as _sishu_attachments_router
+app.include_router(_sishu_attachments_router, prefix="/api/attachments", tags=["attachments"], dependencies=_sishu_deps)
+
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
         continue  # v4批6 6.6：七域 vendor 行摘除（平台 sishu_learning 承接同前缀）
-    # 三轨M16(批10)+批11/13深水：knowledge/imports/attachments/skills/subagents/partners
+    # 三轨M16(批10)+批11/13/14深水：knowledge/skills/subagents/partners/co_writer
     # vendor 行续服务+执法补挂（协议 F⑤——不扩造登记为主；前端消费面经 vendor 栈服务）。
-    # 批11：voice 已全量换芯摘除；skills/subagents 重闭包、批13：partners 运行时闭包
-    # （orchestrator/tool_registry/builtin/skill/cron/mcp/准入层=装配域远期池）登记远期池。
+    # 批11：voice 已全量换芯摘除；skills/subagents/partners/co_writer 运行时闭包直击
+    # 引擎本体（orchestrator/tool_registry/builtin/skill/cron/mcp/co_writer 包/stream_bus/
+    # 准入层=装配域远期池）登记远期池。imports/attachments 批14 已平台化摘除。
     # 执法=require_expert("use", sishu) 叠加 vendor 原生 _auth/_admin（deps 叠加不互替）。
-    # 注：早期版本条件误写 _deps is None（vendor 行实为 _auth）致本支路死码——批13 修正。
-    if _tags and _tags[0] in ("knowledge", "imports", "attachments", "skills", "subagents", "partners"):
+    if _tags and _tags[0] in (
+        "knowledge", "skills", "subagents", "partners", "co_writer",
+    ):
         app.include_router(_r, prefix=_prefix, tags=_tags,
                            dependencies=[Depends(_sishu_deps[0].dependency), *(_deps or [])])
         continue
