@@ -364,12 +364,14 @@ _SISHU_BATCH6_UNMOUNTED = {
     # 批14深水：四小域平台面承接 vendor 行摘除
     "h5-links", "h5-settings", "imports", "attachments",
     # 批14深水：零消费域显式卸挂登记（前端 grep 0 文件+后端非 vendor 消费 0——
-    # dashboard/wechat-push/space-mcp/space-cli-apps/plugins/agent-config；
-    # multi-user 同为零消费但属 auth 邻接面，批15 C5 探针组 gate 后再登记卸挂）。
+    # dashboard/wechat-push/space-mcp/space-cli-apps/plugins/agent-config）。
     # 批16前置：mcp-settings（5 端点 0 消费）+system vendor 行（frontend 仅消费
     # /status=平台批11 已承接；余 4 端点 runtime-topology/test×3 零消费）卸挂。
+    # 批15 C5 gate 裁决（E-103）：multi-user 卸挂——探针实测 student(use) 可达
+    # /users 与 /admin/resources（vendor 仅 disabled-auth 面=无执法裸面，5 路由
+    # 全 admin 语义），且前端 0 消费——auth 邻接面不再留裸挂。
     "dashboard", "wechat-push", "space-mcp", "space-cli-apps", "plugins", "agent-config",
-    "mcp-settings", "system",
+    "mcp-settings", "system", "multi-user",
 }
 
 from app.api import sishu_learning as _sishu_learning
