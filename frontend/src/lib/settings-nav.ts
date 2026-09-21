@@ -380,43 +380,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   },
   {
     key: "knowledge",
-    label: { zh: "知识库", en: "Knowledge Base" },
+    label: { zh: "知识与课程", en: "Knowledge & Curriculum" },
     blurb: { zh: "文档解析引擎", en: "Document parsing engine" },
     icon: ReadOutlined,
     href: "/settings/document-parsing",
-  },
-  {
-    key: "curriculum",
-    label: { zh: "设置管理", en: "Curriculum" },
-    blurb: {
-      zh: "课本、章节与知识点：课程体系的权威管理入口。",
-      en: "Textbooks, chapters and knowledge points.",
-    },
-    icon: BlockOutlined,
-    href: "/settings/curriculum",
-    children: CURRICULUM_CHILDREN,
+    children: CURRICULUM_CHILDREN
   },
   {
     key: "chat",
-    label: { zh: "聊天", en: "Chat" },
+    label: { zh: "聊天与智能体", en: "Chat & Agents" },
     blurb: {
       zh: "工具、能力与附件",
       en: "Tools, capabilities, and attachments",
     },
     icon: MessageOutlined,
     href: "/settings/chat",
-    children: CHAT_CHILDREN,
-  },
-  {
-    key: "agents",
-    label: { zh: "伙伴和智能体", en: "Partners & Agents" },
-    blurb: {
-      zh: "配置可在对话中调用的子智能体",
-      en: "Configure the subagents you can call on in chat",
-    },
-    icon: RobotOutlined,
-    href: "/settings/agents",
-    children: AGENT_CHILDREN,
+    children: [...CHAT_CHILDREN, ...AGENT_CHILDREN],
   },
   {
     key: "memory",
