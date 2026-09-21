@@ -39,6 +39,22 @@ const GoldenQaManager: React.FC = () => {
   const [cands, setCands] = useState<GoldenCandidate[]>([]);
   const [candsLoading, setCandsLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // 三轨M10(U5)：试跑 diff 抽屉
+  const [replayRow, setReplayRow] = useState<any>(null);
+  const [replayResult, setReplayResult] = useState<any>(null);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const replayGolden = async (id: string) => {
+    setReplayLoading(true);
+    setReplayRow(id);
+    try {
+      const r = await fetch(`/api/v1/golden-qa/${id}/replay`, { method: 'POST' });
+      setReplayResult(await r.json());
+    } catch (e) {
+      setReplayResult({ ok: false, error: String(e) });
+    } finally {
+      setReplayLoading(false);
+    }
+  };
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [form] = Form.useForm();
@@ -174,6 +190,7 @@ const GoldenQaManager: React.FC = () => {
       title: '操作', key: 'action', width: 150, fixed: 'right' as const,
       render: (_: unknown, row: GoldenQaItem) => (
         <Space size={2}>
+          <Button type="link" size="small" data-testid={`golden-replay-${row.id}`} onClick={() => replayGolden(row.id)}>试跑</Button>
           <Popconfirm title={row.enabled ? '停用后不再参与锚定召回，确定？' : '启用后参与锚定召回，确定？'} onConfirm={() => handleToggle(row)}>
             <Button type="link" size="small" danger={row.enabled} icon={<PoweroffOutlined />}>{row.enabled ? '停用' : '启用'}</Button>
           </Popconfirm>
@@ -202,7 +219,9 @@ const GoldenQaManager: React.FC = () => {
     {
       title: '操作', key: 'action', width: 100, fixed: 'right' as const,
       render: (_: unknown, row: GoldenCandidate) => (
-        <Button type="link" size="small" icon={<StarOutlined />} onClick={() => openCreate({ question: row.question, sql: row.latest_sql })}>入金标</Button>
+        <Space size={2}>
+          <Button type="link" size="small" icon={<StarOutlined />} onClick={() => openCreate({ question: row.question, sql: row.latest_sql })}>入金标</Button>
+        </Space>
       ),
     },
   ], []);
@@ -296,6 +315,42 @@ const GoldenQaManager: React.FC = () => {
             <Select allowClear options={ENGINE_OPTIONS} placeholder="自动推断" />
           </Form.Item>
         </Form>
+      </Drawer>
+      {/* 三轨M10(U5)：金标试跑 diff 抽屉 */}
+      <Drawer
+        title={`金标试跑${replayRow ? ` - ${replayRow}` : ''}`}
+        width={640}
+        open={!!replayRow}
+        onClose={() => { setReplayRow(null); setReplayResult(null); }}
+      >
+        {replayLoading && <span>试跑中…</span>}
+        {!replayLoading && replayResult && (
+          <div data-testid="golden-replay-diff">
+            <Space size={12} style={{ marginBottom: 12 }}>
+              <Tag color={replayResult.ok ? 'green' : 'red'}>{replayResult.ok ? '执行成功' : '执行失败'}</Tag>
+              <span>行数 {replayResult.row_count ?? 0}</span>
+              <span>耗时 {replayResult.elapsed_ms ?? 0}ms</span>
+              {replayResult.digest_match != null && (
+                <Tag color={replayResult.digest_match ? 'green' : 'orange'}>
+                  {replayResult.digest_match ? '行数与存证一致' : '行数与存证不一致'}
+                </Tag>
+              )}
+            </Space>
+            {replayResult.error && <pre style={{ color: '#ff4d4f', fontSize: 12, whiteSpace: 'pre-wrap' }}>{replayResult.error}</pre>}
+            {replayResult.columns?.length > 0 && (
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>{replayResult.columns.map((c: string) => <th key={c} style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', padding: 4 }}>{c}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {replayResult.rows.slice(0, 50).map((r: any[], i: number) => (
+                    <tr key={i}>{r.map((cell, j) => <td key={j} style={{ borderBottom: '1px solid var(--border)', padding: 4 }}>{String(cell)}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </Drawer>
     </PageShell>
   );
