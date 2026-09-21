@@ -98,10 +98,8 @@ def delete_kb(name: str):
     return {"ok": True, "deleted": name}
 
 
-@router.get("/{name}")
-def get_kb(name: str):
-    kbm = _kbm()
-    entry = kbm.get_kb_entry(name)
-    if not entry:
-        raise HTTPException(404, f"知识库 {name} 不存在")
-    return {**entry, "name": name}
+# 注意：不承接 vendor GET /{name} 单段参数路由——平台同径先注册会把 vendor
+# 静态单段端点（/health /configs /probe-folder /connect-folder…41 低频面）全部
+# 遮挡成 404（E-91 实测）。前端零消费单段 GET（knowledge-api.ts 全为 /{name}/files
+# 双段与静态径），裁剪保 vendor 低频面续服务。DELETE /{name} 前端消费且 vendor
+# 无同径静态 DELETE，保留 1:1。

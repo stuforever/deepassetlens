@@ -378,9 +378,12 @@ app.include_router(_sishu_sessions_router, prefix="/api/v1/sessions", tags=["ses
 from app.api.sishu_curriculum import router as _sishu_curriculum_router
 app.include_router(_sishu_curriculum_router, prefix="/api/v1/curriculum", tags=["curriculum"], dependencies=_sishu_deps)
 
-# 三轨M17(批10 深水)：knowledge 平台路由——KBM base_dir 调试中（E-90），vendor 续服务
-# from app.api.sishu_knowledge import router as _sishu_knowledge_router
-# app.include_router(_sishu_knowledge_router, prefix="/api/v1/knowledge", tags=["knowledge"], dependencies=_sishu_deps)
+# 三轨M17(批10 深水)：knowledge 平台路由——8 读/写端点先注册恒优先；
+# 其余低频面（上传/进度 WS/RAG 配置等 41 端点）vendor 同前缀续服务（E-85）。
+# 补件：file_routing/embedding/pocketbase_client/embedding_signature/index_versioning
+# 已由 scripts/_v4_port_batch10_kb_deps.py 机械移植（KBM base_dir=vendor 同源解析）。
+from app.api.sishu_knowledge import router as _sishu_knowledge_router
+app.include_router(_sishu_knowledge_router, prefix="/api/v1/knowledge", tags=["knowledge"], dependencies=_sishu_deps)
 
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
