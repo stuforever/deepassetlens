@@ -131,6 +131,20 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
       useStore.getState().setActiveSessionId(target);
     }
   }, [location.search]);
+  // v3 §3.1（Task2）：新建对话直达——?new=1&q=... 预填并自动发出（门户/⌘K 发送链路落点）。
+  // sendQuestion 以显式入参取文本（不依赖 question state 时序）；autoSentRef 防重复发出。
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSentRef.current) return;
+    const m = location.search.match(/[?&]q=([^&]+)/);
+    if (!m) return;
+    autoSentRef.current = true;
+    let q = decodeURIComponent(m[1]);
+    setQuestion(q);
+    // 等首个渲染稳定后发出（对话页数据面就绪即可发——与手输同链路）
+    const t = window.setTimeout(() => { void sendQuestionRef.current?.(q); }, 600);
+    void t;
+  }, [location.search]);
   // 批13-P：受控路由模拟器 Drawer 开关（审计入口，不常驻前台）
   const [simOpen, setSimOpen] = useState(false);
   const [status, setStatus] = useState<ChatStatus>('ready');
@@ -935,9 +949,9 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     }));
   };
 
-  const handleSubmit = async () => {
-    if (!question.trim() || isBusy) return;
-    const userText = question.trim();
+  // v3 §3.1：sendQuestion(text)——发送逻辑以显式入参承载（handleSubmit 与 ?q= 直达自动发出共用）
+  const sendQuestionRef = useRef<((text: string) => Promise<void>) | null>(null);
+  const sendQuestion = async (userText: string) => {
     // 没有活跃会话时，发送第一条消息才正式创建会话
     let sid = activeSession?.id;
     if (!sid) {
@@ -975,6 +989,13 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     setStatus('ready');
     if (!resp) return;
     applyResponse(sid, resp, userText);
+  };
+
+  sendQuestionRef.current = sendQuestion;
+
+  const handleSubmit = async () => {
+    if (!question.trim() || isBusy) return;
+    await sendQuestion(question.trim());
   };
 
   const handleRecommendationSelect = useCallback((rec: any) => {

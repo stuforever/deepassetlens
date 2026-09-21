@@ -1,3 +1,4 @@
+import { Navigate } from 'react-router-dom';
 import React, { lazy } from 'react';
 import { MENU_LABELS } from './config/navigation';
 // ⑤批4（⑤e）：专家自定义页注册表（import 在顶部——eslint import/first）。
@@ -92,7 +93,7 @@ export type RouteConfig = {
 
 export const routes: RouteConfig[] = [
   { path: '/', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
-  { path: '/home', element: ExpertChat, label: '数据资产探查', menuKey: 'home' },
+  { path: '/home', element: (() => <Navigate to="/" replace />) as any, label: '数据资产探查', menuKey: 'home' },
   { path: '/e/:slug/chat', element: ExpertChat, label: '专家对话', menuKey: 'expert_chat' },
   { path: '/graph', element: GraphManager, label: '图谱管理', menuKey: 'graph' },
   { path: '/tree-model', element: GraphManager, label: '四区建模', menuKey: 'tree_model' },

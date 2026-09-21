@@ -13,7 +13,6 @@ import { tokens } from '../theme/tokens';
 
 export type PageTab = { key: string; label: string; menuKey: string };
 
-const PINNED_KEY = 'home'; // 固定首页不可关
 
 interface AppTabsProps {
   pageTabs: PageTab[];
@@ -45,7 +44,6 @@ const AppTabs: React.FC<AppTabsProps> = ({
   const ctxKeyRef = useRef<string>('');
 
   const buildContextMenu = (tab: PageTab): MenuProps['items'] => {
-    const isPinned = tab.key === PINNED_KEY;
     const idx = pageTabs.findIndex((t) => t.key === tab.key);
     const hasRight = idx < pageTabs.length - 1;
     const hasOther = pageTabs.length > 1 && (pageTabs.length > 2 || pageTabs[0].key !== tab.key);
@@ -76,7 +74,6 @@ const AppTabs: React.FC<AppTabsProps> = ({
       >
         {pageTabs.map((tab) => {
           const isActive = tab.key === activeTabKey;
-          const isPinned = tab.key === PINNED_KEY;
           const tabNode = (
             <div
               onClick={() => onSwitch(tab.menuKey)}
@@ -101,12 +98,10 @@ const AppTabs: React.FC<AppTabsProps> = ({
               }}
             >
               {tab.label}
-              {!isPinned ? (
-                <CloseOutlined
-                  style={{ fontSize: 10, color: tokens.colors.textDisabled }}
-                  onClick={(e) => { e.stopPropagation(); onClose(tab.key); }}
-                />
-              ) : null}
+              <CloseOutlined
+                style={{ fontSize: 10, color: tokens.colors.textDisabled }}
+                onClick={(e) => { e.stopPropagation(); onClose(tab.key); }}
+              />
             </div>
           );
           return (
