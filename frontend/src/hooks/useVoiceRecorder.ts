@@ -25,8 +25,14 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
     streamRef.current = null;
   }, []);
 
+  // 三轨M11 顺手修(:28)：重入竞态闸——state 要到 start() 末尾才更新，
+  // getUserMedia await 期间二次调用会绕过守卫（双 MediaStream+麦克风泄漏）。
+  // stateRef 同步读写，进入即置 "recording" 占位。
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const start = useCallback(async () => {
-    if (state !== "idle") return;
+    if (stateRef.current !== "idle") return;
+    stateRef.current = "recording"; // 同步占位（render state 随后跟上）
     setError(null);
     if (
       typeof navigator === "undefined" ||
@@ -39,8 +45,15 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      setError("Microphone permission denied.");
+    } catch (e: any) {
+      // 三轨M11(:42)：错误分类——NotReadable/NotFound 等不再笼统报 permission denied
+      stateRef.current = "idle"; // 失败回滚占位
+      setError(
+        e?.name === "NotFoundError" ? "未检测到麦克风设备。"
+        : e?.name === "NotReadableError" ? "麦克风被其他应用占用。"
+        : e?.name === "NotAllowedError" ? "麦克风权限被拒绝。"
+        : "录音启动失败。",
+      );
       return;
     }
     streamRef.current = stream;
@@ -106,10 +119,17 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
   }, [start, state, stop]);
 
   // Stop the mic if the component unmounts mid-recording.
+  // 三轨M11 顺手修(:110)：卸载后 onstop 回调（转写 POST/onTranscript/setState）一并拦截
+  // ——用户离开页面不再上传录音。
+  const unmountedRef = useRef(false);
   useEffect(() => {
     return () => {
+      unmountedRef.current = true;
       const recorder = recorderRef.current;
-      if (recorder && recorder.state !== "inactive") recorder.stop();
+      if (recorder && recorder.state !== "inactive") {
+        recorder.onstop = null; // 短路异步 onstop（卸载后不再转写上传）
+        recorder.stop();
+      }
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);

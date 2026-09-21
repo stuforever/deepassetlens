@@ -93,16 +93,20 @@ export function useNotebookSelection() {
       const notebook = notebooks.find((nb) => nb.id === notebookId);
       if (!notebook) return;
 
+      // 三轨M11 顺手修(:96)：updater 纯函数化——副作用（fetch）移出 setState updater
+      //（StrictMode 双调用会重复发请求/渲染期副作用违 React 约定）。
       setExpandedNotebooks((prev) => {
         const newSet = new Set(prev);
         if (newSet.has(notebookId)) {
           newSet.delete(notebookId);
         } else {
           newSet.add(notebookId);
-          fetchNotebookRecords(notebookId);
         }
         return newSet;
       });
+      if (!expandedNotebooks.has(notebookId)) {
+        fetchNotebookRecords(notebookId);
+      }
     },
     [notebooks, fetchNotebookRecords],
   );

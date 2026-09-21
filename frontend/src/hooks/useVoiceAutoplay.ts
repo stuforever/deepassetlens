@@ -89,6 +89,7 @@ export function useVoiceAutoplayPreference() {
   }, []);
 
   const setValue = useCallback(async (next: boolean) => {
+    const previous = value; // 三轨M11(:99)：回滚基准
     setVal(next);
     cachedGlobal = next;
     if (typeof window !== "undefined") {
@@ -96,11 +97,19 @@ export function useVoiceAutoplayPreference() {
         new CustomEvent(GLOBAL_EVENT, { detail: { value: next } }),
       );
     }
-    await apiFetch(apiUrl("/api/v1/settings/voice-autoplay"), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voice_autoplay: next }),
-    });
+    // 三轨M11 顺手修(:99)：PUT 失败回滚 UI/缓存/广播（原乐观更新无错误处理——4xx/5xx 被当成功）
+    try {
+      const res = await apiFetch(apiUrl("/api/v1/settings/voice-autoplay"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice_autoplay: next }),
+      });
+      if (!res.ok) throw new Error(`voice-autoplay PUT ${res.status}`);
+    } catch (e) {
+      setValue(previous); // 回滚
+      // eslint-disable-next-line no-console
+      console.warn("[useVoiceAutoplay] 保存失败已回滚:", e);
+    }
   }, []);
 
   return { value, setValue, loading };

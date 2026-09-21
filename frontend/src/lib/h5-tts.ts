@@ -221,6 +221,8 @@ export async function serverTtsToBlob(
 // --------------------------------------------------------------------------- //
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
+// 三轨M11(:287)：朗读代际——每次 speakServer/h5StopSpeak 递增，迟到回调比对失效
+let speakEpoch = 0;
 let currentAudio: HTMLAudioElement | null = null;
 let currentObjectUrl: string | null = null;
 
@@ -231,6 +233,7 @@ export function h5StopSpeak() {
     /* ignore */
   }
   currentUtterance = null;
+  speakEpoch += 1;
   if (currentAudio) {
     try {
       currentAudio.pause();
@@ -274,7 +277,9 @@ function speakBrowser(text: string, onDone?: () => void): boolean {
 }
 
 async function speakServer(text: string, onDone?: () => void): Promise<boolean> {
-  const key = fnv1a(text.slice(0, 500));
+  // 三轨M11 顺手修(:276)：缓存键纳入全文+用户——原 32 位哈希+500 字截断对长文本无区分度
+  //（前 500 字相同即撞键播错音频），且未纳用户（服务端按账号可能不同音色）。
+  const key = fnv1a(`${getH5User()}|${text}`);
   let blob = await cacheGet(key);
   if (!blob) {
     blob = await serverTts(text);
@@ -285,13 +290,20 @@ async function speakServer(text: string, onDone?: () => void): Promise<boolean> 
     void cachePut(key, blob);
   }
   h5StopSpeak();
+  // 三轨M11 顺手修(:287)：代际守卫——await cacheGet/serverTts 期间若被新调用/h5StopSpeak
+  // 顶掉（epoch 变化），本次放弃播放与 ObjectURL 注册（防 URL 泄漏+迟到播放覆盖）。
+  const myEpoch = ++speakEpoch;
   try {
     const url = URL.createObjectURL(blob);
+    if (myEpoch !== speakEpoch) {
+      URL.revokeObjectURL(url);
+      return true;
+    }
     const audio = new Audio(url);
     audio.playbackRate = readStoredSpeechRate();
     if (onDone) {
-      audio.onended = () => onDone();
-      audio.onerror = () => onDone();
+      audio.onended = () => { if (myEpoch === speakEpoch) onDone(); };
+      audio.onerror = () => { if (myEpoch === speakEpoch) onDone(); };
     }
     currentObjectUrl = url;
     currentAudio = audio;
