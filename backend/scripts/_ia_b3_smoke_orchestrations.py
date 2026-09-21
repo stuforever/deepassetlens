@@ -60,14 +60,14 @@ def check(name, cond, detail=""):
 
 
 # ---- 批1 回归（chat 主链） ----
-evs, code = stream("tutor/chat", "用一句话自我介绍")
+evs, code = stream("sishu/chat", "用一句话自我介绍")
 t = types_of(evs)
 check("chat TC1 session_meta", "session_meta" in t, str(t[:6]))
 check("chat TC1 result+done", "result" in t and "done" in t, str(t[-4:]))
 check("chat TC1 content 非空", len(full_content(evs)) > 5, full_content(evs)[:60])
 
 # ---- solve TC1 单轮解题 ----
-evs, code = stream("tutor/solve", "解方程 2x+3=11，给出 x")
+evs, code = stream("sishu/solve", "解方程 2x+3=11，给出 x")
 t = types_of(evs)
 check("solve TC1 session_meta", "session_meta" in t, str(t[:6]))
 check("solve TC1 reason 阶段对", "stage_start" in t and "stage_end" in t, str(t))
@@ -76,11 +76,11 @@ check("solve TC1 result+done", "result" in t and "done" in t, str(t[-4:]))
 
 # ---- solve TC3 记忆续接 ----
 sid = first_sess(evs)
-evs2, _ = stream("tutor/solve", "验证一下你的答案", session_id=sid)
+evs2, _ = stream("sishu/solve", "验证一下你的答案", session_id=sid)
 check("solve TC3 同 session 续接", first_sess(evs2) == sid and "done" in types_of(evs2), f"{sid} vs {first_sess(evs2)}")
 
 # ---- mastery TC1 状态查询 ----
-evs, code = stream("tutor/mastery", "我现在的学情怎么样")
+evs, code = stream("sishu/mastery", "我现在的学情怎么样")
 t = types_of(evs)
 tc = [e for e in evs if e.get("type") == "tool_call"]
 tr = [e for e in evs if e.get("type") == "tool_result"]
@@ -89,7 +89,7 @@ check("mastery TC1 tool_result 先于 content", bool(tr) and tr[0].get("seq", 0)
 check("mastery TC1 result+done", "result" in t and "done" in t, str(t[-4:]))
 
 # ---- wrong-intake TC1 抽取→确认卡 ----
-evs, code = stream("tutor/wrong-intake", "我错了这道题：3+5×2 我算成了 16，帮我记一下")
+evs, code = stream("sishu/wrong-intake", "我错了这道题：3+5×2 我算成了 16，帮我记一下")
 t = types_of(evs)
 card = [e for e in evs if e.get("type") == "confirmation_card"]
 check("wrong-intake TC1 confirmation_card", len(card) == 1, str(t))
@@ -101,7 +101,7 @@ sid = first_sess(evs)
 check("wrong-intake TC1 done(未落库)", "done" in t and "error" not in t, str(t[-4:]))
 
 # ---- wrong-intake TC2 确认落库 ----
-evs2, _ = stream("tutor/wrong-intake", "确认", session_id=sid)
+evs2, _ = stream("sishu/wrong-intake", "确认", session_id=sid)
 t2 = types_of(evs2)
 tr2 = [e for e in evs2 if e.get("type") == "tool_result" and (e.get("metadata") or {}).get("name") == "wrong_question_save"]
 check("wrong-intake TC2 save 工具事件", len(tr2) == 1, str(t2))
@@ -111,7 +111,7 @@ if tr2:
 check("wrong-intake TC2 done ok", "done" in t2 and not any(e.get("type") == "error" for e in evs2), str(t2[-4:]))
 
 # ---- wrong-intake TC3 信息不足追问 ----
-evs3, _ = stream("tutor/wrong-intake", "帮我记一道错题")
+evs3, _ = stream("sishu/wrong-intake", "帮我记一道错题")
 t3 = types_of(evs3)
 check("wrong-intake TC3 无确认卡", "confirmation_card" not in t3, str(t3))
 check("wrong-intake TC3 done", "done" in t3, str(t3[-4:]))

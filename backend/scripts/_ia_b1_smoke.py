@@ -46,7 +46,7 @@ def types_of(evs):
 
 # TC1 多轮对话
 t0 = time.time()
-evs = stream({"skill_code": "tutor/chat", "message": "你好，用一句话自我介绍"})
+evs = stream({"skill_code": "sishu/chat", "message": "你好，用一句话自我介绍"})
 ty = types_of(evs)
 check("TC1 session_meta 首帧", ty[:1] == ["session_meta"], f"types={ty[:6]}")
 sm = evs[0][1] if evs else {}
@@ -64,14 +64,14 @@ check("TC1 耗时<150s", time.time() - t0 < 150)
 
 # TC1b 同 session 第二轮（记忆线程）
 sid = sm.get("session_id")
-evs_b = stream({"skill_code": "tutor/chat", "message": "我上一句话问了你什么？",
+evs_b = stream({"skill_code": "sishu/chat", "message": "我上一句话问了你什么？",
                 "session_id": sid})
 ty_b = types_of(evs_b)
 check("TC1b 复用 session 同 id 回传", evs_b and evs_b[0][1].get("session_id") == sid)
 check("TC1b 第二轮 result 非空", any(e == "result" and d.get("content") for e, d in evs_b))
 
 # TC2 工具调用 web_search
-evs2 = stream({"skill_code": "tutor/chat", "message": "搜索 DeepTutor 项目简介",
+evs2 = stream({"skill_code": "sishu/chat", "message": "搜索 DeepTutor 项目简介",
                "tools": ["web_search"]})
 ty2 = types_of(evs2)
 check("TC2 tool_call(web_search) 在序列", "tool_call" in ty2)
@@ -95,7 +95,7 @@ except Exception as e:
     kb_id = ""
     print(f"[WARN] KB 列表获取失败: {e}")
 if kb_id:
-    evs3 = stream({"skill_code": "tutor/chat",
+    evs3 = stream({"skill_code": "sishu/chat",
                    "message": "知识库里有哪些内容？概括一两条",
                    "knowledge_bases": [kb_id]})
     ty3 = types_of(evs3)
@@ -109,13 +109,13 @@ else:
 # TC4 quiz 正常流（批1 中间态负例已过时：tutor/quiz 批4 编排实现——终验收批9 对齐
 # behavior-specs/tutor_quiz.md 正式事件序：session_meta 首帧→…→done ok；正式判题/
 # mimic 用例在 _ia_b4_smoke_orchestrations.py）
-evs4 = stream({"skill_code": "tutor/quiz", "message": "出题"})
+evs4 = stream({"skill_code": "sishu/quiz", "message": "出题"})
 ty4 = types_of(evs4)
 _d4 = next((d for e, d in evs4 if e == "done"), {})
 check("TC4 quiz 正常流", "session_meta" in ty4 and "done" in ty4 and _d4.get("metadata", {}).get("ok") is True)
 
 # TC5 未知技能
-evs5 = stream({"skill_code": "tutor/notexist", "message": "x"})
+evs5 = stream({"skill_code": "sishu/notexist", "message": "x"})
 ty5 = types_of(evs5)
 check("TC5 error 未知技能", ty5 == ["error"] and "未知技能" in (evs5[0][1].get("content", "") if evs5 else ""))
 

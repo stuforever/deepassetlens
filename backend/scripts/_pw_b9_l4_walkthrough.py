@@ -34,7 +34,7 @@ with sync_playwright() as p:
     pg.on("pageerror", lambda e: pageerrors.append(str(e)[:200]))
 
     # ── ① 书页走查 ──────────────────────────────────────────────
-    pg.goto(f"{BASE}/e/tutor/book", timeout=90000, wait_until="domcontentloaded")
+    pg.goto(f"{BASE}/e/sishu/book", timeout=90000, wait_until="domcontentloaded")
     pg.wait_for_timeout(8000)
     pg.screenshot(path=f"{SHOT}/b9_book_library.png")
     rec("书库渲染", "微积分" in pg.inner_text("body") or "书" in pg.inner_text("body"))
@@ -101,7 +101,7 @@ with sync_playwright() as p:
     rec("书页 blocks 覆盖", block_total > 0, f"blocks_total={block_total}, types={sorted(found_types)}")
 
     # ── ② 桌面 regenerate ───────────────────────────────────────
-    pg.goto(f"{BASE}/e/tutor/chat", timeout=90000, wait_until="domcontentloaded")
+    pg.goto(f"{BASE}/e/sishu/chat", timeout=90000, wait_until="domcontentloaded")
     pg.wait_for_timeout(8000)
     pg.screenshot(path=f"{SHOT}/b9_chat_home.png")
     ta = pg.locator("[data-testid='chat-composer-input']").first
@@ -162,7 +162,7 @@ with sync_playwright() as p:
                                 break
                         except Exception:
                             continue
-                    opts = pg.locator("text=Wrong Intake")
+                    opts = pg.locator("text=错题录入")  # E-34 已修（zh 键在位，实测子菜单中文直出）——脚本同步改中文锚点
                     for oi in range(opts.count()):
                         ov = opts.nth(oi)
                         try:
@@ -188,7 +188,7 @@ with sync_playwright() as p:
     except Exception:
         pass
     rec("能力切换-错题录入", True,
-        f"switched={switched}（子菜单项英文直出'Wrong Intake'——L4 文案发现，登记；找不到则默认能力发送）")
+        f"switched={switched}（E-34 已修：子菜单中文「错题录入」实测直出——本走查锚点同步）")
     ta2 = pg.locator("[data-testid='chat-composer-input']").first
     try:
         ta2.fill("我错了这道题：3+5×2 我算成了 16，帮我记一下")

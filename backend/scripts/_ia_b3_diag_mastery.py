@@ -4,7 +4,7 @@ import io, json, sys
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 import requests
 
-body = {"skill_code": "tutor/mastery", "message": "我现在的学情怎么样", "tools": [],
+body = {"skill_code": "sishu/mastery", "message": "我现在的学情怎么样", "tools": [],
         "knowledge_bases": [], "attachments": [], "history_references": [], "config": {}}
 r = requests.post("http://127.0.0.1:28000/api/v2/skills/capability", json=body, stream=True, timeout=300)
 n_think = 0
