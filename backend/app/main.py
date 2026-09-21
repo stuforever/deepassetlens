@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -418,13 +418,15 @@ app.include_router(_sishu_memory_router, prefix="/api/v1/memory", tags=["memory"
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
         continue  # v4批6 6.6：七域 vendor 行摘除（平台 sishu_learning 承接同前缀）
-    # 三轨M16(批10)：knowledge/voice/imports/attachments vendor 保留挂载但补执法
-    # （协议 F⑤——不扩造，登记为主；前端消费面经 vendor 栈 sishu port 服务）。
-    # 批11深水：voice 已全量换芯摘除；skills/subagents 重闭包（subagent 后端族
-    # 6125 行/services.skill 市场栈）登记 vendor 续服务+执法补挂（远期池）。
-    if _tags and _tags[0] in ("knowledge", "imports", "attachments", "skills", "subagents") and _deps is None:
+    # 三轨M16(批10)+批11/13深水：knowledge/imports/attachments/skills/subagents/partners
+    # vendor 行续服务+执法补挂（协议 F⑤——不扩造登记为主；前端消费面经 vendor 栈服务）。
+    # 批11：voice 已全量换芯摘除；skills/subagents 重闭包、批13：partners 运行时闭包
+    # （orchestrator/tool_registry/builtin/skill/cron/mcp/准入层=装配域远期池）登记远期池。
+    # 执法=require_expert("use", sishu) 叠加 vendor 原生 _auth/_admin（deps 叠加不互替）。
+    # 注：早期版本条件误写 _deps is None（vendor 行实为 _auth）致本支路死码——批13 修正。
+    if _tags and _tags[0] in ("knowledge", "imports", "attachments", "skills", "subagents", "partners"):
         app.include_router(_r, prefix=_prefix, tags=_tags,
-                           dependencies=[Depends(_sishu_deps[0].dependency)])
+                           dependencies=[Depends(_sishu_deps[0].dependency), *(_deps or [])])
         continue
     app.include_router(_r, prefix=_prefix, tags=_tags, dependencies=_deps)
 from fastapi.staticfiles import StaticFiles as _DtStaticFiles

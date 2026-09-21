@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import HTTPException, Request
 
 from ..core.auth import ENABLE_AUTH, check_permission, get_current_user
+from ..core.auth import _ANONYMOUS  # noqa: F401 批13深水：require_expert WS 退匿名用
 from ..core.database import SessionLocal
 
 EXPERT_403 = "未获专家授权，请联系管理员"
@@ -40,9 +41,13 @@ def require_expert(action: str, expert_id: Optional[str] = None):
     """依赖工厂：action ∈ {"use", "manage"}。expert_id 缺省时从查询参数/路径取
     （FastAPI 依赖注入 expert_id: str）——固定域路由（/api/tutor 等）显式传 slug。"""
 
-    def _dep(request: Request, expert_id_param: str = "") -> object:
+    def _dep(request: Request = None, expert_id_param: str = "") -> object:
         eid = expert_id or expert_id_param
-        user = _user_or_anonymous(request)
+        # 批13深水：WS 路由（partners /{id}/ws 等 vendor 续服务面）scope 下 FastAPI
+        # 不注入 Request——退匿名判定（auth=0 直通；auth=1 未命中=保守 403 关连接，
+        # WS 携带 token 的 auth=1 语义随批15 C5 探针组细化，同 vendor ws_require_auth
+        # 的 in-route 处理位）。vendor require_auth 同款可选 request 形状。
+        user = _user_or_anonymous(request) if request is not None else _ANONYMOUS
         db = SessionLocal()
         try:
             if not check_permission(db, user, "expert", action, resource_id=eid):
