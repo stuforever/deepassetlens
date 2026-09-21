@@ -94,13 +94,16 @@ const GovernanceObservatory: React.FC = () => {
   }, [autoRefresh, load]);
 
   const counters = metrics?.counters || {};
+  // 三轨M10(U5) §六：KPI 卡趋势箭头——后端 counters 快照无历史序列时 delta 取自
+  // metrics.delta_*（可选项，缺省 0=中性→箭头占位）；历史序列接入后自动生效。
+  const deltaOf = (key: string) => Number((metrics as any)?.[`delta_${key}`] ?? 0);
   const statItems = [
-    { title: '路由决策', value: counters.route_total ?? 0, color: '#1677ff' },
-    { title: '策略拒绝', value: counters.rejected_total ?? 0, color: '#faad14' },
-    { title: '策略阻断', value: counters.blocked_total ?? 0, color: '#ff4d4f' },
-    { title: '引擎选定', value: counters.engine_selected_total ?? 0, color: '#52c41a' },
-    { title: '终止命中', value: counters.stop_reached_total ?? 0, color: '#13c2c2' },
-    { title: '输出清洗', value: counters.output_scrubbed_total ?? 0, color: '#722ed1' },
+    { title: '路由决策', value: counters.route_total ?? 0, color: '#1677ff', delta: deltaOf('route_total') },
+    { title: '策略拒绝', value: counters.rejected_total ?? 0, color: '#faad14', delta: deltaOf('rejected_total') },
+    { title: '策略阻断', value: counters.blocked_total ?? 0, color: '#ff4d4f', delta: deltaOf('blocked_total') },
+    { title: '引擎选定', value: counters.engine_selected_total ?? 0, color: '#52c41a', delta: deltaOf('engine_selected_total') },
+    { title: '终止命中', value: counters.stop_reached_total ?? 0, color: '#13c2c2', delta: deltaOf('stop_reached_total') },
+    { title: '输出清洗', value: counters.output_scrubbed_total ?? 0, color: '#722ed1', delta: deltaOf('output_scrubbed_total') },
   ];
 
   const audit: any[] = (metrics?.audit as any[]) || [];
@@ -131,6 +134,12 @@ const GovernanceObservatory: React.FC = () => {
                   title={<Text type="secondary" style={{ fontSize: 12 }}>{s.title}</Text>}
                   value={s.value}
                   valueStyle={{ fontSize: 22, fontWeight: 600, color: s.color }}
+                  suffix={
+                    <span style={{ fontSize: 12, color: s.delta > 0 ? '#52c41a' : s.delta < 0 ? '#ff4d4f' : 'var(--text-tertiary)' }}>
+                      {s.delta > 0 ? '↑' : s.delta < 0 ? '↓' : '→'}
+                      {s.delta !== 0 ? Math.abs(s.delta) : ''}
+                    </span>
+                  }
                 />
               </Card>
             </Col>
