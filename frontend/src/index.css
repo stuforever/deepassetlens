@@ -303,3 +303,16 @@ input:focus-visible,
     animation-duration: 0.01ms !important;
   }
 }
+
+/* v3 §三（Task5 Step3）：移动端 <768px 隐藏平台壳（顶栏/图标条/页签条）——h5 全屏。
+   面板/侧栏由 App.tsx 布局天然不再渲染于窄屏（媒体查询统一收口）。 */
+@media (max-width: 768px) {
+  .ant-layout-header,
+  [data-testid='activity-bar'],
+  [data-testid='nav-panel'],
+  [data-testid='chat-panel'],
+  [data-testid='settings-panel'],
+  [data-testid='app-tabs'] {
+    display: none !important;
+  }
+}

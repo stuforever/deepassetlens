@@ -59,6 +59,7 @@ const AppTabs: React.FC<AppTabsProps> = ({
     <>
       {/* 标签栏（B1 美化：背景 bgPage，让激活页签白底"连接"内容区） */}
       <div
+        data-testid="app-tabs"
         style={{
           display: 'flex',
           alignItems: 'center',

@@ -208,13 +208,13 @@ export const NAV_PANEL_GROUPS: NavPanelGroup[] = [
     { menuKey: 'e:sishu:admin:mq', label: '母题库', icon: <BookOutlined /> },
     { menuKey: 'e:sishu:admin:book', label: '书源', icon: <ReadOutlined /> },
     { menuKey: 'e:sishu:admin:settings', label: '教学设置', icon: <SettingOutlined /> },
-    // { menuKey: 'h5_publish', label: 'H5 发布管理', icon: <MobileOutlined /> },  // Task 5 落地后启用
+    { menuKey: 'h5_publish', label: 'H5 发布管理', icon: <MobileOutlined /> },
   ] },
 ];
 
 /** menuKey -> label（页签标题、面包屑用） */
 export const MENU_LABELS: Record<string, string> = (() => {
-  const out: Record<string, string> = { home: '数据资产探查' };
+  const out: Record<string, string> = { home: '数据资产探查', h5_publish: 'H5 发布管理' };
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.menuKey] = it.label;
   }
@@ -226,7 +226,7 @@ export const MENU_LABELS: Record<string, string> = (() => {
 /** menuKey -> path */
 export const menuKeyToPath: Record<string, string> = (() => {
   // 专家地基①：portal=/；home 保留映射（老会话侧栏点击经 /home 重定向进专家对话页）
-  const out: Record<string, string> = { home: '/home', portal: '/' };
+  const out: Record<string, string> = { home: '/home', portal: '/', h5_publish: '/h5-publish' };
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.menuKey] = it.path;
   }
@@ -243,6 +243,8 @@ export const pathToMenuKey: Record<string, string> = (() => {
   }
   // 兼容旧路径 /free-plan -> 首页
   out['/free-plan'] = 'home';
+  // v3 §三（Task5）：H5 发布管理页
+  out['/h5-publish'] = 'h5_publish';
   // ⑤R F4（批11）11.1：DT knowledge 页路径别名 → 知识库管理（/vector）——语义并入重定向
   out['/knowledge'] = 'vector_manage';
   // IA 件批1 1.3：tutor-h5 迁移旧路径别名（14 条静态——KeepAlive 架构无 Navigate，
@@ -275,6 +277,7 @@ export const NEEDS_OPEN_TARGET = new Set([
 
 /** 画布类页面：内容区取消内边距（自撑满） */
 export const CANVAS_MENU_KEYS = new Set([
+  'h5_publish', // v3 §三：发布管理页全幅（无内容内边距）——非画布语义，仅借用零内边距判定
   'graph',
   'tree_model',
   'matrix_model',

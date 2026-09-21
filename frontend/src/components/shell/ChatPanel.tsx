@@ -16,8 +16,7 @@ const { Text } = Typography;
 const EXPERTS: { id: ExpertId; label: string; path: string; color: string }[] = [
   { id: 'wenshu', label: '问数', path: '/e/wenshu/chat', color: '#2563EB' },
   { id: 'sishu', label: '私塾', path: '/e/sishu/chat', color: '#D97706' },
-  // Task 5 落地后改指 /h5-publish（发布管理页）；本任务先指展台对话页保链路活
-  { id: 'tutor-h5', label: 'H5', path: '/e/tutor-h5/chat', color: '#0891B2' },
+  { id: 'tutor-h5', label: 'H5', path: '/h5-publish', color: '#0891B2' },
 ];
 
 const relTime = (ts?: number) => {

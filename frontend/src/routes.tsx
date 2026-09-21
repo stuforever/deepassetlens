@@ -40,6 +40,7 @@ const SecurityControlCenter = lazy(() => import(/* webpackChunkName: "security" 
 // 专家地基①：专家门户 + 专家对话。/home 与 /e/:slug/chat 同挂 ExpertChat（slug 缺省 wenshu）——
 // KeepAlive 架构按页签 menuKey 渲染组件（无 <Routes>），重定向组件会被常驻挂载引发循环，故不使用重定向。
 const ExpertPortal = lazy(() => import(/* webpackChunkName: "expert-portal" */ './pages/ExpertPortal'));
+const PublishManager = lazy(() => import(/* webpackChunkName: "h5-publish" */ './pages/h5/PublishManager'));
 const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ './pages/expert/ExpertChat'));
 // 记忆插槽②批6：记忆管理页（平台管理区，admin-only）
 const MemoryAdmin = lazy(() => import(/* webpackChunkName: "memory-admin" */ './pages/MemoryAdmin'));
@@ -95,6 +96,8 @@ export const routes: RouteConfig[] = [
   { path: '/', element: ExpertPortal, label: '专家门户', menuKey: 'portal' },
   { path: '/home', element: (() => <Navigate to="/" replace />) as any, label: '数据资产探查', menuKey: 'home' },
   { path: '/e/:slug/chat', element: ExpertChat, label: '专家对话', menuKey: 'expert_chat' },
+  // v3 §三（Task5）：H5 发布管理页（12 页卡+手机框预览+二维码）
+  { path: '/h5-publish', element: PublishManager, label: 'H5 发布管理', menuKey: 'h5_publish' },
   { path: '/graph', element: GraphManager, label: '图谱管理', menuKey: 'graph' },
   { path: '/tree-model', element: GraphManager, label: '四区建模', menuKey: 'tree_model' },
   { path: '/matrix', element: GraphManager, label: '资产矩阵', menuKey: 'matrix_model' },

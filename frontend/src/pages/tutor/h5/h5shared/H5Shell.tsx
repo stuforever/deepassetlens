@@ -170,6 +170,13 @@ export function H5Shell({
       if (localStorage.getItem("h5_is_admin") === "1") return;
       // 三轨M11(U6)：onboarding 一次性——跳过/确认后不再弹（localStorage 标记）
       if (localStorage.getItem("h5_onboarding_done") === "1") return;
+      // v3 §三（Task5）：发布管理 iframe 预览带 ?onboarding=skip——直接置位并跳过弹窗
+      try {
+        if (new URLSearchParams(window.location.search).get("onboarding") === "skip") {
+          localStorage.setItem("h5_onboarding_done", "1");
+          return;
+        }
+      } catch { /* ignore */ }
       const raw = localStorage.getItem("h5_recent_users");
       const recents = raw ? JSON.parse(raw) : [];
       if (Array.isArray(recents) && recents.length) return;
