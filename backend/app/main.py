@@ -357,7 +357,7 @@ from app.vendor.deeptutor.api.tutor_routers import tutor_routers as _dt_tutor_ro
 # 批6 摘行集：tags 元组首元素标识（与 tutor_routers 装配表逐字对应）
 _SISHU_BATCH6_UNMOUNTED = {
     "mother-questions", "learner-profile", "mastery-path",
-    "self-learning", "notebook", "question-notebook", "book",
+    "self-learning", "notebook", "question-notebook", "book", "sessions",
 }
 
 from app.api import sishu_learning as _sishu_learning
@@ -369,6 +369,10 @@ for _r, _prefix, _tags in _sishu_learning.SISHU_MOUNTS:
 # 三轨M13(批7)：book REST PG 面（vendor book 行摘除——SISHU_BATCH6_UNMOUNTED 扩 book）
 from app.api.sishu_book import router as _sishu_book_router
 app.include_router(_sishu_book_router, prefix="/api/v1/book", tags=["book"], dependencies=_sishu_deps)
+
+# 三轨M14(批8)：会话族 REST PG 面（vendor sessions 行摘除——SISHU_BATCH6_UNMOUNTED 扩 sessions）
+from app.api.sishu_sessions import router as _sishu_sessions_router
+app.include_router(_sishu_sessions_router, prefix="/api/v1/sessions", tags=["sessions"], dependencies=_sishu_deps)
 
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
