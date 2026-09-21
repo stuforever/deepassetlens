@@ -20,6 +20,7 @@ import ActivityBar, { type ShellPanel } from './components/shell/ActivityBar';
 import NavPanel from './components/shell/NavPanel';
 import ChatPanel from './components/shell/ChatPanel';
 import SettingsPanel from './components/shell/SettingsPanel';
+import CommandPalette from './components/shell/CommandPalette';
 import AppTabs, { type PageTab } from './components/AppTabs';
 import { expertPageRoutes, matchExpertPage } from './config/expertPages';
 
@@ -44,6 +45,8 @@ const App: React.FC = () => {
 
   // v3 §二：图标条+滑出面板（ActivityBar/NavPanel/ChatPanel/SettingsPanel）——Esc 收起
   const [shellPanel, setShellPanel] = useState<ShellPanel>(null);
+  // v3 #8：⌘K 命令面板
+  const [cmdkOpen, setCmdkOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [pageTabs, setPageTabs] = useState<PageTab[]>([]);
   const [activeTabKey, setActiveTabKey] = useState('');
@@ -104,6 +107,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setShellPanel(null);
+      // v3 #8：Ctrl+K / ⌘K 唤起命令面板
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setCmdkOpen((v) => !v);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -284,25 +292,21 @@ const App: React.FC = () => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space.s4 }}>
-            <AutoComplete
-              value={searchText}
-              onChange={setSearchText}
-              options={searchOptions}
-              onSelect={(value: string) => {
-                switchToMenu(value);
-                setSearchText('');
-              }}
-              style={{ width: 320 }}
-              placeholder="搜索页面…（Ctrl+K）"
+            <div
+              role="button"
+              tabIndex={0}
               data-testid="global-search"
+              onClick={() => setCmdkOpen(true)}
+              style={{
+                width: 320, height: 32, display: 'flex', alignItems: 'center', gap: 8,
+                padding: '0 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                background: 'var(--bg-content, #fff)', border: '1px solid var(--border-subtle, #e5e7eb)',
+                color: 'var(--text-tertiary, #999)',
+              }}
             >
-              <Input
-                className="dal-global-search"
-                prefix={<SearchOutlined style={{ color: tokens.colors.textTertiary }} />}
-                allowClear
-                onClear={() => setSearchText('')}
-              />
-            </AutoComplete>
+              <SearchOutlined style={{ color: tokens.colors.textTertiary }} />
+              搜索页面…（Ctrl+K）
+            </div>
             <UserBadge />
           </div>
         </Header>
@@ -318,6 +322,7 @@ const App: React.FC = () => {
           )}
           {shellPanel === 'chat' && <ChatPanel onClose={() => setShellPanel(null)} />}
           {shellPanel === 'settings' && <SettingsPanel onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />}
+          <CommandPalette open={cmdkOpen} onClose={() => setCmdkOpen(false)} />
           {/* 内容区：页签 + KeepAlive */}
           <Content
             style={{
