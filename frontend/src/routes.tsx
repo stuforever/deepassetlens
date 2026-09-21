@@ -99,9 +99,10 @@ export const routes: RouteConfig[] = [
   // v3 §三（Task5）：H5 发布管理页（12 页卡+手机框预览+二维码）
   { path: '/h5-publish', element: PublishManager, label: 'H5 发布管理', menuKey: 'h5_publish' },
   { path: '/graph', element: GraphManager, label: '图谱管理', menuKey: 'graph' },
-  { path: '/tree-model', element: GraphManager, label: '四区建模', menuKey: 'tree_model' },
-  { path: '/matrix', element: GraphManager, label: '资产矩阵', menuKey: 'matrix_model' },
-  { path: '/gallery', element: GraphManager, label: '图库', menuKey: 'gallery' },
+  // v3 #10/#17（Task6）：三旧画布路由重定向 /graph?view=...（4 合 1 单入口；pathToMenuKey 旧键保留）
+  { path: '/tree-model', element: (() => <Navigate to="/graph?view=quad" replace />) as any, label: '四区建模', menuKey: 'tree_model' },
+  { path: '/matrix', element: (() => <Navigate to="/graph?view=matrix" replace />) as any, label: '资产矩阵', menuKey: 'matrix_model' },
+  { path: '/gallery', element: (() => <Navigate to="/graph?view=neo4j" replace />) as any, label: '图库', menuKey: 'gallery' },
   { path: '/master-data', element: MasterDataManager, label: '主数据', menuKey: 'master_data' },
   { path: '/activity', element: ActivityManager, label: '活动数据', menuKey: 'activity_data' },
   { path: '/entity-relation', element: EntityRelationManager, label: '实体关系', menuKey: 'entity_relation_manage' },
