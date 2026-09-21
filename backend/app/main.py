@@ -355,9 +355,12 @@ from app.vendor.deeptutor.api.tutor_routers import static_mounts as _dt_static_m
 from app.vendor.deeptutor.api.tutor_routers import tutor_routers as _dt_tutor_routers
 
 # 批6 摘行集：tags 元组首元素标识（与 tutor_routers 装配表逐字对应）
+# 批11深水扩：personas/capabilities 平台路由 5+2 端点全量 1:1 承接，vendor 行摘除；
+# voice 平台路由 tts/stt 全量 1:1（services/voice 批6已移植）同摘除。
 _SISHU_BATCH6_UNMOUNTED = {
     "mother-questions", "learner-profile", "mastery-path",
     "self-learning", "notebook", "question-notebook", "book", "sessions",
+    "personas", "capabilities", "voice",
 }
 
 from app.api import sishu_learning as _sishu_learning
@@ -385,12 +388,35 @@ app.include_router(_sishu_curriculum_router, prefix="/api/v1/curriculum", tags=[
 from app.api.sishu_knowledge import router as _sishu_knowledge_router
 app.include_router(_sishu_knowledge_router, prefix="/api/v1/knowledge", tags=["knowledge"], dependencies=_sishu_deps)
 
+# 批11深水(1/4)：settings 平台路由——vendor settings.py 消费面 27 端点 1:1（全静态
+# 径零遮挡）；codex-oauth/mineru/document-parsing/fetch-models/tour 低频面 vendor 续服务。
+from app.api.sishu_settings import router as _sishu_settings_router
+app.include_router(_sishu_settings_router, prefix="/api/v1/settings", tags=["settings"], dependencies=_sishu_deps)
+
+# 批11深水(2/4)：capabilities 平台路由——2 端点全量 1:1（vendor 行摘除）。
+from app.api.sishu_capabilities import router as _sishu_capabilities_router
+app.include_router(_sishu_capabilities_router, prefix="/api/v1/capabilities", tags=["capabilities"], dependencies=_sishu_deps)
+
+# 批11深水(3/4)：personas 平台路由——5 端点全量 1:1（services/persona+core/i18n 补件移植）。
+from app.api.sishu_personas import router as _sishu_personas_router
+app.include_router(_sishu_personas_router, prefix="/api/v1/personas", tags=["personas"], dependencies=_sishu_deps)
+
+# 批11深水(4/4)：system 平台路由——/status 端点 1:1；vendor 余四端点零消费续服务。
+from app.api.sishu_system import router as _sishu_system_router
+app.include_router(_sishu_system_router, prefix="/api/v1/system", tags=["system"], dependencies=_sishu_deps)
+
+# 批11深水(5/5)：voice 平台路由——tts/stt 全量 1:1（vendor voice 行摘除）。
+from app.api.sishu_voice import router as _sishu_voice_router
+app.include_router(_sishu_voice_router, prefix="/api/v1/voice", tags=["voice"], dependencies=_sishu_deps)
+
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
         continue  # v4批6 6.6：七域 vendor 行摘除（平台 sishu_learning 承接同前缀）
     # 三轨M16(批10)：knowledge/voice/imports/attachments vendor 保留挂载但补执法
-    # （协议 F⑤——不扩造，登记为主；前端消费面经 vendor 栈 sishu port 服务）
-    if _tags and _tags[0] in ("knowledge", "voice", "imports", "attachments") and _deps is None:
+    # （协议 F⑤——不扩造，登记为主；前端消费面经 vendor 栈 sishu port 服务）。
+    # 批11深水：voice 已全量换芯摘除；skills/subagents 重闭包（subagent 后端族
+    # 6125 行/services.skill 市场栈）登记 vendor 续服务+执法补挂（远期池）。
+    if _tags and _tags[0] in ("knowledge", "imports", "attachments", "skills", "subagents") and _deps is None:
         app.include_router(_r, prefix=_prefix, tags=_tags,
                            dependencies=[Depends(_sishu_deps[0].dependency)])
         continue
