@@ -57,21 +57,34 @@ def get_book(book_id: str):
     r = _one("SELECT book_id, title, manifest, status, created_at, updated_at FROM sishu_books WHERE book_id=:b", {"b": book_id})
     if not r:
         raise HTTPException(404, "book 不存在")
-    pages = _rows("SELECT page_id FROM sishu_book_pages WHERE book_id=:b", {"b": book_id})
+    # E-104：vendor get_book 1:1——pages 返回整页 model（payload 已含 blocks 键；blocks 表
+    # 为权威时按 created_at 序覆盖），非 [{"id"}] 缩减形（缩减形致 PageReader page.blocks
+    # 不可迭代崩溃——L4 走查 pageerror 实证）。
+    page_rows = _rows("SELECT page_id, payload FROM sishu_book_pages WHERE book_id=:b ORDER BY created_at", {"b": book_id})
     spine = _one("SELECT spine FROM sishu_book_spines WHERE book_id=:b", {"b": book_id})
     manifest = r["manifest"] or {}
     chapters = ((spine or {}).get("spine") or {}).get("chapters") or []
+    out_pages = []
+    for p in page_rows:
+        page = dict(p["payload"] or {})
+        blocks = _rows("SELECT payload FROM sishu_book_blocks WHERE page_id=:p ORDER BY created_at",
+                       {"p": p["page_id"]})
+        if blocks:
+            page["blocks"] = [b["payload"] for b in blocks]
+        elif not isinstance(page.get("blocks"), list):
+            page["blocks"] = []
+        out_pages.append(page)
     return {
         "book": {
             "id": r["book_id"], "title": r["title"], "status": r["status"] or "unknown",
             "metadata": manifest,
-            "page_count": len(pages),
+            "page_count": len(out_pages),
             "chapter_count": manifest.get("chapter_count", len(chapters)),
             "created_at": str(r["created_at"]) if r["created_at"] else None,
             "updated_at": str(r["updated_at"]) if r["updated_at"] else None,
         },
         "spine": (spine or {}).get("spine") or {},
-        "pages": [{"id": p["page_id"]} for p in pages],
+        "pages": out_pages,
     }
 
 
