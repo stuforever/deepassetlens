@@ -360,7 +360,7 @@ from app.vendor.deeptutor.api.tutor_routers import tutor_routers as _dt_tutor_ro
 _SISHU_BATCH6_UNMOUNTED = {
     "mother-questions", "learner-profile", "mastery-path",
     "self-learning", "notebook", "question-notebook", "book", "sessions",
-    "personas", "capabilities", "voice",
+    "personas", "capabilities", "voice", "memory",
 }
 
 from app.api import sishu_learning as _sishu_learning
@@ -408,6 +408,12 @@ app.include_router(_sishu_system_router, prefix="/api/v1/system", tags=["system"
 # 批11深水(5/5)：voice 平台路由——tts/stt 全量 1:1（vendor voice 行摘除）。
 from app.api.sishu_voice import router as _sishu_voice_router
 app.include_router(_sishu_voice_router, prefix="/api/v1/voice", tags=["voice"], dependencies=_sishu_deps)
+
+# 批12深水：memory 平台路由——vendor memory.py 27 端点全量 1:1（services/memory 移植包
+# 与 vendor 逐文件齐全，import 前缀机械改写；vendor memory 行摘除）。三层记忆槽 MD（平台
+# D1 既有）不动；数据面仍为 workspace MD+sidecar 文件（PG 化=数据层远期池）。
+from app.api.sishu_memory import router as _sishu_memory_router
+app.include_router(_sishu_memory_router, prefix="/api/v1/memory", tags=["memory"], dependencies=_sishu_deps)
 
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
