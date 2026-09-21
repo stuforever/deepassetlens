@@ -1208,25 +1208,25 @@ const SecurityControlCenter: React.FC = () => {
           </Text>
         </Space>
       </Card>
+      {/* 三轨M10(U5) §六：4Tab 重构——Tab2 装配十步=左锚点+右文档式（E-78② 裁定，
+         2026-09-20 用户裁定优先于批13-W 十步平铺；面板组件零改动全复用） */}
       <Tabs
         defaultActiveKey="tab0"
         style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         items={[
-          { key: 'tab0', label: STEP_TITLES[0], children: <Tab0Panel /> },
+          { key: 'tab0', label: '模式预设', children: <Tab0Panel /> },
           { key: 'guards', label: '守卫（运行期）', children: guardsTab },
-          { key: 'step1', label: STEP_TITLES[1], children: <TeachPanel step={1} /> },
-          { key: 'step2', label: STEP_TITLES[2], children: <TeachPanel step={2} /> },
-          { key: 'step3', label: STEP_TITLES[3], children: <TeachPanel step={3} /> },
-          { key: 'step4', label: STEP_TITLES[4], children: <CapabilityPanel stepFilter={4} /> },
-          { key: 'step5', label: STEP_TITLES[5], children: <CapabilityPanel stepFilter={5} /> },
-          { key: 'step6', label: STEP_TITLES[6], children: <CapabilityPanel stepFilter={6} /> },
-          { key: 'step7', label: STEP_TITLES[7], children: <CapabilityPanel stepFilter={7} /> },
-          { key: 'step89', label: STEP_TITLES[8], children: <TeachPanel step={8} /> },
-          { key: 'step10', label: STEP_TITLES[10], children: <CapabilityPanel stepFilter={10} /> },
           {
-            key: 'allcaps', label: '全部能力（平铺）',
-            children: <CapabilityPanel />,
+            key: 'steps', label: '装配十步',
+            children: (
+              <SecurityStepsAnchored
+                renderStep={(s) =>
+                  s === 8 ? <TeachPanel step={8} /> : s === 1 || s === 2 || s === 3 ? <TeachPanel step={s} /> : <CapabilityPanel stepFilter={s} />
+                }
+              />
+            ),
           },
+          { key: 'allcaps', label: '能力总览', children: <CapabilityPanel /> },
         ]}
       />
     </PageShell>
@@ -1234,3 +1234,57 @@ const SecurityControlCenter: React.FC = () => {
 };
 
 export default SecurityControlCenter;
+
+
+/**
+ * SecurityStepsAnchored（三轨M10(U5) §六）：装配十步左锚点+右文档式容器。
+ * 左=十步锚点列表（步号+标题+步头说明一行）；右=该步面板（复用既有组件零改动）。
+ */
+const SecurityStepsAnchored: React.FC<{
+  renderStep: (step: number) => React.ReactNode;
+}> = ({ renderStep }) => {
+  const [active, setActive] = useState<number>(1);
+  const steps = [1, 2, 3, 4, 5, 6, 7, 8, 10];
+  return (
+    <div
+      data-testid="security-steps-anchored"
+      style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, overflow: 'hidden' }}
+    >
+      <div
+        style={{
+          width: 232, flexShrink: 0, overflowY: 'auto',
+          borderRight: `1px solid ${tokens.colors.border}`, paddingRight: 8,
+        }}
+      >
+        {steps.map((s) => {
+          const isActive = s === active;
+          return (
+            <div
+              key={s}
+              data-testid={`security-step-anchor-${s}`}
+              onClick={() => setActive(s)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '9px 12px', marginBottom: 4, cursor: 'pointer',
+                borderRadius: tokens.radius.default, fontSize: 13,
+                background: isActive ? tokens.colors.primaryBg : 'transparent',
+                color: isActive ? tokens.colors.primary : tokens.colors.textSecondary,
+                fontWeight: isActive ? tokens.fontWeight.semibold : tokens.fontWeight.regular,
+                borderLeft: isActive ? `3px solid ${tokens.colors.primary}` : '3px solid transparent',
+              }}
+            >
+              <span style={{ fontSize: 11, opacity: 0.75 }}>{s}</span>
+              {(STEP_TITLES[s] || `步${s}`).replace(/^步\d+\s*·\s*/, '')}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+          {STEP_TEACH[active]?.teach || ''}
+        </Text>
+        {renderStep(active)}
+      </div>
+    </div>
+  );
+};
