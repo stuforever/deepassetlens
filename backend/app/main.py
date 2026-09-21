@@ -374,6 +374,10 @@ app.include_router(_sishu_book_router, prefix="/api/v1/book", tags=["book"], dep
 from app.api.sishu_sessions import router as _sishu_sessions_router
 app.include_router(_sishu_sessions_router, prefix="/api/v1/sessions", tags=["sessions"], dependencies=_sishu_deps)
 
+# 三轨M15(批9)：curriculum 读面 PG 换芯（同前缀 vendor curriculum router 仍挂 LLM 写面——读面先注册恒优先）
+from app.api.sishu_curriculum import router as _sishu_curriculum_router
+app.include_router(_sishu_curriculum_router, prefix="/api/v1/curriculum", tags=["curriculum"], dependencies=_sishu_deps)
+
 for _r, _prefix, _tags, _deps in _dt_tutor_routers:
     if _tags and _tags[0] in _SISHU_BATCH6_UNMOUNTED:
         continue  # v4批6 6.6：七域 vendor 行摘除（平台 sishu_learning 承接同前缀）
