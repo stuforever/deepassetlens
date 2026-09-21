@@ -15,6 +15,7 @@
 """
 
 import os
+import re
 import shutil
 import zipfile
 import yaml
@@ -44,8 +45,22 @@ class SkillStorage:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _skill_path(self, skill_code: str) -> Path:
-        """获取技能包目录路径（强制小写）"""
-        return self.root / skill_code.lower()
+        """获取技能包目录路径（强制小写；白名单校验防路径穿越/兄弟目录逃逸）。
+
+        原实现对 skill_code 零校验直接与 root 拼接："a/../../etc" 或绝对路径
+        （Path 拼接遇绝对路径整体替换）即可落点 root 之外。"""
+        code = str(skill_code or "").strip().lower()
+        # 允许嵌套路径（如 scenarios/distribution-overload），封死：
+        # 绝对路径 / 盘符 / 反斜杠 / ".." 上跳（init_db 的合法嵌套 code 不受影响）
+        if (not code or code.startswith("/") or "\\" in code or ".." in code
+                or not re.match(r"^[a-z0-9][a-z0-9_\-/\.]*$", code)):
+            raise ValueError(f"非法 skill_code: {str(skill_code)[:60]}")
+        # resolve 归属兜底（双保险）：落点必须仍在 root 内
+        p = (self.root / code).resolve()
+        root_res = self.root.resolve()
+        if p != root_res and root_res not in p.parents:
+            raise ValueError(f"skill_code 越界: {str(skill_code)[:60]}")
+        return self.root / code
 
     def create_skeleton(self, skill_code: str, metadata: Dict[str, Any] = None) -> Path:
         """

@@ -1,0 +1,22 @@
+memory:
+  update:
+    l2_budget: 20
+    l3_budget: 10
+  audit:
+    l2_budget: 20
+    l3_budget: 10
+  dedup:
+    iterations: 3
+    auto_after_update: true
+  merge:
+    auto_after_update: true
+    auto_after_audit: true
+    auto_after_dedup: true
+  chunking:
+    overlap_ratio: 0.1
+    boundary: paragraph
+    min_chunk_chars: 1000
+    max_chunk_chars: 64000
+  reference:
+    enforce_required: true
+    drop_invalid_refs: true

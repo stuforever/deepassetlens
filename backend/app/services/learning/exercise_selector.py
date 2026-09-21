@@ -97,14 +97,24 @@ def _score_exercise(exercise: dict[str, Any], profile: Any) -> tuple[int, str, A
         for q in (exercise.get("questions") or [])
         if isinstance(q, dict) and q.get("kp_id")
     }
+    # C-契约适配：tupu 侧 build_learner_profile 的 weak/strong_points 是
+    # [{item_id,...}]、due_reviews 是 [{kind,item_id,due}]（DeepTutor 旧链期望
+    # 裸 id 列表）——统一抽取 item_id，兼容两种形态，否则自适应排序静默失效。
+    weak_ids = [str(w.get("item_id")) for w in (profile.weak_points or [])
+                if isinstance(w, dict) and w.get("item_id")]                + [str(x) for x in (profile.weak_points or []) if not isinstance(x, dict)]
+    strong_ids = [str(s.get("item_id")) for s in (profile.strong_points or [])
+                  if isinstance(s, dict) and s.get("item_id")]                  + [str(x) for x in (profile.strong_points or []) if not isinstance(x, dict)]
+    due_items = [d for d in (profile.due_reviews or []) if isinstance(d, dict)]
     if q_kp_ids:
-        for kid in profile.weak_points:
+        for kid in weak_ids:
             if kid in q_kp_ids:
                 return PRIORITY_WEAK, _weak_reason(profile.kp_mastery.get(kid)), profile.kp_mastery.get(kid)
-        for due in profile.due_reviews:
-            if str(due.get("kp_id") or "") in q_kp_ids:
+        for due in due_items:
+            # 双键兼容：tupu 画像用 item_id，DeepTutor legacy 用 kp_id
+            due_kid = str(due.get("item_id") or due.get("kp_id") or "")
+            if due_kid and due_kid in q_kp_ids:
                 return PRIORITY_DUE, REASON_DUE, None
-        for kid in profile.strong_points:
+        for kid in strong_ids:
             if kid in q_kp_ids:
                 return PRIORITY_MASTERED, REASON_MASTERED, None
 
@@ -112,22 +122,24 @@ def _score_exercise(exercise: dict[str, Any], profile: Any) -> tuple[int, str, A
     if not title:
         return PRIORITY_NORMAL, REASON_NORMAL, None
 
-    # 薄弱点
-    for kid in profile.weak_points:
+    # 薄弱点（标题桥接需 kp_name，tupu 新画像无此字段——getattr 防御，浮值直接跳过）
+    for kid in weak_ids:
         kp = profile.kp_mastery.get(kid)
-        if kp and (title in kp.kp_name or kp.kp_name in title):
+        kp_name = getattr(kp, "kp_name", None)
+        if kp and kp_name and (title in kp_name or kp_name in title):
             return PRIORITY_WEAK, _weak_reason(kp), kp
 
     # 到期复习
-    for due in profile.due_reviews:
+    for due in due_items:
         kp_name = str(due.get("kp_name") or "")
         if kp_name and (title in kp_name or kp_name in title):
             return PRIORITY_DUE, REASON_DUE, None
 
     # 已掌握
-    for kid in profile.strong_points:
+    for kid in strong_ids:
         kp = profile.kp_mastery.get(kid)
-        if kp and (title in kp.kp_name or kp.kp_name in title):
+        kp_name = getattr(kp, "kp_name", None)
+        if kp and kp_name and (title in kp_name or kp_name in title):
             return PRIORITY_MASTERED, REASON_MASTERED, None
 
     return PRIORITY_NORMAL, REASON_NORMAL, None

@@ -346,13 +346,14 @@ app.include_router(experts.router)  # 自带 prefix="/api/experts"（专家地�
 from app.api import memory
 app.include_router(memory.router)  # 自带 prefix="/api/memory"（记忆插槽②）
 
-# ⑤R B1（唯一交棒 批3.1）：vendor 子树挂载——原 prefix，端点契约不变。
-# tutor_routers=(router, prefix, tags, deps) 逐对对齐原仓 main.py 挂载表（随批次增长）；
-# 静态挂载照原仓 L342-376（workspace 根走 DEEPTUTOR_HOME=DT_TUTOR_WORKSPACE_ROOT 单点）。
-# v4批6 6.C+6.6：学习数据域七域换平台路由（sishu_learning 包，require_expert+binding 全挂
-# ——执行面零 vendor 导入），vendor 对应六行摘除（curriculum/knowledge/book 等仍 vendor）。
-from app.vendor.deeptutor.api.tutor_routers import static_mounts as _dt_static_mounts
-from app.vendor.deeptutor.api.tutor_routers import tutor_routers as _dt_tutor_routers
+# ⑤R B1（唯一交棒 批3.1）→ 批16deep（E-107）：vendor 子树物理删除后由 sishu_full 移植栈
+# 同表承接——tutor_routers=(router, prefix, tags, deps) 逐对对齐原挂载表（A/B 35 行逐行全等
+# +static mounts 4=4）；静态挂载 workspace 根走 DEEPTUTOR_HOME=DT_TUTOR_WORKSPACE_ROOT
+# 单点（sishu_full/__init__ 自举，app/vendor/__init__ 钩子随 vendor 树退役）。
+# v4批6 6.C+6.6：学习数据域七域平台路由（sishu_learning 包，require_expert+binding 全挂），
+# 对应行摘除逻辑（_SISHU_BATCH6_UNMOUNTED）不变。
+from app.services.sishu_full.api.tutor_routers import static_mounts as _dt_static_mounts
+from app.services.sishu_full.api.tutor_routers import tutor_routers as _dt_tutor_routers
 
 # 批6 摘行集：tags 元组首元素标识（与 tutor_routers 装配表逐字对应）
 # 批11深水扩：personas/capabilities 平台路由 5+2 端点全量 1:1 承接，vendor 行摘除；

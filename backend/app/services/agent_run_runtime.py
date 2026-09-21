@@ -647,8 +647,16 @@ def execute_agent_run(db: Session, run: AgentRun) -> AgentRun:
     try:
         final_payload: Dict[str, Any]
         if run.page_code == DEFAULT_LLM_CHAT_PAGE or run.scene_code == DEFAULT_LLM_CHAT_SCENE:
-            connection, system_prompt, _ = _resolve_llm_connection(db, payload)
-            answer = _invoke_llm_with_fallback(db, connection, system_prompt, user_query)
+            # C-修复（两处）：① _resolve_llm_connection 返回单个 config，原三元组
+            # 解包必 ValueError；② _invoke_llm_with_fallback 全库无定义（重构遗留
+            # NameError）——改走本文件已导入的 call_openai_compatible_messages 直连。
+            connection = _resolve_llm_connection(
+                db, payload.get("llm_connection_id") or payload.get("connection_id"))
+            system_prompt = _safe_text(payload.get("system_prompt") or "")
+            messages = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + [
+                {"role": "user", "content": user_query},
+            ]
+            answer = call_openai_compatible_messages(connection, messages=messages)
             final_payload = _build_llm_chat_output(
                 connection=connection,
                 answer=answer,

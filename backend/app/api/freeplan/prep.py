@@ -214,6 +214,8 @@ async def run_prep(*, req: Any, agent: Any, memory_thread_id: str,
             f"allowed={len(_contract.allowed_tools)} 契约注入成功"
         )
     else:
+        # C-修复：HumanMessage 原只在 if 分支内导入——路由失败走 else 时 NameError
+        from langchain_core.messages import HumanMessage
         input_messages = [HumanMessage(content=_effective_question)]
 
     # 评审 P1-5：路由成功后确定性写回 last_skill/last_step

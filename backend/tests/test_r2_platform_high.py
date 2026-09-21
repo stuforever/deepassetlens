@@ -7,7 +7,6 @@
 4. concept_support.py:249 幸存旧链接清理
 5. data_intelligence_misc.py:174 HTTPException 二次包装修正
 6. entity_relation_manage.py:581 async 阻塞改线程池+上传大小限制
-7. dt_knowledge_adapter.py:41 vendor 状态透传白名单对齐
 8. engine_observability.py:148 catalog SWITCH 后连接复位
 9. data_intelligence_support.py:104 空消息错误优雅降级
 """
@@ -197,17 +196,7 @@ def test_import_excel_rejects_oversize(monkeypatch):
     assert r.status_code in (400, 413), f"超大文件未被拒: {r.status_code}"
 
 
-# --------------------------------------------------------------------------- #
-# 7. dt_knowledge_adapter 状态白名单
-# ---------------------------------------------------------------------------
-
-def test_adapter_status_whitelist():
-    from app.api.dt_knowledge_adapter import normalize_kb_status
-    assert normalize_kb_status("ready") == "ready"
-    assert normalize_kb_status("needs_reindex") == "ready"   # vendor 侧异常态归一
-    assert normalize_kb_status("unknown") == "ready"
-    assert normalize_kb_status(None) == "ready"
-    assert normalize_kb_status("") == "ready"
+# 7. dt_knowledge_adapter 状态白名单——批16deep 随 adapter 退役删除（归一逻辑已在 sishu_full knowledge 栈）
 
 
 # --------------------------------------------------------------------------- #

@@ -35,7 +35,9 @@ class SandboxExecutor:
         'IndexError', 'AttributeError', 'RuntimeError', 'StopIteration',
         'NotImplementedError', 'OverflowError', 'ZeroDivisionError',
         'NameError', 'PermissionError', 'ImportError', 'ModuleNotFoundError',
-        '__import__', '__build_class__', '__name__',
+        # '__import__' 已移除（沙箱逃逸面：白名单保留即可 import os/subprocess 执行任意
+        # 系统命令，令 filesystem/network 门控形同虚设）。结构化复用由宿主注入白名单模块。
+        '__build_class__', '__name__',
     }
 
     @staticmethod
@@ -59,15 +61,33 @@ class SandboxExecutor:
         return safe_bi
 
     @staticmethod
+    def _sanitize_module(mod):
+        """C-逃逸修复：注入沙箱的模块对象做属性脱敏——模块顶部的 import（如
+        traceback 顶部的 sys）会作为属性暴露，脚本可经 traceback.sys.modules['os']
+        执行任意系统命令。仅复制公开函数/类，剔除解释器内部对象。"""
+        import types as _types
+        safe = _types.ModuleType(getattr(mod, "__name__", "sandbox_module"))
+        _deny = {"sys", "builtins", "os", "subprocess", "importlib",
+                 "__loader__", "__spec__", "__builtins__"}
+        for name in dir(mod):
+            if name.startswith("_") or name in _deny:
+                continue
+            try:
+                setattr(safe, name, getattr(mod, name))
+            except Exception:
+                pass
+        return safe
+
+    @staticmethod
     def create_safe_globals(permissions: dict = None) -> dict:
         perms = permissions or {}
         safe_globals = {
             '__builtins__': SandboxExecutor._build_safe_builtins(perms),
         }
-        safe_globals['json'] = json
-        safe_globals['re'] = re
+        safe_globals['json'] = SandboxExecutor._sanitize_module(json)
+        safe_globals['re'] = SandboxExecutor._sanitize_module(re)
         safe_globals['datetime'] = datetime
-        safe_globals['traceback'] = traceback
+        safe_globals['traceback'] = SandboxExecutor._sanitize_module(traceback)
         safe_globals['__permissions__'] = perms
         return safe_globals
 
@@ -173,6 +193,30 @@ class TemplateRenderer:
             return value if isinstance(value, str) else str(value)
 
         return re.sub(r'\{\{\s*(.+?)\s*\}\}', replace_var, template)
+
+    @staticmethod
+    def render_to_binds(template: str, context: dict) -> tuple:
+        """
+        C-注入修复：{{var}} 值一律转为绑定参数而非字符串替换进 SQL 文本。
+        返回 (sql_with_binds, params)。缺失键占位符绑定为字面 "{{x}}" 字符串
+        （原行为是字面量留在 SQL 里，语义相同但不再有引号逃逸面）；
+        dict/list 值此前会把 Python repr 拼进 SQL，现统一 JSON 字符串绑定。
+        """
+        import json as _json
+        params = {}
+        counter = {"n": 0}
+
+        def replace_var_bind(match):
+            var_path = match.group(1).strip()
+            value = TemplateRenderer._get_nested_value(context, var_path, match.group(0))
+            if isinstance(value, (dict, list, tuple, set)):
+                value = _json.dumps(value, ensure_ascii=False, default=str)
+            name = "p%d" % counter["n"]
+            counter["n"] += 1
+            params[name] = value if isinstance(value, str) else str(value)
+            return ":" + name
+
+        return re.sub(r'\{\{\s*(.+?)\s*\}\}', replace_var_bind, template), params
 
     @staticmethod
     def render_dict(data: dict, context: dict) -> dict:

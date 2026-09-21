@@ -180,6 +180,23 @@ class TaskWorkerManager:
         """启动工作线程"""
         if self.worker and self.worker.is_alive():
             return
+        # 僵死任务回收：进程崩溃/重启会遗留 running 态任务（无租约机制即永久卡死）。
+        # 启动时统一重排回队列重新执行。
+        try:
+            db = SessionLocal()
+            try:
+                stale = db.query(TaskQueue).filter(TaskQueue.status == "running").all()
+                for t in stale:
+                    # poller 只消费 pending 态（queued 无人拾取会二次卡死）
+                    t.status = "pending"
+                    t.started_at = None
+                if stale:
+                    db.commit()
+                    logger.warning(f"[TaskWorkerManager] 已回收 {len(stale)} 个僵死 running 任务回队列")
+            finally:
+                db.close()
+        except Exception as _rec_err:
+            logger.warning(f"[TaskWorkerManager] 僵死任务回收失败（忽略）: {_rec_err!r}")
         self.worker = TaskWorker(poll_interval=poll_interval)
         self.worker.start()
         logger.info(f"[TaskWorkerManager] 工作线程已启动 (轮询间隔: {poll_interval}s)")

@@ -602,7 +602,14 @@ def get_metric_version_snapshot(metric_id: str, version: int, db: Session = Depe
 
 def _snapshot_and_store(db: Session, metric: Metric, operator: Optional[str], action: str) -> MetricVersion:
     snap = _now_snapshot(metric, db)
-    ver = int(metric.version_current or 1)
+    # C-修复：原实现直接以 version_current 当新版本号（全库无 +1 逻辑），
+    # 第二次起 submit/approve/publish 全部撞同号。取已有最大版本 +1 并回写指针
+    # （回滚拨回旧值后仍单调递增，不撞历史版本号）。
+    _last = (db.query(MetricVersion.version)
+             .filter(MetricVersion.metric_id == metric.id)
+             .order_by(MetricVersion.version.desc()).first())
+    ver = (int(_last[0]) + 1) if _last else int(metric.version_current or 1)
+    metric.version_current = ver
     mv = MetricVersion(metric_id=metric.id, version=ver, status="published", snapshot_json=snap, created_by=operator)
     db.add(mv)
     db.add(MetricAuditLog(metric_id=metric.id, action=action, before_json=None, after_json=snap, operator=operator))

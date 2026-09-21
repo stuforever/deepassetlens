@@ -446,6 +446,10 @@ def get_subgraph_by_l1(
             tgt_ids = {str(r.target_entity_id) for r in all_src_rels}
             l4_entity_ids = set()
             matrix_rels = []
+            # C-修复：emitted_rel_ids 提前初始化——原实现只在 if l4_entity_ids
+            # 分支内初始化，子图存在实体间关系但无 L4 概念指向时，下方去重循环
+            # 引用未定义名字直接 NameError。
+            emitted_rel_ids = set()
             if tgt_ids:
                 tgt_entities = db.query(Entity).filter(Entity.id.in_(list(tgt_ids))).all()
                 tgt_concept_ids = {str(e.concept_id) for e in tgt_entities if e.concept_id}

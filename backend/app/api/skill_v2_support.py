@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import re
 
-from app.models.skill import SkillApiBinding
+from app.models.skill import Skill, SkillApiBinding
 
 def _sid(val):
     s = str(val).strip()

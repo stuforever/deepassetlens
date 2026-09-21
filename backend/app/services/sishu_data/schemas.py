@@ -101,12 +101,6 @@ _MOTHER = [
     # 既有部署升级（CREATE 内新列对老表幂等补齐——先于依赖 user_id 的索引执行）
     "ALTER TABLE sishu_mq_docs ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
     "ALTER TABLE sishu_question_variants ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
-    "ALTER TABLE sishu_mq_review_state ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
-    "ALTER TABLE sishu_mq_tags ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
-    "ALTER TABLE sishu_mq_attempts ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
-    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_user ON sishu_mq_docs (user_id)",
-    "CREATE INDEX IF NOT EXISTS idx_sishu_vq_mother ON sishu_question_variants (mother_id)",
-    "CREATE INDEX IF NOT EXISTS idx_sishu_vq_user ON sishu_question_variants (user_id)",
     # 复习状态/标签/attempt/review_log（vendor rs/tags/att/review_log JSON 文件迁移）
     """CREATE TABLE IF NOT EXISTS sishu_mq_review_state (
       mq_id VARCHAR(64) PRIMARY KEY,
@@ -122,6 +116,12 @@ _MOTHER = [
       user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',
       mother_id VARCHAR(64),
       doc JSONB NOT NULL)""",
+    "ALTER TABLE sishu_mq_review_state ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "ALTER TABLE sishu_mq_tags ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "ALTER TABLE sishu_mq_attempts ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin'",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_mq_user ON sishu_mq_docs (user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_vq_mother ON sishu_question_variants (mother_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sishu_vq_user ON sishu_question_variants (user_id)",
     """CREATE TABLE IF NOT EXISTS sishu_mq_review_log (
       seq BIGSERIAL PRIMARY KEY,
       user_id VARCHAR(128) NOT NULL DEFAULT 'local-admin',

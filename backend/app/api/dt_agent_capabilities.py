@@ -79,9 +79,9 @@ async def capability(req: CapabilityRequest):
         regen_content = ""
         if req.h5_user:
             try:
-                from deeptutor.multi_user.h5 import h5_user_guarded
-                from deeptutor.multi_user.paths import user_context
-                from deeptutor.services.session.sqlite_store import get_sqlite_session_store
+                from app.services.sishu_full.multi_user.h5 import h5_user_guarded
+                from app.services.sishu_full.multi_user.paths import user_context
+                from app.services.sishu_full.services.session.sqlite_store import get_sqlite_session_store
                 h5_ctx = user_context(h5_user_guarded(
                     req.h5_user, req.code or "", req.x_access_code or ""))
                 h5_ctx.__enter__()

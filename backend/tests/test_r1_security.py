@@ -396,9 +396,9 @@ def _h5_env(monkeypatch, store, ctx):
     _vendor = str(Path(__file__).resolve().parents[1] / "app" / "vendor")
     if _vendor not in _sys.path:
         _sys.path.insert(0, _vendor)
-    import deeptutor.multi_user.h5 as vh5
-    import deeptutor.multi_user.paths as vpaths
-    import deeptutor.services.session.sqlite_store as vstore
+    import app.services.sishu_full.multi_user.h5 as vh5
+    import app.services.sishu_full.multi_user.paths as vpaths
+    import app.services.sishu_full.services.session.sqlite_store as vstore
     monkeypatch.setattr(vh5, "h5_user_guarded", lambda u, code="", xac="": f"h5_{u}")
     monkeypatch.setattr(vpaths, "user_context", lambda user: ctx)
     monkeypatch.setattr(vstore, "get_sqlite_session_store", lambda: store)

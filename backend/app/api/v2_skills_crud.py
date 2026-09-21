@@ -340,10 +340,11 @@ def import_skill(request: SkillImportRequest, db: Session = Depends(get_db), upl
     from fastapi import UploadFile
     import tempfile
     import shutil
+    from pathlib import Path
 
     # 保存上传的 ZIP 到临时文件
     with tempfile.TemporaryDirectory() as tmp_dir:
-        temp_zip = tmp_dir / "uploaded.zip"
+        temp_zip = Path(tmp_dir) / "uploaded.zip"
         with open(temp_zip, "wb") as f:
             shutil.copyfileobj(uploaded_file.file, f)
 
@@ -359,6 +360,7 @@ def import_skill(request: SkillImportRequest, db: Session = Depends(get_db), upl
 
         # 在数据库中创建技能记录（不创建新技能包目录，因为导入已解压）
         skill = SkillService.create_skill(db, {
+            "skill_code": new_skill_code,
             "name": metadata.get("name", "Imported Skill"),
             "description": metadata.get("description"),
             "skill_type": metadata.get("skill_type", "python"),

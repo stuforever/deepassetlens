@@ -109,7 +109,15 @@ def set_branch_selection(session_id: str, body: BranchSelection):
 
 @router.delete("/{session_id}/messages/{message_id}")
 def delete_message(session_id: str, message_id: int):
+    # C-修复（IDOR）：sishu_messages 无 user_id 列，经会话归属间接隔离——
+    # 原实现任何调用者知道 session_id 即可删他人消息。同文件
+    # rename/delete_session 端点均按 user_id 校验，此处对齐。
+    u = _scope_user()
     with engine.begin() as c:
+        owned = c.execute(text("SELECT 1 FROM sishu_sessions WHERE session_id=:s AND user_id=:u"),
+                          {"s": session_id, "u": u}).first()
+        if not owned:
+            raise HTTPException(404, "会话不存在")
         n = c.execute(text("DELETE FROM sishu_messages WHERE id=:m AND session_id=:s"),
                       {"m": message_id, "s": session_id}).rowcount
     if not n:

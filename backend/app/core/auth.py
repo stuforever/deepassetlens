@@ -445,14 +445,14 @@ class AuthMiddleware:
         # P3-a: MCP 内部服务身份校验（ENABLE_AUTH=1 时，/mcp 路径接受 X-Internal-Service header）
         if _path_matches(path, _MCP_INTERNAL_PATHS):
             _internal_token = os.getenv("TUPU_INTERNAL_TOKEN", "")
-            # 有内部 token 配置 -> 校验 Bearer token 匹配
-            if _internal_token and auth_header.lower().startswith("bearer "):
-                if auth_header[7:].strip() == _internal_token:
+            # 有内部 token 配置 -> 仅接受 Bearer token（关闭 X-Internal-Service 兜底：
+            # 该 header 客户端完全可控且服务名是公开常量，兜底等于鉴权绕过提权 admin）
+            if _internal_token:
+                if auth_header.lower().startswith("bearer ") and auth_header[7:].strip() == _internal_token:
                     state["user"] = _ANONYMOUS
                     return await self.app(scope, receive, send)
-                else:
-                    await _send_json_response(send, 401, "内部服务 token 不匹配")
-                    return
+                await _send_json_response(send, 401, "内部服务 token 不匹配")
+                return
             # 无内部 token 配置 -> 校验 X-Internal-Service header
             _x_internal = ""
             for _k, _v in scope.get("headers") or []:

@@ -26,7 +26,7 @@ def list_textbooks():
 def list_kps():
     with engine.connect() as c:
         rows = c.execute(text(
-            "SELECT payload FROM sishu_knowledge_points ORDER BY created_at")).mappings().all()
+            "SELECT payload FROM sishu_knowledge_points ORDER BY payload->>'created_at' NULLS LAST, kp_id")).mappings().all()
     return {"items": [dict(r["payload"]) for r in rows]}
 
 
@@ -50,5 +50,5 @@ def list_chapters(textbook_id: str):
     with engine.connect() as c:
         rows = c.execute(text(
             "SELECT payload FROM sishu_chapters WHERE payload->>'textbook_id'=:t "
-            "ORDER BY created_at"), {"t": textbook_id}).mappings().all()
+            "ORDER BY payload->>'created_at' NULLS LAST, chapter_id"), {"t": textbook_id}).mappings().all()
     return {"items": [dict(r["payload"]) for r in rows]}

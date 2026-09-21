@@ -526,6 +526,14 @@ def execute_sql_api(payload: SqlExecuteRequest, db: Session = Depends(get_db)):
     if first_word != "SELECT":
         raise HTTPException(status_code=400, detail="仅允许执行 SELECT 查询")
 
+    # C-安全修复：仅校验 SELECT 不构成边界——本接口跑在应用主库 session 上，
+    # 可读取明文凭据表（DataSourceConfig/kg_llm_connection_configs 等）与系统目录。
+    _low_sql = raw.lower()
+    for _bad in ("datasourceconfig", "kg_llm_connection_configs", "kg_data_source_configs",
+                 "kg_expert_profiles", "information_schema", "pg_catalog", "mysql.", "performance_schema"):
+        if _bad in _low_sql:
+            raise HTTPException(status_code=403, detail="禁止查询敏感表/系统目录")
+
     # 如果有指定数据源，用MySQL执行
     if payload.data_source_id:
         from ..models.base import DataSourceConfig

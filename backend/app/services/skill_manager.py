@@ -282,6 +282,14 @@ class VersionService:
             content = version.content if isinstance(version.content, dict) else {}
             if not _contains_inline_source(content):
                 continue
+            # C-数据安全修复：内联源码必须先确保落盘（历史版本可能从未写过
+            # filesystem），缺失则从内联内容补写；落盘失败则保留内联内容，
+            # 不冒险用轻量引用覆盖（原实现直接覆盖 = 源码永久丢失）。
+            try:
+                _persist_skill_source_to_filesystem(storage, skill.skill_code, skill.skill_type, content)
+            except Exception as _persist_err:
+                logger.warning(f"[normalize] 内联源码落盘失败，保留内联内容: {_persist_err!r}")
+                continue
             version.content = _build_lightweight_version_content(storage, skill.skill_type, version.version, content)
             changed += 1
         if changed:

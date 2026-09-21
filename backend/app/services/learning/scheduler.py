@@ -111,7 +111,7 @@ class FsrsSpacedRepetitionScheduler:
     """
 
     def __init__(self) -> None:
-        from deeptutor.learning import fsrs as _fsrs
+        from app.services.sishu_full.learning import fsrs as _fsrs
 
         self._fsrs = _fsrs
 

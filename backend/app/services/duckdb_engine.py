@@ -605,8 +605,24 @@ def _parse_sql_tables_and_filters(sql: str) -> Tuple[Dict[str, str], Dict[str, D
         if tbl:
             where_filters.setdefault(tbl, {})[col_name] = value
 
+    # C-修复：只遍历 WHERE 顶层 AND 连接词——原 ast.find_all 会把 OR 分支、
+    # NOT 内部条件也当独立 AND 下推（OR 语义被静默改成 AND）。
+    def _conjuncts(node):
+        if node is None:
+            return []
+        if isinstance(node, exp.Paren):
+            return _conjuncts(node.this)
+        if isinstance(node, exp.And):
+            return _conjuncts(node.this) + _conjuncts(node.expression)
+        return [node]
+
+    _where_node = ast.args.get("where")
+    _where_conds = _conjuncts(_where_node.this if _where_node is not None else None)
+
     # WHERE 常量等值条件 col = 'value'
-    for cond in ast.find_all(exp.EQ):
+    for cond in _where_conds:
+        if not isinstance(cond, exp.EQ):
+            continue
         l, r = cond.this, cond.expression
         col, lit = None, None
         if isinstance(l, exp.Column) and isinstance(r, exp.Literal):
@@ -617,7 +633,9 @@ def _parse_sql_tables_and_filters(sql: str) -> Tuple[Dict[str, str], Dict[str, D
             _record(col.table or col.name, col.name, lit.this)
 
     # 批2：WHERE IN ('a','b') 条件 -> 数组下推（附 pushdown 数组）
-    for cond in ast.find_all(exp.In):
+    for cond in _where_conds:
+        if not isinstance(cond, exp.In):
+            continue
         col = cond.this
         vals = cond.expressions
         if isinstance(col, exp.Column) and vals and all(isinstance(v, exp.Literal) for v in vals):
@@ -625,7 +643,9 @@ def _parse_sql_tables_and_filters(sql: str) -> Tuple[Dict[str, str], Dict[str, D
 
     # P3：范围条件（col >= 1 / col <= 10 / > / <）-> 结构化为 {"_range": [(op, val), ...]}
     _RANGE_OPS = {exp.GTE: ">=", exp.LTE: "<=", exp.GT: ">", exp.LT: "<"}
-    for cond in ast.find_all((exp.GTE, exp.LTE, exp.GT, exp.LT)):
+    for cond in _where_conds:
+        if not isinstance(cond, (exp.GTE, exp.LTE, exp.GT, exp.LT)):
+            continue
         l, r = cond.this, cond.expression
         col, lit = None, None
         if isinstance(l, exp.Column) and isinstance(r, exp.Literal):
@@ -650,7 +670,9 @@ def _parse_sql_tables_and_filters(sql: str) -> Tuple[Dict[str, str], Dict[str, D
             where_filters.setdefault(tbl, {})[col.name] = {"_range": [(op, lit.this)]}
 
     # P3：LIKE 前缀条件（col LIKE 'xx%'，仅纯前缀模式）-> 结构化为 {"_like": "xx%"}
-    for cond in ast.find_all(exp.Like):
+    for cond in _where_conds:
+        if not isinstance(cond, exp.Like):
+            continue
         col, pattern = cond.this, cond.expression
         if isinstance(col, exp.Column) and isinstance(pattern, exp.Literal):
             pat = str(pattern.this)
@@ -727,9 +749,21 @@ def build_sql_with_filters(pseudo_sql: str, filters: Dict[str, Any]) -> str:
                     where_conds.append(exp.GT(this=col_expr, expression=lit_expr))
                 else:
                     where_conds.append(exp.LT(this=col_expr, expression=lit_expr))
-        elif isinstance(v, dict) and "_like" in v:
-            # P3：LIKE 前缀 -> col LIKE 'xx%'
-            where_conds.append(exp.Like(this=col_expr, expression=exp.Literal.string(str(v["_like"]))))
+        elif isinstance(v, dict) and ("_like" in v or "like" in v):
+            # P3：LIKE 前缀 -> col LIKE 'xx%'（"like" 为 LLM 常用别名，同义收编）
+            pat = v.get("_like", v.get("like"))
+            where_conds.append(exp.Like(this=col_expr, expression=exp.Literal.string(str(pat))))
+        elif isinstance(v, dict) and ("contains" in v or "_contains" in v):
+            # 包含匹配 -> col LIKE '%子串%'（名称类模糊搜索，LLM 高频意图）
+            s = v.get("contains", v.get("_contains"))
+            where_conds.append(exp.Like(this=col_expr, expression=exp.Literal.string(f"%{s}%")))
+        elif isinstance(v, dict):
+            # 非法 dict 形状：显式报错让 agent 自纠，不许静默字符串化成 EQ（恒 0 行假象）
+            raise ValueError(
+                f"filters[{k!r}] 的值 {v!r} 不是合法条件；合法格式："
+                "标量=精确匹配 | {'contains': '子串'} 包含 | {'_like': '前缀%'} 通配 | "
+                "[v1,v2] IN | {'_range': [['>=',a],['<=',b]]} 范围"
+            )
         else:
             lit_expr = exp.Literal.string(str(v))
             where_conds.append(exp.EQ(this=col_expr, expression=lit_expr))
@@ -750,8 +784,14 @@ def build_sql_with_filters(pseudo_sql: str, filters: Dict[str, Any]) -> str:
                 elif isinstance(v, dict) and "_range" in v:
                     for op, val in v["_range"]:
                         where_parts.append(f"{col_name} {op} '{str(val).replace(chr(39), chr(39)+chr(39))}'")
-                elif isinstance(v, dict) and "_like" in v:
-                    where_parts.append(f"{col_name} LIKE '{str(v['_like']).replace(chr(39), chr(39)+chr(39))}'")
+                elif isinstance(v, dict) and ("_like" in v or "like" in v):
+                    pat = v.get("_like", v.get("like"))
+                    where_parts.append(f"{col_name} LIKE '{str(pat).replace(chr(39), chr(39)+chr(39))}'")
+                elif isinstance(v, dict) and ("contains" in v or "_contains" in v):
+                    s = v.get("contains", v.get("_contains"))
+                    where_parts.append(f"{col_name} LIKE '%{str(s).replace(chr(39), chr(39)+chr(39))}%'")
+                elif isinstance(v, dict):
+                    raise ValueError(f"filters[{k!r}] 的值 {v!r} 不是合法条件")
                 else:
                     where_parts.append(f"{col_name}='{str(v).replace(chr(39), chr(39)+chr(39))}'")
             return f"{pseudo_sql} WHERE " + " AND ".join(where_parts)

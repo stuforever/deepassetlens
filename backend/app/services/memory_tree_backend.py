@@ -27,9 +27,13 @@ _BACKUP_KEEP = 3
 
 
 def _safe_join(root: Path, rel: str) -> Path:
-    """路径穿越防护：resolve 后必须落 root 内（管理页 file 端点同款铁则）。"""
+    """路径穿越防护：resolve 后必须落 root 内（管理页 file 端点同款铁则）。
+
+    用 parents 归属判定而非 startswith 前缀比对——后者存在兄弟目录前缀绕过
+    （root=.../wenshu 时 .../wenshu_admin/x 同样命中前缀而放行）。"""
     p = (root / rel).resolve()
-    if not str(p).startswith(str(root.resolve())):
+    root_res = root.resolve()
+    if p != root_res and root_res not in p.parents:
         raise ValueError(f"路径越界: {rel}")
     return p
 

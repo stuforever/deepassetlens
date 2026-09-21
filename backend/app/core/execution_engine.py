@@ -124,13 +124,14 @@ class SQLExecutor(SkillExecutor):
 
         database = "default"
 
-        # 渲染 SQL 模板
-        rendered_sql = TemplateRenderer.render(sql, input_payload)
+        # 渲染 SQL 模板（C-注入修复：值走绑定参数，不再字符串替换进 SQL 文本）
+        rendered_sql, render_bind_params = TemplateRenderer.render_to_binds(sql, input_payload)
 
         try:
             # 使用当前数据库连接执行（简化实现）
             from sqlalchemy import text
-            result_proxy = self.db.execute(text(rendered_sql))
+            result_proxy = (self.db.execute(text(rendered_sql), render_bind_params)
+                            if render_bind_params else self.db.execute(text(rendered_sql)))
 
             # 获取结果
             if result_proxy.returns_rows:

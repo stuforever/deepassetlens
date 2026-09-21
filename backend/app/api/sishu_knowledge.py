@@ -80,6 +80,9 @@ def set_default_kb(name: str):
     cfg = kbm._load_config()
     for k, v in cfg.get("knowledge_bases", {}).items():
         v["is_default"] = (k == name)
+    # C-修复：_save_config 落盘的是 self.config——必须把变更后的 cfg 回写，
+    # 否则 is_default 翻转被静默丢弃
+    kbm.config = cfg
     kbm._save_config()
     return {"ok": True, "default": name}
 
@@ -94,6 +97,8 @@ def delete_kb(name: str):
     cfg.get("knowledge_bases", {}).pop(name, None)
     if cfg.get("defaults", {}).get("default_kb") == name:
         cfg["defaults"]["default_kb"] = None
+    # C-修复：同 set_default_kb——变更回写 self.config 后再落盘
+    kbm.config = cfg
     kbm._save_config()
     return {"ok": True, "deleted": name}
 

@@ -172,6 +172,9 @@ async def answer_with_orchestrator(
         knowledge_bases=[],
         tools=[],
         mode="chat",
+        # C-修复：_prepare 无条件读取 history_references（原 SimpleNamespace
+        # 缺该字段，微信链路进 run_chat 即 AttributeError）
+        history_references=[],
     )
     final_text = ""
     errors: list[str] = []

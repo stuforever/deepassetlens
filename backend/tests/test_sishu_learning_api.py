@@ -50,7 +50,7 @@ class TestEnforcementMounting:
         """挂载表与 vendor tutor_routers 装配行逐字对齐（前端契约零改）。
         main.py 实挂由部署检查/L2 重放覆盖（28000 实测 200）。"""
         from app.api.sishu_learning import SISHU_MOUNTS
-        from app.vendor.deeptutor.api.tutor_routers import tutor_routers as _tt
+        from app.services.sishu_full.api.tutor_routers import tutor_routers as _tt
         vendor_map = {tags[0]: prefix for _r, prefix, tags, _d in _tt if tags}
         for _r, prefix, tags in SISHU_MOUNTS:
             assert vendor_map.get(tags[0]) == prefix, \

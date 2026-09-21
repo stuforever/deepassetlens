@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from datetime import datetime
@@ -16,6 +16,13 @@ class SourceTableResponse(SourceTableBase):
     id: UUID
     column_metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
+
+    @validator("connection_info")
+    def _mask_password(cls, v):
+        """响应脱敏：连接信息中的密码不出网（写路径走 SourceTableCreate 不受影响）。"""
+        if isinstance(v, dict) and v.get("password"):
+            v = {**v, "password": "******"}
+        return v
 
     class Config:
         orm_mode = True

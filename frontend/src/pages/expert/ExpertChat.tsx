@@ -84,15 +84,18 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   ? card.suggestions
   : card?.ui_config?.suggestions) ?? FREEPLAN_EXAMPLE_QUERIES;
 
-  // ⑤补补-2：欢迎语动态数（仅 tutor——wenshu 不调接口零变化）
+  // ⑤补补-2：欢迎语动态数（仅 sishu——wenshu 不调接口零变化）
+  // 批16deep 17.1：/api/tutor/profile 随 ⑤R R1 路由退役 404——切平台面 /api/v1/learning/today-panel
   const [tutorProfile, setTutorProfile] = useState<{ due_count: number; streak_days: number } | null>(null);
   useEffect(() => {
     if (slug !== 'sishu') return;
     (async () => {
       try {
-        const r = await fetch('/api/tutor/profile');
+        const r = await fetch('/api/v1/learning/today-panel');
         const j = await r.json();
-        if (j?.data) setTutorProfile({ due_count: j.data.due_count ?? 0, streak_days: j.data.streak_days ?? 0 });
+        if (j && (j.due_count !== undefined || j.streak_days !== undefined)) {
+          setTutorProfile({ due_count: j.due_count ?? 0, streak_days: j.streak_days ?? 0 });
+        }
       } catch { /* 画像失败静默——欢迎语回落 */ }
     })();
   }, [slug]);
