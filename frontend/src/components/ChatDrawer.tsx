@@ -136,7 +136,7 @@ const ChatDrawer: React.FC<ChatDrawerProps> = ({ visible, onClose }) => {
       />
       {loading && (
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <Spin tip="思考中..." />
+          <Spin size="small" /><div style={{ marginTop: 8, fontSize: 12, color: "var(--text-tertiary)" }}>思考中...</div>
         </div>
       )}
     </Drawer>

@@ -83,7 +83,7 @@ const SERIF = "Georgia, 'Times New Roman', 'Songti SC', SimSun, serif";
 const MONO = "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace";
 const CARD_BORDER = `1px solid ${colors.border}`;
 /** 模型目录入口：源指向 /settings，tupu 对应 LLM 配置页。 */
-const MODEL_CATALOG_PATH = '/llm-config';
+const MODEL_CATALOG_PATH = '/settings/llm'; // Task8：LLM 双入口合并（旧 /llm-config 重定向）
 
 type IconComponent = React.ComponentType<{ style?: React.CSSProperties }>;
 

@@ -588,7 +588,7 @@ const RightPanel: React.FC<Props> = ({ onOpenTarget }) => {
           <Divider orientation="left">映射规则详情（与映射规则模块一致）</Divider>
           {loadingLineage ? (
             <div style={{ textAlign: 'center', padding: '20px' }}>
-              <Spin tip="加载映射规则中..." />
+              <Spin size="small" /><div style={{ marginTop: 8, fontSize: 12, color: "var(--text-tertiary)" }}>加载映射规则中...</div>
             </div>
           ) : lineageData?.lineage && lineageData.lineage.length > 0 ? (
             <Space direction="vertical" style={{ width: '100%' }}>

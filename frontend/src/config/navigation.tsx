@@ -125,7 +125,7 @@ export const NAV_GROUPS: NavGroup[] = [  // ── 三轨M6(U1) 侧栏 4 区重�
     items: [
       { menuKey: 'governance', label: '运行观测', path: '/governance', icon: FundOutlined },
       { menuKey: 'engine_workbench', label: '引擎工作台', path: '/engine-workbench', icon: ThunderboltOutlined },
-      { menuKey: 'llmconfig', label: 'LLM 配置', path: '/llm-config', icon: SettingOutlined },
+      { menuKey: 'llmconfig', label: 'LLM 配置', path: '/settings/llm', icon: SettingOutlined },
       { menuKey: 'memory_admin', label: '记忆管理', path: '/memory-admin', icon: BookOutlined },
       { menuKey: 'expert_grants', label: '专家赋权', path: '/expert-grants', icon: TeamOutlined },
       { menuKey: 'security_controls', label: '安全控制中心', path: '/security-controls', icon: PoweroffOutlined },

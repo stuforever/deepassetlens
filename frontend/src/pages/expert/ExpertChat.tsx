@@ -1079,7 +1079,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   if (!card) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spin size="large" tip="正在加载专家卡…" />
+        <Spin size="large" />
+        <div style={{ marginTop: 12, fontSize: 13, color: "var(--text-tertiary)" }}>正在加载专家卡…</div>
       </div>
     );
   }

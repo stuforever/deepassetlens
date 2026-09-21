@@ -121,7 +121,7 @@ export const routes: RouteConfig[] = [
   { path: '/knowledge', element: KnowledgePage, label: '知识库管理', menuKey: 'vector_manage' },
   // IA批5 5.5：LLM 合一页——/llm-config 承接设置中心复刻页（ServiceConfigEditor service="llm"，
 // 形态/字段/交互 1:1）；LLMConfigManager 退役 git rm + M00 登记。
-{ path: '/llm-config', element: settingsPage(SettingsLlm), label: 'LLM 配置', menuKey: 'llmconfig' },
+{ path: '/llm-config', element: (() => <Navigate to="/settings/llm" replace />) as any, label: 'LLM 配置', menuKey: 'llmconfig' },
   { path: '/memory-admin', element: MemoryAdmin, label: '记忆管理', menuKey: 'memory_admin' },
   { path: '/attachment-settings', element: AttachmentSettings, label: '对话附件上限', menuKey: 'attachment_settings' },
   // ⑥-2a B-2：专家赋权管理面（平台配置层——grant 三端点复用，admin-only）

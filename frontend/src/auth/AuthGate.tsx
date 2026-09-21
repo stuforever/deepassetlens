@@ -82,13 +82,13 @@ const AuthGate: React.FC<Props> = ({ children }) => {
   }, []);
 
   if (phase === 'init') {
-    return <FullScreen><Spin tip="加载权限配置..." size="large" /></FullScreen>;
+    return <FullScreen><Spin size="large" /><div style={{ marginTop: 12, fontSize: 13, color: "var(--text-tertiary)" }}>加载权限配置...</div></FullScreen>;
   }
   if (phase === 'login') {
-    return <FullScreen><Spin tip="跳转 Authentik 登录..." size="large" /></FullScreen>;
+    return <FullScreen><Spin size="large" /><div style={{ marginTop: 12, fontSize: 13, color: "var(--text-tertiary)" }}>跳转 Authentik 登录...</div></FullScreen>;
   }
   if (phase === 'exchange') {
-    return <FullScreen><Spin tip="登录态交换中..." size="large" /></FullScreen>;
+    return <FullScreen><Spin size="large" /><div style={{ marginTop: 12, fontSize: 13, color: "var(--text-tertiary)" }}>登录态交换中...</div></FullScreen>;
   }
   if (phase === 'error') {
     return (
