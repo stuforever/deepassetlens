@@ -3,6 +3,9 @@
  * 首个真实用户=tutor 四页。routes.tsx 消费本表拼接专家自定义路由（扩展点验证）。
  * 纪律：页面是代码，卡是数据——本表只登记路由与组件映射，开关由卡 enabled 决定。
  */
+/* 三轨M16(批15) C3：Bearer 注入单点（传输层豁免——总编排 Global Constraints 授权） */
+import "../fetchBearerPatch";
+
 import type { ComponentType } from 'react';
 import { createElement, lazy } from 'react';
 import RequireExpert from '../components/RequireAdmin';
