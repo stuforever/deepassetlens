@@ -168,6 +168,8 @@ export function H5Shell({
     if (params.get("u") || params.get("openid")) return;
     try {
       if (localStorage.getItem("h5_is_admin") === "1") return;
+      // 三轨M11(U6)：onboarding 一次性——跳过/确认后不再弹（localStorage 标记）
+      if (localStorage.getItem("h5_onboarding_done") === "1") return;
       const raw = localStorage.getItem("h5_recent_users");
       const recents = raw ? JSON.parse(raw) : [];
       if (Array.isArray(recents) && recents.length) return;
@@ -180,6 +182,9 @@ export function H5Shell({
   const confirmWelcome = () => {
     const name = welcomeName.trim();
     if (!name) return;
+    try {
+      localStorage.setItem("h5_onboarding_done", "1"); // 三轨M11：确认后亦一次性
+    } catch { /* ignore */ }
     try {
       const raw = localStorage.getItem("h5_recent_users");
       const recents = raw ? JSON.parse(raw) : [];
@@ -300,7 +305,56 @@ export function H5Shell({
     return () => navigator.serviceWorker.removeEventListener("message", onMessage);
   }, []);
 
+  // 三轨M11(U6) §7.1：桌面=深色设备展台（手机框 390×844 居中+说明条+新窗口打开）；
+  // 移动端（≤768px）原样全屏 H5 壳。matchMedia 即时判定（不订阅 resize——刷新生效即可）。
+  const isDesktopViewport =
+    typeof window !== "undefined" && !!window.matchMedia?.("(min-width: 769px)").matches;
+
   return (
+    <div
+      data-testid="h5-shell-root"
+      style={
+        isDesktopViewport
+          ? {
+              minHeight: "100vh",
+              background: "linear-gradient(160deg,#0f172a 0%,#1e293b 100%)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              padding: "32px 16px",
+            }
+          : { display: "flex", flexDirection: "column", minHeight: "100vh" }
+      }
+    >
+      {isDesktopViewport && (
+        <div
+          data-testid="h5-expo-banner"
+          style={{
+            maxWidth: 430, width: "100%", color: "#94a3b8", fontSize: 12,
+            marginBottom: 12, display: "flex", justifyContent: "space-between",
+          }}
+        >
+          <span>📱 私塾先生 h5 · 手机视图</span>
+          <button
+            data-testid="h5-new-window"
+            onClick={() => window.open(window.location.href, "_blank")}
+            style={{ background: "none", border: "none", color: "#60a5fa", cursor: "pointer", fontSize: 12 }}
+          >
+            新窗口打开 ↗
+          </button>
+        </div>
+      )}
+      <div
+        style={
+          isDesktopViewport
+            ? {
+                width: 390, height: 844, borderRadius: 36, overflow: "hidden",
+                border: "10px solid #0b1220", boxShadow: "0 24px 64px rgba(0,0,0,.5)",
+                background: "#f8fafc", display: "flex", flexDirection: "column",
+              }
+            : { display: "flex", flexDirection: "column", flex: 1, width: "100%" }
+        }
+      >
     // 根容器固定视口高度，内滚容器才能正确产生滚动条（否则随内容长高被裁掉）。
     <div
       className="dsh-h5"
@@ -416,6 +470,16 @@ export function H5Shell({
             style={{ width: "100%", padding: "12px", borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 16, marginBottom: 12, boxSizing: "border-box" }}
           />
           <button
+            data-testid="h5-onboarding-skip"
+            onClick={() => {
+              try { localStorage.setItem("h5_onboarding_done", "1"); } catch { /* ignore */ }
+              setWelcomeOpen(false);
+            }}
+            style={{ width: "100%", padding: "6px 0", textAlign: "center", fontSize: 13, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", marginBottom: 4 }}
+          >
+            跳过，先逛逛
+          </button>
+          <button
             onClick={confirmWelcome}
             disabled={!welcomeName.trim()}
             style={{
@@ -475,6 +539,8 @@ export function H5Shell({
           </button>
         </div>
       </H5Sheet>
+    </div>
+      </div>
     </div>
   );
 }
