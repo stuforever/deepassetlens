@@ -1397,7 +1397,7 @@ export const ChatMessageList = memo(function ChatMessageList({
         const showActions = msgDone && hasVisibleMarkdownContent(msg.content);
         const isLastAssistant = i === lastRenderedAssistantIndex;
         // 三轨M7 E-33 修复：桥消费层（AgentChatContext）user 消息 capability=skillCode
-        //（缺省 "tutor/chat"）——原门槛只认 "chat" 致桌面 regenerate 恒 False。
+        //（缺省 "sishu/chat"）——原门槛只认 "chat" 致桌面 regenerate 恒 False。
         // chat 等价能力=空 / "chat" / "*​/chat" 后缀（纯对话类才可 regenerate）。
         const pairedCap = pairedUserMessage?.capability || "";
         const isChatLikeCap =

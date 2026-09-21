@@ -50,6 +50,9 @@ def main():
                 print(f"WARN: 渠道切换 {CHANNEL} 失败: {e}")
         ta = pg.query_selector("textarea.ant-input:visible")
         if not ta:
+            # E-101 补：sishu 页 composer=ChatComposer（DT 1:1）裸 textarea 无 ant-input 类——退任意可见 textarea
+            ta = pg.query_selector("textarea:visible")
+        if not ta:
             print("FAIL: 找不到输入框")
             b.close(); return 1
         ta.fill(Q)

@@ -122,7 +122,7 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const send = useCallback(async (content: string, opts?: AgentSendOptions) => {
-    const skillCode = opts?.skillCode || "tutor/chat";
+    const skillCode = opts?.skillCode || "sishu/chat";
     const snapshot: MessageRequestSnapshot = {
       content,
       capability: skillCode,

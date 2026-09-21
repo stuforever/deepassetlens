@@ -140,43 +140,43 @@ interface CapabilityDef {
 
 const CAPABILITIES: CapabilityDef[] = [
   {
-    value: "", skillCode: "tutor/chat", label: "Chat",
+    value: "", skillCode: "sishu/chat", label: "Chat",
     description: "Flexible conversation with any tool", icon: MessageSquare,
     allowedTools: ["brainstorm", "geogebra_analysis", "web_search", "code_execution", "reason", "paper_search", "imagegen", "videogen"],
     defaultTools: [],
   },
   {
-    value: "deep_solve", skillCode: "tutor/solve", label: "Solve",
+    value: "deep_solve", skillCode: "sishu/solve", label: "Solve",
     description: "Multi-step reasoning & problem solving", icon: BrainCircuit,
     allowedTools: ["web_search", "code_execution", "reason"],
     defaultTools: ["web_search", "code_execution", "reason"],
     loopEngine: true,
   },
   {
-    value: "deep_question", skillCode: "tutor/quiz", label: "Quiz",
+    value: "deep_question", skillCode: "sishu/quiz", label: "Quiz",
     description: "Auto-validated question generation", icon: PenLine,
     allowedTools: ["web_search", "code_execution"],
     defaultTools: ["web_search", "code_execution"],
   },
   {
-    value: "deep_research", skillCode: "tutor/research", label: "Research",
+    value: "deep_research", skillCode: "sishu/research", label: "Research",
     description: "Comprehensive multi-agent research", icon: Microscope,
     allowedTools: ["web_search", "paper_search", "code_execution"],
     defaultTools: ["web_search", "paper_search", "code_execution"],
   },
   {
-    value: "visualize", skillCode: "tutor/visualize", label: "Visualize",
+    value: "visualize", skillCode: "sishu/visualize", label: "Visualize",
     description: "Generate charts, diagrams, interactive pages, or math animations",
     icon: BarChart3, allowedTools: [], defaultTools: [],
   },
   {
-    value: "mastery_path", skillCode: "tutor/mastery", label: "Mastery Path",
+    value: "mastery_path", skillCode: "sishu/mastery", label: "Mastery Path",
     description: "Mastery-based tutoring with a hard gate", icon: GraduationCap,
     allowedTools: ["web_search", "code_execution"], defaultTools: [],
     loopEngine: true,
   },
   {
-    value: "wrong_intake", skillCode: "tutor/wrong-intake", label: "Wrong Intake",
+    value: "wrong_intake", skillCode: "sishu/wrong-intake", label: "Wrong Intake",
     description: "Record wrong questions through natural dialogue", icon: BookMarked,
     allowedTools: [], defaultTools: [], loopEngine: true,
   },
@@ -865,13 +865,18 @@ function TutorHomeChatInner() {
   /* ---- 新会话 ---- */
   const newSession = useCallback(() => { reset(); navigateToHome(); }, [reset, navigateToHome]);
 
-    const contextBudget = readContextBudget(lastMessage?.events);
+  // 三轨M7(U2) §3.3 E-101 修正：右栏信任设施改真右栏（232px 列+可折叠，同 ExpertChat 形制）——
+  // 原实现误落主列文档流底部（全宽横条），并挤压欢迎宫格 flex-1 致第二行被 composer 遮挡。
+  const [trustOpen, setTrustOpen] = useState(true);
+
+  const contextBudget = readContextBudget(lastMessage?.events);
 
   return (
     <QuizFollowupProvider>
       <GeogebraTabProvider>
+        <div className="relative flex h-full w-full items-stretch overflow-hidden">
         <div
-          className="chat-preview-shell flex h-full w-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
+          className="chat-preview-shell flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
           data-preview-open={previewSource !== null ? "true" : "false"}
           data-viewer-open={viewerPanelOpen && previewSource === null ? "true" : "false"}
           onDragEnter={handleDragEnter}
@@ -899,7 +904,7 @@ function TutorHomeChatInner() {
           {/* 消息区（DT L1982-2075 1:1） */}
           <div className="flex w-full flex-1 min-h-0 flex-col">
             {!hasMessages ? (
-              <div className="animate-fade-in flex w-full flex-1 min-h-0 flex-col items-center justify-center px-6 pb-8 gap-8">
+              <div className="animate-fade-in flex w-full flex-1 flex-col items-center justify-center px-6 pb-8 gap-8" style={{ minHeight: "fit-content" }}>
                 <div className="flex w-full max-w-[960px] items-center justify-center gap-4">
                   <h1 className="font-serif text-[40px] font-medium leading-[1.1] tracking-[-0.015em] text-[var(--foreground)]">{t(welcomeGreeting)}</h1>
                 </div>
@@ -1097,28 +1102,6 @@ function TutorHomeChatInner() {
             <SaveToNotebookModal open={showSaveModal} payload={chatSavePayload} messages={chatSaveMessages as never} onClose={handleCloseSaveModal} />
           </Suspense>
           <FilePreviewDrawer open={previewSource !== null} source={previewSource} onClose={handleClosePreview} />
-            {/* 三轨M7(U2) §3.3：sishu 右栏信任设施——课本章节/教学设置/书库（活动面板顶部区） */}
-            <div data-testid="sishu-trust-panel" className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-              <div className="mb-2 text-xs font-semibold text-[var(--foreground)]">学情上下文</div>
-              <div className="flex flex-col gap-1">
-                {[
-                  { label: "课本章节", path: "/settings/curriculum/chapters" },
-                  { label: "教学设置", path: "/e/sishu/admin/settings" },
-                  { label: "书库", path: "/e/sishu/book" },
-                ].map((e) => (
-                  <button
-                    key={e.label}
-                    data-testid={`sishu-trust-${e.label}`}
-                    type="button"
-                    onClick={() => navigate(e.path)}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-[var(--foreground)] hover:bg-[var(--muted)]"
-                  >
-                    <BookMarked className="h-3.5 w-3.5 text-amber-600" />
-                    {e.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           <SessionViewerPanel
             ref={viewerPanelRef}
             open={viewerPanelOpen && previewSource === null}
@@ -1128,6 +1111,53 @@ function TutorHomeChatInner() {
             onClose={() => setViewerOpen(false)}
             onAutoOpen={() => setViewerOpen(true)}
           />
+        </div>
+        {/* 三轨M7(U2) §3.3 E-101 修正：右栏信任设施——课本章节/教学设置/书库（232px 真右栏+可折叠） */}
+        {trustOpen ? (
+          <aside
+            data-testid="sishu-trust-panel"
+            className="flex h-full w-[232px] shrink-0 flex-col overflow-y-auto border-l border-[var(--border)] bg-[var(--card)] px-4 py-4"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[var(--foreground)]">学情上下文</span>
+              <button
+                type="button"
+                data-testid="sishu-trust-collapse"
+                onClick={() => setTrustOpen(false)}
+                className="rounded-md px-1.5 py-0.5 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                收起
+              </button>
+            </div>
+            <div className="flex flex-col gap-1">
+              {[
+                { label: "课本章节", path: "/settings/curriculum/chapters" },
+                { label: "教学设置", path: "/e/sishu/admin/settings" },
+                { label: "书库", path: "/e/sishu/book" },
+              ].map((e) => (
+                <button
+                  key={e.label}
+                  data-testid={`sishu-trust-${e.label}`}
+                  type="button"
+                  onClick={() => navigate(e.path)}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-[var(--foreground)] hover:bg-[var(--muted)]"
+                >
+                  <BookMarked className="h-3.5 w-3.5 text-amber-600" />
+                  {e.label}
+                </button>
+              ))}
+            </div>
+          </aside>
+        ) : (
+          <button
+            type="button"
+            data-testid="sishu-trust-open"
+            onClick={() => setTrustOpen(true)}
+            className="absolute right-3 top-3 z-20 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          >
+            学情上下文
+          </button>
+        )}
         </div>
       </GeogebraTabProvider>
     </QuizFollowupProvider>

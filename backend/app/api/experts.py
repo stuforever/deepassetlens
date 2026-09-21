@@ -78,9 +78,11 @@ def _validate_card_fields(body: Dict[str, Any]) -> None:
     # ⑤批3（⑤c 诚实账①回补源头）：卡 tools 校验用真实注册全集（GENERIC_ALLOWED_TOOLS，
     # 含教学族）——_mcp_tool_registry() 是 wenshu tools **推导面**（剔除教学族的零感知
     # 语义），不是校验面；批 2 一函数两用导致 tutor 卡九件必 422（洞在批 2，不在本批打补丁）。
-    from app.services.query_contract import GENERIC_ALLOWED_TOOLS
+    # E-101：⑤R R1 后教学族从 GENERIC 分家为 TUTOR_TOOLS 冻结名单（sishu 代理 twin 执行面），
+    # 校验全集须并回 TUTOR_TOOLS——否则 sishu 卡 11 件全 422，卡编辑 API 整体锁死。
+    from app.services.query_contract import GENERIC_ALLOWED_TOOLS, TUTOR_TOOLS
     from pathlib import Path
-    reg = set(GENERIC_ALLOWED_TOOLS)
+    reg = set(GENERIC_ALLOWED_TOOLS) | set(TUTOR_TOOLS)
     slug = body.get("expert_id") or ""
     if not _SLUG_RE.match(slug):
         raise ValueError(f"expert_id 非法（小写字母数字连字符）: {slug}")

@@ -58,7 +58,7 @@ export function startQuizJudge(
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          skill_code: "tutor/quiz",
+          skill_code: "sishu/quiz",
           message: payload.question,
           config: { action: "judge", ...payload },
         }),

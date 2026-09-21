@@ -19,22 +19,22 @@ export function capabilityToSkill(capability: string | null | undefined): string
     case undefined:
     case "":
     case "chat":
-      return "tutor/chat";
+      return "sishu/chat";
     case "solve":
-      return "tutor/solve";
+      return "sishu/solve";
     case "mastery":
-      return "tutor/mastery";
+      return "sishu/mastery";
     case "wrong_intake":
-      return "tutor/wrong-intake";
+      return "sishu/wrong-intake";
     case "deep_question":
     case "quiz":
-      return "tutor/quiz";
+      return "sishu/quiz";
     case "visualize":
-      return "tutor/visualize";
+      return "sishu/visualize";
     case "deep_research":
-      return "tutor/research";
+      return "sishu/research";
     default:
-      return "tutor/chat";
+      return "sishu/chat";
   }
 }
 
@@ -108,7 +108,7 @@ export class H5BridgeClient {
     }
     if (msg.type === "regenerate") {
       void this.runTurn({
-        skill_code: "tutor/chat",
+        skill_code: "sishu/chat",
         message: "",
         session_id: msg.session_id,
         h5_user: msg.u ?? null,

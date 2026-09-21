@@ -25,7 +25,7 @@ async function requestOverBridge<T>(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      skill_code: "tutor/book-generate",
+      skill_code: "sishu/book-generate",
       message: String(message.type || "book_op"),
       config: { ...message },
     }),

@@ -32,6 +32,10 @@ const SLUG_BG: Record<string, string> = {
   sishu: spaceColors.sishu,
   'tutor-h5': spaceColors.h5,
 };
+// E-101：知识源白名单名→显示名（未列出的原样展示）
+const KB_SOURCE_LABELS: Record<string, string> = {
+  ontology_graph: '本体图谱',
+};
 const SUGGESTED_ASKS = [
   '查询用电客户总数',
   '帮我出一道鸡兔同笼的变式题',
@@ -81,6 +85,10 @@ const ExpertPortal: React.FC = () => {
     [sessions],
   );
 
+  // E-101：知识源 chips 出可读名（ontology_graph→本体图谱；kb:{uuid} 死引用已随卡数据清理剪除）
+  const kbTagLabel = (k: string) =>
+    (KB_SOURCE_LABELS as Record<string, string>)[k] ?? k;
+
   const kbTags = (c: ExpertCard) => {
     const ks = c.knowledge_sources || [];
     const head = ks.slice(0, 3);
@@ -89,7 +97,7 @@ const ExpertPortal: React.FC = () => {
       <>
         {head.map((k) => (
           <Tag key={k} style={{ fontSize: 11, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {k.length > 8 ? `${k.slice(0, 8)}…` : k}
+            {kbTagLabel(k)}
           </Tag>
         ))}
         {rest.length > 0 && (
