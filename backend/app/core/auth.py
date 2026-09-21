@@ -442,28 +442,18 @@ class AuthMiddleware:
 
         auth_header = _read_auth_header(scope)
 
-        # P3-a: MCP 内部服务身份校验（ENABLE_AUTH=1 时，/mcp 路径接受 X-Internal-Service header）
+        # P3-a: MCP 内部服务身份校验（ENABLE_AUTH=1 时，/mcp 路径仅接受 Bearer 内部 token）
         if _path_matches(path, _MCP_INTERNAL_PATHS):
             _internal_token = os.getenv("TUPU_INTERNAL_TOKEN", "")
-            # 有内部 token 配置 -> 仅接受 Bearer token（关闭 X-Internal-Service 兜底：
-            # 该 header 客户端完全可控且服务名是公开常量，兜底等于鉴权绕过提权 admin）
-            if _internal_token:
-                if auth_header.lower().startswith("bearer ") and auth_header[7:].strip() == _internal_token:
-                    state["user"] = _ANONYMOUS
-                    return await self.app(scope, receive, send)
-                await _send_json_response(send, 401, "内部服务 token 不匹配")
-                return
-            # 无内部 token 配置 -> 校验 X-Internal-Service header
-            _x_internal = ""
-            for _k, _v in scope.get("headers") or []:
-                if _k == b"x-internal-service":
-                    _x_internal = _v.decode("latin-1")
-                    break
-            if _x_internal == _INTERNAL_SERVICE_NAME:
+            # R1批（R#1 critical）：X-Internal-Service 兜底移除——该 header 客户端完全可控
+            # 且服务名是公开常量，无 token 配置时兜底=鉴权绕过提权 admin。内部调用方
+            # （tupu_deepagent）与主进程同源读 env（main.py 启动自动生成 token 注入），
+            # Bearer 通道始终可用；外部客户端无 token → 一律 401。
+            if _internal_token and auth_header.lower().startswith("bearer ") \
+                    and auth_header[7:].strip() == _internal_token:
                 state["user"] = _ANONYMOUS
                 return await self.app(scope, receive, send)
-            # MCP 路径无内部身份 -> 拒绝（不允许外部直连 MCP）
-            await _send_json_response(send, 401, "MCP 端点需内部服务身份（X-Internal-Service 或 Bearer 内部 token）")
+            await _send_json_response(send, 401, "MCP 端点需 Bearer 内部 token（X-Internal-Service 兜底已废除）")
             return
 
         # 可选 token 路径：有就解析，无就匿名

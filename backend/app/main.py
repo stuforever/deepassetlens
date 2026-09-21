@@ -281,6 +281,13 @@ async def lifespan(app: FastAPI):
         logger.warning(f"[shutdown] close_tupu_agent error: {_e}")
 
 
+# R1批（R#1）：TUPU_INTERNAL_TOKEN 自动生成（进程内单例——MCP 中间件与 deepagent
+# 客户端同源同值；外部客户端无从获知 → /mcp Bearer-only 闭环）。显式配置优先。
+import os as _r1_os
+import secrets as _r1_secrets
+if not _r1_os.getenv("TUPU_INTERNAL_TOKEN"):
+    _r1_os.environ["TUPU_INTERNAL_TOKEN"] = _r1_secrets.token_urlsafe(32)
+
 app = FastAPI(title="数据智能分析组件 API", lifespan=lifespan)
 
 # 启用 CORS（P3: 生产环境禁止通配符+凭据组合）

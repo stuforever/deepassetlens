@@ -511,19 +511,30 @@ def test_auth_on_sse_stream_passthrough(monkeypatch):
 
 
 def test_mcp_internal_header_access(monkeypatch):
-    """§八.6：ENABLE_AUTH=1 下 /mcp + X-Internal-Service: tupu-agent → 200（内部服务
-    身份贯穿，Agent 工具加载不受生产鉴权影响）；无内部身份/错误身份 → 401（不允许
-    外部直连 MCP，spec §二.4）。
-    变异锚点：内部头校验分支删 → 内部 Agent 通道 401 断（M17/M08 断链）；
-    /mcp 无身份直通 → 外部可直连 MCP（安全洞）红。"""
+    """§八.6（R1批 R#1 修订）：X-Internal-Service 兜底废除（header 客户端可控=提权面）——
+    /mcp 仅接受 Bearer 内部 token（进程内自动生成，deepagent 客户端同源同读 env）；
+    无 token 配置 → 一律 401（含伪造 header）。
+    变异锚点：Bearer 分支删 → 内部 Agent 通道 401 断（M17/M08 断链）。"""
+    monkeypatch.setattr("app.core.auth.ENABLE_AUTH", True)
+    monkeypatch.setenv("TUPU_INTERNAL_TOKEN", "test-internal-token")
+    from fastapi.testclient import TestClient
+    client = TestClient(_mw_app())
+    r = client.get("/mcp/probe", headers={"Authorization": "Bearer test-internal-token"})
+    assert r.status_code == 200
+    assert r.json()["user"] == "anonymous"  # 内部身份走匿名上下文贯穿
+    r2 = client.get("/mcp/probe")           # 无身份
+    assert r2.status_code == 401
+    r3 = client.get("/mcp/probe", headers={"X-Internal-Service": "tupu-agent"})  # 伪造 header（兜底已废）
+    assert r3.status_code == 401
+    r4 = client.get("/mcp/probe", headers={"Authorization": "Bearer wrong"})     # 错 token
+    assert r4.status_code == 401
+
+def test_mcp_internal_no_token_all_denied(monkeypatch):
+    """R1批 R#1：TUPU_INTERNAL_TOKEN 未配置 → /mcp 一律 401（X-Internal-Service 兜底废除）。"""
     monkeypatch.setattr("app.core.auth.ENABLE_AUTH", True)
     monkeypatch.delenv("TUPU_INTERNAL_TOKEN", raising=False)
     from fastapi.testclient import TestClient
     client = TestClient(_mw_app())
-    r = client.get("/mcp/probe", headers={"X-Internal-Service": "tupu-agent"})
-    assert r.status_code == 200
-    assert r.json()["user"] == "anonymous"  # 内部身份走匿名上下文贯穿
-    r2 = client.get("/mcp/probe")           # 无内部身份
-    assert r2.status_code == 401
-    r3 = client.get("/mcp/probe", headers={"X-Internal-Service": "evil-service"})  # 错误身份
-    assert r3.status_code == 401
+    for headers in ({}, {"X-Internal-Service": "tupu-agent"}):
+        r = client.get("/mcp/probe", headers=headers)
+        assert r.status_code == 401
