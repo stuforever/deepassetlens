@@ -984,6 +984,11 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     [activeSessionId, deleteMessage],
   );
 
+  // 三轨M7(U2) §3.3：sishu 右栏信任设施（课本章节/教学设置/书库——可折叠）
+  // E-99：本 useState 必须位于 cardError/!card 早退之前——React 钩子序守恒
+  // （原位置在早退后致 hooks 数逐渲染递增→整页 crash「Rendered more hooks...」）。
+  const [trustOpen, setTrustOpen] = useState<boolean>(() => slug === 'sishu');
+
   // S5（HITL v2）：批准/拒绝人审中断 -> POST /chat/freeplan/resume（服务端据此恢复同 thread 续跑）
   // 稳定引用（useCallback + 仅依赖状态 setter），保证消息行 memo 不失效；线程 id 由调用方（消息 payload）携带。
   const handleHITLDecision = useCallback(async (interruptId: string, approve: boolean) => {
@@ -1055,8 +1060,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     );
   }
 
-  // 三轨M7(U2) §3.3：sishu 右栏信任设施（课本章节/教学设置/书库——可折叠）
-  const [trustOpen, setTrustOpen] = useState<boolean>(() => slug === 'sishu');
+  // 三轨M7(U2) §3.3 信任设施见上方 hooks 区（E-99 钩子序守恒上移）。
+
   return (
     <div style={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
