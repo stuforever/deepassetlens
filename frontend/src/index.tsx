@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
+import './theme/tableSpec.css';
 // 引擎批2：DT 桌面窗口主题/动画层 + i18next（keySeparator=false，zh 资源即键直查）
 import './dt-globals.css';
 import { initI18n } from './i18n/init';

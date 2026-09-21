@@ -1,0 +1,23 @@
+/* Task 7（v3 #15/#16）：下拉框三档 + 抽屉三档 + 左栏 token 化。
+   统一规范（施工规格 §五/§2.5）：Select 宽度三档 sm120/md200/lg320（showSearch>7 项）；
+   Drawer 三档 400/560/720；左栏 232（--sider-w）。 */
+
+:root {
+  --sider-w: 232px;
+  --drawer-w-sm: 400px;
+  --drawer-w-md: 560px;
+  --drawer-w-lg: 720px;
+}
+
+/* 下拉三档（class 挂 antd Select style width 消费；此处提供全局兜底变量） */
+.select-sm { min-width: 120px; }
+.select-md { min-width: 200px; }
+.select-lg { min-width: 320px; }
+
+/* 抽屉三档（antd Drawer width prop 消费；class 兜底） */
+.drawer-sm { width: var(--drawer-w-sm); }
+.drawer-md { width: var(--drawer-w-md); }
+.drawer-lg { width: var(--drawer-w-lg); }
+
+/* 左栏统一 token（平台左栏 232px；h5/画布域自带骨架除外） */
+.platform-sider { width: var(--sider-w); }

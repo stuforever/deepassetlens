@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { Select as AntSelect } from "antd";  // Task7：原生 select → antd Select（平台域清零，testid 保留）
 import { Loader2, Upload, ZoomIn, Trash2, Sparkles, XCircle, CheckCircle2 } from "lucide-react";
 import { notify } from "../../lib/notifications";
 import { apiUrl } from "../../lib/api";
@@ -466,27 +467,27 @@ export function MotherQuestionFields({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <div>
           <label className="text-xs text-muted-foreground">{t("Subject")}</label>
-          <select className="w-full mt-1 px-2 py-1.5 rounded border bg-transparent text-sm" value={value.subject} onChange={(e) => onChange({ subject: e.target.value })} disabled={readOnly} data-testid="mqf-subject">
-            {Object.entries(SUBJECTS).map(([k, v]) => <option key={k} value={k}>{t(SUBJECT_DISPLAY[k])}</option>)}
-          </select>
+          <AntSelect size="small" style={{ width: "100%", marginTop: 4 }} value={value.subject} onChange={(v) => onChange({ subject: v })} disabled={readOnly} data-testid="mqf-subject"
+            options={Object.entries(SUBJECTS).map(([k, v]) => ({ value: k, label: t(SUBJECT_DISPLAY[k]) }))}
+          />
         </div>
         <div>
           <label className="text-xs text-muted-foreground">{t("Grade")}</label>
-          <select className="w-full mt-1 px-2 py-1.5 rounded border bg-transparent text-sm" value={value.grade} onChange={(e) => onChange({ grade: e.target.value })} disabled={readOnly} data-testid="mqf-grade">
-            {GRADES.map((g) => <option key={g} value={g}>{t(GRADE_DISPLAY[g])}</option>)}
-          </select>
+          <AntSelect size="small" style={{ width: "100%", marginTop: 4 }} value={value.grade} onChange={(v) => onChange({ grade: v })} disabled={readOnly} data-testid="mqf-grade"
+            options={GRADES.map((g) => ({ value: g, label: t(GRADE_DISPLAY[g]) }))}
+          />
         </div>
         <div>
           <label className="text-xs text-muted-foreground">{t("Question Type")}</label>
-          <select className="w-full mt-1 px-2 py-1.5 rounded border bg-transparent text-sm" value={value.category} onChange={(e) => onChange({ category: e.target.value })} disabled={readOnly} data-testid="mqf-category">
-            {CATEGORIES.map((c) => <option key={c} value={c}>{t(CATEGORY_DISPLAY[c])}</option>)}
-          </select>
+          <AntSelect size="small" style={{ width: "100%", marginTop: 4 }} value={value.category} onChange={(v) => onChange({ category: v })} disabled={readOnly} data-testid="mqf-category"
+            options={CATEGORIES.map((c) => ({ value: c, label: t(CATEGORY_DISPLAY[c]) }))}
+          />
         </div>
         <div>
           <label className="text-xs text-muted-foreground">{t("Difficulty")}</label>
-          <select className="w-full mt-1 px-2 py-1.5 rounded border bg-transparent text-sm" value={value.difficulty} onChange={(e) => onChange({ difficulty: Number(e.target.value) })} disabled={readOnly} data-testid="mqf-difficulty">
-            {[1, 2, 3, 4, 5].map((d) => <option key={d} value={d}>{"★".repeat(d)}</option>)}
-          </select>
+          <AntSelect size="small" style={{ width: "100%", marginTop: 4 }} value={value.difficulty} onChange={(v) => onChange({ difficulty: Number(v) })} disabled={readOnly} data-testid="mqf-difficulty"
+            options={[1, 2, 3, 4, 5].map((d) => ({ value: d, label: "★".repeat(d) }))}
+          />
         </div>
       </div>
 
@@ -495,30 +496,22 @@ export function MotherQuestionFields({
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-xs text-muted-foreground">{t("Textbook")}</label>
-            <select
-              className="w-full mt-1 px-2 py-1.5 rounded border bg-transparent text-sm"
-              value={value.textbook_id}
-              onChange={(e) => onChange({ textbook_id: e.target.value, chapter_id: "" })}
-              disabled={readOnly}
-              data-testid="mqf-textbook"
-            >
-              <option value="">{t("Not specified")}</option>
-              {textbooks.map((tb) => <option key={tb.id} value={tb.id}>{tb.name}{tb.grade ? ` (${t(GRADE_DISPLAY[tb.grade] || tb.grade)})` : ""}</option>)}
-            </select>
+            <AntSelect size="small" style={{ width: "100%", marginTop: 4 }} value={value.textbook_id || ""} onChange={(v) => onChange({ textbook_id: v, chapter_id: "" })} disabled={readOnly} data-testid="mqf-textbook"
+            allowClear
+            options={[{ value: "", label: t("Not specified") }, ...textbooks.map((tb) => ({ value: tb.id, label: tb.name + (tb.grade ? ` (${t(GRADE_DISPLAY[tb.grade] || tb.grade)})` : "") }))]}
+          />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">{t("Chapter")}</label>
-            <select className="w-full mt-1 px-2 py-1.5 rounded border bg-transparent text-sm" value={value.chapter_id} onChange={(e) => onChange({ chapter_id: e.target.value })} disabled={!value.textbook_id || readOnly} data-testid="mqf-chapter">
-              <option value="">{t("Not specified")}</option>
-              {filteredChapters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <AntSelect size="small" style={{ width: "100%", marginTop: 4 }} value={value.chapter_id || ""} onChange={(v) => onChange({ chapter_id: v })} disabled={!value.textbook_id || readOnly} data-testid="mqf-chapter"
+            options={[{ value: "", label: t("Not specified") }, ...filteredChapters.map((c) => ({ value: c.id, label: c.name }))]}
+          />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">{t("Knowledge Point")}</label>
-            <select className="w-full mt-1 px-2 py-1.5 rounded border bg-transparent text-sm" value={value.knowledge_point_id} onChange={(e) => onChange({ knowledge_point_id: e.target.value })} disabled={readOnly} data-testid="mqf-kp">
-              <option value="">{t("Not attached")}</option>
-              {kps.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
-            </select>
+            <AntSelect size="small" style={{ width: "100%", marginTop: 4 }} value={value.knowledge_point_id || ""} onChange={(v) => onChange({ knowledge_point_id: v })} disabled={readOnly} data-testid="mqf-kp"
+            options={[{ value: "", label: t("Not attached") }, ...kps.map((k) => ({ value: k.id, label: k.name }))]}
+          />
           </div>
         </div>
       )}
