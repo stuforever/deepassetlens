@@ -108,6 +108,9 @@ export function usePageSpeech(
   // 服务端引擎：<audio> 顺序播放；engineRef 在首次播放时定格
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const engineRef = useRef<"browser" | "server" | "none">("none");
+  // R0 重放批：代际守卫——synth.cancel() 会触发 onend/onerror，无守卫则 stop 后旧链
+  // 继续推进下一段（竞态；同 E-79 h5-tts speakEpoch 同族修法）
+  const epochRef = useRef(0);
   const uRef = useRef(opts?.u || "");
 
   useEffect(() => {
@@ -140,6 +143,7 @@ export function usePageSpeech(
   }, []);
 
   const stopAll = useCallback(() => {
+    epochRef.current += 1;
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -174,9 +178,11 @@ export function usePageSpeech(
         // 播放期间用户可能已 stop / seek：索引不符则丢弃本次结果
         if (indexRef.current !== idx || engineRef.current !== "server") return;
         const url = URL.createObjectURL(blob);
+        const myEpoch = epochRef.current;
         audio.src = url;
         audio.onended = () => {
           URL.revokeObjectURL(url);
+          if (epochRef.current !== myEpoch) return;
           const next = indexRef.current + 1;
           if (next < segmentsRef.current.length) {
             void speakFromServer(next);
@@ -186,6 +192,7 @@ export function usePageSpeech(
         };
         audio.onerror = () => {
           URL.revokeObjectURL(url);
+          if (epochRef.current !== myEpoch) return;
           // 服务端音频坏了 → 本段回落浏览器
           engineRef.current = "browser";
           setEngine("browser");
@@ -217,7 +224,9 @@ export function usePageSpeech(
     u.lang = voiceRef.current?.lang || "zh-CN";
     u.rate = 1.0;
     boundaryRef.current = u;
+    const myEpoch = epochRef.current;
     u.onend = () => {
+      if (epochRef.current !== myEpoch) return;
       const next = indexRef.current + 1;
       if (next < list.length) {
         speakFromBrowser(next);
@@ -226,6 +235,7 @@ export function usePageSpeech(
       }
     };
     u.onerror = () => {
+      if (epochRef.current !== myEpoch) return;
       if (synth.paused) return;
       const next = indexRef.current + 1;
       if (next < list.length) {

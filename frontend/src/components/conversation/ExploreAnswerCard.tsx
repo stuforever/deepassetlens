@@ -33,7 +33,7 @@ const ExploreAnswerCard: React.FC<{ data?: ExploreAnswerData }> = ({ data }) => 
           <Text type="secondary" style={{ fontSize: 12 }}>相关实体：</Text>
           <Space size={[4, 4]} wrap>
             {entities.slice(0, 10).map((e, i) => (
-              <StatusTag key={i} preset="info">{e.get('name') || e.get('entity_name') || e.get('code') || String(e)}</StatusTag>
+              <StatusTag key={i} preset="info">{e?.name || e?.entity_name || e?.code || e?.entity_code || String(e)}</StatusTag>
             ))}
           </Space>
         </div>
@@ -43,7 +43,7 @@ const ExploreAnswerCard: React.FC<{ data?: ExploreAnswerData }> = ({ data }) => 
           <Text type="secondary" style={{ fontSize: 12 }}>相关属性：</Text>
           <Space size={[4, 4]} wrap>
             {attributes.slice(0, 10).map((a, i) => (
-              <StatusTag key={i} preset="success">{a.get('name') || a.get('attribute_name') || a.get('code') || String(a)}</StatusTag>
+              <StatusTag key={i} preset="success">{a?.name || a?.attribute_name || a?.code || String(a)}</StatusTag>
             ))}
           </Space>
         </div>

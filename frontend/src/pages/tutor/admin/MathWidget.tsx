@@ -87,10 +87,9 @@ export function MathWidget({
         el.innerHTML = '';
         const node = document.createElement('div');
         node.setAttribute('data-math-widget', figure.type);
-        node.setAttribute(
-          'data-opt',
-          JSON.stringify(figure.config || {}).replace(/"/g, '&quot;'),
-        );
+        // setAttribute 存原始字符串（HTML 实体转义只适用于 innerHTML 写法——
+        // 带 &quot; 的 JSON 使 mountWidgets 解析 data-opt 必败=控件挂载失败）
+        node.setAttribute('data-opt', JSON.stringify(figure.config || {}));
         el.appendChild(node);
         window.MATH_mountWidgets();
       })

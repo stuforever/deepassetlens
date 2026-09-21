@@ -28,6 +28,7 @@ const ExpertCardConfigEditor: React.FC = () => {
   const [ksKbs, setKsKbs] = useState<string[]>([]);
   const [suggs, setSuggs] = useState<string[]>([]);
   const [slots, setSlots] = useState<any[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closeReason, setCloseReason] = useState('');
@@ -48,7 +49,10 @@ const ExpertCardConfigEditor: React.FC = () => {
         const mem: any = c.memory;
         setSlots(Array.isArray(mem) ? [] : (mem?.slots || []));
       }
-    } catch { /* 403/网络——守卫已拦 admin 外 */ }
+    } catch {
+      // 读取失败不可静默——card=null 时 onSaveCore 全部 diff 跳过=静默丢数据（R0 重放批修复）
+      setLoadFailed(true);
+    }
   };
 
   useEffect(() => {
@@ -99,6 +103,10 @@ const ExpertCardConfigEditor: React.FC = () => {
   };
 
   const onSaveCore = () => {
+    if (!card) {
+      message.error('卡未加载（读取失败）——保存已阻止，防止空基线静默丢数据');
+      return;
+    }
     const fields: Record<string, unknown> = {};
     if (card && JSON.stringify(card.tools || []) !== JSON.stringify(tools)) {
       fields.tools = tools;
@@ -112,6 +120,12 @@ const ExpertCardConfigEditor: React.FC = () => {
     }
     if (card && JSON.stringify(card.suggestions || []) !== JSON.stringify(suggs.filter((s) => s.trim()))) {
       fields.suggestions = suggs.filter((s) => s.trim());
+    }
+    // R0 重放批（清单:101）：llm_connection_id 纳入 diff——原实现只 setConnId 本地态，
+    // 保存不含该字段=改选连接被静默丢弃；null 归一（①校验空值约定）
+    const connNorm = connId || null;
+    if (card && (card.llm_connection_id || null) !== connNorm) {
+      fields.llm_connection_id = connNorm;
     }
     if (Object.keys(fields).length === 0) {
       message.info('无变更');
@@ -228,7 +242,7 @@ const ExpertCardConfigEditor: React.FC = () => {
             </Space>
           </Form.Item>
           <Space>
-            <Button type="primary" loading={saving} onClick={onSaveCore}>
+            <Button type="primary" loading={saving} disabled={!card} title={loadFailed ? "卡读取失败，保存已禁用" : undefined} onClick={onSaveCore}>
               保存卡配置（①CRUD PATCH）
             </Button>
             <Button onClick={load}>重载</Button>
