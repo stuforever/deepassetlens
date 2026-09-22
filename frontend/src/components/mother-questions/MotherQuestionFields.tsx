@@ -160,7 +160,6 @@ function ImageUpload({
       <div className="mt-1 flex items-start gap-3">
         {url ? (
           <div className="relative group">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={url} alt={label} className="w-32 h-32 object-cover rounded border cursor-pointer" onClick={() => setZoomOpen(true)} data-testid={areaTestId ? `${areaTestId}-preview` : undefined} />
             {!readOnly && (
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition rounded flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
@@ -190,7 +189,6 @@ function ImageUpload({
       </div>
       {zoomOpen && url && (
         <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center" onClick={() => setZoomOpen(false)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt={label} className="max-w-[90vw] max-h-[90vh] object-contain" onClick={(e) => e.stopPropagation()} />
           <button onClick={() => setZoomOpen(false)} className="absolute top-4 right-4 p-2 bg-white/20 rounded text-white hover:bg-white/30">
             <Trash2 className="w-6 h-6" />

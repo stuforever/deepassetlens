@@ -93,6 +93,12 @@ import ContextBudgetChip, { type ContextBudget } from "./ContextBudgetChip";
 import KnowledgeSelector from "./KnowledgeSelector";
 import ModelSelector from "./ModelSelector";
 import PersonaSelector from "./PersonaSelector";
+import ContextReferenceTree, {
+  type ContextTreeItem,
+} from "./ContextReferenceTree";
+import { ComposerInput, type ComposerInputHandle } from "./ComposerInput";
+import { useVoiceRecorder } from "../learn/useVoiceRecorder";
+import { DT, ellipsis } from "./dtStyle";
 
 type SpaceSelectionCounts = {
   attachments: number;
@@ -105,12 +111,6 @@ type SpaceSelectionCounts = {
   persona: number;
   memory: number;
 };
-import ContextReferenceTree, {
-  type ContextTreeItem,
-} from "./ContextReferenceTree";
-import { ComposerInput, type ComposerInputHandle } from "./ComposerInput";
-import { useVoiceRecorder } from "../learn/useVoiceRecorder";
-import { DT, ellipsis } from "./dtStyle";
 
 /** @ant-design/icons 组件类型（原 LucideIcon 的等价替换）。 */
 type IconType = ComponentType<{ className?: string; style?: CSSProperties }>;

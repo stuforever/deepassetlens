@@ -169,7 +169,8 @@ body {
 .ant-table-cell.dal-action-col:hover a {
   opacity: 1;
 }
-三轨M9(U4)：C 表格型全局基线——行 hover 高亮 + 表头吸顶（13 管理页同享）
+/* ---------------------------------------------------------------------------
+ * 三轨M9(U4)：C 表格型全局基线——行 hover 高亮 + 表头吸顶（13 管理页同享）
  * ------------------------------------------------------------------------- */
 .ant-table-tbody > tr.ant-table-row:hover > td {
   background: color-mix(in srgb, var(--color-primary, #2563eb) 6%, transparent);

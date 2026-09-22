@@ -197,7 +197,6 @@ function AttachmentStrip({
                 background: "rgba(241, 245, 249, 0.35)",
               }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={attachment.previewUrl}
                 alt={attachment.filename}

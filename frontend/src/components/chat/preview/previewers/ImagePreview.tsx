@@ -48,7 +48,6 @@ export default function ImagePreview({
           {t("Failed to load image.")}
         </div>
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={url}
           alt={filename}

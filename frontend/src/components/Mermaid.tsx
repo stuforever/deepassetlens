@@ -12,6 +12,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
+import { subscribeToThemeChanges } from "../lib/theme";
 
 // @ts-ignore 缺包登记：mermaid 未安装（见文件头）
 type MermaidApi = (typeof import("mermaid"))["default"];
@@ -33,7 +34,6 @@ function t(key: string, vars?: Record<string, string | number>): string {
   return text;
 }
 
-import { subscribeToThemeChanges } from "../lib/theme";
 
 interface MermaidProps {
   chart: string;

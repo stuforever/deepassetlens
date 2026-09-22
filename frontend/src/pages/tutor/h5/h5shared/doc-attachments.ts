@@ -10,6 +10,8 @@
  * 字面量与基础函数（extOf/classifyFile/formatBytes 等）re-export 批8 件避免双写漂移。
  */
 import type { ComponentType, CSSProperties } from "react";
+// 本文件自持一份 extOf 引用（re-export 的符号不能在本模块作用域直接可见）。
+import { extOf as extOfLocal } from "../../admin/doc-attachments";
 import {
   CodeOutlined,
   FileAddOutlined,
@@ -43,8 +45,6 @@ export function isSvgFilename(filename: string): boolean {
   return extOfLocal(filename) === ".svg";
 }
 
-// 本文件自持一份 extOf 引用（re-export 的符号不能在本模块作用域直接可见）。
-import { extOf as extOfLocal } from "../../admin/doc-attachments";
 
 export interface DocIconSpec {
   Icon: ComponentType<{ className?: string; style?: CSSProperties }>;

@@ -1,12 +1,13 @@
 "use client";
 
 import { lazy } from "react";
-// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
-const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { langForFilename } from "../../../../lib/code-languages";
 import { useTextSource } from "./useTextSource";
+
+// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
+const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 
 const RichCodeBlock = dynamic(
   () => import("../../../common/RichCodeBlock"),

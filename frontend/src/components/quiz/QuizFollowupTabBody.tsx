@@ -204,7 +204,6 @@ export default function QuizFollowupTabBody({
                       className="overflow-hidden rounded-md border border-[var(--border)] bg-[var(--card)]"
                     >
                       {src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={src}
                           alt={image.filename}

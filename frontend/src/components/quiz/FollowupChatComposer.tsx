@@ -14,8 +14,6 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { lazy } from "react";
-// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
-const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 import { MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import ChatComposer from "../chat/home/ChatComposer";
@@ -40,6 +38,9 @@ import type { SelectedQuestionEntry } from "../chat/QuestionBankPicker";
 import type { SelectedRecord } from "../../lib/notebook-selection-types";
 import type { SpaceMemoryFile } from "../../lib/space-items";
 import type { LLMSelection } from "../../lib/unified-ws";
+
+// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
+const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 
 const NotebookRecordPicker = dynamic(
   () => import("../notebook/NotebookRecordPicker"),

@@ -14,7 +14,6 @@ export default function SvgPreview({
 }) {
   return (
     <div className="flex h-full w-full items-center justify-center bg-[var(--muted)]/30 p-6">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={url}
         alt={filename}

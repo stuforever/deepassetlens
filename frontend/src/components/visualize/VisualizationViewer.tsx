@@ -1,8 +1,6 @@
 "use client";
 
 import { lazy } from "react";
-// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
-const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { Code2, Copy, Check, ExternalLink, Maximize2, X } from "lucide-react";
@@ -11,6 +9,9 @@ import { Mermaid } from "../Mermaid";
 import { prepareIframeHtml } from "../../lib/iframe-html";
 import { isManimResult, type VisualizeResult } from "../../lib/visualize-types";
 import "./svg-theme.css";
+
+// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
+const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 
 const MathAnimatorViewer = dynamic(
   () => import("../math-animator/MathAnimatorViewer"),

@@ -7,10 +7,6 @@
 
 import type { CSSProperties } from "react";
 
-type PrismTheme = {
-  [key: string]: CSSProperties;
-};
-
 // Individual theme imports - using direct imports, not barrel imports
 import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
 import a11yDark from "react-syntax-highlighter/dist/esm/styles/prism/a11y-dark";
@@ -58,6 +54,10 @@ import vs from "react-syntax-highlighter/dist/esm/styles/prism/vs";
 import vscDarkPlus from "react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus";
 import xonokai from "react-syntax-highlighter/dist/esm/styles/prism/xonokai";
 import zTouch from "react-syntax-highlighter/dist/esm/styles/prism/z-touch";
+
+type PrismTheme = {
+  [key: string]: CSSProperties;
+};
 
 /** Saved ID for a code block theme. Used in storage and as a stable identifier.
  *

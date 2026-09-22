@@ -1175,7 +1175,6 @@ export default function QuizViewer({
                       className="group relative overflow-hidden rounded-md border border-[var(--border)] bg-[var(--background)]"
                     >
                       {previewSrc ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={previewSrc}
                           alt={image.filename}

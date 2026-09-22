@@ -118,7 +118,6 @@ export function OriginalTextTab({ textbookId, chapterId, chapterName, pageStart,
       {/* Page image area */}
       <div className="flex-1 overflow-y-auto flex flex-col items-center p-4">
         {currentPage?.image_url && (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={currentPage.image_url}
             alt={t("Page {{count}}", { count: currentPage.page_num })}

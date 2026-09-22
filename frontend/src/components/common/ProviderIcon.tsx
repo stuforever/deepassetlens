@@ -76,7 +76,6 @@ export default function ProviderIcon({
     );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={`/provider-icons/${spec.file}`}
       alt=""

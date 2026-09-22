@@ -5,6 +5,9 @@ import { MENU_LABELS } from './config/navigation';
 import { expertPageRoutes } from './config/expertPages';
 // 附件四 A-1：守卫雏形（role-based——A-4 升级 ACL use/manage 分层）
 import RequireAdmin from './components/RequireAdmin';
+// IA批5 接线：KeepAlive 无 <Routes> 嵌套上下文——settings 子页直接渲染，useSettings 需自备
+// Provider（统一壳：每页签独立 Provider，保存/引导/主题状态互不串扰）。
+import { SettingsProvider } from './components/settings/SettingsContext';
 
 // 路由懒加载：每页独立 chunk（webpackChunkName 控制产物名）。
 // KeepAlive 语义不受影响——lazy 只影响「首次打开某页签时的模块加载」，已挂载页签不卸载。
@@ -21,9 +24,6 @@ const DataSourceConfigPage = lazy(() => import(/* webpackChunkName: "config" */ 
 const DorisConfigPage = lazy(() => import(/* webpackChunkName: "config" */ './pages/DorisConfig'));
 // IA批4 4.5：知识中心 16 件复刻承接 /vector（menuKey vector_manage 不变）；VectorManagePanel 退役 git rm
 const KnowledgePage = lazy(() => import(/* webpackChunkName: "knowledge" */ './pages/knowledge/KnowledgePage'));
-// IA批5 接线：KeepAlive 无 <Routes> 嵌套上下文——settings 子页直接渲染，useSettings 需自备
-// Provider（统一壳：每页签独立 Provider，保存/引导/主题状态互不串扰）。
-import { SettingsProvider } from './components/settings/SettingsContext';
 const settingsPage = (Comp: React.ComponentType): React.FC =>
   function SettingsPageShell() {
     return (

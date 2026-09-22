@@ -1,5 +1,4 @@
 import { Select as AntSelect } from "antd";
-"use client";
 
 import {
   memo,

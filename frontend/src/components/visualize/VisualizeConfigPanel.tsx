@@ -1,5 +1,4 @@
 import { Select as AntSelect } from "antd";
-"use client";
 
 import { memo } from "react";
 import { useTranslation } from "react-i18next";

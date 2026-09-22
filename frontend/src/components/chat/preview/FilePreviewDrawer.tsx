@@ -2,8 +2,6 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { lazy } from "react";
-// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
-const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 import { Check, Copy, Download, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { docIconFor, formatBytes } from "../../../lib/doc-attachments";
@@ -13,6 +11,9 @@ import {
   previewKindFor,
   resolveSourceUrl,
 } from "./previewerFor";
+
+// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
+const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 
 // Heavy renderers are lazy so opening the drawer with a small image doesn't
 // pay the cost of loading the markdown / code-highlight chunks.

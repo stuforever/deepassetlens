@@ -25,8 +25,6 @@ import {
   type ReactNode,
 } from "react";
 import { lazy } from "react";
-// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
-const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 import {
   Activity,
   AlertCircle,
@@ -58,6 +56,9 @@ import type { GeogebraTabPayload } from "../../../context/GeogebraTabContext";
 import { apiUrl } from "../../../lib/api";
 import type { MessageAttachment } from "../../../pages/tutor/h5/h5shared/UnifiedChatContext";
 import type { StreamEvent } from "../../../lib/unified-ws";
+
+// next/dynamic -> React.lazy shim (CRA has no SSR; ssr:false is a no-op). Registered in engine ledger E-20.
+const dynamic = (loader: () => Promise<any>, _opts?: Record<string, unknown>) => lazy(loader);
 
 const PdfPreview = dynamic(
   () => import("../preview/previewers/PdfPreview"),

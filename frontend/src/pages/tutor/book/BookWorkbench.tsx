@@ -380,7 +380,7 @@ function BookPageInner() {
   ]);
 
   const handleDeleteBook = async (id: string) => {
-    if (!confirm(t("Delete this book? This cannot be undone."))) return;
+    if (!window.confirm(t("Delete this book? This cannot be undone."))) return;
     await bookApi.delete(id);
     if (selectedBookId === id) {
       setSelectedBookId(null);
@@ -393,7 +393,7 @@ function BookPageInner() {
   const handleRebuildBook = async () => {
     if (!detail) return;
     if (
-      !confirm(
+      !window.confirm(
         t(
           "Rebuild this book using the current chapter structure? Existing generated pages will be replaced.",
         ),
@@ -561,7 +561,7 @@ function BookPageInner() {
 
   const handleDeleteBlock = async (block: Block) => {
     if (!detail || !selectedPage) return;
-    if (!confirm(t("Delete this {{type}} block?", { type: block.type })))
+    if (!window.confirm(t("Delete this {{type}} block?", { type: block.type })))
       return;
     await bookApi.deleteBlock(detail.book.id, selectedPage.id, block.id);
     await loadBookDetail(detail.book.id);
