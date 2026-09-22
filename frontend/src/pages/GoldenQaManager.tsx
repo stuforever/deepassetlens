@@ -319,7 +319,7 @@ const GoldenQaManager: React.FC = () => {
       {/* 三轨M10(U5)：金标试跑 diff 抽屉 */}
       <Drawer
         title={`金标试跑${replayRow ? ` - ${replayRow}` : ''}`}
-        width={640}
+        width={720}
         open={!!replayRow}
         onClose={() => { setReplayRow(null); setReplayResult(null); }}
       >

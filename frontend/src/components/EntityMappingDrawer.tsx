@@ -72,7 +72,7 @@ const EntityMappingDrawer: React.FC<Props> = ({ entity, sourceMode, open, onClos
 
   return (
     <Drawer
-      width={760}
+      width={720}
       open={open}
       onClose={onClose}
       title={

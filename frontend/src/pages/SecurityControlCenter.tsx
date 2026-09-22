@@ -533,7 +533,7 @@ const CapabilityPanel: React.FC<{ stepFilter?: number }> = ({ stepFilter }) => {
       {/* 审计记录 Drawer */}
       <Drawer
         title={`审计记录${eventsCap ? ` - ${items.find(i => i.capability_id === eventsCap)?.title || eventsCap}` : ''}`}
-        width={760}
+        width={720}
         open={eventsOpen}
         onClose={() => setEventsOpen(false)}
       >
@@ -1111,7 +1111,7 @@ const SecurityControlCenter: React.FC = () => {
       {/* Drawer① 参数编辑 */}
       <Drawer
         title={paramTarget ? `参数编辑 - ${paramTarget.title}` : '参数编辑'}
-        width={520}
+        width={560}
         open={!!paramTarget}
         onClose={() => setParamTarget(null)}
         footer={

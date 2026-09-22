@@ -211,12 +211,10 @@ export default function PageSpeechBar({ speech, onClose }: PageSpeechBarProps) {
           onClick={toggle}
           title={active ? "暂停/继续" : "开始朗读"}
           icon={
-            paused ? (
-              <CaretRightOutlined style={{ fontSize: 16 }} />
-            ) : playing ? (
+            playing ? (
               <PauseOutlined style={{ fontSize: 16 }} />
             ) : (
-              <LoadingOutlined spin style={{ fontSize: 16 }} />
+              <CaretRightOutlined style={{ fontSize: 16 }} />
             )
           }
           style={{ width: 36, height: 36, minWidth: 36, padding: 0 }}

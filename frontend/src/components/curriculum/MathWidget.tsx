@@ -93,7 +93,7 @@ export function MathWidget({
         node.setAttribute("data-math-widget", figure.type);
         node.setAttribute(
           "data-opt",
-          JSON.stringify(figure.config || {}).replace(/"/g, "&quot;"),
+          JSON.stringify(figure.config || {}),
         );
         el.appendChild(node);
         window.MATH_mountWidgets();

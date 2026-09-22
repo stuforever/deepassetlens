@@ -1,3 +1,4 @@
+import { Select as AntSelect } from "antd";
 "use client";
 
 import { memo } from "react";
@@ -101,32 +102,24 @@ export default memo(function ResearchConfigPanel({
     <>
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
         <Field label={t("Mode")} width="min-w-[130px] flex-1">
-          <select
+          <AntSelect
             value={value.mode}
-            onChange={(e) => update("mode", e.target.value as ResearchMode)}
-            className={`${INPUT_CLS} w-full`}
-          >
-            <option value="">{t("Select...")}</option>
-            {MODE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(option.label)}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => update("mode", v as ResearchMode)}
+            size="small"
+            style={{ width: "100%" }}
+            allowClear
+            options={[{ value: "", label: t("Select...") }, ...MODE_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }))]}
+          />
         </Field>
         <Field label={t("Depth")} width="min-w-[130px] flex-1">
-          <select
+          <AntSelect
             value={value.depth}
-            onChange={(e) => update("depth", e.target.value as ResearchDepth)}
-            className={`${INPUT_CLS} w-full`}
-          >
-            <option value="">{t("Select...")}</option>
-            {DEPTH_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(option.label)}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => update("depth", v as ResearchDepth)}
+            size="small"
+            style={{ width: "100%" }}
+            allowClear
+            options={[{ value: "", label: t("Select...") }, ...DEPTH_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }))]}
+          />
         </Field>
       </div>
       {value.depth === "manual" && (

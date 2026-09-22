@@ -1,3 +1,4 @@
+import { Select as AntSelect } from "antd";
 "use client";
 
 import {
@@ -204,16 +205,18 @@ export default memo(function QuizConfigPanel({
             </Field>
 
             <Field label={t("Difficulty")} width="flex-1">
-              <select
+              <AntSelect
                 value={value.difficulty}
-                onChange={(e) => update("difficulty", e.target.value)}
-                className={`${INPUT_CLS} w-full`}
-              >
-                <option value="auto">{t("Auto")}</option>
-                <option value="easy">{t("Easy")}</option>
-                <option value="medium">{t("Medium")}</option>
-                <option value="hard">{t("Hard")}</option>
-              </select>
+                onChange={(v) => update("difficulty", v)}
+                size="small"
+                style={{ width: "100%" }}
+                options={[
+                  { value: "auto", label: t("Auto") },
+                  { value: "easy", label: t("Easy") },
+                  { value: "medium", label: t("Medium") },
+                  { value: "hard", label: t("Hard") },
+                ]}
+              />
             </Field>
 
             <Field label={t("Type")} width="flex-1">

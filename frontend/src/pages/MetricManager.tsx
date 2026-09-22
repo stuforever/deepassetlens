@@ -652,7 +652,7 @@ const MetricManager: React.FC = () => {
 
       <Drawer
         open={drawerOpen}
-        width={980}
+        width={720}
         title={<Space><Text strong>指标配置</Text><Text type="secondary">{metricDetail?.metric?.metric_name} ({metricDetail?.metric?.metric_code})</Text></Space>}
         onClose={() => setDrawerOpen(false)}
       >

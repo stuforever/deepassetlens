@@ -93,15 +93,17 @@ export function MathWidget({
         el.appendChild(node);
         window.MATH_mountWidgets();
       })
-      .catch(() => {
-        /* 控件加载失败时静默降级（保留公式/文字说明） */
+      .catch((e) => {
+        // 静默降级保留 UI（R1批(:97)：至少留痕可定位）
+        console.warn("[MathWidget] 控件资产加载失败（降级为公式/文字）:", e?.message || e);
       });
 
     return () => {
       cancelled = true;
       if (el) el.innerHTML = '';
     };
-  }, [figure]);
+    // R1批(:101)：以稳定值作依赖（figure 对象引用随父渲染内联构造=每次清空重挂、交互态丢失）
+  }, [figure?.type, figure?.config]);
 
   if (!figure || !figure.type) return null;
 

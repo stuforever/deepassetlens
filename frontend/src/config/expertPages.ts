@@ -172,29 +172,22 @@ export function expertPageRoutes(): ExpertPageConfig[] {
 // KeepAlive 架构禁 redirect 组件（routes.tsx 头注），旧 path 注册同 element 实路由，
 // menuKey 用新键（页签/打开状态归同域）；hideInMenu=true 防菜单泄漏重复项。
 const LEGACY_TUTOR_ALIAS: ExpertPageConfig[] = [
-  ...[...EXPERT_PAGES.sishu, ...SISHU_ADMIN_PAGES].map((p) => ({
+  // R1批(:171)：去重——EXPERT_PAGES.sishu 定义里已 ...SISHU_ADMIN_PAGES 展开（后台 11 条
+  // 已在表内），再拼接=每条别名重复注册两份（routes 表翻倍+menuKey 遮蔽歧义）
+  ...EXPERT_PAGES.sishu.map((p) => ({
     ...p,
     path: p.path.replace('/e/sishu', '/e/tutor'),
     hideInMenu: true,
   })),
 ];
 const LEGACY_H5_ALIASES: ExpertPageConfig[] = [
-  { path: '/e/sishu/h5', element: withUseGuard(H5Home, 'tutor-h5'), label: '首页', menuKey: 'e:tutor-h5:home', hideInMenu: true },
-  { path: '/e/sishu/h5/chat', element: withUseGuard(H5Chat, 'tutor-h5'), label: '对话', menuKey: 'e:tutor-h5:chat', hideInMenu: true },
-  { path: '/e/sishu/h5/learn', element: withUseGuard(H5Learn, 'tutor-h5'), label: '学习', menuKey: 'e:tutor-h5:learn', hideInMenu: true },
-  { path: '/e/sishu/h5/learn/textbook', element: withUseGuard(H5LearnTextbook, 'tutor-h5'), label: '教材学', menuKey: 'e:tutor-h5:learn:textbook', hideInMenu: true },
-  { path: '/e/sishu/h5/classroom', element: withUseGuard(H5Classroom, 'tutor-h5'), label: '课堂', menuKey: 'e:tutor-h5:classroom', hideInMenu: true },
-  { path: '/e/sishu/h5/review', element: withUseGuard(H5Review, 'tutor-h5'), label: '复习', menuKey: 'e:tutor-h5:review', hideInMenu: true },
-  { path: '/e/sishu/h5/wrong', element: withUseGuard(H5Wrong, 'tutor-h5'), label: '错题录入', menuKey: 'e:tutor-h5:wrong', hideInMenu: true },
-  { path: '/e/sishu/h5/wrongbook', element: withUseGuard(H5WrongBook, 'tutor-h5'), label: '错题本', menuKey: 'e:tutor-h5:wrongbook', hideInMenu: true },
-  { path: '/e/sishu/h5/paths', element: withUseGuard(H5Paths, 'tutor-h5'), label: '精通之路', menuKey: 'e:tutor-h5:paths', hideInMenu: true },
-  { path: '/e/sishu/h5/paths/:bookId', element: withUseGuard(H5PathBook, 'tutor-h5'), label: '书路径', menuKey: 'e:tutor-h5:paths:book', hideInMenu: true },
-  { path: '/e/sishu/h5/report', element: withUseGuard(H5Report, 'tutor-h5'), label: '学情报告', menuKey: 'e:tutor-h5:report', hideInMenu: true },
-  { path: '/e/sishu/h5/atlas', element: withUseGuard(H5Atlas, 'tutor-h5'), label: '知识地图', menuKey: 'e:tutor-h5:atlas', hideInMenu: true },
-  { path: '/e/sishu/h5/book/:bookId', element: withUseGuard(H5BookRead, 'tutor-h5'), label: '教材阅读', menuKey: 'e:tutor-h5:book', hideInMenu: true },
-  { path: '/e/sishu/h5/me', element: withUseGuard(H5Me, 'tutor-h5'), label: '我的', menuKey: 'e:tutor-h5:me', hideInMenu: true },
-  { path: '/e/sishu/h5/share', element: withUseGuard(H5Share, 'tutor-h5'), label: '分享', menuKey: 'e:tutor-h5:share', hideInMenu: true },
-  { path: '/e/sishu/notebook', element: withUseGuard(NotebookPage, 'tutor-h5'), label: '笔记本', menuKey: 'e:tutor-h5:notebook', hideInMenu: true },
+  // R1批(:178)：由 TUTOR_H5_PAGES map 派生（消逐字重复+每条重新 withUseGuard 包装的组件
+  // 身份差异——同 menuKey 下新旧路径共用同一 element.type，KeepAlive 不误判重挂载）
+  ...TUTOR_H5_PAGES.map((p) => ({
+    ...p,
+    path: p.path.replace('/e/tutor-h5', '/e/sishu/h5'),
+    hideInMenu: true,
+  })),
 ];
 
 /**

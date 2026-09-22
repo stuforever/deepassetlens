@@ -1,3 +1,4 @@
+import { Select as AntSelect } from "antd";
 "use client";
 
 import { memo } from "react";
@@ -44,43 +45,37 @@ export default memo(function VisualizeConfigPanel({
   const body = (
     <>
       <Field label={t("Render Mode")} width="w-[140px]">
-        <select
+        <AntSelect
           value={value.render_mode}
-          onChange={(e) =>
-            update(
-              "render_mode",
-              e.target.value as VisualizeFormConfig["render_mode"],
-            )
-          }
-          className={`${INPUT_CLS} w-full`}
-        >
-          <option value="auto">{t("Auto")}</option>
-          <option value="chartjs">{t("Chart.js")}</option>
-          <option value="svg">{t("SVG")}</option>
-          <option value="mermaid">{t("Mermaid")}</option>
-          <option value="html">{t("HTML")}</option>
-          <option value="manim_video">{t("Animation")}</option>
-          <option value="manim_image">{t("Storyboard")}</option>
-        </select>
+          onChange={(v) => update("render_mode", v as VisualizeFormConfig["render_mode"])}
+          size="small"
+          style={{ width: "100%" }}
+          options={[
+            { value: "auto", label: t("Auto") },
+            { value: "chartjs", label: t("Chart.js") },
+            { value: "svg", label: t("SVG") },
+            { value: "mermaid", label: t("Mermaid") },
+            { value: "html", label: t("HTML") },
+            { value: "manim_video", label: t("Animation") },
+            { value: "manim_image", label: t("Storyboard") },
+          ]}
+        />
       </Field>
 
       {isManim ? (
         <>
           <Field label={t("Quality")} width="w-[100px]">
-            <select
+            <AntSelect
               value={value.quality}
-              onChange={(e) =>
-                update(
-                  "quality",
-                  e.target.value as VisualizeFormConfig["quality"],
-                )
-              }
-              className={`${INPUT_CLS} w-full`}
-            >
-              <option value="low">{t("Low")}</option>
-              <option value="medium">{t("Medium")}</option>
-              <option value="high">{t("High")}</option>
-            </select>
+              onChange={(v) => update("quality", v as VisualizeFormConfig["quality"])}
+              size="small"
+              style={{ width: "100%" }}
+              options={[
+                { value: "low", label: t("Low") },
+                { value: "medium", label: t("Medium") },
+                { value: "high", label: t("High") },
+              ]}
+            />
           </Field>
 
           <Field label={t("Style Hint")} width="min-w-[160px] flex-1">

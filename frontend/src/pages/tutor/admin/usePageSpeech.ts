@@ -172,13 +172,13 @@ export function usePageSpeech(
       indexRef.current = idx;
       setCurrentIndex(idx);
       const audio = getAudio();
+      const myEpoch = epochRef.current;
       setState("speaking");
       try {
         const blob = await serverTtsToBlob(list[idx].text, uRef.current);
         // 播放期间用户可能已 stop / seek：索引不符则丢弃本次结果
         if (indexRef.current !== idx || engineRef.current !== "server") return;
         const url = URL.createObjectURL(blob);
-        const myEpoch = epochRef.current;
         audio.src = url;
         audio.onended = () => {
           URL.revokeObjectURL(url);
@@ -187,6 +187,10 @@ export function usePageSpeech(
           if (next < segmentsRef.current.length) {
             void speakFromServer(next);
           } else {
+            // R1批(:299)：自然播完清残留——audio.src/indexRef 留在末段会让 toggle/resume
+            // 重播最后一段而非从头开始
+            audio.removeAttribute("src");
+            indexRef.current = 0;
             setState("idle");
           }
         };
@@ -200,7 +204,9 @@ export function usePageSpeech(
         };
         await audio.play();
       } catch {
-        // 服务端未配置/网络失败 → 整体回落浏览器引擎
+        // R1批(:194)：代际不符（stop/seek 触发的 play 打断 AbortError 等）→ 静默退出，
+        // 不再误降级引擎+不再用旧 idx 二次朗读；仅真实服务端/网络失败回落浏览器
+        if (epochRef.current !== myEpoch) return;
         engineRef.current = "browser";
         setEngine("browser");
         speakFromBrowser(idx);
@@ -231,6 +237,8 @@ export function usePageSpeech(
       if (next < list.length) {
         speakFromBrowser(next);
       } else {
+        // R1批(:299)：同 server 分支——自然播完归零
+        indexRef.current = 0;
         setState("idle");
       }
     };

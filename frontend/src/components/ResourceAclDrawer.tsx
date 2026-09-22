@@ -98,7 +98,7 @@ const ResourceAclDrawer: React.FC<Props> = ({ open, onClose, resourceType, resou
   return (
     <Drawer
       title={title || `权限管理 — ${resourceType}/${resourceId}`}
-      width={680}
+      width={720}
       open={open}
       onClose={onClose}
       destroyOnHidden

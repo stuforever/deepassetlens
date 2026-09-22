@@ -26,6 +26,7 @@ const ExpertCardConfigEditor: React.FC = () => {
   const [tools, setTools] = useState<string[]>([]);
   const [ksGraph, setKsGraph] = useState(true);
   const [ksKbs, setKsKbs] = useState<string[]>([]);
+  const [otherKs, setOtherKs] = useState<string[]>([]);  // R1批(:106)：未建模知识源类型保真
   const [suggs, setSuggs] = useState<string[]>([]);
   const [slots, setSlots] = useState<any[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -45,6 +46,8 @@ const ExpertCardConfigEditor: React.FC = () => {
         const ks = c.knowledge_sources || [];
         setKsGraph(ks.includes('ontology_graph'));
         setKsKbs(ks.filter((k) => k.startsWith('kb:')));
+        // R1批(:106)：保留未建模类型（未来新增 knowledge_sources 类型不再被保存静默删除）
+        setOtherKs(ks.filter((k) => k !== 'ontology_graph' && !k.startsWith('kb:')));
         setSuggs(c.suggestions || []);
         const mem: any = c.memory;
         setSlots(Array.isArray(mem) ? [] : (mem?.slots || []));
@@ -57,21 +60,27 @@ const ExpertCardConfigEditor: React.FC = () => {
 
   useEffect(() => {
     if (!isAdminUser) return;
+    let cancelled = false;  // R1批(:54)：取消守卫——卸载/切换后慢响应不再 setState（防旧响应覆盖新数据）
     (async () => {
       await load();
+      if (cancelled) return;
       try {
         const c = await llmAdminApi.getConnections();
+        if (cancelled) return;
         const raw: any = c.data;
         const arr = Array.isArray(raw) ? raw : (raw?.items || raw?.connections || raw?.data || []);
         setConnections(Array.isArray(arr) ? arr : []);
       } catch { /* 连接列表失败不阻卡编辑 */ }
+      if (cancelled) return;
       try {
         const k = await knowledgeBaseApi.list();
+        if (cancelled) return;
         const raw: any = k.data;
         const arr = Array.isArray(raw) ? raw : (raw?.items || raw?.knowledge_bases || raw?.data || []);
         setKbs(Array.isArray(arr) ? arr : []);
       } catch { /* KB 列表失败不阻卡编辑 */ }
     })();
+    return () => { cancelled = true; };
   }, [isAdminUser]);
 
   // 工具选项=活注册表实测清单（manifest 端点 tool_universe——装配期静态注册全集）
@@ -80,6 +89,7 @@ const ExpertCardConfigEditor: React.FC = () => {
     (async () => {
       try {
         const r = await fetch('/api/capabilities/manifest');
+        if (!r.ok) throw new Error(`manifest ${r.status}`);  // R1批(:75)：非 2xx 不再盲 json
         const j = await r.json();
         setToolUniverse(j.tool_universe || []);
       } catch { /* manifest 失败则多选框空——提交仍由①校验兜底 */ }
@@ -114,6 +124,7 @@ const ExpertCardConfigEditor: React.FC = () => {
     const ks = [
       ...(ksGraph ? ['ontology_graph'] : []),
       ...ksKbs,
+      ...otherKs,  // R1批(:106)：未建模类型原样带回（防保存即删）
     ];
     if (card && JSON.stringify(card.knowledge_sources || []) !== JSON.stringify(ks)) {
       fields.knowledge_sources = ks;
@@ -134,24 +145,24 @@ const ExpertCardConfigEditor: React.FC = () => {
     patch(fields);
   };
 
-  const onEnabledChange = (v: boolean) => {
+  const onEnabledChange = async (v: boolean) => {
     if (v === enabled) return;
     if (!v) {
       setCloseOpen(true);                              // 红级关闭需 close_reason（①校验）
       return;
     }
-    setEnabled(true);
-    patch({ enabled: true });
+    // R1批(:129)：先落库成功再同步本地态（乐观写失败=UI 与服务端状态脱节）
+    await patch({ enabled: true });
   };
 
-  const confirmClose = () => {
+  const confirmClose = async () => {
     if (closeReason.trim().length < 10) {
       message.warning('关停理由至少 10 字（①红级校验）');
       return;
     }
+    // R1批(:138)：await patch + saving 守卫（双击=两次无效关停写）；成功后才清理本地态
     setCloseOpen(false);
-    setEnabled(false);
-    patch({ enabled: false, close_reason: closeReason.trim() });
+    await patch({ enabled: false, close_reason: closeReason.trim() });
     setCloseReason('');
   };
 
@@ -268,7 +279,7 @@ const ExpertCardConfigEditor: React.FC = () => {
       <Modal
         title="关停专家卡（红级）"
         open={closeOpen}
-        onOk={confirmClose}
+        okButtonProps={{ loading: saving, disabled: saving }} onOk={confirmClose}
         onCancel={() => setCloseOpen(false)}
         okText="确认关停"
         cancelText="取消"
