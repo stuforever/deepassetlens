@@ -56,6 +56,9 @@ class ChatRequest(BaseModel):
     # ⑤b（spec §三）：L1 轨迹 surface 请求级指定（练习判分→quiz）。None=②原语义
     # （全部声明 surface 落盘——wenshu 零感知）；非法值由 endpoint 校验 422。
     surface: Optional[str] = Field(default=None, description="L1 轨迹 surface 覆盖（须 ∈ 卡 L1 声明）")
+    # B1（v4§八）：📚 知识库选择——None/空=不过滤；非空=检索层按选中队列过滤
+    # （prep 注入 RAG 前置块；批① 附件条多选消费）。
+    kb_ids: Optional[List[str]] = Field(default=None, description="知识库 id 过滤（None/空=不过滤）")
 
 
 class ChatResponse(BaseModel):

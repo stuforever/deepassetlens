@@ -183,6 +183,26 @@ async def run_prep(*, req: Any, agent: Any, memory_thread_id: str,
     elif _followup_rewritten:
         logger.info(f"[FollowupRewrite] 非 generic 路径丢弃改写，用原问题")
 
+    # ===== B1（v4§八）：📚 知识库选择——kb_ids 非空即检索注入（RAG 前置块）=====
+    # None/空=不过滤不注入（零行为变化）；只追加在 HumanMessage，不触碰契约系统前缀
+    # （批5-C1 前缀缓存前提=前缀逐字节一致）。
+    _kb_text = ""
+    if getattr(req, "kb_ids", None):
+        try:
+            _t_kb = time.time()
+            from app.services.kb_query import kb_search_filtered as _ksf
+            _kb_blocks = await asyncio.to_thread(_ksf, _effective_question, req.kb_ids, 6)
+            if _kb_blocks:
+                _kb_lines = ["[知识库检索结果（用户选定 {} 库）]".format(len(_kb_blocks))]
+                for _b in _kb_blocks:
+                    _kb_lines.append("[知识库 {}]".format(_b.get("kb_name") or _b.get("kb_id", "")))
+                    _kb_lines.extend("- {}".format(m["text"][:400]) for m in _b.get("matches", []))
+                _kb_text = "\n\n" + "\n".join(_kb_lines)
+            prep_timing["kb_ms"] = round((time.time() - _t_kb) * 1000)
+        except Exception as _kbe:
+            logger.warning(f"[KB] 知识库检索注入失败（降级跳过）: {_kbe}")
+            prep_timing["kb_ms"] = -1
+
     # 契约注入 runtime.context（SkillPolicyMiddleware 读取的唯一边界）
     _precomputed_bundle = None
     if _contract is not None:
@@ -207,7 +227,8 @@ async def run_prep(*, req: Any, agent: Any, memory_thread_id: str,
             apply_rubric_tier(_contract)
         except Exception as _rbe:
             logger.warning(f"[RubricTier] 分档失败(不影响执行): {_rbe}")
-        input_messages = [SystemMessage(content=_contract_msg), HumanMessage(content=_effective_question)]
+        input_messages = [SystemMessage(content=_contract_msg),
+                          HumanMessage(content=_effective_question + _kb_text)]
         logger.info(
             f"[SkillRouter] route={_route.route_type if _route else 'fallback'} "
             f"skill={_contract.skill_id} step={_contract.workflow_step} "
@@ -216,7 +237,7 @@ async def run_prep(*, req: Any, agent: Any, memory_thread_id: str,
     else:
         # C-修复：HumanMessage 原只在 if 分支内导入——路由失败走 else 时 NameError
         from langchain_core.messages import HumanMessage
-        input_messages = [HumanMessage(content=_effective_question)]
+        input_messages = [HumanMessage(content=_effective_question + _kb_text)]
 
     # 评审 P1-5：路由成功后确定性写回 last_skill/last_step
     try:

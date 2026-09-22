@@ -38,3 +38,37 @@ def kb_query(kb_id: str, query: str, top_k: int = 6) -> Dict[str, Any]:
         }
     finally:
         db.close()
+
+
+# B1（v4§八）单次请求最大检索库数（None=全库时的成本护栏）
+KB_SEARCH_MAX_KBS = 10
+
+
+def kb_search_filtered(query: str, kb_ids=None, top_k: int = 6) -> list:
+    """按选中 kb_ids 过滤检索（B1——v4§八「检索层按选中队列过滤」）。
+
+    契约：kb_ids None/空=全库不过滤（上限 KB_SEARCH_MAX_KBS）；不存在的 id /
+    检索失败 / 无命中的库一律跳过不报错。返回块列表（同 kb_query 出参形状），
+    供 freeplan prep 注入 HumanMessage（批① 附件条 📚 消费链）。
+    """
+    from app.core.database import SessionLocal
+    from app.models.knowledge_base import KnowledgeBase
+    if not query or not str(query).strip():
+        return []
+    db = SessionLocal()
+    try:
+        q = db.query(KnowledgeBase)
+        if kb_ids:
+            q = q.filter(KnowledgeBase.id.in_(list(kb_ids)[:KB_SEARCH_MAX_KBS]))
+        else:
+            q = q.limit(KB_SEARCH_MAX_KBS)
+        kbs = q.all()
+    finally:
+        db.close()
+    out = []
+    for kb in kbs:
+        res = kb_query(kb.id, query, top_k=top_k)
+        if res.get("error") or not res.get("matches"):
+            continue
+        out.append(res)
+    return out
