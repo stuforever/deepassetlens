@@ -26,6 +26,10 @@ import { tokens } from '../../theme/tokens';
 
 const { Text } = Typography;
 
+// 批⓪ ContractCardsPanel 前台折叠下线：对话页只留「发问-回答-依据」（v4 §十二.3），
+// 路由/契约/策略/模板字样移后台——批⑥ 引擎台「路由模拟」Tab 复用本组件。
+const CONTRACT_CARDS_VISIBLE = false;
+
 /** S3b（G9）：追问改写透明性 —— 「理解为：xxx」小字 + 点击展开原文对照 */
 const FollowupRewriteNote: React.FC<{ note: { original: string; rewritten: string } }> = ({ note }) => {
   const [showOriginal, setShowOriginal] = useState(false);
@@ -132,8 +136,9 @@ const AssistantCanvas: React.FC<{
 
   return (
     <div style={{ fontSize: 14, color: tokens.colors.textPrimary }}>
-      {/* 0.1 受控 Skill 问答平台 v2：六张业务卡（路由/范围/数据访问/执行决策/终止条件/证据），默认折叠状态条 */}
-      {(route || contract) ? (
+      {/* 0.1 受控 Skill 问答平台 v2：六张业务卡（路由/范围/数据访问/执行决策/终止条件/证据），默认折叠状态条
+          批⓪ 前台折叠下线：对话页只留「发问-回答-依据」（v4 §十二.3）——批⑥ 引擎台后台复用 */}
+      {CONTRACT_CARDS_VISIBLE && (route || contract) ? (
         <div style={{ marginBottom: 8 }}>
           <ContractCardsPanel route={route} contract={contract} policyEvents={policyEvents} templateEvents={templateEvents} evidence={evidence} confidence={confidence} />
         </div>

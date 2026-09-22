@@ -8,10 +8,10 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, Drawer, Input, Popconfirm, Select, Space, Spin, Typography, message } from 'antd';
+import { Button, Input, Popconfirm, Select, Spin, Typography, message } from 'antd';
 import {
   ApiOutlined, ApartmentOutlined, ArrowDownOutlined, BookOutlined, ClearOutlined,
-  DatabaseOutlined, ExperimentOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
+  DatabaseOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
   RocketOutlined, EditOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import ConversationMessageList from '../../components/conversation/ConversationMessageList';
@@ -28,7 +28,6 @@ import { useStore } from '../../store/useStore';
 import type { ChatMessage, ChatMessagePayload } from '../../components/conversation/types';
 import { thinkReducer, decisionCommittedReducer } from '../../utils/thinkStreamReducer';
 import { buildFinalDeliveryView, resolveFinalAnswer } from '../../utils/finalDelivery';
-import RouteSimulator from '../../components/conversation/contractCards/RouteSimulator';
 import { tokens, spaceColors } from '../../theme/tokens';
 
 const { Text } = Typography;
@@ -141,12 +140,16 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     autoSentRef.current = true;
     let q = decodeURIComponent(m[1]);
     setQuestion(q);
-    // 等首个渲染稳定后发出（对话页数据面就绪即可发——与手输同链路）
+    // R#6：立即清 ?q=/?new=1（replace 不留历史）——刷新/后退不再重发（审查更正形态）；
+    // 其余参数（session= 等）保留；setTimeout 补 cleanup——600ms 内切走/卸载则取消发出。
+    const sp = new URLSearchParams(location.search);
+    sp.delete('q');
+    sp.delete('new');
+    navigate({ pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: true });
     const t = window.setTimeout(() => { void sendQuestionRef.current?.(q); }, 600);
-    void t;
-  }, [location.search]);
-  // 批13-P：受控路由模拟器 Drawer 开关（审计入口，不常驻前台）
-  const [simOpen, setSimOpen] = useState(false);
+    return () => window.clearTimeout(t);
+  }, [location.search, location.pathname, navigate]);
+  // 批⓪：路由模拟器审计入口下线（simOpen/Drawer 移除）——批⑥ 引擎台「路由模拟」Tab 后台承接
   const [status, setStatus] = useState<ChatStatus>('ready');
   const [llmConnectionId, setLlmConnectionId] = useState<string | undefined>(undefined);
   const [llmConnections, setLlmConnections] = useState<any[]>([]);
@@ -1003,6 +1006,10 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   }, [setQuestion]);
 
   // 稳定引用：避免内联箭头导致消息列表项 React.memo 失效
+  // 批⓪ 消息真删：平台会话消息无服务端 per-message 记录（vendor DELETE /sessions/{id}/messages/{mid}
+  // 仅覆盖 h5 会话；freeplan checkpoint 只有整线程记忆端点，无 per-message 端点且批⓪无后端白名单）——
+  // 本地删即唯一副本删除；checkpoint 残留由会话级「删除/清空会话」统一清（clearFreeplanMemory）。
+  // 【登记·待用户裁决：是否补 per-message checkpoint 删除端点（后端白名单外）】
   const handleDeleteMessage = useCallback(
     (msgId: string) => deleteMessage(activeSessionId, msgId),
     [activeSessionId, deleteMessage],
@@ -1040,32 +1047,23 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
       onSubmit={() => { if (!isBusy && question.trim()) handleSubmit(); }}
       placeholder={card?.ui_config?.placeholder ?? '想问什么数据？'}
       disabled={isBusy}
+      isBusy={isBusy}
+      onStop={handleStop}
       leftSlot={
-        <>
-          <Select
-            size="small"
-            variant="borderless"
-            style={{ width: 130, fontSize: 12 }}
-            placeholder="模型"
-            allowClear
-            value={llmConnectionId}
-            onChange={(v) => setLlmConnectionId(v)}
-            options={llmConnections.map((c: any) => ({ label: c.name || c.model_name || c.id, value: c.id }))}
-            popupMatchSelectWidth={180}
-          />
-          <Button
-            size="small"
-            type="text"
-            icon={<ExperimentOutlined />}
-            style={{ fontSize: 12, color: 'var(--text-tertiary)' }}
-            onClick={() => setSimOpen(true)}
-          >
-            审计模拟
-          </Button>
-        </>
+        <Select
+          size="small"
+          variant="borderless"
+          style={{ width: 130, fontSize: 12 }}
+          placeholder="模型"
+          allowClear
+          value={llmConnectionId}
+          onChange={(v) => setLlmConnectionId(v)}
+          options={llmConnections.map((c: any) => ({ label: c.name || c.model_name || c.id, value: c.id }))}
+          popupMatchSelectWidth={180}
+        />
       }
     />
-  );;
+  );
 
   // ⑥ 专家地基①：卡 loading 期间 Spin；卡读失败上屏（不降级 wenshu，spec §十）
   if (cardError) {
@@ -1092,17 +1090,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
       {/* v3 §2.4 空间色：对话页页头 3px 色条（wenshu 蓝） */}
       <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: spaceColors.wenshu, zIndex: 5 }} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* 批13-P：受控路由模拟器收进「审计模拟」按钮（Drawer），不再常驻问答页顶部 */}
-      <Drawer
-        title={<Space><ExperimentOutlined /> 受控路由模拟器（审计）</Space>}
-        placement="right"
-        width={560}
-        open={simOpen}
-        onClose={() => setSimOpen(false)}
-        destroyOnClose
-      >
-        <RouteSimulator />
-      </Drawer>
+      {/* 批⓪ 审计模拟下线：路由模拟器后台化（批⑥ 引擎台「路由模拟」Tab 复用 RouteSimulator）；
+          对话页只留「发问-回答-依据」（v4 §十二.3），Drawer 组件文件保留。 */}
       {hasMessages ? (
         /* 有消息：消息列表 + 底部输入框 */
         <>

@@ -185,7 +185,11 @@ const LEGACY_H5_ALIASES: ExpertPageConfig[] = [
   // 身份差异——同 menuKey 下新旧路径共用同一 element.type，KeepAlive 不误判重挂载）
   ...TUTOR_H5_PAGES.map((p) => ({
     ...p,
-    path: p.path.replace('/e/tutor-h5', '/e/sishu/h5'),
+    // R#12：notebook 旧链前缀为 /e/sishu/notebook（IA批1 迁移前原路径，无 /h5 段）——
+    // 统一派生会落 /e/sishu/h5/notebook 致旧链 404，此处特判。
+    path: p.path.includes('/notebook')
+      ? p.path.replace('/e/tutor-h5', '/e/sishu')
+      : p.path.replace('/e/tutor-h5', '/e/sishu/h5'),
     hideInMenu: true,
   })),
 ];

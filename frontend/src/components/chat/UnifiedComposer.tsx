@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { Button, Input } from 'antd';
-import { SendOutlined } from '@ant-design/icons';
+import { SendOutlined, StopOutlined } from '@ant-design/icons';
 import { tokens } from '../../theme/tokens';
 
 export interface UnifiedComposerProps {
@@ -20,11 +20,15 @@ export interface UnifiedComposerProps {
   maxRows?: number;
   leftSlot?: React.ReactNode;
   testId?: string;
+  /** v4§九：busy 时发送钮切换「停止生成」（白底红边，沿 FreePlanChat P3 规格） */
+  isBusy?: boolean;
+  onStop?: () => void;
 }
 
 const UnifiedComposer: React.FC<UnifiedComposerProps> = ({
   value, onChange, onSubmit, placeholder = '想问什么数据？',
   disabled = false, minRows = 2, maxRows = 6, leftSlot, testId = 'unified-composer',
+  isBusy = false, onStop,
 }) => (
   <div
     className="dal-composer"
@@ -57,14 +61,26 @@ const UnifiedComposer: React.FC<UnifiedComposerProps> = ({
         {leftSlot}
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Shift+Enter 换行</span>
       </div>
-      <Button
-        type="primary"
-        shape="circle"
-        data-testid={`${testId}-send`}
-        icon={<SendOutlined />}
-        onClick={onSubmit}
-        disabled={disabled || !value.trim()}
-      />
+      {isBusy && onStop ? (
+        /* v4§九：停止生成（白底红边，沿 FreePlanChat P3 规格；此态下不 disabled） */
+        <Button
+          shape="circle"
+          icon={<StopOutlined />}
+          onClick={onStop}
+          aria-label="停止生成"
+          data-testid={`${testId}-stop`}
+          style={{ background: 'var(--bg-content)', borderColor: tokens.colors.error, color: tokens.colors.error }}
+        />
+      ) : (
+        <Button
+          type="primary"
+          shape="circle"
+          data-testid={`${testId}-send`}
+          icon={<SendOutlined />}
+          onClick={onSubmit}
+          disabled={disabled || !value.trim()}
+        />
+      )}
     </div>
   </div>
 );

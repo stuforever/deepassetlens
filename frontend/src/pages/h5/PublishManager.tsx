@@ -32,8 +32,8 @@ const H5_PAGES: H5Page[] = [
 ];
 
 function lanUrl(path: string): string {
-  // 运行时取主机（不硬编码 IP）；dev=当前 hostname:23000
-  return `http://${window.location.hostname}:23000${path}`;
+  // 运行时取当前源（协议+主机+端口同 dev/prod 一致；审查 Minor：禁硬编码 :23000）
+  return `${window.location.origin}${path}`;
 }
 
 const PublishManager: React.FC = () => {

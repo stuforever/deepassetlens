@@ -33,7 +33,6 @@ const TABLESS_MENU_KEYS = (menuKey: string): boolean =>
 const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const setCanvasMode = useStore((state) => state.setCanvasMode);
   const setActiveMenuKey = useStore((state) => state.setActiveMenuKey);
 
   // 三轨M6(U1) D1：/home → / 重定向（老链接兼容；pathToMenuKey.home 保留仅作映射）
@@ -144,10 +143,8 @@ const App: React.FC = () => {
     }
     const menuKey = pathToMenuKey[location.pathname];
     if (!menuKey) return;
-    if (menuKey === 'graph') setCanvasMode('force');
-    else if (menuKey === 'tree_model') setCanvasMode('quad');
-    else if (menuKey === 'matrix_model') setCanvasMode('matrix');
-    else if (menuKey === 'gallery') setCanvasMode('neo4j');
+    // R#8：旧 canvasMode 映射删除——?view= 深链由 GraphManager 单一管理（init effect 随 search 生效）；
+    // 此处按菜单硬设视图会覆盖深链/图内切视图（回归：/graph?view=matrix 落 force）。
     const label = MENU_LABELS[menuKey] || menuKey;
     if (!TABLESS_MENU_KEYS(menuKey)) {
       setPageTabs((prev) => {
@@ -158,7 +155,7 @@ const App: React.FC = () => {
       setActiveTabKey(menuKey);
     }
     setActiveMenuKey(menuKey);
-  }, [location.pathname, setCanvasMode, setActiveMenuKey, navigate]);
+  }, [location.pathname, setActiveMenuKey, navigate]);
 
   // 关闭页签
   const closeTab = useCallback(

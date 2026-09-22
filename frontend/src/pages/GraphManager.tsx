@@ -29,14 +29,15 @@ const GraphManager: React.FC = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams(); // react-router v6 返回元组（E-25④ 同口径）
 
-  // 初始化：?view= 优先（旧路由重定向/⌘K 直达落点）
+  // 初始化：?view= 优先（旧路由重定向/⌘K 直达落点）；
+  // R#8：deps 含 search——SPA 重入改 ?view= 时直接切视图（KeepAlive 存活页不再漏读深链）。
   useEffect(() => {
     const v = search.get('view') as CanvasMode | null;
     if (v && v !== canvasMode && VIEW_ITEMS.some((i) => i.key === v)) {
       setCanvasMode(v);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [search]);
 
   const onChange = (key: string) => {
     setCanvasMode(key as CanvasMode);

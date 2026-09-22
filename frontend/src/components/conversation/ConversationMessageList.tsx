@@ -9,6 +9,10 @@ import type { ChatMessage, ConversationCardAction, ConversationSceneConfig } fro
 
 const { Text } = Typography;
 
+// 批⓪ ContractCardsPanel 前台折叠下线：对话页只留「发问-回答-依据」（v4 §十二.3），
+// 路由/契约/策略/模板字样移后台——批⑥ 引擎台「路由模拟」Tab 复用本组件。
+const CONTRACT_CARDS_VISIBLE = false;
+
 /**
  * 批13-O 单一状态源 = 框架事件流的实时投影（后端零新增协议）。
  * 状态行只显示「现在进行时」；步骤卡（ThinkStream 折叠区）显示「过去」轨迹+耗时摘要——
@@ -137,7 +141,7 @@ const MessageRow = React.memo<{
             />
           ) : null}
           {/* 受控 Skill 问答平台 v2：流式运行中即渲染受控卡片（route/contract 事件一到即显示，默认折叠状态条） */}
-          {(msg.payload?.route || msg.payload?.contract) ? (
+          {CONTRACT_CARDS_VISIBLE && (msg.payload?.route || msg.payload?.contract) ? (
             <ContractCardsPanel
               route={msg.payload.route}
               contract={msg.payload.contract}
