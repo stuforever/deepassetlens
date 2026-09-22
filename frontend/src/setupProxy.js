@@ -44,15 +44,17 @@ module.exports = function (app) {
     })
   );
 
-  // IA批2：/api 代理启用 ws:true——vendor 聊天走 /api/v1/ws WebSocket（unified-ws.ts），
-  // 原仓 web/proxy.ts 转发 WS，dev 代理此前缺位致 h5 发送"WebSocket failed to connect"。
-  // 实测：scoped '/api/v1/ws' 挂载 HPM upgrade 不生效（握手悬挂），'/api' 全局 ws:true 可用。
+  // IA批2 曾在此启用 /api ws:true——vendor /api/v1/ws 引擎已随批16deep 物理删除
+  // （L7 断言零消费），且 HPM ws:true 的 upgrade 响应者与 WDS4 自身 /ws HMR 套接字
+  // 竞争写同一个连接（28000 对 /ws 回裸 HTTP 404 字节被转发→浏览器 Invalid frame
+  // header→dev-client 无限重连=页面闪烁）。平台 WS（partners/knowledge progress）
+  // 走 wsUrl() 直连 dev server 同源升级，由 WDS4 自身代理；此处保持 ws:false。
   app.use(
     ['/api'],
     createProxyMiddleware({
       target: BACKEND,
       changeOrigin: true,
-      ws: true,
+      ws: false,
     })
   );
 };

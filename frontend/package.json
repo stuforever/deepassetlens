@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "description": "DeepAssetLens 资产深度探查平台（前端）",
-  "proxy": "http://127.0.0.1:28000",
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
     "@antv/g6": "^4.8.24",
