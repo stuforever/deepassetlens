@@ -9,6 +9,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState } from "react";
+import { Select as AntSelect } from "antd"; // R5批①：原生 select → antd（R#2 续批，options 显式映射）
 import { useTranslation } from "react-i18next";
 import type { Chapter, ContentType, Spine } from "../../../../lib/book-types";
 
@@ -181,21 +182,21 @@ export default function SpineEditor({
                       ⓘ
                     </span>
                   </span>
-                  <select
+                  <AntSelect
+                    size="small"
+                    style={{ width: "100%", marginTop: 4 }}
                     value={chapter.content_type}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       updateChapter(idx, {
-                        content_type: e.target.value as ContentType,
+                        content_type: v as ContentType,
                       })
                     }
-                    className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                  >
-                    {CONTENT_TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {t(opt.label)}
-                      </option>
-                    ))}
-                  </select>
+                    data-testid="spine-content-type"
+                    options={CONTENT_TYPE_OPTIONS.map((opt) => ({
+                      value: opt.value,
+                      label: t(opt.label),
+                    }))}
+                  />
                   <span className="mt-1 block text-[11px] leading-snug text-[var(--muted-foreground)]/80">
                     {t(
                       CONTENT_TYPE_OPTIONS.find(

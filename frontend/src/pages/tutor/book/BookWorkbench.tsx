@@ -13,6 +13,7 @@ import { useSearchParams } from "react-router-dom";
 import { Loader2, MessageSquare } from "lucide-react";
 import { notify } from "../../../lib/notifications";
 import { useTranslation } from "react-i18next";
+import { AppShellProvider } from "../../../context/AppShellContext"; // R5批①：引擎批5 复刻缺件——BookCreator/BookChatPanel 的 useAppShell 需此 Provider（缺失=新建书籍页崩溃）
 
 import { bookApi, type BookWsEvent } from "../../../lib/book-api";
 import type {
@@ -665,7 +666,8 @@ function BookPageInner() {
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen w-full">
+    <AppShellProvider>
+      <div className="flex h-screen w-full">
       {toast && (
         <div className="fixed top-4 right-4 z-50 rounded-lg bg-red-500/90 px-4 py-2 text-sm text-white shadow-lg">
           {toast}
@@ -804,6 +806,7 @@ function BookPageInner() {
           />
         )}
       </main>
-    </div>
+      </div>
+    </AppShellProvider>
   );
 }

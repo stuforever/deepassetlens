@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Select as AntSelect } from "antd"; // R5批①：原生 select → antd（R#2 续批，languageTouchedRef 副作用保留）
 import {
   ChevronDown,
   ChevronRight,
@@ -715,17 +716,20 @@ export default function BookCreator({
             <div className="flex items-center justify-between gap-3">
               <label className="text-xs text-[var(--muted-foreground)]">
                 {t("Language")}{" "}
-                <select
+                <AntSelect
+                  size="small"
+                  style={{ width: 96, marginLeft: 4 }}
                   value={language}
-                  onChange={(e) => {
+                  onChange={(v) => {
                     languageTouchedRef.current = true;
-                    setLanguage(e.target.value as "en" | "zh");
+                    setLanguage(v as "en" | "zh");
                   }}
-                  className="ml-1 rounded-md border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-xs text-[var(--foreground)]"
-                >
-                  <option value="en">{t("language.english")}</option>
-                  <option value="zh">{t("language.chinese")}</option>
-                </select>
+                  data-testid="book-language"
+                  options={[
+                    { value: "en", label: t("language.english") },
+                    { value: "zh", label: t("language.chinese") },
+                  ]}
+                />
               </label>
               <button
                 onClick={handleCreate}

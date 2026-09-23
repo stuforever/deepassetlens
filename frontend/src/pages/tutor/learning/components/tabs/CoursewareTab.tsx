@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { Select as AntSelect } from "antd"; // R5批①：原生 select → antd（R#2 续批，testid 保留）
 import { Presentation, ChevronDown, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ChapterOverview, Grade7Resource } from "../../../../../lib/self-learning-api";
@@ -47,19 +48,17 @@ export function CoursewareTab({ overview, chapterId, chapterName }: {
             <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${cwCollapsed ? "" : "rotate-180"}`} />
           </button>
           {!cwCollapsed && !loading && courseware.length > 0 && (
-            <select
+            <AntSelect
               value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
+              onChange={(v) => setSelectedId(v)}
               data-testid="courseware-select"
-              className="flex-1 min-w-0 px-3 py-2 rounded-lg border bg-card text-sm cursor-pointer"
-            >
-              <option value="">{t("Select a courseware...")}</option>
-              {courseware.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
+              size="small"
+              style={{ flex: 1, minWidth: 0 }}
+              options={[
+                { value: "", label: t("Select a courseware...") },
+                ...courseware.map((c) => ({ value: c.id, label: c.title })),
+              ]}
+            />
           )}
         </div>
         {cwCollapsed ? (
