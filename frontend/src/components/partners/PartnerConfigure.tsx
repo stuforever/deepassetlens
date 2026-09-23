@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Select as AntSelect } from "antd"; // R5批②：原生 select → antd（R#2 续批，focus 边框契约经 onFocus/onBlur 保留）
 import {
   CloseOutlined,
   DeleteOutlined,
@@ -503,9 +504,9 @@ export default function PartnerConfigure({
             >
               {t("Reply language")}
             </label>
-            <select
+            <AntSelect
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(v) => setLanguage(v)}
               onFocus={() => setLangFocused(true)}
               onBlur={() => setLangFocused(false)}
               style={{
@@ -513,17 +514,14 @@ export default function PartnerConfigure({
                 borderRadius: 8,
                 border: fieldBorder(langFocused),
                 background: "transparent",
-                padding: "6px 12px",
                 fontSize: 13,
-                outline: "none",
-                cursor: "pointer",
-                transition: "border-color 150ms",
               }}
-            >
-              <option value="">{t("Auto (English)")}</option>
-              <option value="en">English</option>
-              <option value="zh">中文</option>
-            </select>
+              options={[
+                { value: "", label: t("Auto (English)") },
+                { value: "en", label: "English" },
+                { value: "zh", label: "中文" },
+              ]}
+            />
           </div>
           <div style={{ gridColumn: "span 2 / span 2" }}>
             <label

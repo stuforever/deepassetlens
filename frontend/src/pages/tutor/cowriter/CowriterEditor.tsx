@@ -47,6 +47,7 @@
  *   localStorage 草稿镜像/清除、title 提交、in-flight 快照校验（markdownRef）全部未改。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Select as AntSelect } from "antd"; // R5批②：原生 select → antd（R#2 续批，暗色面板内行为契约逐字保留）
 import type {
   ComponentType,
   CSSProperties,
@@ -2773,38 +2774,25 @@ export default function CowriterEditor({ docId: docIdProp }: { docId?: string })
           </div>
 
           {selectionTools.includes("rag") && (
-            <select
+            <AntSelect
               value={kbName}
-              onChange={(e) => setKbName(e.target.value)}
+              onChange={(v) => setKbName(v)}
               aria-label={"知识库"}
               style={{
                 marginTop: 8,
-                height: 32,
                 width: "100%",
+                height: 32,
                 borderRadius: 8,
                 border: `1px solid ${BORDER}`,
                 background: "transparent",
-                padding: "0 10px",
                 fontSize: 12.5,
                 color: FG,
-                outline: "none",
-                transition: "border-color 150ms",
-                cursor: "pointer",
               }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = `${PRIMARY}59`;
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = BORDER;
-              }}
-            >
-              <option value="">{"Select a knowledge base..."}</option>
-              {knowledgeBases.map((k) => (
-                <option key={k.name} value={k.name}>
-                  {k.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Select a knowledge base..." },
+                ...knowledgeBases.map((k) => ({ value: k.name, label: k.name })),
+              ]}
+            />
           )}
 
           {(isEditing || selectionTrace) && (
@@ -3126,32 +3114,24 @@ export default function CowriterEditor({ docId: docIdProp }: { docId?: string })
                   >
                     {"来源"}
                   </label>
-                  <select
+                  <AntSelect
+                    size="small"
                     value={source}
-                    onChange={(e) => setSource(e.target.value as SourceOption)}
+                    onChange={(v) => setSource(v as SourceOption)}
                     style={{
                       width: "100%",
                       borderRadius: 8,
                       border: `1px solid ${BORDER}`,
                       background: BACKGROUND,
-                      padding: "6px 8px",
                       fontSize: 12,
                       color: FG,
-                      outline: "none",
-                      transition: "border-color 150ms",
-                      cursor: "pointer",
                     }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = PRIMARY;
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = BORDER;
-                    }}
-                  >
-                    <option value="none">{"无"}</option>
-                    <option value="rag">{"知识库"}</option>
-                    <option value="web">{"网络搜索"}</option>
-                  </select>
+                    options={[
+                      { value: "none", label: "无" },
+                      { value: "rag", label: "知识库" },
+                      { value: "web", label: "网络搜索" },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label
@@ -3167,37 +3147,25 @@ export default function CowriterEditor({ docId: docIdProp }: { docId?: string })
                   >
                     {"知识库"}
                   </label>
-                  <select
+                  <AntSelect
+                    size="small"
                     value={kbName}
-                    onChange={(e) => setKbName(e.target.value)}
+                    onChange={(v) => setKbName(v)}
                     disabled={source !== "rag"}
                     style={{
                       width: "100%",
                       borderRadius: 8,
                       border: `1px solid ${BORDER}`,
                       background: BACKGROUND,
-                      padding: "6px 8px",
                       fontSize: 12,
                       color: FG,
-                      outline: "none",
-                      transition: "border-color 150ms",
-                      cursor: source !== "rag" ? "not-allowed" : "pointer",
                       opacity: source !== "rag" ? 0.4 : 1,
                     }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = PRIMARY;
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = BORDER;
-                    }}
-                  >
-                    <option value="">{"选择…"}</option>
-                    {knowledgeBases.map((k) => (
-                      <option key={k.name} value={k.name}>
-                        {k.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "选择…" },
+                      ...knowledgeBases.map((k) => ({ value: k.name, label: k.name })),
+                    ]}
+                  />
                 </div>
               </div>
             </div>

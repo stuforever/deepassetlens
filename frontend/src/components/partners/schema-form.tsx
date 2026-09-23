@@ -11,6 +11,7 @@
  */
 
 import { useState } from "react";
+import { Select as AntSelect } from "antd"; // R5批②：原生 select → antd（R#2 续批，enum 显式映射）
 import { EyeInvisibleOutlined, EyeOutlined } from "@ant-design/icons";
 
 export type JsonSchema = {
@@ -262,19 +263,17 @@ export function SchemaField({
     return (
       <div>
         <FieldLabel label={label} description={description} />
-        <select
+        <AntSelect
           value={String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(v) => onChange(v)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={{ ...focusStyle(focused), cursor: "pointer" }}
-        >
-          {enumValues.map((opt) => (
-            <option key={String(opt)} value={String(opt)}>
-              {String(opt)}
-            </option>
-          ))}
-        </select>
+          style={{ ...focusStyle(focused), width: "100%" }}
+          options={enumValues.map((opt) => ({
+            value: String(opt),
+            label: String(opt),
+          }))}
+        />
       </div>
     );
   }

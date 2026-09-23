@@ -60,7 +60,7 @@ import {
   LoadingOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
-import { Tooltip } from "antd";
+import { Tooltip, Select as AntSelect } from "antd"; // R5批②：原生 select → antd（R#2 续批——provider 级联/previousLabel diff 副作用逐字保留）
 
 import ProviderIcon from "../../pages/tutor/h5/h5shared/ProviderIcon";
 import { CodexOAuthCard } from "./CodexOAuthCard";
@@ -1123,44 +1123,17 @@ export function ServiceConfigEditor({ service }: { service: ServiceName }) {
                           >
                             {t("Output format")}
                           </div>
-                          <div style={{ position: "relative" }}>
-                            <select
-                              className={selectClass}
-                              {...FOCUS_PROPS}
-                              value={activeModel.response_format || "mp3"}
-                              onChange={(e) =>
-                                updateModelField(
-                                  service,
-                                  "response_format",
-                                  e.target.value,
-                                )
-                              }
-                              data-testid={`service-response-format-${service}`}
-                            >
-                              {["mp3", "wav", "opus", "aac", "flac", "pcm"].map(
-                                (fmt) => (
-                                  <option
-                                    className={selectOptionClass}
-                                    key={fmt}
-                                    value={fmt}
-                                  >
-                                    {fmt}
-                                  </option>
-                                ),
-                              )}
-                            </select>
-                            <DownOutlined
-                              style={{
-                                pointerEvents: "none",
-                                position: "absolute",
-                                right: 12,
-                                top: "50%",
-                                transform: "translateY(-50%)",
-                                fontSize: 14,
-                                color: MUTED,
-                              }}
-                            />
-                          </div>
+                          <AntSelect
+                            value={activeModel.response_format || "mp3"}
+                            onChange={(v) =>
+                              updateModelField(service, "response_format", v)
+                            }
+                            data-testid={`service-response-format-${service}`}
+                            style={{ width: "100%" }}
+                            options={["mp3", "wav", "opus", "aac", "flac", "pcm"].map(
+                              (fmt) => ({ value: fmt, label: fmt }),
+                            )}
+                          />
                         </div>
                       </>
                     )}
@@ -1795,90 +1768,59 @@ function ProfileFields({
         >
           {t("Provider")}
         </div>
-        <div style={{ position: "relative" }}>
-          {providerValue && (
-            <span
-              style={{
-                pointerEvents: "none",
-                position: "absolute",
-                left: 12,
-                top: "50%",
-                transform: "translateY(-50%)",
-                display: "inline-flex",
-              }}
-            >
+        <AntSelect
+          value={providerValue}
+          disabled={isManagedCodex}
+          data-testid={`service-provider-select-${service}`}
+          prefix={
+            providerValue ? (
               <ProviderIcon provider={providerValue} size={15} />
-            </span>
-          )}
-          <select
-            className={selectClass}
-            style={providerValue ? { paddingLeft: 36 } : undefined}
-            {...FOCUS_PROPS}
-            value={providerValue}
-            disabled={isManagedCodex}
-            data-testid={`service-provider-select-${service}`}
-            onChange={(e) => {
-              const val = e.target.value;
-              const field = service === "search" ? "provider" : "binding";
-              const options = providers[service] || [];
-              const previousLabel =
-                options.find((p) => p.value === providerValue)?.label ?? "";
-              const match = options.find((p) => p.value === val);
-              updateProfileField(service, field, val);
-              // Keep an un-customized profile name tracking its provider.
-              const renamed = nextProfileName(
-                profile.name,
-                previousLabel,
-                match?.label ?? "",
-              );
-              if (renamed !== profile.name) {
-                updateProfileField(service, "name", renamed);
-              }
-              if (match?.base_url) {
-                updateProfileField(service, "base_url", match.base_url);
-              }
-              if (service === "embedding" && match?.default_dim) {
-                updateModelField(service, "dimension", match.default_dim);
-              }
-              if (
-                (service === "tts" ||
-                  service === "stt" ||
-                  service === "imagegen" ||
-                  service === "videogen") &&
-                match?.default_model
-              ) {
-                updateModelField(service, "model", match.default_model);
-              }
-              if (service === "tts" && match?.default_voice) {
-                updateModelField(service, "voice", match.default_voice);
-              }
-            }}
-          >
-            <option className={selectOptionClass} value="">
-              {t("Select provider...")}
-            </option>
-            {(providers[service] || []).map((p) => (
-              <option
-                className={selectOptionClass}
-                key={p.value}
-                value={p.value}
-              >
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <DownOutlined
-            style={{
-              pointerEvents: "none",
-              position: "absolute",
-              right: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              fontSize: 14,
-              color: MUTED,
-            }}
-          />
-        </div>
+            ) : undefined
+          }
+          onChange={(val) => {
+            const field = service === "search" ? "provider" : "binding";
+            const options = providers[service] || [];
+            const previousLabel =
+              options.find((p) => p.value === providerValue)?.label ?? "";
+            const match = options.find((p) => p.value === val);
+            updateProfileField(service, field, val);
+            // Keep an un-customized profile name tracking its provider.
+            const renamed = nextProfileName(
+              profile.name,
+              previousLabel,
+              match?.label ?? "",
+            );
+            if (renamed !== profile.name) {
+              updateProfileField(service, "name", renamed);
+            }
+            if (match?.base_url) {
+              updateProfileField(service, "base_url", match.base_url);
+            }
+            if (service === "embedding" && match?.default_dim) {
+              updateModelField(service, "dimension", match.default_dim);
+            }
+            if (
+              (service === "tts" ||
+                service === "stt" ||
+                service === "imagegen" ||
+                service === "videogen") &&
+              match?.default_model
+            ) {
+              updateModelField(service, "model", match.default_model);
+            }
+            if (service === "tts" && match?.default_voice) {
+              updateModelField(service, "voice", match.default_voice);
+            }
+          }}
+          style={{ width: "100%" }}
+          options={[
+            { value: "", label: t("Select provider...") },
+            ...(providers[service] || []).map((p) => ({
+              value: p.value,
+              label: p.label,
+            })),
+          ]}
+        />
         {showSearchProviderWarning && (
           <p
             style={{
