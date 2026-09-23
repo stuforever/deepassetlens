@@ -1,4 +1,4 @@
-import { apiFetch, apiUrl } from "./api";
+import { apiFetch, apiUrl, isRuntimeAuthEnabled } from "./api";
 import { invalidateClientCache, withClientCache } from "./client-cache";
 import type { LLMSelection, StreamEvent } from "./unified-ws";
 
@@ -117,7 +117,13 @@ export interface QuizResultItem {
 }
 
 async function expectJson<T>(response: Response): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
+  // R5批④：401 跳转对齐 apiFetch 的 runtimeAuthEnabled 门控——auth=OFF 部署偶发 401
+  // 不再误弹 /login（apiFetch 注释明确说明该行为是被刻意避免的）
+  if (
+    response.status === 401 &&
+    isRuntimeAuthEnabled() &&
+    typeof window !== "undefined"
+  ) {
     const next = encodeURIComponent(window.location.pathname);
     window.location.href = `/login?next=${next}`;
     return new Promise(() => {});

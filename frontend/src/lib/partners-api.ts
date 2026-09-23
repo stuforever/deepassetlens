@@ -127,7 +127,12 @@ async function json<T>(res: Response): Promise<T> {
         : (detail?.message ?? `Request failed: ${res.status}`);
     throw new Error(msg);
   }
-  return (await res.json()) as T;
+  // R5批④：204/205 与空响应体直接兜底——void 端点（destroyPartner 等）返回空体时
+  // res.json() 抛 SyntaxError 把已成功的操作当失败上抛
+  if (res.status === 204 || res.status === 205) return undefined as T;
+  const text = await res.text();
+  if (!text.trim()) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export async function listPartners(): Promise<PartnerInfo[]> {

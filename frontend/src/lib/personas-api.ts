@@ -43,7 +43,11 @@ async function asJson(response: Response) {
     }
     throw new Error(detail);
   }
-  return response.json();
+  // R5批④：204/205 与空响应体兜底——deletePersona 等空体写操作不再被误判为失败
+  if (response.status === 204 || response.status === 205) return undefined;
+  const text = await response.text();
+  if (!text.trim()) return undefined;
+  return JSON.parse(text);
 }
 
 function normalizeInfo(item: {

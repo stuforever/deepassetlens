@@ -70,6 +70,11 @@ export function setRuntimeAuthEnabled(enabled: boolean): void {
   runtimeAuthEnabled = enabled;
 }
 
+/** R5批④：读当前运行时认证态——裸 fetch 调用方的 401 门控与 apiFetch 同源对齐。 */
+export function isRuntimeAuthEnabled(): boolean {
+  return runtimeAuthEnabled;
+}
+
 /**
  * Authenticated fetch wrapper. Behaves identically to `fetch` but automatically
  * redirects to /login when the backend returns 401 (expired / invalid token).
