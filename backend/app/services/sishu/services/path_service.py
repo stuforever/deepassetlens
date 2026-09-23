@@ -218,13 +218,25 @@ class PathService:
     def get_chat_feature_dir(self, feature: ChatWorkspaceFeature) -> Path:
         return self.get_chat_workspace_root() / feature
 
+    @staticmethod
+    def _safe_id(kind: str, val: str) -> str:
+        """R5批⑩（清单安全）：外部 ID 净化——'..'/'/'/'\'/':'/NUL/空 非法。
+        task_id/session_id/doc_id/book_id/notebook_id 等多处来自 HTTP 入参，
+        未净化即与根目录拼路径（穿越/逃逸工作区）。"""
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{kind} 非法（空/非字符串）")
+        v = val.strip()
+        if v in (".", "..") or "/" in v or "\\" in v or ":" in v or chr(0) in v or any(ord(c) < 32 for c in v):
+            raise ValueError(f"{kind} 含非法路径字符: {val!r}")
+        return v
+
     def get_task_workspace(self, feature: str, task_id: str) -> Path:
         task_root = self._resolve_feature_root(feature)
-        return task_root / task_id
+        return task_root / self._safe_id("task_id", task_id)
 
     def get_session_workspace(self, feature: str, session_id: str) -> Path:
         session_root = self._resolve_feature_root(feature)
-        return session_root / session_id
+        return session_root / self._safe_id("session_id", session_id)
 
     def _resolve_feature_root(self, feature: str) -> Path:
         if feature in {
@@ -254,13 +266,13 @@ class PathService:
         return self.get_agent_dir(module) / "sessions.json"
 
     def get_task_dir(self, module: str, task_id: str) -> Path:
-        return self.get_agent_dir(module) / task_id
+        return self.get_agent_dir(module) / self._safe_id("task_id", task_id)
 
     def get_notebook_dir(self) -> Path:
         return self.get_workspace_feature_dir("notebook")
 
     def get_notebook_file(self, notebook_id: str) -> Path:
-        return self.get_notebook_dir() / f"{notebook_id}.json"
+        return self.get_notebook_dir() / f"{self._safe_id('notebook_id', notebook_id)}.json"
 
     def get_notebook_index_file(self) -> Path:
         return self.get_notebook_dir() / "notebooks_index.json"
@@ -324,7 +336,7 @@ class PathService:
 
     def get_co_writer_doc_root(self, doc_id: str) -> Path:
         """Per-document root directory."""
-        return self.get_co_writer_docs_dir() / f"doc_{doc_id}"
+        return self.get_co_writer_docs_dir() / f"doc_{self._safe_id('doc_id', doc_id)}"
 
     def get_co_writer_doc_manifest(self, doc_id: str) -> Path:
         return self.get_co_writer_doc_root(doc_id) / "manifest.json"

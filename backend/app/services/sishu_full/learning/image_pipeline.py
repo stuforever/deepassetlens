@@ -59,15 +59,23 @@ def save_upload(file_bytes: bytes, ext: str = "jpg", subdir: str = "single_q") -
 
 
 def resolve_url_to_path(url: str) -> Path | None:
-    """Map a public image URL back to its filesystem path (for export/crop)."""
+    """Map a public image URL back to its filesystem path (for export/crop).
+
+    R5批⑩（清单安全）：只接受本服务公开前缀的 URL——原「非前缀分支对任意存在的本地
+    绝对路径直接放行」（客户端可指向任意服务器文件被 read_bytes+OCR 外带）与
+    「rel 未归一化」（../ 逃出图片根）两洞一并堵死：归一化后必须仍落图片根内。
+    """
     prefix = _public_base() + "/"
     if not url or not url.startswith(prefix):
-        # absolute filesystem path or external URL
-        if url and Path(url).exists():
-            return Path(url)
         return None
     rel = url[len(prefix):]
-    return _images_root() / rel
+    root = _images_root().resolve()
+    try:
+        p = (root / rel).resolve()
+        p.relative_to(root)
+    except Exception:
+        return None
+    return p
 
 
 # --------------------------------------------------------------------------- #
