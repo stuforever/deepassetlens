@@ -7,8 +7,14 @@ from typing import Any, Dict, List
 
 class ConnectedESFamily:
     def __init__(self, params: Dict[str, Any]):
-        self.url = params.get("url")            # 如 http://127.0.0.1:11200
-        self.index = params.get("index", "")
+        # R5批⑰（清单安全）：url/index 必填校验——原缺 url 时 f-string 拼出
+        # "None//_search" 抛原始 requests 异常（内部信息泄露），缺 index 打根路径全库
+        self.url = (params.get("url") or "").rstrip("/")
+        self.index = (params.get("index") or "").strip()
+        if not self.url or not self.url.startswith(("http://", "https://")):
+            raise ValueError(f"ConnectedESFamily 需要有效 url（http/https）: {self.url!r}")
+        if not self.index or "/" in self.index or self.index.startswith("_"):
+            raise ValueError(f"ConnectedESFamily 需要有效 index: {self.index!r}")
         self._client = params.get("client")     # 可注入（测试桩）
 
     def initialize(self, kb: Dict[str, Any]) -> None:

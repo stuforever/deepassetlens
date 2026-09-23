@@ -68,7 +68,12 @@ class Neo4jSyncService:
             session.run(query, id=entity_id, name=name, concept_id=concept_id)
 
     def sync_relation(self, source_id: str, target_id: str, rel_type: str, properties: dict = None):
-        """同步实体间业务关系"""
+        """同步实体间业务关系. R5批⑰（清单安全）：rel_type 在 Cypher 中无法参数化，
+        白名单字符集校验（反引号/分隔符即拒绝）防 Cypher 注入。"""
+        import re as _re
+
+        if not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", rel_type or ""):
+            raise ValueError(f"非法关系类型: {rel_type!r}")
         with self.driver.session() as session:
             query = (
                 "MATCH (s {id: $source_id}) "

@@ -16,7 +16,12 @@ def export_wrong_book_file(user_id: str, format: str = "md") -> dict:
     if format not in ("md", "json", "docx"):
         return {"error": f"format 白名单 md|json|docx（收到 {format}）"}
     EXPORT_ROOT.mkdir(parents=True, exist_ok=True)
-    stem = f"wrongbook_{user_id}_{uuid.uuid4().hex[:8]}"
+    # R5批⑰（清单安全）：user_id 来自工具调用参数，未清洗即拼导出文件名（'/' '..'
+    # 空字节可穿越 EXPORT_ROOT）。折叠非安全字符为 '_'。
+    import re as _re
+
+    _uid = _re.sub(r"[^A-Za-z0-9_-]", "_", str(user_id or ""))[:64] or "anonymous"
+    stem = f"wrongbook_{_uid}_{uuid.uuid4().hex[:8]}"
     if format == "json":
         path = EXPORT_ROOT / f"{stem}.json"
         path.write_text(json.dumps(rows, ensure_ascii=False, indent=1, default=str),
