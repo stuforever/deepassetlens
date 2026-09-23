@@ -22,17 +22,18 @@ def test_tutor_llm_prompt_hardened():
 
 def test_join_expr_whitelist():
     src = inspect.getsource(qas)
-    assert "fullmatch" in src and "`[^`]+`" in src
+    assert "fullmatch" in src and "join_expr" in src and "AND" in src
     # 正则行为与生产一致：等式 AND 链过、带函数/字面量的不过
     import re
-    pat = re.compile(r"\s*`[^`]+`(?:\.`[^`]+`)*\s*=\s*`[^`]+`(?:\.`[^`]+`)*"
-                     r"(?:\s+AND\s+`[^`]+`(?:\.`[^`]+`)*\s*=\s*`[^`]+`(?:\.`[^`]+`)*)*\s*")
-    assert pat.fullmatch(" `a`.`id` = `b`.`aid` ")
+    pat = re.compile(r"\s*[\w`.]+\.[\w`.]+\s*=\s*[\w`.]+\.[\w`.]+"
+                     r"(?:\s+AND\s+[\w`.]+\.[\w`.]+\s*=\s*[\w`.]+\.[\w`.]+)*\s*")
+    assert pat.fullmatch("a.id = b.aid")            # 未反引号（17_coverage 契约格式）
+    assert pat.fullmatch(" `a`.`id` = `b`.`aid` ")  # 反引号形式
     assert pat.fullmatch("`a`.`id` = `b`.`aid` AND `c`.`x` = `d`.`cx`")
-    assert pat.fullmatch("`a` = `b`")
     assert not pat.fullmatch("`a`.`id` = `b`.`aid` OR 1=1")
     assert not pat.fullmatch("`a`.`id` = 'x'")
     assert not pat.fullmatch("`a`.`id` = substr(`b`.`x`, 1)")
+    assert not pat.fullmatch("1=1")                 # 裸恒等式（无列引用）拒绝
 
 
 def test_absolute_forbidden_not_escaped_by_declaration():

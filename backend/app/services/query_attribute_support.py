@@ -274,8 +274,8 @@ def _build_sql_text(blueprint: Dict[str, Any]) -> str:
             import re as _re
 
             if not _re.fullmatch(
-                    r"\s*`[^`]+`(?:\.`[^`]+`)*\s*=\s*`[^`]+`(?:\.`[^`]+`)*"
-                    r"(?:\s+AND\s+`[^`]+`(?:\.`[^`]+`)*\s*=\s*`[^`]+`(?:\.`[^`]+`)*)*\s*",
+                    r"\s*[\w`.]+\.[\w`.]+\s*=\s*[\w`.]+\.[\w`.]+"
+                    r"(?:\s+AND\s+[\w`.]+\.[\w`.]+\s*=\s*[\w`.]+\.[\w`.]+)*\s*",
                     join_expr):
                 continue
             join_line += f"\n  ON {join_expr}"

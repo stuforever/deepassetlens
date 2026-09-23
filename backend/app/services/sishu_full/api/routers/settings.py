@@ -1060,6 +1060,7 @@ async def fetch_models_from_provider(payload: FetchModelsPayload):
 
 @router.put("/theme")
 async def update_theme(update: ThemeUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     current_ui = load_ui_settings()
     current_ui["theme"] = update.theme
     save_ui_settings(current_ui)
@@ -1068,6 +1069,7 @@ async def update_theme(update: ThemeUpdate):
 
 @router.put("/language")
 async def update_language(update: LanguageUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     current_ui = load_ui_settings()
     current_ui["language"] = update.language
     save_ui_settings(current_ui)
@@ -1076,6 +1078,7 @@ async def update_language(update: LanguageUpdate):
 
 @router.put("/voice-autoplay")
 async def update_voice_autoplay(update: VoiceAutoplayUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     """Persist the global default for auto-playing chat replies via TTS.
 
     A personal UI preference (any authenticated user); the chat surface layers
@@ -1089,6 +1092,7 @@ async def update_voice_autoplay(update: VoiceAutoplayUpdate):
 
 @router.put("/chat-response-timeout")
 async def update_chat_response_timeout(update: ChatResponseTimeoutUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     """Persist how long the chat UI waits for a turn event before timing out.
 
     A personal UI preference (any authenticated user). Slow tools like image /
@@ -1103,6 +1107,7 @@ async def update_chat_response_timeout(update: ChatResponseTimeoutUpdate):
 
 @router.put("/ui")
 async def update_ui_settings(update: UISettingsUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     """Merge frontend partial update into current UI settings.
 
     Uses exclude_unset=True semantics so that only fields explicitly provided
@@ -1118,6 +1123,7 @@ async def update_ui_settings(update: UISettingsUpdate):
 
 @router.post("/reset")
 async def reset_settings():
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     save_ui_settings(DEFAULT_UI_SETTINGS)
     return DEFAULT_UI_SETTINGS
 
@@ -1147,6 +1153,7 @@ async def get_sidebar_settings():
 
 @router.put("/sidebar/description")
 async def update_sidebar_description(update: SidebarDescriptionUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     current_ui = load_ui_settings()
     current_ui["sidebar_description"] = update.description
     save_ui_settings(current_ui)
@@ -1155,6 +1162,7 @@ async def update_sidebar_description(update: SidebarDescriptionUpdate):
 
 @router.put("/sidebar/nav-order")
 async def update_sidebar_nav_order(update: SidebarNavOrderUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     current_ui = load_ui_settings()
     current_ui["sidebar_nav_order"] = update.nav_order.model_dump()
     save_ui_settings(current_ui)
@@ -1163,6 +1171,7 @@ async def update_sidebar_nav_order(update: SidebarNavOrderUpdate):
 
 @router.put("/enabled-tools")
 async def update_enabled_tools(update: EnabledToolsUpdate):
+    _require_settings_admin()  # R5批⑲（清单安全）：全局设置文件写入补管理门
     sanitized = _sanitize_enabled_tools(update.enabled_tools)
     current_ui = load_ui_settings()
     current_ui["enabled_optional_tools"] = sanitized

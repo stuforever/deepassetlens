@@ -17,7 +17,12 @@ def kb_query(kb_id: str, query: str, top_k: int = 6) -> Dict[str, Any]:
         top_k = max(1, min(int(top_k or 6), 50))
         if (kb.type or "indexed") == "connected":
             from app.services.kb_engines.connected_es import ConnectedESFamily
-            fam = ConnectedESFamily(dict(kb.pointer_params or {}))
+            try:
+                # R5批⑲补：构造校验入 try——未配置 url 的指针库按 KB 级错误跳过
+                # （B1 语义：错误/空结果的库不阻塞其余库），不再向调用方泄原始异常
+                fam = ConnectedESFamily(dict(kb.pointer_params or {}))
+            except Exception as e:
+                return {"error": f"指针知识库配置无效: {e}"}
         else:
             from app.services.kb_engines.qdrant_family import QdrantFamily
             fam = QdrantFamily()

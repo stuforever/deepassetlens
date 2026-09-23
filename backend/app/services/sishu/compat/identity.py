@@ -29,6 +29,7 @@ _USERS_WRITE_LOCK = threading.Lock()
 AUTH_DIR = SYSTEM_ROOT / "auth"
 USERS_FILE = AUTH_DIR / "users.json"
 SECRET_FILE = AUTH_DIR / "auth_secret"
+_EPHEMERAL_AUTH_SECRET: str | None = None  # R5批⑲：持久化失败时的进程内兜底密钥
 LEGACY_USERS_FILE = PROJECT_ROOT / "data" / "user" / "auth_users.json"
 LEGACY_SECRET_FILE = PROJECT_ROOT / "data" / "user" / "auth_secret"
 
@@ -324,5 +325,13 @@ def load_or_create_auth_secret() -> str:
         )
         return generated
     except Exception as exc:
-        logger.warning("Failed to load/create auth secret at %s: %s", SECRET_FILE, exc)
-        return secrets.token_hex(32)
+        # R5批⑲（清单安全）：持久化失败不再每次返回新随机密钥（已签发 token 立即全失效
+        # 且每次调用再失效、密钥永不落盘）——进程内缓存一把临时密钥，进程存活期内稳定；
+        # 重启失效=显式降级（error 级告警，不静默）。
+        global _EPHEMERAL_AUTH_SECRET
+        if _EPHEMERAL_AUTH_SECRET is None:
+            _EPHEMERAL_AUTH_SECRET = secrets.token_hex(32)
+            logger.error(
+                "Auth secret 持久化失败（目录只读/权限?）——启用进程内临时密钥，"
+                "重启即全部失效，请修复 %s 的写权限: %s", SECRET_FILE, exc)
+        return _EPHEMERAL_AUTH_SECRET

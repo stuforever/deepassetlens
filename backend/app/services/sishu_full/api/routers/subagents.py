@@ -227,6 +227,10 @@ async def message_connection(name: str, payload: SubagentMessageRequest):
     kind = str(meta.get("agent_kind") or "")
     cwd = str(meta.get("cwd") or "")
     partner_id = str(meta.get("partner_id") or "")
+    # R5批⑲（清单安全）：消息路径补 partner 授权复检——原仅创建连接时校验一次，
+    # 管理员撤销 grant/重配后旧连接仍可继续咨询（信任过期元数据）
+    if partner_id:
+        assert_partner_allowed(partner_id)
     backend = get_backend(kind)
     if backend is None:
         raise HTTPException(status_code=400, detail=f"Unknown agent kind: {kind!r}")
