@@ -159,6 +159,12 @@ const CAPABILITIES: CapabilityDef[] = [
     defaultTools: ["web_search", "code_execution"],
   },
   {
+    // UX2批⑤（反馈⑥）：问答式错题录入——专用编排（抽取→确认卡→确认落库）
+    value: "wrong_intake", skillCode: "sishu/wrong-intake", label: "错题录入",
+    description: "上传错题照片，AI 识别题干并问答式确认录入",
+    icon: ClipboardCheck, allowedTools: [], defaultTools: [],
+  },
+  {
     value: "deep_research", skillCode: "sishu/research", label: "Research",
     description: "Comprehensive multi-agent research", icon: Microscope,
     allowedTools: ["web_search", "paper_search", "code_execution"],

@@ -36,6 +36,8 @@ EXPERT_ID = "sishu"
 
 # 批3：wrong-intake 确认卡挂起态（桥进程内——确认轮同 session_id 取回）
 _WRONG_INTAKE_PENDING: Dict[str, Dict[str, Any]] = {}
+# UX批⑤：问答式多轮信息累积（按 session）——抽取逐消息无状态会导致信息永不收敛
+_WRONG_INTAKE_HISTORY: Dict[str, str] = {}
 
 _SOLVE_DIRECTIVE = (
     "[solve 模式]\n你是解题引擎。按多步推理解题：先复述已知与目标，再分步推导（每步给出依据），"
@@ -579,6 +581,38 @@ async def run_wrong_intake(req, session_id: str, turn_id: str, user_prefix: str)
 
     msg = (req.message or "").strip()
 
+    # UX批⑤（用户反馈⑥）：图片附件→rapidocr 识别+红笔检测，识别文本注入抽取 prompt——
+    # 文本模型无视觉也能全流程（拍照→识别→问答式抽取→确认卡→落库）
+    # 多轮累积：本 session 的历史消息（含首轮 OCR 文本）全部进入抽取 prompt
+    _WRONG_INTAKE_HISTORY[session_id] = _WRONG_INTAKE_HISTORY.get(session_id, "")
+    atts = getattr(req, "attachments", None) or []
+    ocr_note = ""
+    for att in atts:
+        if not isinstance(att, dict) or str(att.get("type", "")).lower() != "image":
+            continue
+        b64 = str(att.get("base64") or "")
+        if not b64:
+            continue
+        try:
+            import base64 as _b64
+            raw = _b64.b64decode(b64)
+            from app.services.sishu.learning.image_pipeline import ocr_image, detect_red_strokes
+            _ocr = ocr_image(raw)
+            _ocr_text = (_ocr.get("text") or "").strip()
+            _red = None
+            try:
+                _red = detect_red_strokes(raw)
+            except Exception:
+                pass
+            _name = str(att.get("filename") or "photo")
+            _nl = chr(10)
+            ocr_note += (f"[图片 {_name} OCR识别" + ("·检测到红笔标记]" if _red else "]") + _nl
+                         + (_ocr_text[:3000] or "（未识别到文字）") + _nl + _nl)
+        except Exception as e:
+            logger.warning(f"[wrong-intake] 图片识别失败: {e}")
+    if ocr_note:
+        msg = (ocr_note + msg) if msg else (ocr_note + "请根据图片内容录入错题")
+
     # 确认轮：挂起卡存在 + 确认语义 → 落库（mother_question_find_or_create+wrong_question_add）
     pending = _WRONG_INTAKE_PENDING.get(session_id)
     if pending and (msg in ("确认", "确认保存", "保存", "确认录入", "好的，确认") or msg.startswith("确认")):
@@ -615,6 +649,7 @@ async def run_wrong_intake(req, session_id: str, turn_id: str, user_prefix: str)
                              "scripted": True},
                    session_id=session_id, turn_id=turn_id)
         _WRONG_INTAKE_PENDING.pop(session_id, None)
+        _WRONG_INTAKE_HISTORY.pop(session_id, None)
         receipt = ("已入库 ✓\n" if save_res.get("ok")
                    else f"落库失败：{save_res.get('error', '未知错误')}\n")
         if save_res.get("ok"):
@@ -634,9 +669,12 @@ async def run_wrong_intake(req, session_id: str, turn_id: str, user_prefix: str)
     card: Dict[str, Any] = {}
     try:
         from app.services.llm_client import get_chat_model
+        # UX批⑤：多轮累积——本轮消息（含 OCR 注入）并入会话历史，抽取读全量
+        _WRONG_INTAKE_HISTORY[session_id] = (_WRONG_INTAKE_HISTORY.get(session_id, "") + msg + chr(10)).strip()
+        _hist = _WRONG_INTAKE_HISTORY[session_id]
         resp = get_chat_model(temperature=0).invoke([
             {"role": "system", "content": _EXTRACTION_SYSTEM},
-            {"role": "user", "content": msg}])
+            {"role": "user", "content": _hist}])
         txt = str(resp.content)
         card = json.loads(txt[txt.find("{"):txt.rfind("}") + 1])
     except Exception as e:
