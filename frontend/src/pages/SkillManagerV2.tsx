@@ -60,6 +60,8 @@ const SkillManagerV2: React.FC = () => {
   // 搜索 & 筛选
   const [searchText, setSearchText] = useState('');
   const [filterTypes, setFilterTypes] = useState<string[]>([]);
+  // 批⑤（v4§三）：场景分型筛选——scenario|general|''（全部）
+  const [filterScenario, setFilterScenario] = useState<'scenario' | 'general' | ''>('');
 
   // SKILL.md 编辑
   const [mdContent, setMdContent] = useState('');
@@ -256,7 +258,8 @@ const SkillManagerV2: React.FC = () => {
       s.skill_code.toLowerCase().includes(searchText.toLowerCase()) ||
       (s.description || '').toLowerCase().includes(searchText.toLowerCase());
     const matchType = filterTypes.length === 0 || filterTypes.includes(s.skill_type);
-    return matchSearch && matchType;
+    const matchScenario = !filterScenario || s.type === filterScenario;
+    return matchSearch && matchType && matchScenario;
   });
 
   // ── 文件图标 ──
@@ -341,6 +344,9 @@ const SkillManagerV2: React.FC = () => {
                         <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.textPrimary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {typeInfo.icon} {skill.name}
                         </span>
+                        {/* 批⑤（v4§三）：场景分型标签——scenario=场景（进技能下拉）/general=通用/NULL=未分型 */}
+                        {skill.type === 'scenario' && <Tag color="blue" style={{ margin: '0 4px 0 0', fontSize: 11 }}>场景</Tag>}
+                        {skill.type === 'general' && <Tag style={{ margin: '0 4px 0 0', fontSize: 11 }}>通用</Tag>}
                         <StatusTag preset={statusInfo.preset} style={{ margin: 0, fontSize: 11 }}>{statusInfo.label}</StatusTag>
                       </div>
                       <div style={{ fontSize: 11, color: tokens.colors.textTertiary, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -536,6 +542,13 @@ const SkillManagerV2: React.FC = () => {
               {Object.entries(SKILL_TYPE_MAP).map(([k, v]) => (
                 <Select.Option key={k} value={k}>{v.icon} {v.label}</Select.Option>
               ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="type" label="场景分型" initialValue="scenario"
+            tooltip="场景技能=绑定业务场景（契约+模板牢笼），出现在对话技能下拉；通用技能=自动装配不进下拉">
+            <Select allowClear placeholder="未分型">
+              <Select.Option value="scenario">场景技能</Select.Option>
+              <Select.Option value="general">通用技能</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item name="description" label="描述">

@@ -36,6 +36,8 @@ export type ChatRequestPayload = {
   expert_id?: string;
   /** B1（v4§八）：知识库过滤（None/空=不过滤；批①b 附件条 📚 消费） */
   kb_ids?: string[];
+  /** B2（v4§四）：🎭 角色卡（None=默认分析师现状等价；批⑤ 附件条 🎭 消费） */
+  role_id?: string;
 };
 
 export type ConversationCard = {

@@ -30,13 +30,15 @@ const ExpertCardConfigEditor: React.FC = () => {
   const [suggs, setSuggs] = useState<string[]>([]);
   const [slots, setSlots] = useState<any[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
+  // 批⑤（v4§五.3）：专家维度开放——角色卡页对 wenshu 开放（sishu 原有语义不变；切换即重载）
+  const [activeExpert, setActiveExpert] = useState<'sishu' | 'wenshu'>('sishu');
   const [saving, setSaving] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closeReason, setCloseReason] = useState('');
 
   const load = async () => {
     try {
-      const res = await expertsApi.get('sishu');
+      const res = await expertsApi.get(activeExpert);
       const c = (res.data as ExpertCard) || null;
       setCard(c);
       if (c) {
@@ -81,7 +83,7 @@ const ExpertCardConfigEditor: React.FC = () => {
       } catch { /* KB 列表失败不阻卡编辑 */ }
     })();
     return () => { cancelled = true; };
-  }, [isAdminUser]);
+  }, [isAdminUser, activeExpert]);
 
   // 工具选项=活注册表实测清单（manifest 端点 tool_universe——装配期静态注册全集）
   useEffect(() => {
@@ -101,7 +103,7 @@ const ExpertCardConfigEditor: React.FC = () => {
   const patch = async (fields: Record<string, unknown>) => {
     setSaving(true);
     try {
-      const r = await expertsApi.update('sishu', fields);
+      const r = await expertsApi.update(activeExpert, fields);
       message.success(`已保存（version ${r.data?.version ?? '?'})`);
       await load();
     } catch (e: any) {
@@ -172,6 +174,17 @@ const ExpertCardConfigEditor: React.FC = () => {
         title={(
           <Space>
             <span>专家卡配置（编辑面）</span>
+            <Select
+              size="small"
+              value={activeExpert}
+              onChange={(v) => setActiveExpert(v)}
+              style={{ width: 150 }}
+              options={[
+                { value: 'sishu', label: '私塾先生（sishu）' },
+                { value: 'wenshu', label: '问数（wenshu）' },
+              ]}
+              data-testid="expert-card-expert-switch"
+            />
             {card && <Tag color="blue">version {card.version}</Tag>}
             <Tag color={enabled ? 'green' : 'red'}>{enabled ? '启用' : '关停'}</Tag>
           </Space>

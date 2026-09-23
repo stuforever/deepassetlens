@@ -11,6 +11,8 @@ export interface SkillDTO {
   description?: string;
   skill_type: 'natural' | 'python' | 'sql' | 'http' | 'mixed' | 'claude';
   status: 'draft' | 'published' | 'disabled';
+  /** B2（v4§三）：场景分型 scenario|general（NULL=存量未分型）——批⑤ 前端消费 */
+  type?: 'scenario' | 'general' | null;
   current_version_id?: string;
   tags?: string[];
   priority: number;
@@ -78,7 +80,7 @@ export interface APIResponse<T = any> {
 }
 
 export const skillV2Api = {
-  listSkills: (params?: { status?: string; skill_type?: string; skip?: number; limit?: number }) =>
+  listSkills: (params?: { status?: string; skill_type?: string; type?: string; skip?: number; limit?: number }) =>
     v2Api.get<APIResponse<SkillDTO[]>>('/skills', { params }),
 
   getSkill: (skillId: string) =>

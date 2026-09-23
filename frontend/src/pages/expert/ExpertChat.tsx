@@ -155,7 +155,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   // 批⓪：路由模拟器审计入口下线（simOpen/Drawer 移除）——批⑥ 引擎台「路由模拟」Tab 后台承接
   const [status, setStatus] = useState<ChatStatus>('ready');
   const [llmConnectionId, setLlmConnectionId] = useState<string | undefined>(undefined);
-  // 批①b（v4§二.4）：附件条选择（📚kb 多选→ChatRequest.kb_ids；⚡技能 B2 前持久化不进请求；🤖模型直通 llmConnectionId）
+  // 批①b（v4§二.4）：附件条选择（📚kb 多选→ChatRequest.kb_ids；⚡技能 v2 场景分型持久化不进请求；🤖模型直通 llmConnectionId；🎭角色 B2 role_id→ChatRequest）
   const [attach, setAttach] = useState<AttachmentSelection>({ kbIds: [] });
   const [llmConnections, setLlmConnections] = useState<any[]>([]);
   const [stats, setStats] = useState<{ master: string; business: string; relation: string }>({ master: '-', business: '-', relation: '-' });
@@ -304,6 +304,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           format: 'card',
           llm_connection_id: llmConnectionId,
           kb_ids: attach.kbIds.length ? attach.kbIds : undefined,  // B1（v4§八）：选中的知识库过滤
+          role_id: attach.roleId || undefined,  // B2（v4§四）：🎭角色卡——None=默认分析师现状等价
           mode: MODE,
           expert_id: slug || 'wenshu',  // 专家地基①④：请求带专家维度
         },
@@ -1058,9 +1059,9 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
       leftSlot={
         <ComposerAttachmentBar
           expertId={slug || 'wenshu'}
-          value={{ kbIds: attach.kbIds, skillCode: attach.skillCode, modelId: llmConnectionId }}
+          value={{ kbIds: attach.kbIds, skillCode: attach.skillCode, modelId: llmConnectionId, roleId: attach.roleId }}
           onChange={(next) => {
-            setAttach({ kbIds: next.kbIds, skillCode: next.skillCode });
+            setAttach({ kbIds: next.kbIds, skillCode: next.skillCode, roleId: next.roleId });
             setLlmConnectionId(next.modelId);
           }}
         />
@@ -1293,9 +1294,9 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           config={
             <ComposerAttachmentBar
               expertId={slug || 'wenshu'}
-              value={{ kbIds: attach.kbIds, skillCode: attach.skillCode, modelId: llmConnectionId }}
+              value={{ kbIds: attach.kbIds, skillCode: attach.skillCode, modelId: llmConnectionId, roleId: attach.roleId }}
               onChange={(next) => {
-                setAttach({ kbIds: next.kbIds, skillCode: next.skillCode });
+                setAttach({ kbIds: next.kbIds, skillCode: next.skillCode, roleId: next.roleId });
                 setLlmConnectionId(next.modelId);
               }}
               testId="rail-attachment-bar"
