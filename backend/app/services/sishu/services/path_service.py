@@ -449,13 +449,14 @@ def get_path_service() -> PathService:
 
         return get_current_path_service()
     except Exception:
+        # R5批⑪（清单安全）：不再 fail-open 回退共享默认实例——compat 层对「无用户
+        # 上下文」的合法情形（CLI/后台任务）本就直接返回共享实例不抛错，能进到这里
+        # 的只会是多用户路径解析的真实故障；回退共享实例=跨用户数据串扰。fail-closed。
         import logging as _logging
 
-        _logging.getLogger(__name__).warning(
-            "get_path_service() fell back to default instance; multi-user path resolution failed",
-            exc_info=True,
-        )
-        return PathService.get_instance()
+        _logging.getLogger(__name__).exception(
+            "multi-user path resolution failed; refusing shared-instance fallback")
+        raise
 
 
 __all__ = [

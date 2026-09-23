@@ -56,6 +56,11 @@ def _normalize_tool_list(value: Any) -> list[str] | None:
 
 
 def grant_path(user_id: str) -> Path:
+    # R5批⑪（清单安全）：user_id 净化——save 侧有 get_user_by_id 间接约束，但
+    # load_grant/public_grant 直传 HTTP 入参无校验，'..'/'/' 可越出授权目录读写
+    if not isinstance(user_id, str) or not user_id.strip() or user_id in (".", "..") \
+            or "/" in user_id or "\\" in user_id or ":" in user_id or "\x00" in user_id:
+        raise ValueError(f"非法 user_id: {user_id!r}")
     ensure_system_dirs()
     return GRANTS_DIR / f"{user_id}.json"
 
@@ -97,7 +102,15 @@ def load_grant(user_id: str) -> dict[str, Any]:
     try:
         return normalize_grant(user_id, json.loads(path.read_text(encoding="utf-8")))
     except Exception:
-        return empty_grant(user_id)
+        # R5批⑪（清单安全）：读取失败不再回退 empty_grant（enabled_tools=None=放行池内
+        # 全部工具）——瞬时 IO 错误/半写损坏会把受限授权静默升级为全量授权（fail-open）。
+        # fail-closed：返回全空白名单（enabled_tools=[] = 什么工具都不放行）。
+        denied = empty_grant(user_id)
+        denied["enabled_tools"] = []
+        denied["mcp_tools"] = []
+        denied["cli_apps"] = []
+        denied["exec_enabled"] = False
+        return denied
 
 
 def save_grant(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
