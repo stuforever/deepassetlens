@@ -69,11 +69,8 @@ class FileTypeRouter:
         ".toml",
         ".csv",
         ".tsv",
-        ".ini",
-        ".cfg",
-        ".conf",
-        ".env",
-        ".properties",
+        # R5批㉓（清单安全）：.ini/.cfg/.conf/.env/.properties 常存密钥/密码/令牌，
+        # 移出可摄取文本白名单（原目录同步会整读入知识库）
         # Typesetting
         ".tex",
         ".latex",

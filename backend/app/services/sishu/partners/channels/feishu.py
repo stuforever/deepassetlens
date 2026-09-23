@@ -880,6 +880,13 @@ class FeishuChannel(BaseChannel):
                     filename = f"{filename}.opus"
 
         if data and filename:
+            # R5批㉓（清单安全）：filename 来自发送者上传的原始文件名（攻击者可控）——
+            # 取 basename 并折叠路径字符，防穿越 media_dir
+            import os as _os
+            import re as _re
+
+            filename = _os.path.basename(filename.replace("\\", "/")) or f"{msg_type}_file"
+            filename = _re.sub(r"[^A-Za-z0-9._\-一-鿿]", "_", filename)[:120]
             file_path = media_dir / filename
             file_path.write_bytes(data)
             logger.debug("Downloaded {} to {}", msg_type, file_path)

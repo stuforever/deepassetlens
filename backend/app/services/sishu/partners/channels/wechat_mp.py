@@ -152,10 +152,23 @@ class WechatMpChannel(BaseChannel):
         from aiohttp import web  # optional dependency
 
         async def handler(request):
-            body = await request.text()
-            # WeChat signature verification (GET) / message push (POST)
+            # R5批㉓（清单安全）：按微信服务器配置流程验签——GET 校验 signature 后原样
+            # 回显 echostr（原实现直接返回 config.token=泄露签名密钥）；POST 同样验签。
+            import hashlib as _hashlib
+
+            params = request.query
+            token = self.config.token or ""
+            sig = params.get("signature", "")
+            ts = params.get("timestamp", "")
+            nonce = params.get("nonce", "")
+            if not (token and sig and ts and nonce):
+                return web.Response(status=403, text="missing signature params")
+            expected = _hashlib.sha1("".join(sorted([token, ts, nonce])).encode()).hexdigest()
+            if sig != expected:
+                return web.Response(status=403, text="signature mismatch")
             if request.method == "GET":
-                return web.Response(text=self.config.token)
+                return web.Response(text=params.get("echostr", ""))
+            body = await request.text()
             try:
                 event = json.loads(body) if body else {}
                 await self.handle_inbound_event(event)
