@@ -13,11 +13,11 @@ declare module '*.module.scss' {
 // E-36：File System Access API 类型补声明（TS 4.9 lib.dom 缺 newer 成员；
 // lib/chat-import 使用侧均为可选调用 + 运行时特性探测，类型面仅补形状）。
 interface FileSystemDirectoryHandle {
-  values(options?: { mode?: "read" | "write" }): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
-  queryPermission?: (descriptor?: { mode?: "read" | "write" }) => Promise<PermissionState>;
-  requestPermission?: (descriptor?: { mode?: "read" | "write" }) => Promise<PermissionState>;
+  values(options?: { mode?: "read" | "readwrite" }): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
+  queryPermission?: (descriptor?: { mode?: "read" | "readwrite" }) => Promise<PermissionState>;
+  requestPermission?: (descriptor?: { mode?: "read" | "readwrite" }) => Promise<PermissionState>;
 }
 
 interface Window {
-  showDirectoryPicker?: (options?: { id?: string; mode?: "read" | "write"; startIn?: string }) => Promise<FileSystemDirectoryHandle>;
+  showDirectoryPicker?: (options?: { id?: string; mode?: "read" | "readwrite"; startIn?: string }) => Promise<FileSystemDirectoryHandle>;
 }

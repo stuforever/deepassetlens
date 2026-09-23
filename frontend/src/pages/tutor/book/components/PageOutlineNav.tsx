@@ -18,6 +18,13 @@ import {
   MousePointerClick,
   Sparkles,
   Sticker,
+  // R5批⑩：Guided Learning 块型图标
+  ClipboardCheck,
+  GraduationCap,
+  LayoutDashboard,
+  Repeat,
+  Stethoscope,
+  Wrench,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -37,6 +44,13 @@ const TYPE_ICON: Record<BlockType, LucideIcon> = {
   flash_cards: Sticker,
   deep_dive: MessageCircle,
   concept_graph: Layers,
+  // R5批⑩：Guided Learning 阶段块型（枚举补齐随之补图标/标签）
+  diagnostic: Stethoscope,
+  pretest: ClipboardCheck,
+  retrieval_practice: Repeat,
+  error_diagnosis: Wrench,
+  module_test: GraduationCap,
+  progress_dashboard: LayoutDashboard,
 };
 
 const TYPE_LABEL_EN: Record<BlockType, string> = {
@@ -53,6 +67,12 @@ const TYPE_LABEL_EN: Record<BlockType, string> = {
   flash_cards: "Flash cards",
   deep_dive: "Deep dive",
   concept_graph: "Concept graph",
+  diagnostic: "Diagnostic",
+  pretest: "Pre-test",
+  retrieval_practice: "Retrieval practice",
+  error_diagnosis: "Error diagnosis",
+  module_test: "Module test",
+  progress_dashboard: "Progress dashboard",
 };
 
 function shortLabel(block: Block, fallback: string): string {

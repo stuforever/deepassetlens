@@ -38,7 +38,15 @@ export type BlockType =
   | "flash_cards"
   | "deep_dive"
   | "section"
-  | "concept_graph";
+  | "concept_graph"
+  // R5批⑩：补齐 Guided Learning 阶段的 6 个枚举值——后端生成器已会产出这些块类型，
+  // 前端缺声明会在接口返回时与类型不符（审查清单 High 登记点）
+  | "diagnostic"
+  | "pretest"
+  | "retrieval_practice"
+  | "error_diagnosis"
+  | "module_test"
+  | "progress_dashboard";
 
 export type ContentType =
   | "theory"

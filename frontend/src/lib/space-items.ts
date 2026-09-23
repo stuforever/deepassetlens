@@ -1,22 +1,20 @@
 "use client";
 
 import {
-  Bot,
   ClipboardList,
   History,
   NotebookPen,
-  UserRound,
-  Wand2,
   type LucideIcon,
 } from "lucide-react";
 
+// R5批⑩：收敛键表——agents/personas/skills 三键从未被任何消费方命中
+// （桌面 ChatSpaceMenu ITEM_ORDER=attach/knowledge/chat_history/my_agents/books/
+// notebooks/question_bank/persona/memory，my_agents/persona 为消费方内联条目）；
+// h5 域用 h5shared/spaceItems.ts 自有副本，与本件无关。
 export type SpaceItemKey =
   | "chat_history"
-  | "agents"
   | "notebooks"
-  | "question_bank"
-  | "personas"
-  | "skills";
+  | "question_bank";
 
 export type SpaceMemoryFile = "summary" | "profile";
 
@@ -37,13 +35,6 @@ export const SPACE_ITEMS: SpaceItem[] = [
     icon: History,
   },
   {
-    key: "agents",
-    href: "/space/agents",
-    label: "My Agents",
-    description: "Chat with imported Claude Code and Codex agents.",
-    icon: Bot,
-  },
-  {
     key: "notebooks",
     href: "/space/notebooks",
     label: "Notebooks",
@@ -57,19 +48,5 @@ export const SPACE_ITEMS: SpaceItem[] = [
     label: "Question Bank",
     description: "Review and organize quiz questions across sessions.",
     icon: ClipboardList,
-  },
-  {
-    key: "personas",
-    href: "/space/personas",
-    label: "Personas",
-    description: "Behavior presets you can apply per chat turn.",
-    icon: UserRound,
-  },
-  {
-    key: "skills",
-    href: "/space/skills",
-    label: "Skills",
-    description: "Capability playbooks the model reads on demand.",
-    icon: Wand2,
   },
 ];
