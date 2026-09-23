@@ -95,8 +95,14 @@ export function AppShellProvider({ children }: { children: React.ReactNode }) {
     fetch("/api/v1/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const lang = normalizeLanguage(d?.ui?.language);
-        if (lang) writeStoredLanguage(lang);
+        // R5批⑪：后端未报告语言（请求失败/缺 ui.language 字段）时不得覆写本地语言——
+        // normalizeLanguage 恒返回 "en"|"zh"，原 if (lang) 永真，失败路径会把
+        // localStorage 语言静默改写为 "en" 并经 LANGUAGE_EVENT 反向触发 setState
+        const reported = d?.ui?.language;
+        if (reported) {
+          const lang = normalizeLanguage(reported);
+          if (lang) writeStoredLanguage(lang);
+        }
       })
       .catch(() => {});
   }, []);
