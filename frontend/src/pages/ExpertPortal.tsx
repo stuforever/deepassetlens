@@ -1,224 +1,158 @@
 /**
- * 新建对话首页（v3 §二.1/§四——ExpertPortal 重写）：专家 Tab + 居中 composer + 问法 chips + 最近对话卡条。
- * 发送 → /e/{slug}/chat?new=1&q=...；h5 Tab → /h5-publish（发布管理页，Task 5）。
+ * 专家门户首页（UX2批① 用户反馈①⑤：两套入口不强融——首页只做三张高质感专家卡：
+ * 图标+名称+能做什么介绍，点击分别进入各自入口 /e/wenshu/chat、/e/sishu/chat、/h5-publish。
+ * 原集中 composer/模板宫格/Tab 退场——对话在各专家页内完成（8 建议卡 ExpertChat 首屏已有）。
  */
-import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { Typography } from 'antd';
-import { SearchOutlined, ReadOutlined, MobileOutlined } from '@ant-design/icons';
+import React, { useContext } from 'react';
+import {
+  BarChartOutlined,
+  ReadOutlined,
+  MobileOutlined,
+  ArrowRightOutlined,
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import UnifiedComposer from '../components/chat/UnifiedComposer';
 import { AuthCtx } from '../auth/AuthGate';
-import { tokens, spaceColors } from '../theme/tokens';
-import { useStore } from '../store/useStore';
-import { listSessions } from '../pages/tutor/admin/session-api';
-import { chatTemplates } from '../config/chatTemplates';
-
-const { Text } = Typography;
+import { spaceColors } from '../theme/tokens';
 
 type ChatSlug = 'wenshu' | 'sishu' | 'h5';
 
-const TAB_META: { slug: ChatSlug; label: string; color: string; title: string; placeholder: string; icon: React.ComponentType<any> }[] = [
-  { slug: 'wenshu', label: '问数', color: spaceColors.wenshu, title: '有什么想探查的数据？', placeholder: '想问什么数据？', icon: SearchOutlined },
-  { slug: 'sishu', label: '私塾', color: spaceColors.sishu, title: '今天想学点什么？', placeholder: '想学什么？可以让我出题、判分、安排复习', icon: ReadOutlined },
-  { slug: 'h5', label: 'h5', color: spaceColors.h5, title: '手机上的私塾', placeholder: '选择页面在手机上打开', icon: MobileOutlined },
+const CARDS: {
+  slug: ChatSlug;
+  label: string;
+  color: string;
+  colorSoft: string;
+  icon: React.ComponentType<any>;
+  intro: string[];
+  cta: string;
+}[] = [
+  {
+    slug: 'wenshu',
+    label: '问数',
+    color: spaceColors.wenshu,
+    colorSoft: 'rgba(37, 99, 235, 0.10)',
+    icon: BarChartOutlined,
+    intro: ['一句话查数据，自动出图', 'SQL 生成与口径解读', '血缘追溯 · 对比 · 趋势'],
+    cta: '开始探索',
+  },
+  {
+    slug: 'sishu',
+    label: '私塾先生',
+    color: spaceColors.sishu,
+    colorSoft: 'rgba(217, 119, 6, 0.10)',
+    icon: ReadOutlined,
+    intro: ['出题 · 判分 · 错题本', '学情画像与复习规划', 'AI 教材与讲义生成'],
+    cta: '开始学习',
+  },
+  {
+    slug: 'h5',
+    label: 'H5 展台',
+    color: spaceColors.h5,
+    colorSoft: 'rgba(8, 145, 178, 0.10)',
+    icon: MobileOutlined,
+    intro: ['手机端随时练题', '错题回顾与报告', '移动学习空间'],
+    cta: '打开展台',
+  },
 ];
-
-const FALLBACK_CHIPS: Record<ChatSlug, string[]> = {
-  wenshu: ['统计用电客户总数', '什么是变压器', '配电变压器有哪些？列出编号和名称', '用电客户数据的来源'],
-  sishu: ['出三道几何练习', '我今天该复习什么', '看看我的学情画像', '开始今天的复习'],
-  h5: ['对话', '学习', '错题本', '学情报告'],
-};
 
 const NewChatHome: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useContext(AuthCtx);
-  const sessions = useStore((s) => s.sessions);
-  const [tab, setTab] = useState<ChatSlug>(() => {
-    const saved = localStorage.getItem('newchat-tab');
-    return saved === 'sishu' || saved === 'h5' || saved === 'wenshu' ? saved : 'wenshu';
-  });
-  const [question, setQuestion] = useState('');
-  const [h5Rows, setH5Rows] = useState<{ sid: string; title: string; ts: number }[]>([]);
 
-  useEffect(() => { localStorage.setItem('newchat-tab', tab); }, [tab]);
-
-  useEffect(() => {
-    listSessions(20, 0).then((rows) => {
-      setH5Rows((rows || []).map((r) => ({ sid: r.session_id || r.id, title: r.title, ts: r.updated_at || 0 })));
-    }).catch(() => { /* 静默 */ });
-  }, []);
-
-  const meta = TAB_META.find((t) => t.slug === tab)!;
-  // 最近对话卡条 ×5：平台 store 会话（wenshu/sishu，有消息）+ h5 vendor 会话，按近序
-  const recent = useMemo(() => {
-    const rows: { key: string; title: string; color: string; ts: number; open: () => void }[] = [];
-    for (const s of sessions) {
-      if (!s.messages.length) continue;
-      const color = s.expertId === 'sishu' ? spaceColors.sishu : spaceColors.wenshu;
-      rows.push({
-        key: `p-${s.id}`, title: s.title, color, ts: s.createdAt,
-        open: () => {
-          useStore.getState().setActiveSessionId(s.id);
-          navigate(s.expertId === 'sishu' ? '/e/sishu/chat' : '/e/wenshu/chat');
-        },
-      });
+  const enter = (slug: ChatSlug) => {
+    if (slug === 'h5') {
+      navigate('/h5-publish');
+      return;
     }
-    for (const r of h5Rows) {
-      rows.push({
-        key: `h-${r.sid}`, title: r.title || '(未命名)', color: spaceColors.h5, ts: r.ts,
-        open: () => navigate(`/e/tutor-h5/chat?session=${encodeURIComponent(r.sid)}`),
-      });
-    }
-    rows.sort((a, b) => b.ts - a.ts);
-    return rows.slice(0, 5);
-  }, [sessions, h5Rows, navigate]);
-
-  const relTime = (ts: number) => {
-    if (!ts) return '';
-    const t = ts < 1e12 ? ts * 1000 : ts;
-    const d = Date.now() - t;
-    if (d < 60_000) return '刚刚';
-    if (d < 3_600_000) return `${Math.floor(d / 60_000)}分钟前`;
-    if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}小时前`;
-    if (d < 7 * 86_400_000) return `${Math.floor(d / 86_400_000)}天前`;
-    return new Date(t).toLocaleDateString();
+    navigate(`/e/${slug}/chat`);
   };
-
-  const send = () => {
-    const q = question.trim();
-    if (!q) return;
-    if (tab === 'h5') { navigate('/h5-publish'); return; }
-    navigate(`/e/${tab}/chat?new=1&q=${encodeURIComponent(q)}`);
-  };
-
-  void user;
 
   return (
-    <div data-testid="newchat-home" style={{ flex: 1, overflow: 'auto', background: tokens.colors.bgPage }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '72px 24px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* 专家 Tab（页内 Tab 非页签条；选中=空间色下划线；localStorage 记忆） */}
-        <div style={{ display: 'flex', gap: 28, marginBottom: 40 }} data-testid="newchat-tabs">
-          {TAB_META.map((t) => {
-            const active = t.slug === tab;
-            return (
-              <div
-                key={t.slug}
-                role="button"
-                tabIndex={0}
-                data-testid={`newchat-tab-${t.slug}`}
-                onClick={() => setTab(t.slug)}
-                onKeyDown={(e) => { if (e.key === 'Enter') setTab(t.slug); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 15,
-                  cursor: 'pointer', paddingBottom: 8,
-                  color: active ? t.color : 'var(--text-secondary, #888)',
-                  fontWeight: active ? 600 : 400,
-                  borderBottom: active ? `2px solid ${t.color}` : '2px solid transparent',
-                }}
-              >
-                <t.icon />
-                {t.label}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 居中标题随专家切换 */}
-        <h1 style={{ fontSize: 30, fontWeight: 600, color: 'var(--text-primary, #222)', margin: '0 0 28px', letterSpacing: '-0.01em' }}>
-          {meta.title}
+    <div data-testid="newchat-home" style={{ flex: 1, overflow: 'auto', background: tokens_bg() }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '96px 32px 48px' }}>
+        <h1
+          style={{
+            fontSize: 30, fontWeight: 600, color: 'var(--text-primary, #222)',
+            margin: '0 0 10px', letterSpacing: '-0.01em', textAlign: 'center',
+          }}
+          data-testid="portal-greeting"
+        >
+          {user?.sub ? `${user.sub}，今天想从哪儿开始？` : '今天想从哪儿开始？'}
         </h1>
+        <p style={{ textAlign: 'center', color: 'var(--text-tertiary, #999)', margin: '0 0 56px', fontSize: 14 }}>
+          选择一位专家进入对应工作台
+        </p>
 
-        {/* 中央 composer ≤720px（M7 统一组件复用） */}
-        <div style={{ width: '100%', maxWidth: 720 }}>
-          <UnifiedComposer
-            testId="newchat-composer"
-            value={question}
-            onChange={setQuestion}
-            onSubmit={send}
-            placeholder={meta.placeholder}
-          />
-        </div>
-
-        {/* 批①b（v4§二.2）：模板宫格 2×4——点击只回填 composer 并聚焦，不直发（铁律） */}
-        {tab !== 'h5' ? (
-          <div style={{ width: '100%', maxWidth: 720, marginTop: 20 }} data-testid="newchat-templates">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              {chatTemplates[tab].map((tpl) => (
-                <div
-                  key={tpl.title}
-                  role="button"
-                  tabIndex={0}
-                  data-testid={`newchat-template-${tpl.title}`}
-                  onClick={() => {
-                    setQuestion(tpl.text);
-                    const ta = document.querySelector<HTMLInputElement>("[data-testid='newchat-composer'] textarea");
-                    if (ta) { ta.focus(); }
-                  }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { setQuestion(tpl.text); } }}
-                  style={{
-                    padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
-                    border: '1px solid var(--border-subtle, #e5e7eb)', background: 'var(--bg-content, #fff)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-primary)', fontSize: 13, fontWeight: 600 }}>
-                    {tpl.icon}{tpl.title}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary, #999)', marginTop: 4, minHeight: 18, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {tpl.text || '输入自定义问题'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 20 }} data-testid="newchat-chips">
-            {FALLBACK_CHIPS.h5.map((c) => (
+        <div
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}
+          data-testid="portal-cards"
+        >
+          {CARDS.map((c) => (
+            <div
+              key={c.slug}
+              role="button"
+              tabIndex={0}
+              data-testid={`portal-card-${c.slug}`}
+              onClick={() => enter(c.slug)}
+              onKeyDown={(e) => { if (e.key === 'Enter') enter(c.slug); }}
+              onMouseEnter={(ev) => {
+                ev.currentTarget.style.transform = 'translateY(-6px)';
+                ev.currentTarget.style.boxShadow = `0 16px 40px ${c.colorSoft}, 0 4px 16px rgba(0,0,0,0.06)`;
+                ev.currentTarget.style.borderColor = c.color;
+              }}
+              onMouseLeave={(ev) => {
+                ev.currentTarget.style.transform = 'none';
+                ev.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                ev.currentTarget.style.borderColor = 'var(--border-subtle, #e5e7eb)';
+              }}
+              className="ux-portal-card"
+              style={{
+                position: 'relative', overflow: 'hidden',
+                padding: '28px 24px 22px', borderRadius: 18, cursor: 'pointer',
+                border: '1px solid var(--border-subtle, #e5e7eb)', background: 'var(--bg-content, #fff)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                transition: 'transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease',
+                display: 'flex', flexDirection: 'column', gap: 14,
+              }}
+            >
+              {/* 顶部空间色渐变条 */}
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: `linear-gradient(90deg, ${c.color}, ${c.color}22)` }} />
               <div
-                key={c}
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate('/h5-publish')}
                 style={{
-                  padding: '6px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 13,
-                  border: '1px solid var(--border-subtle, #e5e7eb)', background: 'var(--bg-content, #fff)',
-                  color: 'var(--text-secondary, #555)',
+                  width: 60, height: 60, borderRadius: 16, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', background: c.colorSoft,
                 }}
               >
-                {c}
+                <c.icon style={{ fontSize: 30, color: c.color }} />
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* 最近对话横向卡条 ×5 */}
-        {recent.length > 0 && (
-          <div style={{ width: '100%', marginTop: 56 }} data-testid="newchat-recent">
-            <Text type="secondary" style={{ fontSize: 12, fontWeight: 600 }}>最近对话</Text>
-            <div style={{ display: 'flex', gap: 12, marginTop: 10, overflowX: 'auto', paddingBottom: 4 }}>
-              {recent.map((r) => (
-                <div
-                  key={r.key}
-                  role="button"
-                  tabIndex={0}
-                  onClick={r.open}
-                  style={{
-                    minWidth: 200, maxWidth: 220, padding: '10px 12px', borderRadius: 12, cursor: 'pointer',
-                    border: '1px solid var(--border-subtle, #e5e7eb)', background: 'var(--bg-content, #fff)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 99, background: r.color, flexShrink: 0 }} />
-                    <Text ellipsis style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{r.title}</Text>
+              <div style={{ fontSize: 21, fontWeight: 650, color: 'var(--text-primary, #222)' }}>{c.label}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 84 }}>
+                {c.intro.map((line) => (
+                  <div key={line} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary, #555)' }}>
+                    <span style={{ width: 5, height: 5, borderRadius: 99, background: c.color, flexShrink: 0 }} />
+                    {line}
                   </div>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{relTime(r.ts)}</Text>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div
+                style={{
+                  marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  paddingTop: 12, borderTop: '1px solid var(--border-subtle, #eef0f3)', fontSize: 13,
+                  fontWeight: 600, color: c.color,
+                }}
+              >
+                {c.cta}
+                <ArrowRightOutlined />
+              </div>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
     </div>
   );
 };
+
+function tokens_bg(): string {
+  return 'var(--bg-page, #f7f8fa)';
+}
 
 export default NewChatHome;

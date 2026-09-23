@@ -94,6 +94,8 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
   const [renamingKey, setRenamingKey] = useState('');
   const [renameVal, setRenameVal] = useState('');
   const [search, setSearch] = useState('');
+  // UX2批⑥（反馈⑤）：历史区分类别 Tab（全部/问数/私塾/h5）——批④ 层叠在所选类别内保持
+  const [catTab, setCatTab] = useState<'all' | ExpertId>('all');
   const [expanded, setExpanded] = useState(false);
   const [pins, setPins] = useState<string[]>(() => loadHist(HIST_PIN_KEY));
   const [favs, setFavs] = useState<string[]>(() => loadHist(HIST_FAV_KEY));
@@ -148,10 +150,12 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
     });
   };
 
+  // UX2批⑥：类别 Tab 过滤（filtered 基础上按专家收窄）
+  const scoped = catTab === 'all' ? filtered : filtered.filter((r) => r.expert === catTab);
   // 批④ 四层层叠：📌置顶 → ⭐收藏 → 按专家三组（组内 今天/本周/更早）
-  const pinnedRows = filtered.filter((r) => pins.includes(r.key));
-  const favRows = filtered.filter((r) => favs.includes(r.key) && !pins.includes(r.key));
-  const rest = filtered.filter((r) => !pins.includes(r.key) && !favs.includes(r.key));
+  const pinnedRows = scoped.filter((r) => pins.includes(r.key));
+  const favRows = scoped.filter((r) => favs.includes(r.key) && !pins.includes(r.key));
+  const rest = scoped.filter((r) => !pins.includes(r.key) && !favs.includes(r.key));
 
   const commitRename = (r: Row) => {
     const t = renameVal.trim();
@@ -316,7 +320,26 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
         data-testid="chat-panel-search"
       />
       <div style={{ flex: 1, minHeight: 0 }}>
-        {filtered.length === 0 && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }} data-testid="chat-cat-tabs">
+          {(['all', 'wenshu', 'sishu', 'tutor-h5'] as const).map((k) => (
+            <div
+              key={k}
+              role="button"
+              tabIndex={0}
+              data-testid={`chat-cat-tab-${k}`}
+              onClick={() => setCatTab(k)}
+              style={{
+                padding: '2px 10px', borderRadius: 999, fontSize: 12, cursor: 'pointer',
+                background: catTab === k ? 'var(--primary-50, #eff6ff)' : 'transparent',
+                color: catTab === k ? 'var(--brand, #2563EB)' : 'var(--text-secondary, #888)',
+                border: `1px solid ${catTab === k ? 'var(--brand, #2563EB)' : 'var(--border-subtle, #e5e7eb)'}`,
+              }}
+            >
+              {k === 'all' ? '全部' : (EXPERTS.find((e) => e.id === k)?.label || k)}
+            </div>
+          ))}
+        </div>
+        {scoped.length === 0 && (
           <Text type="secondary" style={{ fontSize: 12 }}>{q ? '无匹配会话' : '暂无对话记录'}</Text>
         )}
         {renderLayer('📌 置顶', 'hist-group-pinned', pinnedRows)}

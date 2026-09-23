@@ -135,12 +135,23 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   }, [location.search]);
   // v3 §3.1（Task2）：新建对话直达——?new=1&q=... 预填并自动发出（门户/⌘K 发送链路落点）。
   // sendQuestion 以显式入参取文本（不依赖 question state 时序）；autoSentRef 防重复发出。
+  // UX2批③（反馈③）：?new=1 无 q=卡进入新建意图——强制新会话不复用残留活跃位。
   const autoSentRef = useRef(false);
+  const selfNavRef = useRef(false);
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    if (sp.get('new') !== '1') return;
+    newChatIntentRef.current = true;
+    sp.delete('new');
+    navigate({ pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
   useEffect(() => {
     if (autoSentRef.current) return;
     const m = location.search.match(/[?&]q=([^&]+)/);
     if (!m) return;
     autoSentRef.current = true;
+    newChatIntentRef.current = true; // UX2批③（反馈③）：?new=1=新建契约——强制新会话
     let q = decodeURIComponent(m[1]);
     setQuestion(q);
     // R#6：立即清 ?q=/?new=1（replace 不留历史）——刷新/后退不再重发（审查更正形态）；
@@ -148,9 +159,11 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     const sp = new URLSearchParams(location.search);
     sp.delete('q');
     sp.delete('new');
+    selfNavRef.current = true; // UX2批③：自身 replace 触发的 cleanup 不掐定时器
     navigate({ pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: true });
+    // UX2批③：自身 replace 触发的 cleanup 不掐定时器（硬加载 ?q= 场景）；用户 600ms 内切走仍取消
     const t = window.setTimeout(() => { void sendQuestionRef.current?.(q); }, 600);
-    return () => window.clearTimeout(t);
+    return () => { if (!selfNavRef.current) window.clearTimeout(t); selfNavRef.current = false; };
   }, [location.search, location.pathname, navigate]);
   // 批⓪：路由模拟器审计入口下线（simOpen/Drawer 移除）——批⑥ 引擎台「路由模拟」Tab 后台承接
   const [status, setStatus] = useState<ChatStatus>('ready');
@@ -961,12 +974,17 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
 
   // v3 §3.1：sendQuestion(text)——发送逻辑以显式入参承载（handleSubmit 与 ?q= 直达自动发出共用）
   const sendQuestionRef = useRef<((text: string) => Promise<void>) | null>(null);
+  // UX2批③（反馈③）：新建意图位——?new=1 进入时强制新会话，不复用 store 残留的
+  // activeSessionId（⌘K 新建对话等入口不清活跃位，新建内容曾追加进老会话）
+  const newChatIntentRef = useRef(false);
   const sendQuestion = async (userText: string) => {
-    // 没有活跃会话时，发送第一条消息才正式创建会话
-    let sid = activeSession?.id;
-    if (!sid) {
+    let sid: string;
+    if (newChatIntentRef.current || !activeSession?.id) {
       // IA 件批2 2.2：会话创建写入专家维度（slug 同 L280 expert_id 同源；string 收窄 ExpertId）
       sid = createNewSession(slug === 'sishu' || slug === 'tutor-h5' ? slug : 'wenshu');
+      newChatIntentRef.current = false;
+    } else {
+      sid = activeSession.id;
     }
     setQuestion('');
 

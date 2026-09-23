@@ -878,7 +878,8 @@ function TutorHomeChatInner() {
         {/* v3 §2.4 空间色：对话页页头 3px 色条（sishu 琥珀） */}
         <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#D97706', zIndex: 5 }} />
         <div
-          className="chat-preview-shell flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
+          className="chat-preview-shell flex h-full min-w-0 flex-1 flex-col overflow-hidden text-[var(--foreground)]"
+          style={{ background: "var(--bg-page, #f7f8fa)" }}  /* UX2批④：背景对齐问数 bgPage */
           data-preview-open={previewSource !== null ? "true" : "false"}
           data-viewer-open={viewerPanelOpen && previewSource === null ? "true" : "false"}
           onDragEnter={handleDragEnter}
@@ -910,33 +911,7 @@ function TutorHomeChatInner() {
                 <div className="flex w-full max-w-[960px] items-center justify-center gap-4">
                   <h1 className="font-serif text-[40px] font-medium leading-[1.1] tracking-[-0.015em] text-[var(--foreground)]">{t(welcomeGreeting)}</h1>
                 </div>
-                {/* 三轨M7(U2) §3.3：sishu 空间首页宫格——7 功能入口下沉，首条消息后宫格退场 */}
-                <div
-                  data-testid="sishu-space-grid"
-                  className="grid w-full max-w-[720px] gap-2.5"
-                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}
-                >
-                  {[
-                    { label: "书籍", path: "/e/sishu/book" },
-                    { label: "自主学习", path: "/e/sishu/self-learning" },
-                    { label: "AI写作", path: "/e/sishu/co-writer" },
-                    { label: "伙伴/推送", path: "/e/sishu/partners" },
-                    { label: "母题库", path: "/e/sishu/admin/mother-questions" },
-                    { label: "书源", path: "/e/sishu/admin/book" },
-                    { label: "教学设置", path: "/e/sishu/admin/settings" },
-                  ].map((entry) => (
-                    <button
-                      key={entry.label}
-                      data-testid={`sishu-grid-${entry.label}`}
-                      type="button"
-                      onClick={() => navigate(entry.path)}
-                      className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-2 py-3.5 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                    >
-                      <BookMarked className="h-4.5 w-4.5 text-amber-600" />
-                      <span className="text-xs text-[var(--foreground)]">{entry.label}</span>
-                    </button>
-                  ))}
-                </div>
+                {/* UX2批⑧：7 功能入口已下沉管理台（v4§5.2 私塾管理组）——首屏宫格移除（用户反馈⑧） */}
               </div>
             ) : (
               <div className="relative flex w-full flex-1 min-h-0 flex-col">
@@ -955,7 +930,7 @@ function TutorHomeChatInner() {
                       : undefined
                   }
                 >
-                  <div data-chat-column="true" className="mx-auto w-full max-w-[960px] space-y-9 px-6">
+                  <div data-chat-column="true" className="mx-auto w-full space-y-9 px-6" style={{ maxWidth: "min(100%, max(720px, 60vw))" }}>
                     <ChatMessageList
                       messages={state.messages as never}
                       isStreaming={state.isStreaming}
@@ -1010,6 +985,7 @@ function TutorHomeChatInner() {
               </div>
             )}
 
+            <div style={{ borderRadius: 24, boxShadow: '0 12px 32px rgba(15, 23, 42, 0.10)', background: 'var(--bg-content, #fff)', overflow: 'hidden' }}  /* UX2批④：composer 卡片化对齐问数 S3 面板 */>
             <ChatComposer
               composerRef={composerRef}
               capMenuRef={capMenuRef}
@@ -1086,6 +1062,7 @@ function TutorHomeChatInner() {
               onCancelStreaming={cancelStreamingTurn}
               prefillInputRef={prefillInputRef}
             />
+            </div>
             <div
               aria-hidden="true"
               className="shrink-0"

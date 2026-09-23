@@ -74,6 +74,10 @@ const App: React.FC = () => {
     setPanelWidths((m) => ({ ...m, [p]: w }));
     if (commit) localStorage.setItem(`shell:width:${p}`, String(w));
   };
+  // UX2批⑦（反馈⑥套娃）：钉住=锁定——面板内导航/会话点击不再自隐（原 onClose 无视钉住态强制隐藏）
+  const closeUnlessPinned = (p: 'chat' | 'console' | 'settings') => {
+    if (!pinnedPanels[p]) setShellPanel(null);
+  };
   // v3 #8：⌘K 命令面板
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -361,13 +365,13 @@ const App: React.FC = () => {
                 width={panelWidths[shellPanel]}
                 onWidthChange={(w, commit) => changePanelWidth(shellPanel, w, commit)}
                 onTogglePin={() => togglePin(shellPanel)}
-                onClose={() => setShellPanel(null)}
+                onClose={() => closeUnlessPinned(shellPanel)}
               >
                 {shellPanel === 'console' && (
-                  <NavPanel visible onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />
+                  <NavPanel visible onClose={() => closeUnlessPinned('console')} onNavigate={(path) => navigate(path)} />
                 )}
-                {shellPanel === 'chat' && <ChatPanel onClose={() => setShellPanel(null)} />}
-                {shellPanel === 'settings' && <SettingsPanel onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />}
+                {shellPanel === 'chat' && <ChatPanel onClose={() => closeUnlessPinned('chat')} />}
+                {shellPanel === 'settings' && <SettingsPanel onClose={() => closeUnlessPinned('settings')} onNavigate={(path) => navigate(path)} />}
               </ShellPanel>
             </>
           )}
