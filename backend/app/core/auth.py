@@ -38,6 +38,7 @@
 """
 from __future__ import annotations
 
+import hmac
 import os
 import json
 import time
@@ -450,7 +451,8 @@ class AuthMiddleware:
             # （tupu_deepagent）与主进程同源读 env（main.py 启动自动生成 token 注入），
             # Bearer 通道始终可用；外部客户端无 token → 一律 401。
             if _internal_token and auth_header.lower().startswith("bearer ") \
-                    and auth_header[7:].strip() == _internal_token:
+                    and hmac.compare_digest(auth_header[7:].strip(), _internal_token):
+                # Minor（R3批）：token 比较改常量时间——直等 == 存在理论时序侧信道
                 state["user"] = _ANONYMOUS
                 return await self.app(scope, receive, send)
             await _send_json_response(send, 401, "MCP 端点需 Bearer 内部 token（X-Internal-Service 兜底已废除）")

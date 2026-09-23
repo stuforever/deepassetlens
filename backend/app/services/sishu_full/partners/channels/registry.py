@@ -44,7 +44,9 @@ def discover_plugins() -> dict[str, type[BaseChannel]]:
     from importlib.metadata import entry_points
 
     plugins: dict[str, type[BaseChannel]] = {}
-    for ep in entry_points(group="app.services.sishu_full.partners.channels"):
+    # Minor（R3批）：组名回退 deeptutor.partners.channels——与平台侧 sishu 副本
+    # （app/services/sishu/partners/channels/registry.py）一致，同一插件双栈只注册一次。
+    for ep in entry_points(group="deeptutor.partners.channels"):
         try:
             cls = ep.load()
             plugins[ep.name] = cls

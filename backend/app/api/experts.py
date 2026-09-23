@@ -244,8 +244,11 @@ def patch_expert(expert_id: str, body: ExpertPatchBody, request: Request):
     _require_admin(request)
     user = get_current_user(request)
     updated_by = user.sub if user and user.sub else "admin"
-    fields = {k: v for k, v in body.model_dump().items()
-              if v is not None and k not in ("confirm", "close_reason")}
+    # R#10（R3批）：exclude_unset 区分「未传/传 null」——原 `v is not None` 过滤把显式
+    # 清空（前端提交 llm_connection_id: null）静默吞掉，UI 报已保存但 A→空不生效。
+    # 传 null=清空生效；未传键不进 fields=不动。
+    fields = {k: v for k, v in body.model_dump(exclude_unset=True).items()
+              if k not in ("confirm", "close_reason")}
     if fields.get("tools") is not None or fields.get("skills") is not None or \
        fields.get("memory") is not None or fields.get("knowledge_sources") is not None or \
        fields.get("system_prompt") is not None or \
