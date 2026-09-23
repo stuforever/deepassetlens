@@ -107,7 +107,9 @@ export function filterRefsByScope(
     return refs.filter((r) => set.has(r.cwd));
   }
   const set = new Set(scope.days);
-  return refs.filter((r) => set.has(r.date));
+  // R5批⑨：与 buildSelectGroups 的分组键对齐（空 date 兜底 "(unknown)"）——
+  // 否则用户勾选的 "(unknown)" 分组刷新后永远过滤不出任何会话
+  return refs.filter((r) => set.has(r.date || "(unknown)"));
 }
 
 /** Fully parse the selected sessions; corrupt/unreadable ones are skipped

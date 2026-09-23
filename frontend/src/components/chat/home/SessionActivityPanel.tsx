@@ -522,7 +522,8 @@ function AttachmentRow({
           <Icon
             size={13}
             strokeWidth={1.6}
-            className={isImage ? "text-[var(--muted-foreground)]" : spec.tint}
+            className={isImage ? "text-[var(--muted-foreground)]" : undefined}
+            style={isImage ? undefined : { color: spec.tint }}
           />
         </span>
         <span className="min-w-0 flex-1">

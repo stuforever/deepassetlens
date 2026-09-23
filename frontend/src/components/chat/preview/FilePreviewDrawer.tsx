@@ -185,7 +185,7 @@ export default function FilePreviewDrawer({
           {/* Header */}
           <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--card)] px-4 py-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--muted)]/60">
-              <HeaderIcon size={18} strokeWidth={1.5} className={spec.tint} />
+              <HeaderIcon size={18} strokeWidth={1.5} style={{ color: spec.tint }} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-medium text-[var(--foreground)]">

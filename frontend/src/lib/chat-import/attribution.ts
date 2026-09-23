@@ -77,11 +77,20 @@ export function assignSessionsToAgents(
       out.set(sid, meta.agentId);
       continue;
     }
-    const owner = agents.find(
+    const matches = agents.filter(
       (a) =>
         a.source === meta.source &&
         scopeContainsSession(a.scope, meta, session.created_at),
     );
+    // R5批⑨：多匹配取最具体 scope（projects>days>all）——迁移遗留 all-scope 与具体
+    // scope 重叠是预期常态（见本函数文档），先匹配先得会随同步顺序漂移（all 晚到
+    // 吞掉具体 agent 名下会话）
+    const matchesSpecificity = { projects: 2, dates: 1, all: 0 } as const;
+    const owner =
+      matches.sort(
+        (a, b) =>
+          matchesSpecificity[b.scope.kind] - matchesSpecificity[a.scope.kind],
+      )[0] ?? null;
     out.set(sid, owner?.id ?? null);
   }
   return out;
