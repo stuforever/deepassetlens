@@ -4,6 +4,7 @@
 
 from collections.abc import AsyncGenerator, Mapping
 import logging
+import os
 import threading
 from typing import cast
 
@@ -127,7 +128,19 @@ def _get_aiohttp_connector() -> aiohttp.TCPConnector | None:
     global _ssl_warning_logged
 
     # Thread-safe check and one-time warning emission
-    disable_flag = bool(load_system_settings()["disable_ssl_verify"])
+    # R5批⑳（清单安全）：disable_ssl_verify 系统设置需同时显式设 env
+    # TUPU_ALLOW_INSECURE_SSL=1 才生效——原开关一开即对所有出站请求关证书校验
+    # （MITM 可截获 API key 与全部对话内容）。
+    _setting_on = bool(load_system_settings()["disable_ssl_verify"])
+    disable_flag = _setting_on and os.getenv("TUPU_ALLOW_INSECURE_SSL", "") == "1"
+    if _setting_on and not disable_flag:
+        with _ssl_warning_lock:
+            if not _ssl_warning_logged:
+                _ssl_warning_logged = True
+                logger.warning(
+                    "系统配置 disable_ssl_verify 已忽略——如确需关闭证书校验，"
+                    "请显式设置 env TUPU_ALLOW_INSECURE_SSL=1（生产环境严禁）"
+                )
     if not disable_flag:
         return None
 

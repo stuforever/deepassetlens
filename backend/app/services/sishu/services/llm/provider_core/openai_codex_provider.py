@@ -101,16 +101,14 @@ class OpenAICodexProvider(LLMProvider):
                 except Exception as exc:
                     if "CERTIFICATE_VERIFY_FAILED" not in str(exc):
                         raise
-                    logger.warning(
-                        "SSL verification failed for Codex API; retrying with verify=False"
-                    )
-                    content, tool_calls, finish_reason = await _request_codex(
-                        CODEX_RESPONSES_URL,
-                        headers,
-                        body,
-                        verify=False,
-                        on_content_delta=on_content_delta,
-                    )
+                    # R5批⑳（清单安全）：TLS 校验失败=中间人/劫持信号——绝不以
+                    # verify=False 重试（会把 Bearer token 与完整对话发给身份不明方）。
+                    # 显式中止，提示排查网络/证书。
+                    raise CodexHTTPError(
+                        getattr(exc, "status_code", 0) or 0,
+                        "Codex API TLS 证书校验失败（疑似中间人/流量劫持）——已中止请求，"
+                        "请检查网络与证书链",
+                    ) from None
                 return LLMResponse(
                     content=content,
                     tool_calls=tool_calls,

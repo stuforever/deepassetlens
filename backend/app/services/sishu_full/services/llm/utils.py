@@ -79,8 +79,10 @@ def is_local_llm_server(base_url: str, allow_private: bool | None = None) -> boo
     if not hostname:
         hostname = base_url
 
-    hostname_lower = hostname.lower()
-    if any(host in hostname_lower for host in LOCAL_HOSTS):
+    hostname_lower = hostname.lower().rstrip(".")
+    # R5批⑳（清单安全）：子串包含判定可被 https://localhost.attacker.com 绕过——
+    # 改为「精确等于 LOCAL_HOSTS 成员」或「.localhost 真子域后缀」；IP 判定保留
+    if hostname_lower in LOCAL_HOSTS or hostname_lower.endswith(".localhost"):
         return True
 
     try:
