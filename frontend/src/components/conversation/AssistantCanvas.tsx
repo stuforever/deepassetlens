@@ -20,6 +20,7 @@ import remarkGfm from 'remark-gfm';
 import ThinkStream from './ThinkStream';
 import SqlResultTable from './SqlResultTable';
 import ContractCardsPanel from './contractCards/ContractCardsPanel';
+import EvidenceCapsule, { evidenceToSources } from '../chat/EvidenceCapsule';
 import type { ChatMessagePayload, FinalFinding } from './types';
 import { buildFinalDeliveryView } from '../../utils/finalDelivery';
 import { tokens } from '../../theme/tokens';
@@ -150,6 +151,17 @@ const AssistantCanvas: React.FC<{
           <ThinkStream items={thinkStream} active={false} metaInfo={isLast ? liveMetaInfo : undefined} traces={traceLogs} />
         </div>
       ) : null}
+
+      {/* 0.2 EvidenceCapsule（批①a——v4§11.2/§12.2）：证据胶囊——「依据什么」；
+          思考链讲怎么想的、胶囊讲依据什么（替代批⓪折叠的 ContractCardsPanel 证据面） */}
+      {(() => {
+        const sources = evidenceToSources(evidence);
+        return sources.length > 0 ? (
+          <div style={{ marginBottom: 8 }}>
+            <EvidenceCapsule sources={sources} confidence={confidence as any} />
+          </div>
+        ) : null;
+      })()}
 
       {/* 1. 最终结果标题：必须明显显示（含融合 M3 G7 置信度三级小徽标） */}
       {(view.title || view.summary.length > 0 || view.findings.length > 0 || view.showTable) ? (

@@ -928,7 +928,7 @@ const FreePlanChat: React.FC = () => {
     }
   }, [activeSessionId]);
 
-  const CONTENT_WIDTH = 1200;
+  const CONTENT_WIDTH = 720; // 批①a（v4§二.1）：消息流与 composer 同宽 ≤720 居中
 
   // 输入卡片（两种状态共用；B2 美化：S3 阴影 + 聚焦主色描边环 + 渐变发送钮）
   const inputCard = (

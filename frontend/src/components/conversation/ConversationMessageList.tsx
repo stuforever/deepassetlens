@@ -1,10 +1,11 @@
 import React from 'react';
-import { Alert, Button, Card, Space, Spin, Typography, Popconfirm } from 'antd';
+import { Alert, Button, Space, Spin, Typography, Popconfirm } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ThinkStream from './ThinkStream';
 import AssistantCanvas from './AssistantCanvas';
 import ContractCardsPanel from './contractCards/ContractCardsPanel';
 import SqlResultTable from './SqlResultTable';
+import MessageActions from '../chat/MessageActions';
 import type { ChatMessage, ConversationCardAction, ConversationSceneConfig } from './types';
 
 const { Text } = Typography;
@@ -72,10 +73,14 @@ const MessageRow = React.memo<{
   canDelete: boolean;
   liveMetaInfo?: string;
   liveFinalAnswer?: string;
+  /** 批①a 操作条「保存到笔记」的 userQuery（父级取最近一条用户消息文本） */
+  pairedUserQuery?: string;
+  /** 批①a 思考链文案专家维度（thinkingTexts[expertId]——私塾=小塾） */
+  expertId?: string;
   onSelectRecommendation?: (rec: any) => void;
   onDeleteMessage?: (msgId: string) => void;
   onHITLDecision?: (interruptId: string, approve: boolean) => void;
-}>(({ msg, isLast, canDelete, liveMetaInfo, liveFinalAnswer, onSelectRecommendation, onDeleteMessage, onHITLDecision }) => {
+}>(({ msg, isLast, canDelete, liveMetaInfo, liveFinalAnswer, pairedUserQuery, expertId, onSelectRecommendation, onDeleteMessage, onHITLDecision }) => {
   // 批13-O：完成闪示窗口退出需要一次重渲（无新事件到来时「完成(x.xs)」短暂显示后切回兜底）
   const [, _tick] = React.useReducer((x: number) => x + 1, 0);
   const _live = msg.loading ? deriveLiveStatus(msg.payload) : null;
@@ -91,99 +96,102 @@ const MessageRow = React.memo<{
         <DeleteOutlined className="msg-del" style={{ position: 'absolute', top: 4, right: 4, zIndex: 10, fontSize: 13, color: 'var(--text-tertiary)', cursor: 'pointer', padding: 4 }} />
       </Popconfirm>
     ) : null}
-    <Card
-      size="small"
-      variant="borderless"
-      style={{
-        width: msg.role === 'user' ? 'min(1200px, 72%)' : '100%',
-        maxWidth: '100%',
-        background: msg.role === 'user' ? 'var(--color-primary-bg)' : 'transparent',
-        boxShadow: 'none',
-      }}
-      title={undefined}
-      styles={{ body: msg.role === 'user' ? { padding: '6px 12px' } : { padding: '0' } }}
-    >
-      {msg.role === 'user' ? (
-        /* B2 美化：用户问题 = 左主色竖线 + 文本 + 12px 时间戳，与回答区分 */
-        <div style={{ borderLeft: `3px solid var(--color-primary)`, paddingLeft: 10, width: '100%' }}>
-          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-            {(() => {
-              const m = /(\d{13})/.exec(msg.id || '');
-              if (!m) return '';
-              const d = new Date(Number(m[1]));
-              if (Number.isNaN(d.getTime())) return '';
-              const p = (n: number) => String(n).padStart(2, '0');
-              return `${p(d.getHours())}:${p(d.getMinutes())}`;
-            })()}
-          </div>
+    {msg.role === 'user' ? (
+      /* 批①a 裸排版（v4§二.1/附录A.8）：用户消息=右对齐浅灰气泡圆角12；AI 回答无容器 */
+      <div style={{ maxWidth: 'min(720px, 86%)', background: 'var(--muted, #f5f5f5)', borderRadius: 12, padding: '8px 12px' }}>
+        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14, lineHeight: '22px', color: 'var(--text-primary)' }}>{msg.text}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4, textAlign: 'right' }}>
+          {(() => {
+            const m = /(\d{13})/.exec(msg.id || '');
+            if (!m) return '';
+            const d = new Date(Number(m[1]));
+            if (Number.isNaN(d.getTime())) return '';
+            const p = (n: number) => String(n).padStart(2, '0');
+            return `${p(d.getHours())}:${p(d.getMinutes())}`;
+          })()}
         </div>
-      ) : msg.loading ? (
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          {/* S5（HITL v2）：表/catalog 不存在 -> 人审横条（流式暂停等待批准/拒绝；批准后恢复同 thread 续跑） */}
-          {msg.payload?.hitl_interrupt && msg.payload.hitl_interrupt.interrupt_id && onHITLDecision ? (
-            <Alert
-              type="warning"
-              showIcon
-              message="需要你确认：查询的表/catalog 不存在"
-              description={
-                <div style={{ fontSize: 12 }}>
-                  <div style={{ marginBottom: 4 }}>
-                    {msg.payload.hitl_interrupt.reason} {msg.payload.hitl_interrupt.proposal}
+      </div>
+    ) : (
+      <div style={{ width: '100%', minWidth: 0 }}>
+        {msg.loading ? (
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            {/* S5（HITL v2）：表/catalog 不存在 -> 人审横条（流式暂停等待批准/拒绝；批准后恢复同 thread 续跑） */}
+            {msg.payload?.hitl_interrupt && msg.payload.hitl_interrupt.interrupt_id && onHITLDecision ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="需要你确认：查询的表/catalog 不存在"
+                description={
+                  <div style={{ fontSize: 12 }}>
+                    <div style={{ marginBottom: 4 }}>
+                      {msg.payload.hitl_interrupt.reason} {msg.payload.hitl_interrupt.proposal}
+                    </div>
+                    <Space size={8}>
+                      <Button size="small" type="primary" onClick={() => onHITLDecision(msg.payload!.hitl_interrupt!.interrupt_id, true)}>批准重试</Button>
+                      <Button size="small" onClick={() => onHITLDecision(msg.payload!.hitl_interrupt!.interrupt_id, false)}>拒绝</Button>
+                    </Space>
                   </div>
-                  <Space size={8}>
-                    <Button size="small" type="primary" onClick={() => onHITLDecision(msg.payload!.hitl_interrupt!.interrupt_id, true)}>批准重试</Button>
-                    <Button size="small" onClick={() => onHITLDecision(msg.payload!.hitl_interrupt!.interrupt_id, false)}>拒绝</Button>
-                  </Space>
-                </div>
-              }
-              style={{ maxWidth: 640 }}
+                }
+                style={{ maxWidth: 640 }}
+              />
+            ) : null}
+            {/* 受控 Skill 问答平台 v2：流式运行中即渲染受控卡片（route/contract 事件一到即显示，默认折叠状态条） */}
+            {CONTRACT_CARDS_VISIBLE && (msg.payload?.route || msg.payload?.contract) ? (
+              <ContractCardsPanel
+                route={msg.payload.route}
+                contract={msg.payload.contract}
+                policyEvents={msg.payload.policy_events}
+                templateEvents={msg.payload.template_events}
+              />
+            ) : null}
+            {/* 思考面板：读占位消息自身的 payload，实时渲染。
+                批13-O：liveStatus = 框架事件流实时投影（deriveLiveStatus），
+                上移至 ThinkStream 头部标题位替换静态「正在定位数据」——进展在最上面动态展示；
+                meta 不再传冻结的 live_meta（status SSE 仅首帧发一次，「已执行 0 步」即此残留），
+                用组件内默认「已定位 N 步」随步骤实时递增 */}
+            {msg.payload?.thinkStream && msg.payload.thinkStream.length > 0 ? (
+              <ThinkStream
+                items={msg.payload.thinkStream}
+                active={true}
+                liveStatus={_live?.text}
+                expertId={expertId}
+              />
+            ) : null}
+            {/* 批13-O：thinkStream 为空时（编排期首帧）状态行独立显示，保证首个可见反馈不依赖步骤产生 */}
+            {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0) && _live ? (
+              <Space>
+                <Spin size="small" />
+                <Text strong>{_live.text}</Text>
+              </Space>
+            ) : null}
+            {/* 可选 TUPU_EARLY_TABLE 开关（默认关）：表格属结构化元素可提前入卡，正文仍等 done */}
+            {(typeof window !== 'undefined' && window.localStorage.getItem('TUPU_EARLY_TABLE') === '1'
+              && (msg.payload?.sql_result?.row_count ?? 0) > 0 && !!msg.payload?.sql_result?.columns?.length) ? (
+              <SqlResultTable data={msg.payload.sql_result} />
+            ) : null}
+          </Space>
+        ) : (
+          <>
+            <AssistantCanvas
+              payload={msg.payload}
+              isLast={isLast}
+              liveMetaInfo={liveMetaInfo}
+              liveFinalAnswer={liveFinalAnswer}
+              onSelectRecommendation={onSelectRecommendation}
             />
-          ) : null}
-          {/* 受控 Skill 问答平台 v2：流式运行中即渲染受控卡片（route/contract 事件一到即显示，默认折叠状态条） */}
-          {CONTRACT_CARDS_VISIBLE && (msg.payload?.route || msg.payload?.contract) ? (
-            <ContractCardsPanel
-              route={msg.payload.route}
-              contract={msg.payload.contract}
-              policyEvents={msg.payload.policy_events}
-              templateEvents={msg.payload.template_events}
-            />
-          ) : null}
-          {/* 思考面板：读占位消息自身的 payload，实时渲染。
-              批13-O：liveStatus = 框架事件流实时投影（deriveLiveStatus），
-              上移至 ThinkStream 头部标题位替换静态「正在定位数据」——进展在最上面动态展示；
-              meta 不再传冻结的 live_meta（status SSE 仅首帧发一次，「已执行 0 步」即此残留），
-              用组件内默认「已定位 N 步」随步骤实时递增 */}
-          {msg.payload?.thinkStream && msg.payload.thinkStream.length > 0 ? (
-            <ThinkStream
-              items={msg.payload.thinkStream}
-              active={true}
-              liveStatus={_live?.text}
-            />
-          ) : null}
-          {/* 批13-O：thinkStream 为空时（编排期首帧）状态行独立显示，保证首个可见反馈不依赖步骤产生 */}
-          {(!msg.payload?.thinkStream || msg.payload.thinkStream.length === 0) && _live ? (
-            <Space>
-              <Spin size="small" />
-              <Text strong>{_live.text}</Text>
-            </Space>
-          ) : null}
-          {/* 可选 TUPU_EARLY_TABLE 开关（默认关）：表格属结构化元素可提前入卡，正文仍等 done */}
-          {(typeof window !== 'undefined' && window.localStorage.getItem('TUPU_EARLY_TABLE') === '1'
-            && (msg.payload?.sql_result?.row_count ?? 0) > 0 && !!msg.payload?.sql_result?.columns?.length) ? (
-            <SqlResultTable data={msg.payload.sql_result} />
-          ) : null}
-        </Space>
-      ) : (
-        <AssistantCanvas
-          payload={msg.payload}
-          isLast={isLast}
-          liveMetaInfo={liveMetaInfo}
-          liveFinalAnswer={liveFinalAnswer}
-          onSelectRecommendation={onSelectRecommendation}
-        />
-      )}
-    </Card>
+            {/* 批①a 操作条 5 项（v4§二.3）：复制/保存到笔记/下载 Markdown/点赞/点踩 */}
+            {msg.id ? (
+              <MessageActions
+                testId={`msg-actions-${isLast ? 'last' : 'n'}`}
+                text={msg.payload?.final_answer || (msg.payload?.finalTokens || []).join('') || msg.text || ''}
+                userQuery={pairedUserQuery}
+                msgId={msg.id}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+    )}
   </div>
   );
 });
@@ -206,6 +214,8 @@ const ConversationMessageList: React.FC<{
   onDeleteMessage?: (msgId: string) => void;
   /** S5（HITL v2）：批准/拒绝人审中断（interrupt_id, approve） */
   onHITLDecision?: (interruptId: string, approve: boolean) => void;
+  /** 批①a 思考链文案专家维度 */
+  expertId?: string;
 }> = ({
   messages,
   sceneConfig,
@@ -214,6 +224,7 @@ const ConversationMessageList: React.FC<{
   onSelectRecommendation,
   onDeleteMessage,
   onHITLDecision,
+  expertId,
 }) => {
   if (messages.length === 0) {
     return (
@@ -231,6 +242,15 @@ const ConversationMessageList: React.FC<{
       <style>{`.msg-row:hover .msg-del{opacity:1!important}.msg-del{opacity:0.35;transition:opacity .15s}`}</style>
       {messages.map((msg, msgIdx) => {
         const isLast = msgIdx === messages.length - 1;
+        // 批①a：操作条「保存到笔记」的配对问题=本条之前最近一条用户消息
+        const pairedUserQuery = msg.role === 'assistant'
+          ? (() => {
+              for (let i = msgIdx - 1; i >= 0; i--) {
+                if (messages[i].role === 'user') return messages[i].text || '';
+              }
+              return '';
+            })()
+          : undefined;
         return (
           <MessageRow
             key={msg.id}
@@ -239,6 +259,8 @@ const ConversationMessageList: React.FC<{
             canDelete={!!(onDeleteMessage && !msg.loading)}
             liveMetaInfo={isLast ? liveMetaInfo : undefined}
             liveFinalAnswer={isLast ? liveFinalAnswer : undefined}
+            pairedUserQuery={pairedUserQuery}
+            expertId={expertId}
             onSelectRecommendation={onSelectRecommendation}
             onDeleteMessage={onDeleteMessage}
             onHITLDecision={onHITLDecision}
