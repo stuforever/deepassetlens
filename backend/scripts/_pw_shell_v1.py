@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""V1壳 对拍：ActivityBar 3 图标 + NavPanel 六组平铺 + 逐项开页无死链 + 收起行为。"""
+"""V1壳 对拍：ActivityBar 3 图标 + NavPanel 五组平铺（批③ §5.2 重排）+ 逐项开页无死链 + 收起行为。"""
 import sys
 from pathlib import Path
 
@@ -15,15 +15,17 @@ def check(name, ok, detail=""):
     print(f"{'PASS' if ok else 'FAIL'}  {name}  {detail}"[:180], flush=True)
 
 
+# 批③ §5.2：NAV_PANEL_GROUPS 五组 17 项（menuKey 序与 navigation.tsx 一致；
+# 原「平台能力」「治理与系统」两组移入设置中心——过渡期成员挂 ⚙ 面板）
 NAV_ITEMS = [
-    "graph", "entity_relation_manage", "datasource", "doris_config",
-    "skills", "vector_manage", "golden_qa",
+    "graph", "entity_relation_manage",
+    "datasource", "doris_config",
     "master_data", "activity_data", "source", "mapping", "metric_manager",
-    "governance", "engine_workbench", "llmconfig", "memory_admin",
-    "expert_grants", "security_controls",
+    "e:sishu:book", "e:sishu:self-learning", "e:sishu:co-writer", "e:sishu:partners",
     "e:sishu:admin:mq", "e:sishu:admin:book", "e:sishu:admin:settings",
+    "h5_publish",
 ]
-GROUPS = ["数据建模", "数据接入", "平台能力", "数据资产", "治理与系统", "私塾管理"]
+GROUPS = ["数据建模", "数据接入", "数据资产", "私塾管理", "H5 发布管理"]
 
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True)

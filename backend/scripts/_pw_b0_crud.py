@@ -6,6 +6,8 @@
 import sys
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # GBK 控制台容错（'⓪' 编不出）
+
 from playwright.sync_api import sync_playwright
 
 SCR = Path(__file__).parent
@@ -21,7 +23,10 @@ def check(name, ok, detail=""):
 
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True)
-    pg = b.new_page(viewport={"width": 1600, "height": 900})
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent))
+    from _pw_login_util import login_page
+    pg = login_page(b)  # 批③ 补丁：auth=ON 后须登录态（原裸 new_page 落登录页无 composer）
     # 造平台会话：门户发一条消息（sendQuestion 即建会话；CRUD 后删除，自清理）
     pg.goto(BASE + "/", timeout=90000, wait_until="domcontentloaded")
     pg.wait_for_timeout(6000)

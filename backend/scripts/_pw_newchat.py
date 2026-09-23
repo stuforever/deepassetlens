@@ -54,11 +54,11 @@ with sync_playwright() as p:
     expect_url = "/e/wenshu/chat?new=1&q=" + urllib.parse.quote(q, safe="")
     # 批⓪ R#6 后契约：落到对话页且 URL 已立即清参（?q=/?new=1 不驻留）
     check("发送直达对话页", "/e/wenshu/chat" in pg.url and "q=" not in pg.url and "new=1" not in pg.url, pg.url[:90])
-    # 流式回答：等待回答文本或表格（300s 上限）
+    # 流式回答：等待回答文本或表格（600s 上限——探针实测 330s 交付/偶发 >420s，LLM 多轮推理延迟方差非回归）
     got = False
     import time
     t0 = time.time()
-    while time.time() - t0 < 420:
+    while time.time() - t0 < 600:
         body = pg.inner_text("body")
         # 批①a 后流式可达判据：完成行（ThinkingChain）或表格，且操作条出现=回答交付完成
         if ("已准备好答案" in body) or ("推理完成" in body) or (pg.locator("[data-testid^='msg-actions']").count() > 0):
