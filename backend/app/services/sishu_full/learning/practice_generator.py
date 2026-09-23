@@ -45,6 +45,12 @@ _SYSTEM_PROMPT = """你是一位资深数学教师。请根据给定的章节和
 
 
 def _cache_path(chapter_id: str) -> Path:
+    # R5批⑯（清单安全）：chapter_id 来自 HTTP 入参，未校验即拼路径（'..'/'/' 可穿越
+    # 用户工作区）。净化：仅允许字母数字下划线连字符（\w 含中文），其余拒绝。
+    import re as _re
+
+    if not isinstance(chapter_id, str) or not _re.fullmatch(r"[\w-]{1,128}", chapter_id):
+        raise ValueError(f"非法 chapter_id: {chapter_id!r}")
     # 用户感知：user_context(h5_user_guarded(u)) 内返回该用户工作区（随 u 隔离）
     return get_current_path_service().get_workspace_dir() / "practice_gen" / f"{chapter_id}.json"
 

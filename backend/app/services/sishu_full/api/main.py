@@ -345,9 +345,37 @@ app.mount(
 # Mother question images (uploaded photos, screenshots, crops)
 _mq_images_dir = path_service.get_workspace_dir() / "mother_questions" / "images"
 _mq_images_dir.mkdir(parents=True, exist_ok=True)
+
+
+class _AuthedStatic:
+    """R5批⑯（清单安全）：母题图片=用户上传敏感内容，原生 StaticFiles 无鉴权——
+    拿到/枚举 URL 即可直读。包装 require_auth（auth=0 时其为 no-op，行为不变）。"""
+
+    def __init__(self, app):
+        self._app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self._app(scope, receive, send)
+            return
+        from fastapi import HTTPException as _HTTPException
+        from starlette.requests import Request as _Request
+        from starlette.responses import JSONResponse as _JSONResponse
+
+        from .api.routers.auth import require_auth as _require_auth
+
+        try:
+            await _require_auth(_Request(scope, receive=receive))
+        except _HTTPException as exc:
+            resp = _JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+            await resp(scope, receive, send)
+            return
+        await self._app(scope, receive, send)
+
+
 app.mount(
     "/api/v1/mother-questions/files",
-    StaticFiles(directory=str(_mq_images_dir)),
+    _AuthedStatic(StaticFiles(directory=str(_mq_images_dir))),
     name="mother-question-images",
 )
 

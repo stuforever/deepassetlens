@@ -240,7 +240,19 @@ async def websocket_mimic_generate(websocket: WebSocket):
                         {"type": "error", "content": "paper_path is required for parsed mode"}
                     )
                     return
-                paper_dir = paper_path
+                # R5批⑯（清单安全）：parsed 模式 paper_path 客户端可控（upload 模式有
+                # DocumentValidator，此处补齐）——收进 mimic 输出目录，拒绝绝对路径/穿越
+                _pp = Path(paper_path)
+                _mimic_root = _mimic_output_dir().resolve()
+                _resolved = _pp.resolve() if _pp.is_absolute() else (_mimic_root / _pp).resolve()
+                try:
+                    _resolved.relative_to(_mimic_root)
+                except ValueError:
+                    await websocket.send_json(
+                        {"type": "error", "content": "paper_path 越界（必须位于 mimic 输出目录内）"}
+                    )
+                    return
+                paper_dir = str(_resolved)
 
                 # Create batch directory for parsed mode too
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
