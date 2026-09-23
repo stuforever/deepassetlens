@@ -46,7 +46,9 @@ def _h5_ctx(u: str, code: str = "", x_access_code: str = ""):
     from app.services.sishu_full.multi_user.h5 import h5_user_guarded
     from app.services.sishu_full.multi_user.paths import user_context
 
-    if not isinstance(u, str) or not u.strip():
+    # R5批⑫（清单安全）：纯空白 u 不再视作缺省=admin（access_code 启用时 %20 绕过门禁）。
+    # 非字符串（直接调用时的 Query 默认对象）保持回退 admin——真实请求恒为字符串。
+    if not isinstance(u, str) or u == "":
         return nullcontext()
     return user_context(h5_user_guarded(u, code, x_access_code))
 
@@ -472,13 +474,21 @@ async def delete_mother_question(
 # --------------------------------------------------------------------------- #
 
 @router.patch("/{mid}/note")
-async def update_note(mid: str, body: dict = Body(...)):
-    """保存学生笔记."""
-    note = (body.get("note") or "").strip()
-    m = _store().update_mother(mid, {"note": note})
-    if not m:
-        raise HTTPException(404, "母题不存在")
-    return {"note": m.note}
+async def update_note(
+    mid: str,
+    body: dict = Body(...),
+    u: str = Query(""),
+    code: str = Query("", description="访问码（access_code 启用时必填）"),
+    x_access_code: str = Header(""),
+):
+    """保存学生笔记. R5批⑫（清单安全）：补 H5 用户隔离——原 _store() 在
+    user_context 之外读写，笔记落 admin 工作区且无访问码闸门。"""
+    with _h5_ctx(u, code, x_access_code):
+        note = (body.get("note") or "").strip()
+        m = _store().update_mother(mid, {"note": note})
+        if not m:
+            raise HTTPException(404, "母题不存在")
+        return {"note": m.note}
 
 
 # --------------------------------------------------------------------------- #
