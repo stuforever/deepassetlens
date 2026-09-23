@@ -948,15 +948,24 @@ def _narrow_mcp_tools(mcp_tools, card_tools):
     return keep
 
 
-def _assembly_cache_key(connection_id, gver, cver, fhash, expert_id, card_version) -> str:
-    """专家地基①（spec §五）：4→6 因子——#e{expert}@{版本}（身份@版本，两专家各自 Agent）。"""
-    return f"{connection_id or '__default__'}#g{gver}#c{cver}#f{fhash}#e{expert_id}@{card_version}"
+def _assembly_cache_key(connection_id, gver, cver, fhash, expert_id, card_version, role_id=None) -> str:
+    """专家地基①（spec §五）：4→6 因子——#e{expert}@{版本}（身份@版本，两专家各自 Agent）。
+    B2（v4§四）：role_id 真值追加 #r 因子（切角色=重建，不命中旧提示词实例）；
+    None 时键逐字节不变——role_id「None=现状等价」的硬保证。"""
+    key = f"{connection_id or '__default__'}#g{gver}#c{cver}#f{fhash}#e{expert_id}@{card_version}"
+    if role_id:
+        key += f"#r{role_id}"
+    return key
 
 
-async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict = None):
+async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict = None, role_id: str = None):
     """按能力开关条件装配 DeepAgent（批13-Q 4.1）。失败抛异常，由 create_tupu_agent 包装器 fail-safe。
     专家地基①（2026-09-12 spec §五）：card=专家配置卡——提示词基座/工具面/路径/权限四类按卡参数化，
-    能力开关检查逻辑零改动（卡=装配参数，链=平台）。"""
+    能力开关检查逻辑零改动（卡=装配参数，链=平台）。
+    B2（v4§四）：role_id 真值时卡上注入角色风格段（wenshu 预置 3 卡；基座保留=工作流契约不动）。"""
+    if role_id:
+        from app.services.wenshu_roles import apply_role
+        card = apply_role((card or {}).get("expert_id") or "wenshu", role_id, card or {})
     from deepagents import create_deep_agent
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -1339,7 +1348,7 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     return agent
 
 
-async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_id: str = "wenshu"):
+async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_id: str = "wenshu", role_id: str = None):
     """创建 tupu DeepAgent（业务工具走 MCP）——批13-Q fail-safe 包装器。
 
     按能力开关（capability_config）条件装配；新配置装配失败自动回退上一可用版本
@@ -1356,7 +1365,7 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_i
     caps = {p["capability_id"]: p for p in capability_config.get_policies()}
     _last = _LAST_GOOD_ASSEMBLY.get(expert_id) or {}  # 批6 E3：按专家取回退快照（不跨专家串卡）
     try:
-        agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps, card=card)
+        agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps, card=card, role_id=role_id)
         _LAST_GOOD_ASSEMBLY[expert_id] = {"caps": caps,
                                           "caps_version": capability_config.get_version(),
                                           "card": card}
@@ -1373,7 +1382,7 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_i
                     updated_by="assembly", _sync=True)
                 return await _build_agent(checkpointer=checkpointer, connection_id=connection_id,
                                           caps=_last["caps"],
-                                          card=_last.get("card"))
+                                          card=_last.get("card"), role_id=role_id)
             except Exception as e2:
                 logger.error(f"[Capability] 回退装配也失败（fail-closed 阻止创建）: {e2}")
                 try:
@@ -1498,7 +1507,7 @@ def _assert_tool_call_capable(conn_id, caps) -> None:
                          f"请在 LLM 配置页改用支持工具调用的连接")
 
 
-async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu"):
+async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu", role_id: str = None):
     """获取 tupu DeepAgent（按 connection_id + capability 版本缓存，让前端选模型/能力开关真正生效）。
 
     v3.6: 按 connection_id 缓存不同模型的 Agent 实例（空串用默认模型）。
@@ -1545,7 +1554,7 @@ async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu"):
             raise
         except Exception as _gate_err:
             logger.warning(f"[模型目录化] 门控预检异常（放行交由装配兜底）: {_gate_err}")
-    _cache_key = _assembly_cache_key(connection_id, _gver, _cver, _fhash, expert_id, _ecard_ver)
+    _cache_key = _assembly_cache_key(connection_id, _gver, _cver, _fhash, expert_id, _ecard_ver, role_id=role_id)
     if _cache_key not in _GLOBAL_AGENTS:
         async with _AGENT_INIT_LOCK:
             if _cache_key not in _GLOBAL_AGENTS:
@@ -1568,6 +1577,7 @@ async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu"):
                     checkpointer=_GLOBAL_CHECKPOINTER,
                     connection_id=connection_id or None,
                     expert_id=expert_id,
+                    role_id=role_id,
                 )
                 _GLOBAL_AGENTS[_cache_key] = agent
                 _evict_old_agents(_cache_key)
