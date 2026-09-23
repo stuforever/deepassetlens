@@ -20,7 +20,7 @@ import ActivityBar, { type ShellPanel as ShellPanelId } from './components/shell
 import NavPanel from './components/shell/NavPanel';
 import ChatPanel from './components/shell/ChatPanel';
 import SettingsPanel from './components/shell/SettingsPanel';
-import ShellPanel from './components/shell/ShellPanel';
+import ShellPanel, { PANEL_WIDTH_DEFAULT } from './components/shell/ShellPanel';
 import CommandPalette from './components/shell/CommandPalette';
 import AppTabs, { type PageTab } from './components/AppTabs';
 import { expertPageRoutes, matchExpertPage } from './config/expertPages';
@@ -64,6 +64,16 @@ const App: React.FC = () => {
       localStorage.setItem(`shell:pinned:${p}`, next[p] ? '1' : '0');
       return next;
     });
+  // UX批② 反馈④：三面板可拖宽——默认 400，拖动实时回报（commit=false），松手落库 shell:width:{panel}
+  const [panelWidths, setPanelWidths] = useState<Record<'chat' | 'console' | 'settings', number>>(() => ({
+    chat: Number(localStorage.getItem('shell:width:chat')) || PANEL_WIDTH_DEFAULT,
+    console: Number(localStorage.getItem('shell:width:console')) || PANEL_WIDTH_DEFAULT,
+    settings: Number(localStorage.getItem('shell:width:settings')) || PANEL_WIDTH_DEFAULT,
+  }));
+  const changePanelWidth = (p: 'chat' | 'console' | 'settings', w: number, commit: boolean) => {
+    setPanelWidths((m) => ({ ...m, [p]: w }));
+    if (commit) localStorage.setItem(`shell:width:${p}`, String(w));
+  };
   // v3 #8：⌘K 命令面板
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -348,6 +358,8 @@ const App: React.FC = () => {
                 panel={shellPanel}
                 title={SHELL_PANEL_TITLES[shellPanel]}
                 pinned={pinnedPanels[shellPanel]}
+                width={panelWidths[shellPanel]}
+                onWidthChange={(w, commit) => changePanelWidth(shellPanel, w, commit)}
                 onTogglePin={() => togglePin(shellPanel)}
                 onClose={() => setShellPanel(null)}
               >

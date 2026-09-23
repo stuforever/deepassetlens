@@ -1043,7 +1043,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     }
   }, [activeSessionId]);
 
-  const CONTENT_WIDTH = 720; // 批①a（v4§二.1）：消息流与 composer 同宽 ≤720 居中
+  // UX批②（反馈③）：内容宽响应式——min(可用宽, max(720, 60% 视口))；1920 屏留白各 ≤1/5，小屏回落 720 下限
+  const CONTENT_WIDTH = 'min(100%, max(720px, 60vw))';
 
   // 输入卡片（两种状态共用；B2 美化：S3 阴影 + 聚焦主色描边环 + 渐变发送钮）
   const inputCard = (
@@ -1207,7 +1208,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           </div>
 
           {/* 悬浮 composer（S3 阴影 + 聚焦主色描边环；规格 maxWidth 720） */}
-          <div style={{ width: '100%', maxWidth: 720, marginBottom: 24 }}>
+          <div style={{ width: '100%', maxWidth: CONTENT_WIDTH, marginBottom: 24 }}>
             {inputCard}
           </div>
 
@@ -1215,7 +1216,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           {slug === 'sishu' && (
             <div
               data-testid="sishu-space-grid"
-              style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, width: '100%', maxWidth: 720 }}
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, width: '100%', maxWidth: CONTENT_WIDTH }}
             >
               {[
                 { label: '书籍', path: '/e/sishu/book', icon: <BookOutlined /> },
@@ -1245,7 +1246,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           )}
           {slug !== 'sishu' && (
           /* 2×2 建议卡（带图标，hover 抬升 S2；规格 maxWidth 720） */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: 720 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: CONTENT_WIDTH }}>
             {SUGGESTIONS.map((item, i) => (
               <div
                 key={`suggest-${i}`}
