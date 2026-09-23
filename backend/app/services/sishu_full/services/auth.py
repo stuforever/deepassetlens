@@ -297,6 +297,21 @@ def authenticate_pb(username: str, password: str) -> tuple[TokenPayload, str] | 
         return None
 
 
+def pb_is_first_user() -> bool:
+    """R5批⑬（清单安全）：PB 模式的 first-user 判定——原 is_first_user() 查本地 JSON
+    用户库，PB 模式从不写本地库 → 注册闸门恒开（任何人可自助注册）。PB users 集合
+    为空 = first；查询失败 fail-closed（False，拒绝自助注册，管理员可在 PB 后台开户）。"""
+    try:
+        from app.services.sishu_full.services.pocketbase_client import get_pb_client
+
+        pb = get_pb_client()
+        records = pb.collection("users").get_list(page=1, per_page=1)
+        return not getattr(records, "items", None)
+    except Exception as exc:
+        logger.warning(f"PocketBase user count failed: {exc}")
+        return False
+
+
 def register_pb(username: str, email: str, password: str) -> dict | None:
     """
     Create a new user in PocketBase.

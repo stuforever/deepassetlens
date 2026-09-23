@@ -5,7 +5,7 @@
 from datetime import datetime
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from app.services.sishu_full.multi_user.context import get_current_user
@@ -16,6 +16,16 @@ from app.services.sishu_full.services.llm import get_llm_config, get_token_limit
 from app.services.sishu_full.services.search import web_search
 
 router = APIRouter()
+
+
+def _require_settings_admin() -> None:
+    """R5批⑬（清单安全）：/test/* 仅 admin——原非管理员也可调用，端点回显模型/绑定/
+    提供商名称与原始异常串（凭据与拓扑探测面）。与设置域管理门同口径。"""
+    user = get_current_user()
+    if user is None or not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="仅管理员可执行连通性测试")
+
 
 
 class TestResponse(BaseModel):
@@ -146,6 +156,7 @@ async def get_system_status():
 
 @router.post("/test/llm", response_model=TestResponse)
 async def test_llm_connection():
+    _require_settings_admin()
     """
     Test LLM model connection by sending a simple completion request
 
@@ -214,6 +225,7 @@ async def test_llm_connection():
 
 @router.post("/test/embeddings", response_model=TestResponse)
 async def test_embeddings_connection():
+    _require_settings_admin()
     """
     Test Embeddings model connection by sending a simple embedding request
 
@@ -271,6 +283,7 @@ async def test_embeddings_connection():
 
 @router.post("/test/search", response_model=TestResponse)
 async def test_search_connection():
+    _require_settings_admin()
     start_time = time.time()
 
     try:

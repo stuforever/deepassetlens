@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -208,11 +209,23 @@ async def oauth_callback(
 
 
 def _request_origin(request: Request) -> str:
-    """The origin this request arrived on, honouring a reverse proxy's headers."""
+    """The origin this request arrived on.
+
+    R5批⑬（清单安全）：redirect_uri 不再默认信任 x-forwarded-*（客户端可伪造 → OAuth
+    授权码可被引导至攻击者控制的 redirect_uri）。优先 env 配置公网基址
+    TUPU_PUBLIC_BASE_URL；部署在可信反代后可显式设 TUPU_TRUST_PROXY=1 恢复读转发头。
+    """
+    base = os.getenv("TUPU_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if base:
+        return base
     headers = request.headers
-    proto = headers.get("x-forwarded-proto", "").split(",")[0].strip() or request.url.scheme
-    host = headers.get("x-forwarded-host", "").split(",")[0].strip() or headers.get("host", "")
-    return f"{proto}://{host}" if host else ""
+    if os.getenv("TUPU_TRUST_PROXY", "") == "1":
+        proto = headers.get("x-forwarded-proto", "").split(",")[0].strip() or request.url.scheme
+        host = headers.get("x-forwarded-host", "").split(",")[0].strip() or headers.get("host", "")
+        if host:
+            return f"{proto}://{host}"
+    host = headers.get("host", "")
+    return f"{request.url.scheme}://{host}" if host else ""
 
 
 def _callback_page(ok: bool, message: str) -> Response:

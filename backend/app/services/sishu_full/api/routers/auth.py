@@ -513,7 +513,10 @@ async def register(body: RegisterRequest) -> dict:
     if POCKETBASE_ENABLED:
         # PocketBase deployments are documented as single-user. Keep registration
         # closed and require admins to provision users in the PocketBase admin UI.
-        if not is_first_user():
+        # R5批⑬（清单安全）：改 pb_is_first_user——原 is_first_user() 查本地库，PB 模式
+        # 本地库恒空 → 闸门永不生效（自助注册向所有人开放）。
+        from app.services.sishu_full.services.auth import pb_is_first_user
+        if not pb_is_first_user():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Self-registration is closed. Ask an administrator to create your account.",
