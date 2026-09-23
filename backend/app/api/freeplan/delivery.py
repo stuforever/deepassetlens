@@ -191,6 +191,15 @@ def build_done_payload(*, thread_id: str, confirmed: Dict[str, Any], think_strea
                        timing: Dict[str, Any], output_scrubbed: bool,
                        output_check_reason: str) -> Dict[str, Any]:
     """done 帧载荷构建（键序与拆分前一致）。"""
+    # 批⑥（v4§11 调试后台化）：done 帧契约视图按 thread_id 落库——运行观测「契约回放」
+    # 数据源（fire-and-forget，不阻塞流式主链）。
+    try:
+        _expert = (confirmed or {}).get("expert_id") or "wenshu"
+        from app.services.contract_trace import record_contract_trace
+        record_contract_trace(thread_id, _expert,
+                              contract.to_dict() if contract is not None else None)
+    except Exception:
+        pass
     return {
         "thread_id": thread_id,
         "current_task": "DeepAgent",

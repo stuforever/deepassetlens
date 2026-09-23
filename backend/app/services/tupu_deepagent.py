@@ -977,10 +977,11 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     model = get_chat_model(temperature=0.1, streaming=True, connection_id=connection_id)
 
     # MCP client 加载业务工具（16 个 tool，走 SSE，与 deepagent 解耦）
-    # P3-a: 加内部服务身份 header（ENABLE_AUTH=1 时 MCP server 端校验，防外部直连）
+    # P3-a: MCP server 端 Bearer-only（R1批废 X-Internal-Service 兜底）。批⑥：摘除
+    # 死头发送——X-Internal-Service 已无服务端消费方，仅余噪音
     import os as _os
     _internal_token = _os.getenv("TUPU_INTERNAL_TOKEN", "")
-    _mcp_headers = {"X-Internal-Service": "tupu-agent"}
+    _mcp_headers = {}
     if _internal_token:
         _mcp_headers["Authorization"] = f"Bearer {_internal_token}"
     mcp_client = MultiServerMCPClient({

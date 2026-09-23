@@ -94,7 +94,8 @@ _PUBLIC_PATHS = (
 _OPTIONAL_AUTH_PATHS = (
     "/api/v1/auth/me",
 )
-# P3-a: MCP 内部服务身份路径（ENABLE_AUTH=1 时接受 X-Internal-Service header，不要求 OIDC JWT）
+# P3-a: MCP 内部服务身份路径（R1批后仅接受 Bearer TUPU_INTERNAL_TOKEN——
+# X-Internal-Service header 兜底已废除，header 客户端完全可控）
 _MCP_INTERNAL_PATHS = (
     "/mcp",
 )

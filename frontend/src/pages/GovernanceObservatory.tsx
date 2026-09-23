@@ -9,10 +9,11 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Button, Space, Table, Tag, Typography, message, Switch, Card, Statistic, Row, Col, Tooltip, Spin,
+  Button, Space, Table, Tag, Typography, message, Switch, Card, Statistic, Row, Col, Tooltip, Spin, Input,
 } from 'antd';
-import { ReloadOutlined, DashboardOutlined, SafetyCertificateOutlined, AuditOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DashboardOutlined, SafetyCertificateOutlined, AuditOutlined, SearchOutlined } from '@ant-design/icons';
 import { PageShell } from '../components/shell';
+import ContractCardsPanel from '../components/conversation/contractCards/ContractCardsPanel';
 import { dataIntelligenceApi } from '../services/dataIntelligenceApi';
 import { tokens } from '../theme/tokens';
 
@@ -60,6 +61,27 @@ const GovernanceObservatory: React.FC = () => {
   const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+
+  // 批⑥（v4§11 调试后台化）：契约回放——按 thread_id 查询 done 帧契约视图
+  const [traceThreadId, setTraceThreadId] = useState('');
+  const [trace, setTrace] = useState<any>(null);
+  const [traceError, setTraceError] = useState('');
+  const loadTrace = useCallback(async () => {
+    const tid = traceThreadId.trim();
+    if (!tid) return;
+    setTraceError('');
+    try {
+      const res = await fetch(`/api/v1/governance/contract-traces/${encodeURIComponent(tid)}`, { credentials: 'include' });
+      if (!res.ok) {
+        setTrace(null);
+        setTraceError(res.status === 404 ? '无该 thread_id 的契约轨迹' : `查询失败（${res.status}）`);
+        return;
+      }
+      setTrace(await res.json());
+    } catch {
+      setTraceError('查询失败');
+    }
+  }, [traceThreadId]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -293,6 +315,40 @@ const GovernanceObservatory: React.FC = () => {
             ]}
           />
           {!audit.length && !loading && <Text type="secondary">暂无审计记录（运行一次受控对话或模拟路由后出现）</Text>}
+        </Card>
+
+        {/* 契约回放（批⑥ v4§11：调试全后台——按 thread_id 回放 done 帧契约视图） */}
+        <Card
+          size="small"
+          title={
+            <Space>
+              <SearchOutlined />
+              <span>契约回放（按 thread_id）</span>
+            </Space>
+          }
+        >
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              placeholder="输入对话 thread_id…"
+              value={traceThreadId}
+              onChange={(e) => setTraceThreadId(e.target.value)}
+              onPressEnter={loadTrace}
+              data-testid="gov-trace-input"
+            />
+            <Button type="primary" onClick={loadTrace} data-testid="gov-trace-load">回放</Button>
+          </Space.Compact>
+          {traceError && <Text type="danger" style={{ fontSize: 12 }}>{traceError}</Text>}
+          {trace && (
+            <div style={{ marginTop: 12 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                expert={trace.expert_id} · 更新于 {String(trace.updated_at || '').replace('T', ' ').slice(5, 19)}
+              </Text>
+              <ContractCardsPanel contract={trace.contract as any} />
+            </div>
+          )}
+          {!trace && !traceError && (
+            <Text type="secondary" style={{ fontSize: 12 }}>输入 thread_id 后回放该次受控执行的完整契约视图</Text>
+          )}
         </Card>
 
         {loading && (

@@ -511,6 +511,9 @@ app.include_router(
     notebook.router, prefix="/api/v1/notebook", tags=["notebook"], dependencies=_auth
 )
 app.include_router(book.router, prefix="/api/v1/book", tags=["book"], dependencies=_admin)
+from app.api import governance_trace as _gov_trace
+app.include_router(_gov_trace.router, prefix="/api/v1/governance",
+                   tags=["governance"], dependencies=_admin)  # 批⑥：契约回放（admin）
 # R5批⑭（清单安全）：book 域挂载提权 admin——原所有端点仅 require_auth，仅凭 book_id
 # 即可读/改/删任意书籍（无资源级归属模型）；书籍=管理域 authored 内容，admin 门控
 # 为最小收口。按用户归属的完整模型留台账（需 schema 迁移，待前端联调后裁决）。
