@@ -19,6 +19,14 @@ export interface CommandItem {
 
 export function buildCommandItems(navigate: (path: string) => void): CommandItem[] {
   const items: CommandItem[] = [];
+  // UX批①：专家对话页可检索性——页签项 label（数据探索对话/私塾先生对话）不含专家俗称，
+  // ⌘K 搜「问数/私塾」零结果=用户反馈①②口子；hint 进过滤面（label OR hint 匹配），
+  // 点击即单跳 /e/{slug}/chat（页签项本身即真实路径——无需专家重复条目，按 path 去重使其为死代码）
+  const EXPERT_HINTS: Record<string, string> = {
+    'e:wenshu:chat': '问数',
+    'e:sishu:chat': '私塾',
+    'e:tutor-h5:chat': 'h5 展台',
+  };
   // 全部页面（routes 静态注册 + 专家页注册表——label+path 模糊）
   const seen = new Set<string>();
   const push = (key: string, label: string, path: string, hint?: string) => {
@@ -30,12 +38,8 @@ export function buildCommandItems(navigate: (path: string) => void): CommandItem
     if (menuKey.startsWith('settings:')) continue; // 子页经设置面板/设置中心内部导航，面板只留分区入口
     if (menuKey === 'home') continue; // /home 重定向 /（避免面板双首页项）
     if (REDIRECT_ONLY_MENU_KEYS.has(menuKey)) continue; // 批③ 审查Minor①：4合1 退役页不再露出
-    push(`page-${menuKey}`, MENU_LABELS[menuKey] || menuKey, path);
+    push(`page-${menuKey}`, MENU_LABELS[menuKey] || menuKey, path, EXPERT_HINTS[menuKey]);
   }
-  // 三专家动作
-  push('expert-wenshu', '问数：新建对话', '/', '专家');
-  push('expert-sishu', '私塾：新建对话', '/', '专家');
-  push('expert-h5', 'H5：发布管理', '/h5-publish', '专家');
   // 快捷动作
   push('action-newchat', '新建对话', '/', '动作');
   push('action-settings', '打开设置', '/settings', '动作');
