@@ -106,7 +106,7 @@ export function MathWidget({
       cancelled = true;
       if (el) el.innerHTML = "";
     };
-  }, [figure]);
+  }, [figure?.type, figure?.config]); // R3批 Minor：deps 对齐实际消费字段（整对象引用变化不重渲染）
 
   if (!figure || !figure.type) return null;
 

@@ -19,6 +19,7 @@ import {
   AppstoreOutlined,
   AudioOutlined,
   BgColorsOutlined,
+  BookOutlined,
   ClusterOutlined,
   ControlOutlined,
   DashboardOutlined,
@@ -27,11 +28,17 @@ import {
   FilePdfOutlined,
   FileSearchOutlined,
   MessageOutlined,
+  NodeIndexOutlined,
   PaperClipOutlined,
   PictureOutlined,
+  PoweroffOutlined,
+  ReadOutlined,
   RobotOutlined,
+  RocketOutlined,
   SearchOutlined,
   SoundOutlined,
+  TeamOutlined,
+  ThunderboltOutlined,
   ToolOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons';
@@ -67,6 +74,20 @@ export interface SettingsSection {
  * SlidersHorizontal→ControlOutlined、Bot→RobotOutlined。
  * 「进阶」预留分区：curriculum/attachments 已并语义外迁（教学设置/对话附件上限承接），暂无挂项。
  */
+/**
+ * 设置信息架构（批⑥ v4§5.3 八分区重排——取代批5 5.3 的四组口径）：
+ * 通用/模型与服务/知识与检索/智能体/数据探索/数据治理/安全/私塾教学。
+ * 批③过渡期挂 ⚙ 面板的平台能力/治理项在此收口：技能管理/金标锚定/专家赋权→智能体，
+ * 知识库→知识与检索，运行观测/引擎工作台→数据治理，安全控制中心→安全，记忆管理→数据探索。
+ * 缺页登记（§5.3 有名无页，不造页）：个人信息/Rerank/OCR/全文检索/图谱检索/向量索引/
+ * 元模型版本/审计与血缘/认证与 RBAC/数据权限/作文参数/意图类别/日志——随后续需求批补。
+ * lucide→antd 最近图标映射（登记）：Palette→BgColorsOutlined、Paperclip→PaperClipOutlined、
+ * MessagesSquare→MessageOutlined、Network→ClusterOutlined、Search→SearchOutlined、
+ * Brain→RobotOutlined、Database→DatabaseOutlined、Mic→AudioOutlined、AudioLines→SoundOutlined、
+ * Image→PictureOutlined、Clapperboard→VideoCameraOutlined、FileScan→FileSearchOutlined、
+ * Boxes→AppstoreOutlined、BrainCircuit→DeploymentUnitOutlined、Wrench→ToolOutlined、
+ * SlidersHorizontal→ControlOutlined、Bot→RobotOutlined。
+ */
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     key: 'general',
@@ -81,8 +102,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     ],
   },
   {
-    key: 'service',
-    title: '服务',
+    key: 'models',
+    title: '模型与服务',
     items: [
       { path: '/settings/llm', label: 'LLM', icon: RobotOutlined },
       { path: '/settings/embedding', label: '嵌入模型', icon: DatabaseOutlined },
@@ -90,25 +111,60 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       { path: '/settings/tts', label: '语音合成', icon: SoundOutlined },
       { path: '/settings/image', label: '文生图', icon: PictureOutlined },
       { path: '/settings/video', label: '文生视频', icon: VideoCameraOutlined },
-      { path: '/settings/document-parsing', label: '文档解析', icon: FileSearchOutlined },
-      { path: '/settings/mineru', label: 'MinerU', icon: FilePdfOutlined },
       { path: '/settings/models', label: '模型', icon: AppstoreOutlined },
+      { path: '/settings/mineru', label: 'MinerU', icon: FilePdfOutlined },
       { path: '/settings/mcp', label: 'MCP', icon: ApiOutlined },
-      { path: '/settings/memory', label: '记忆', icon: DeploymentUnitOutlined },
-      { path: '/settings/tools', label: '工具', icon: ToolOutlined },
-      { path: '/settings/capabilities', label: '能力', icon: ControlOutlined },
     ],
   },
   {
-    key: 'agent',
-    title: 'Agent',
-    items: [{ path: '/settings/agents', label: '伙伴和智能体', icon: RobotOutlined }],
+    key: 'knowledge',
+    title: '知识与检索',
+    items: [
+      { path: '/vector', label: '知识库管理', icon: BookOutlined },
+      { path: '/settings/document-parsing', label: '文档解析', icon: FileSearchOutlined },
+    ],
   },
   {
-    key: 'advanced',
-    title: '进阶',
-    // 预留分区（挂项随后续批补位；空组不渲染）
-    items: [],
+    key: 'agents',
+    title: '智能体',
+    items: [
+      { path: '/settings/tools', label: '工具', icon: ToolOutlined },
+      { path: '/settings/capabilities', label: '能力', icon: ControlOutlined },
+      { path: '/settings/agents', label: '伙伴和智能体', icon: RobotOutlined },
+      { path: '/skills', label: '技能管理', icon: RocketOutlined },
+      { path: '/golden-qa', label: '金标锚定', icon: FileSearchOutlined },
+      { path: '/expert-grants', label: '专家赋权', icon: TeamOutlined },
+    ],
+  },
+  {
+    key: 'explore',
+    title: '数据探索',
+    items: [
+      { path: '/settings/memory', label: '记忆', icon: DeploymentUnitOutlined },
+      { path: '/memory-admin', label: '记忆管理', icon: BookOutlined },
+    ],
+  },
+  {
+    key: 'governance',
+    title: '数据治理',
+    items: [
+      { path: '/governance', label: '运行观测', icon: DashboardOutlined },
+      { path: '/engine-workbench', label: '引擎工作台', icon: ThunderboltOutlined },
+    ],
+  },
+  {
+    key: 'security',
+    title: '安全',
+    items: [{ path: '/security-controls', label: '安全控制中心', icon: PoweroffOutlined }],
+  },
+  {
+    key: 'teaching',
+    title: '私塾教学',
+    items: [
+      { path: '/settings/curriculum-textbooks', label: '课本管理', icon: BookOutlined },
+      { path: '/settings/curriculum-chapters', label: '章节管理', icon: ReadOutlined },
+      { path: '/settings/curriculum-knowledge-points', label: '知识点管理', icon: NodeIndexOutlined },
+    ],
   },
 ];
 

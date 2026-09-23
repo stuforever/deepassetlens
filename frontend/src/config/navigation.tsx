@@ -273,6 +273,8 @@ export const pathToMenuKey: Record<string, string> = (() => {
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.path] = it.menuKey;
   }
+  // 批⑥：LLM 双入口重定向解析键（routes /llm-config → Navigate /settings/llm 需 menuKey 匹配）
+  out['/llm-config'] = 'llmconfig';
   // 兼容旧路径 /free-plan -> 首页
   out['/free-plan'] = 'home';
   // v3 §三（Task5）：H5 发布管理页

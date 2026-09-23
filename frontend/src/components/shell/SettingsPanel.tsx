@@ -1,14 +1,13 @@
 /**
- * SettingsPanel（v3 §二，批③ §十三换壳）：⚙设置面板内容——设置中心 6 分区入口平铺，进 /settings 体系。
- * 数据源=SETTINGS_CATEGORIES 顶层六分区（lib/settings-nav.ts，E-78⑤ 终版）；
+ * SettingsPanel（v3 §二，批③ §十三换壳；批⑥ v4§5.3 八分区）：⚙设置面板内容——设置中心 8 分区镜像。
+ * 数据源=SETTINGS_SECTIONS（pages/settings/SettingsLayout 注册表，单一事实源——面板与
+ * 二级侧栏同口径）；批③过渡期挂面板底部的平台能力/治理分组已收口进分区（技能管理/金标锚定/
+ * 专家赋权→智能体，知识库→知识与检索，运行观测/引擎工作台→数据治理，安全控制中心→安全，
+ * 记忆管理→数据探索，LLM 配置→模型与服务）。
+ * 平台路径项（/skills 等）与 /settings 项混排——点击即导航，面包屑由目标页自理。
  * 宽度/背景/边框由统一壳 ShellPanel 提供（本组件只渲染滚动内容区）。
  */
-import { SETTINGS_CATEGORIES } from '../../lib/settings-nav';
-import { MENU_LABELS, menuKeyToPath } from '../../config/navigation';
-
-// 批③ §5.3 过渡期保留（Task 10 设置八分区落地后移除）：管理台面板原「平台能力」「治理与系统」
-// 两组移入设置中心——过渡期成员暂挂本面板底部，label/path 复用 navigation 注册表键值。
-const TRANSITION_PANEL_ITEMS = ['skills', 'vector_manage', 'golden_qa', 'governance', 'engine_workbench', 'llmconfig', 'memory_admin', 'expert_grants', 'security_controls'];
+import { SETTINGS_SECTIONS } from '../../pages/settings/SettingsLayout';
 
 export function SettingsPanel({ onNavigate, onClose }: {
   onNavigate: (path: string) => void; onClose: () => void;
@@ -16,53 +15,32 @@ export function SettingsPanel({ onNavigate, onClose }: {
   return (
     <div
       data-testid="settings-panel"
-      style={{
-        overflowY: 'auto', padding: 16,
-      }}
+      style={{ overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}
     >
-      <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', margin: '2px 0 8px', fontWeight: 600 }}>
-        设置中心
-      </div>
-      {SETTINGS_CATEGORIES.map((c) => (
-        <div
-          key={c.key}
-          role="button"
-          tabIndex={0}
-          data-testid={`settings-panel-${c.key}`}
-          onClick={() => { onNavigate(c.href); onClose(); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') { onNavigate(c.href); onClose(); } }}
-          style={{
-            display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px',
-            borderRadius: 8, cursor: 'pointer', fontSize: 13,
-          }}
-          onMouseEnter={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'var(--muted, #f5f5f5)'; }}
-          onMouseLeave={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-        >
-          <c.icon />
-          <span>{c.label.zh}</span>
-        </div>
-      ))}
-      {/* 批③ §5.3 过渡期保留（Task 10 设置八分区落地后移除） */}
-      <div style={{ borderTop: '1px solid var(--border-subtle, #eee)', margin: '10px 0 8px' }} />
-      <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', margin: '2px 0 8px', fontWeight: 600 }}>
-        平台能力与治理（过渡期）
-      </div>
-      {TRANSITION_PANEL_ITEMS.map((key) => (
-        <div
-          key={key}
-          role="button"
-          tabIndex={0}
-          data-testid={`settings-panel-navitem-${key}`}
-          onClick={() => { onNavigate(menuKeyToPath[key]); onClose(); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') { onNavigate(menuKeyToPath[key]); onClose(); } }}
-          style={{
-            display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px',
-            borderRadius: 8, cursor: 'pointer', fontSize: 13,
-          }}
-          onMouseEnter={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'var(--muted, #f5f5f5)'; }}
-          onMouseLeave={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-        >
-          <span>{MENU_LABELS[key]}</span>
+      {SETTINGS_SECTIONS.filter((s) => s.items.length > 0).map((section) => (
+        <div key={section.key} data-testid={`settings-panel-section-${section.key}`}>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', margin: '6px 0 4px', fontWeight: 600 }}>
+            {section.title}
+          </div>
+          {section.items.map((it) => (
+            <div
+              key={it.path}
+              role="button"
+              tabIndex={0}
+              data-testid={`settings-panel-item-${it.path.replace(/\//g, '-').replace(/^-/, '')}`}
+              onClick={() => { onNavigate(it.path); onClose(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { onNavigate(it.path); onClose(); } }}
+              style={{
+                display: 'flex', gap: 8, alignItems: 'center', padding: '7px 10px',
+                borderRadius: 8, cursor: 'pointer', fontSize: 13,
+              }}
+              onMouseEnter={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'var(--muted, #f5f5f5)'; }}
+              onMouseLeave={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+            >
+              <it.icon />
+              <span>{it.label}</span>
+            </div>
+          ))}
         </div>
       ))}
     </div>

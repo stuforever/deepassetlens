@@ -9,6 +9,7 @@ import {
 import { PageShell, StatusTag } from '../components/shell';
 import { tokens } from '../theme/tokens';
 import { engineApi, dorisApi } from '../services/api';
+import RouteSimulator from '../components/conversation/contractCards/RouteSimulator'; // 批⑥：路由模拟迁入后台（v4§十二.3）
 
 const ENGINE_CN: Record<string, string> = { doris: 'Doris', duckdb: 'DuckDB 联邦', pg: 'PG 业务库' };
 
@@ -307,6 +308,10 @@ const EngineWorkbench: React.FC = () => {
                 </Col>
               </Row>
             ),
+          },
+          {
+            key: 'route-sim', label: <span><ExperimentOutlined /> 路由模拟</span>,
+            children: <RouteSimulator />,
           },
         ]}
       />

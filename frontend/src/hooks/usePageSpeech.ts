@@ -105,7 +105,11 @@ export function usePageSpeech(
       window.speechSynthesis.removeEventListener("voiceschanged", sync);
   }, []);
 
+  // R#11（R3批/批⑥）：代际守卫位——stop() 不改 indexRef，在途 TTS fetch（0.5-2s）
+  // 返回时旧守卫（index+engine）仍通过，会把已停止的段"复活"播放
+  const epochRef = useRef(0);
   const stopAll = useCallback(() => {
+    epochRef.current += 1;
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -135,10 +139,11 @@ export function usePageSpeech(
       setCurrentIndex(idx);
       const audio = getAudio();
       setState("speaking");
+      const myEpoch = epochRef.current;
       try {
         const blob = await serverTtsToBlob(list[idx].text, uRef.current);
-        // 播放期间用户可能已 stop / seek：索引不符则丢弃本次结果
-        if (indexRef.current !== idx || engineRef.current !== "server") return;
+        // 播放期间用户可能已 stop / seek：索引不符或代际已推进则丢弃本次结果（R#11）
+        if (indexRef.current !== idx || engineRef.current !== "server" || epochRef.current !== myEpoch) return;
         const url = URL.createObjectURL(blob);
         audio.src = url;
         audio.onended = () => {

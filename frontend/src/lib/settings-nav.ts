@@ -26,7 +26,10 @@ import {
   PictureOutlined,
   ReadOutlined,
   RobotOutlined,
+  RocketOutlined,
+  SafetyOutlined,
   SearchOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   ToolOutlined,
   VideoCameraOutlined,
@@ -236,8 +239,22 @@ const CURRICULUM_CHILDREN: SettingsLeaf[] = [
   },
 ];
 
-const CHAT_CHILDREN: SettingsLeaf[] = [
+const GENERAL_CHILDREN: SettingsLeaf[] = [
   {
+    key: "attachments",
+    href: "/settings/attachments",
+    label: { zh: "附件", en: "Attachments" },
+    blurb: {
+      zh: "聊天附件的大小上限与文本提取预算。",
+      en: "Upload caps and extraction budgets for chat attachments.",
+    },
+    icon: PaperClipOutlined,
+    tile: "dsh-tile-teal",
+    adminOnly: true,
+  },
+];
+
+const CHAT_CHILDREN: SettingsLeaf[] = [  {
     key: "tools",
     href: "/settings/tools",
     label: { zh: "工具", en: "Tools" },
@@ -258,18 +275,6 @@ const CHAT_CHILDREN: SettingsLeaf[] = [
     },
     icon: ControlOutlined,
     tile: "dsh-tile-lime",
-  },
-  {
-    key: "attachments",
-    href: "/settings/attachments",
-    label: { zh: "附件", en: "Attachments" },
-    blurb: {
-      zh: "聊天附件的大小上限与文本提取预算。",
-      en: "Upload caps and extraction budgets for chat attachments.",
-    },
-    icon: PaperClipOutlined,
-    tile: "dsh-tile-teal",
-    adminOnly: true,
   },
 ];
 
@@ -349,27 +354,29 @@ const AGENT_CHILDREN: SettingsLeaf[] = [
   },
 ];
 
+/**
+ * 批⑥（v4§5.3）八分区映射账（防失联——旧 6 分区 31 页+批③过渡 9 项逐项去向）：
+ * 旧「外观」+「网络」+attachments(自旧聊天组) → 通用；旧「模型」7 叶+mineru/models/mcp 孤页 → 模型与服务；
+ * 旧「知识与课程」（审查矛盾件 :381/:383）拆解——curriculum×3 → 私塾教学，document-parsing → 知识与检索；
+ * 旧「聊天与智能体」tools/capabilities+agent×6 → 智能体；旧「记忆」→ 数据探索（+memory_admin）；
+ * 批③过渡 9 项收口：skills/golden_qa/expert_grants → 智能体（卡片直达），vector_manage → 知识与检索，
+ * governance/engine_workbench → 数据治理，security_controls → 安全，llmconfig → 模型与服务
+ * （/llm-config→/settings/llm 重定向已存，V6 批），memory_admin → 数据探索。
+ * 缺页登记（§5.3 有名无页，不造页）：个人信息/Rerank/OCR/全文检索/图谱检索/向量索引/
+ * 元模型版本/审计与血缘/认证与 RBAC/数据权限/作文参数/意图类别/日志——随后续需求批补。
+ */
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   {
-    key: "appearance",
-    label: { zh: "外观", en: "Appearance" },
-    blurb: { zh: "视觉主题与界面语言", en: "Theme and interface language" },
+    key: "general",
+    label: { zh: "通用", en: "General" },
+    blurb: { zh: "外观、附件、网络与状态", en: "Appearance, attachments, network, and status" },
     icon: BgColorsOutlined,
     href: "/settings/appearance",
-  },
-  {
-    key: "network",
-    label: { zh: "网络", en: "Network" },
-    blurb: {
-      zh: "端口、浏览器 API 地址与 CORS",
-      en: "Ports, browser API base, and CORS",
-    },
-    icon: ApartmentOutlined,
-    href: "/settings/network",
+    children: GENERAL_CHILDREN,
   },
   {
     key: "models",
-    label: { zh: "模型", en: "Models" },
+    label: { zh: "模型与服务", en: "Models & Services" },
     blurb: {
       zh: "语言、向量、搜索、语音与生成模型",
       en: "Language, embedding, search, voice, and generation models",
@@ -380,32 +387,47 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   },
   {
     key: "knowledge",
-    label: { zh: "知识与课程", en: "Knowledge & Curriculum" },
-    blurb: { zh: "文档解析引擎", en: "Document parsing engine" },
-    icon: ReadOutlined,
-    href: "/settings/document-parsing",
-    children: CURRICULUM_CHILDREN
+    label: { zh: "知识与检索", en: "Knowledge & Retrieval" },
+    blurb: { zh: "知识库管理与文档解析", en: "Knowledge bases and document parsing" },
+    icon: FileSearchOutlined,
+    href: "/vector",
   },
   {
-    key: "chat",
-    label: { zh: "聊天与智能体", en: "Chat & Agents" },
-    blurb: {
-      zh: "工具、能力与附件",
-      en: "Tools, capabilities, and attachments",
-    },
-    icon: MessageOutlined,
-    href: "/settings/chat",
+    key: "agents",
+    label: { zh: "智能体", en: "Agents" },
+    blurb: { zh: "工具、能力、技能与子代理", en: "Tools, capabilities, skills, and subagents" },
+    icon: RobotOutlined,
+    href: "/settings/tools",
     children: [...CHAT_CHILDREN, ...AGENT_CHILDREN],
   },
   {
-    key: "memory",
-    label: { zh: "记忆", en: "Memory" },
-    blurb: {
-      zh: "分块、预算、去重与引用策略",
-      en: "Chunking, budget, dedup, and reference policies",
-    },
+    key: "explore",
+    label: { zh: "数据探索", en: "Data Exploration" },
+    blurb: { zh: "记忆策略与记忆管理", en: "Memory policies and management" },
     icon: DeploymentUnitOutlined,
     href: "/settings/memory",
+  },
+  {
+    key: "governance",
+    label: { zh: "数据治理", en: "Governance" },
+    blurb: { zh: "运行观测与引擎工作台", en: "Observatory and engine workbench" },
+    icon: ThunderboltOutlined,
+    href: "/governance",
+  },
+  {
+    key: "security",
+    label: { zh: "安全", en: "Security" },
+    blurb: { zh: "安全控制中心", en: "Security control center" },
+    icon: SafetyOutlined,
+    href: "/security-controls",
+  },
+  {
+    key: "teaching",
+    label: { zh: "私塾教学", en: "Teaching" },
+    blurb: { zh: "课本、章节与知识点管理", en: "Textbooks, chapters, and knowledge points" },
+    icon: ReadOutlined,
+    href: "/settings/curriculum-textbooks",
+    children: CURRICULUM_CHILDREN,
   },
 ];
 
