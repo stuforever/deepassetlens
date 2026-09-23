@@ -121,3 +121,31 @@ def test_snapshot_covers_three_engines():
     assert set(_PROBES.keys()) == {"doris", "duckdb", "pg"}
     snap = snapshot()
     assert set(snap.keys()) == {"doris", "duckdb", "pg"}
+
+
+# ---------------------------------------------------------------------------
+# R5批①（清单安全）：build_sql_with_filters 拼接回退废除 + CREATE CATALOG 值侧防线
+# ---------------------------------------------------------------------------
+
+def test_build_sql_filters_unparseable_sql_raises():
+    """sqlglot 解析失败 → 拒绝拼接回退，抛 ValueError（原：字符串拼 WHERE 可注入）。
+    变异锚点：回退拼接复活 → 本测红。"""
+    from app.services.doris_engine import build_sql_with_filters
+    with pytest.raises(ValueError):
+        build_sql_with_filters("NOT (( VALID SQL", {"col": "x' OR '1'='1"})
+    # 可解析 SQL 仍走 AST 正常拼条件（守卫：fix 不得误伤主路径）
+    out = build_sql_with_filters("SELECT 1 FROM t", {"col": "v"})
+    assert "WHERE" in out and "'v'" in out
+
+
+def test_create_catalog_rejects_injection_values():
+    """catalog 属性值含 " / \ / 换行 → ValueError 拒收（原：f-string 直嵌 DDL 可注入
+    PROPERTIES）。变异锚点：值侧校验删除 → 本测红。"""
+    from app.services.doris_engine import create_catalog
+    for bad in ('x"', "y\\", "a\nb"):
+        with pytest.raises(ValueError):
+            create_catalog("ct", jdbc_url=bad, jdbc_user="u", jdbc_password="p",
+                           driver_class="c", driver_url="d")
+    with pytest.raises(ValueError):
+        create_catalog("ct", jdbc_url="j", jdbc_user="u", jdbc_password="p",
+                       driver_class="c", driver_url="d", catalog_type="es", es_hosts="h\\")

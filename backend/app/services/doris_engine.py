@@ -207,9 +207,10 @@ def build_sql_with_filters(sql: str, filters: Dict[str, Any]) -> str:
                 _ast = _ast.where(cond)
             return _ast.sql()
         except Exception:
-            where_parts = [f"{alias_map.get(k, k)}='{str(v).replace(chr(39), chr(39)+chr(39))}'"
-                           for k, v in filters.items()]
-            return f"{sql} WHERE " + " AND ".join(where_parts)
+            # R5批①（清单安全）：sqlglot 解析失败不再回退字符串拼接 WHERE——key 未转义直拼、
+            # value 反斜杠未处理（MySQL \\' 转义下 value 以 \ 结尾即破引号注入）。fail-closed：
+            # 解析不了的 SQL 拒绝附加过滤条件，由调用方报错，不做危险降级。
+            raise ValueError("SQL 解析失败，无法安全附加过滤条件（已拒绝拼接回退）")
     return sql
 
 
@@ -347,6 +348,16 @@ def list_catalogs() -> List[Dict[str, Any]]:
         conn.close()
 
 
+def _check_catalog_prop(key: str, val: str) -> str:
+    """R5批①（清单安全）：CREATE CATALOG DDL 双引号串值侧防线——值含 " 或 \\ 或换行即可
+    提前闭合字符串、注入/篡改任意 PROPERTIES 键值。fail-closed 拒收（连接串/URL 合法
+    字符不受影响）；name 侧已有 _check_ident，此为值侧对齐。"""
+    s = str(val)
+    if '"' in s or "\\" in s or "\n" in s or "\r" in s:
+        raise ValueError(f"catalog 属性 {key} 含非法字符（\" \\ 换行不可用）")
+    return s
+
+
 def create_catalog(name: str, jdbc_url: str, jdbc_user: str, jdbc_password: str,
                    driver_class: str, driver_url: str, catalog_type: str = "jdbc",
                    es_hosts: str = "", es_user: str = "", es_password: str = "") -> Dict[str, Any]:
@@ -358,6 +369,14 @@ def create_catalog(name: str, jdbc_url: str, jdbc_user: str, jdbc_password: str,
     if catalog_type == "internal":
         return {"ok": True, "note": "internal 为 Doris 内置 catalog，无需创建"}
     _check_ident(name)
+    _check_catalog_prop("jdbc_url", jdbc_url)
+    _check_catalog_prop("jdbc_user", jdbc_user)
+    _check_catalog_prop("jdbc_password", jdbc_password)
+    _check_catalog_prop("driver_class", driver_class)
+    _check_catalog_prop("driver_url", driver_url)
+    _check_catalog_prop("es_hosts", es_hosts)
+    _check_catalog_prop("es_user", es_user)
+    _check_catalog_prop("es_password", es_password)
     try:
         conn = get_conn()
     except Exception as e:
