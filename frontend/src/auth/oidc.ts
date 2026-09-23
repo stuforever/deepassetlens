@@ -56,7 +56,10 @@ export async function fetchAuthConfig(): Promise<OidcConfig> {
 }
 
 export function isAuthEnabled(): boolean {
-  return _config?.enable_auth === true;
+  // R5批③ fail-closed：配置未达时按「认证开启」处理（宁多注 Bearer，不静默放行）。
+  // 无 token 时调用方本就不注头，auth=OFF 部署在配置到达前按 ON 处理无副作用。
+  // 清单 High 登记点：现无同步消费方（潜在缺陷——公共 API 防未来误用）。
+  return _config ? _config.enable_auth === true : true;
 }
 
 export function getStoredToken(): TokenBundle | null {

@@ -21,7 +21,8 @@ async function requestOverBridge<T>(
   message: Record<string, unknown>,
   onEvent?: (event: BookWsEvent) => void,
 ): Promise<T> {
-  const resp = await fetch(apiUrl("/api/v2/skills/capability"), {
+  // R5批③：裸 fetch → apiFetch（credentials:include + 401 统一门控）——auth=ON 部署生成类操作此前不携带会话凭据
+  const resp = await apiFetch(apiUrl("/api/v2/skills/capability"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -72,8 +73,9 @@ async function requestOverBridge<T>(
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await apiFetch(apiUrl(`${BASE}${path}`), {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    // R5批③：...init 前置——原顺序下 init.headers 会整体覆盖预合并的 Content-Type/自定义头
     ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
   if (!res.ok) {
     let detail: string;
