@@ -167,8 +167,10 @@ class QueryContract:
         # 契约内 always 禁用绝对禁止工具（模型/技能声明只能加不能减）；
         # 批13-Q：task 在 allow_subagents=True 时移出 forbidden（契约层放行，运行时层仍由
         # skill_policy 复合校验 caps.subagents.enabled）。
+        # R5批⑱（清单安全）：绝对禁止集不再受 allowed_tools 声明影响——原
+        # `t not in c.allowed_tools` 反向过滤，step 声明即逃逸（违背「只能加不能减」）。
         forbidden = [t for t in ABSOLUTE_FORBIDDEN_TOOLS
-                     if t not in c.allowed_tools and not (t == "task" and c.allow_subagents)]
+                     if not (t == "task" and c.allow_subagents)]
         # 批13-G 件1 收口：场景契约剧本手册已随契约消息预载（_load_skill_md lru_cache），
         # read_file 读技能文件成为纯浪费轮——场景路径禁止 read_file（SkillPolicy 硬拦，
         # 与剧本手册段「无需 read_file」文案双保险）。generic 契约不受影响（自主模式仍可读）。

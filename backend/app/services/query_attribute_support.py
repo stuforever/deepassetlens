@@ -268,6 +268,16 @@ def _build_sql_text(blueprint: Dict[str, Any]) -> str:
         seen_joins.add(join_key)
         join_line = f"LEFT JOIN {_quote_sql_identifier(target_entity_name)}"
         if join_expr:
+            # R5批⑱（清单安全）：join_expr 来自 LLM 产出的关系数据，_safe_text 只净文本
+            # 不净语义——白名单格式校验（仅「`标识符` = `标识符`」可 AND 连接），
+            # 不合格式拒绝该 JOIN（fail-closed，宁少不注入）。
+            import re as _re
+
+            if not _re.fullmatch(
+                    r"\s*`[^`]+`(?:\.`[^`]+`)*\s*=\s*`[^`]+`(?:\.`[^`]+`)*"
+                    r"(?:\s+AND\s+`[^`]+`(?:\.`[^`]+`)*\s*=\s*`[^`]+`(?:\.`[^`]+`)*)*\s*",
+                    join_expr):
+                continue
             join_line += f"\n  ON {join_expr}"
         sql_lines.append(join_line)
 
