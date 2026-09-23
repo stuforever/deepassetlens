@@ -206,7 +206,15 @@ export async function* streamSubagentMessage(
     while ((nl = buf.indexOf("\n")) >= 0) {
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 1);
-      if (line) yield JSON.parse(line) as SubagentStreamLine;
+      if (line) {
+        // R5批⑧：NDJSON 坏行容错——反向代理错误页/心跳注释行/连接中断的截断半行
+        // 不再中断整条流（原 JSON.parse 零容错会丢掉已收到的全部输出）
+        try {
+          yield JSON.parse(line) as SubagentStreamLine;
+        } catch {
+          continue;
+        }
+      }
     }
   };
   for (;;) {

@@ -49,6 +49,11 @@ export function runBookSocketOperation<T extends BookWsEvent = BookWsEvent>(
       }, idleTimeoutMs);
     };
 
+    // R5批⑧：建连阶段即启动空闲计时——原实现仅在 onopen 后 arm，握手挂起或
+    // createSocket 返回已 OPEN socket（onopen 不再触发、message 永不发送）时
+    // Promise 永久 pending 且无兜底
+    armIdleTimeout();
+
     const finish = (callback: () => void, closeSocket: boolean): void => {
       if (settled) return;
       settled = true;

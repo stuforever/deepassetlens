@@ -195,8 +195,11 @@ export function reduceBookEvent(
 ): BookProgress {
   const meta = (event.metadata as Record<string, unknown> | undefined) || {};
   const stage = String((event as { stage?: string }).stage || "");
+  // R5批⑧：content 为对象/数组负载时 String() 得真值串 "[object Object]"，
+  // 会屏蔽 meta.kind 兜底致书籍专属 kind 全部失配、进度计数静默停滞——仅接受字符串 content
+  const content = event.content;
   const rawKind = String(
-    (event.content as string) || (meta.kind as string) || "",
+    (typeof content === "string" && content) || (meta.kind as string) || "",
   );
   const eventType = String(event.type || "");
 
