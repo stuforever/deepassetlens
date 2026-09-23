@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import os
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.services.sishu_full.services.wechat_push import (
@@ -47,10 +49,9 @@ class BindRequest(BaseModel):
 
 
 class OAuthRequest(BaseModel):
+    # R5批⑦（清单安全）：appid/secret 是服务端凭据，不再由请求体传入（任何能调用本
+    # 接口的人都能拿到或替换它）；mock 与否同样收敛服务端 env。请求体只保留 code。
     code: str
-    appid: str = ""
-    secret: str = ""
-    mock_mode: bool = True
 
 
 @router.get("/subscribers")
@@ -75,10 +76,15 @@ def subscribe(body: SubscribeRequest):
 
 @router.post("/oauth/code")
 async def oauth_exchange(body: OAuthRequest):
-    """微信网页授权：code -> openid（mock 或真实）。"""
+    """微信网页授权：code -> openid（mock 或真实）。appid/secret/mock 均由服务端
+    env 决定（WECHAT_MP_APPID / WECHAT_MP_SECRET / WECHAT_MP_MOCK，mock 默认开以
+    兼容开发态）。"""
+    appid = os.getenv("WECHAT_MP_APPID", "")
+    secret = os.getenv("WECHAT_MP_SECRET", "")
+    mock_mode = os.getenv("WECHAT_MP_MOCK", "1") == "1"
     try:
         openid = await exchange_code_for_openid(
-            body.code, appid=body.appid, secret=body.secret, mock_mode=body.mock_mode
+            body.code, appid=appid, secret=secret, mock_mode=mock_mode
         )
         return {"ok": True, "openid": openid, "binding": get_binding(openid)}
     except Exception as e:  # noqa: BLE001
@@ -270,13 +276,20 @@ async def scheduler_stop():
 
 
 @router.post("/webhook")
-async def wechat_webhook(body: dict):
+async def wechat_webhook(
+    body: dict,
+    signature: str = Query(""),
+    timestamp: str = Query(""),
+    nonce: str = Query(""),
+):
     """接收公众号回调事件（用户消息 / 菜单点击）并**回复**。
 
     事件 -> 消息解析 -> 关键词命令 / 图片 OCR / AI 答疑 -> 客服消息回推。
 
-    WeChat 回调是 XML，但测试/聚合场景可用 JSON；签名校验由公众号后台
-    (Token) 或反向代理完成。
+    R5批⑦（清单安全）：强制签名校验——原注释声称「签名校验由公众号后台 (Token) 或
+    反向代理完成」实际无人做，FromUserName 客户端可控=身份/消息伪造+AI 成本消耗。
+    token 由 env WECHAT_MP_TOKEN 配置，sha1(sort(token,ts,nonce)) 校验；未配置
+    fail-closed 403，开发联调显式设 TUPU_WECHAT_WEBHOOK_UNVERIFIED=1 放行。
 
     支持的事件字段：
       - ``FromUserName``: 发送者 openid
@@ -285,6 +298,13 @@ async def wechat_webhook(body: dict):
       - ``PicUrl`` / ``pic_url``: 图片 URL（image）
       - ``base64_image``: 图片字节的 base64（测试/聚合用）
     """
+    if os.getenv("TUPU_WECHAT_WEBHOOK_UNVERIFIED", "") != "1":
+        from app.services.sishu_full.partners.channels.wechat_mp import WechatMpChannel
+
+        token = os.getenv("WECHAT_MP_TOKEN", "")
+        if not token or not WechatMpChannel.verify_signature(token, signature, timestamp, nonce):
+            raise HTTPException(status_code=403, detail="webhook 签名校验失败")
+
     from app.services.sishu_full.partners.bus.events import OutboundMessage
     from app.services.sishu_full.services.wechat_push.chat import handle_mp_message
 
