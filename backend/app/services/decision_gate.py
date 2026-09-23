@@ -59,7 +59,9 @@ MAX_REPAIRS = 1
 _FIELD_KNOWN = re.compile(r"已知\s*[:：]\s*([^\n]*)")
 _FIELD_JUDGE = re.compile(r"判断\s*[:：]\s*([^\n]*)")
 _FIELD_THEREFORE = re.compile(r"因此\s*[:：]\s*([^\n]*)")
-_FIELD_SCOPE = re.compile(r"范围\s*[:：]\s*([^\n]*)")
+# R5批③（清单安全）：范围字段行首锚定——原全文 search 会把已知/判断叙述行中的
+# 「客户范围: 客户099」当作范围声明（字段值同行即命中）。
+_FIELD_SCOPE = re.compile(r"^范围\s*[:：]\s*([^\n]*)", re.MULTILINE)
 _SCOPE_SPLIT = re.compile(r"[,，、\s]+")
 # "因此: 调用 execute_sql。" -> 提取工具名
 _THEREFORE_TOOL = re.compile(r"调用\s*([A-Za-z_][\w\-]*)")
@@ -233,7 +235,10 @@ class DecisionGateMiddleware(AgentMiddleware[Any, Any, Any]):
                 tool_call_id=tc_id)
 
         # 从决策文本提取客户范围，同步写入 state.last_scope（不异步、不竞态）
-        _update_last_scope(request.state, aimsg_content)
+        # R5批③（清单安全）：仅 scope_gated 取数工具同步范围——原在所有过闸工具上执行，
+        # 模型可借任意工具调用正文一句话改写甚至清空可信范围
+        if tool_name in self._scope_gated:
+            _update_last_scope(request.state, aimsg_content)
 
         return await handler(request)
 
@@ -358,29 +363,26 @@ def _update_last_scope(state: Any, decision_content: str):
     """
     if not decision_content:
         return
-    import re as _re
-    _scope_match = _re.search(r'范围[:：]\s*(.+)', decision_content)
-    if not _scope_match:
+    # R5批③（清单安全）：复用 _parse_decision 标记位解析——原正则在全文任意位置匹配
+    # 「范围:」，叙述文字（如「上一步显示客户范围: 客户099」）即被当作范围声明；且无
+    # 决策标记的正文也会被扫。现仅结构化决策块内的行首「范围:」字段生效。
+    _decision = _parse_decision(decision_content)
+    if not _decision or "scope" not in _decision:
         return
+    _customer_names = list(_decision["scope"])
 
     # user_input 来源的范围不可被模型覆盖（防自洽绕过）
     _existing = _get_trusted_scope(state)
     if _existing and _existing.get("source") == "user_input":
         return  # 用户指定的范围，模型无权修改
 
-    _scope_raw = _scope_match.group(1).strip()
-    if not _scope_raw or _scope_raw == "无":
-        # 范围: 无 -> 清空旧范围（仅清 model_declared，不碰 user_input）
-        if _existing and _existing.get("source") == "user_input":
-            return  # 不清空用户指定的范围
+    if not _customer_names:
+        # 范围: 无（或空值）-> 清空旧范围（仅清 model_declared，不碰 user_input）
         if isinstance(state, dict):
             state["last_scope"] = None
         else:
             try: setattr(state, "last_scope", None)
             except: pass
-        return
-    _customer_names = [c.strip() for c in _re.split(r'[,，、]', _scope_raw) if c.strip()]
-    if not _customer_names:
         return
     _new_scope = {
         "customer_names": _customer_names,

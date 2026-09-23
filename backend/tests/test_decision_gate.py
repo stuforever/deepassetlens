@@ -366,7 +366,7 @@ class TestScopeSourcePriority:
             "commitment": "exact_set", "source": "user_input",
         }}
         # 模型声明了不同范围
-        _update_last_scope(state, "范围: 客户005,客户006")
+        _update_last_scope(state, f"{DECISION_MARKER}\n已知: 换范围\n判断: 新声明\n因此: 查询\n范围: 客户005,客户006\n")
         _after = _get_trusted_scope(state)
         assert _after["customer_names"] == ["客户001", "客户003"]  # 未被覆盖
         assert _after["source"] == "user_input"
@@ -378,7 +378,7 @@ class TestScopeSourcePriority:
             "customer_names": ["客户001"], "ordered": True,
             "commitment": "exact_set", "source": "model_declared",
         }}
-        _update_last_scope(state, "范围: 客户003,客户005")
+        _update_last_scope(state, f"{DECISION_MARKER}\n已知: 换范围\n判断: 新声明\n因此: 查询\n范围: 客户003,客户005\n")
         _after = _get_trusted_scope(state)
         assert _after["customer_names"] == ["客户003", "客户005"]  # 被覆盖
         assert _after["source"] == "model_declared"
@@ -390,7 +390,7 @@ class TestScopeSourcePriority:
             "customer_names": ["客户001"], "ordered": True,
             "commitment": "exact_set", "source": "user_input",
         }}
-        _update_last_scope(state, "范围: 无")
+        _update_last_scope(state, f"{DECISION_MARKER}\n已知: 换范围\n判断: 清空\n因此: 查询\n范围: 无\n")
         _after = _get_trusted_scope(state)
         assert _after is not None
         assert _after["customer_names"] == ["客户001"]

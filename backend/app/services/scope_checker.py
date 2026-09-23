@@ -52,14 +52,30 @@ def extract_customer_names(sql: str) -> set[str]:
     except Exception:
         return set()
     names: set[str] = set()
+
+    def _under_not(node) -> bool:
+        # R5批③：手动上溯——sqlglot 本版 find_ancestor 隔 Paren 即断链（NOT (a=b) 漏判）
+        p = node.parent
+        while p is not None:
+            if isinstance(p, exp.Not):
+                return True
+            p = p.parent
+        return False
+
     # 1) cust_name IN ('...','...') —— 文档主推模式
+    # R5批③（清单安全）：NOT IN（Not(In(...))）是排除集，值不属于提取集合——原 find_all
+    # 会命中其内层 In，把排除列表当包含列表（NOT IN ('X') 配 declared={'X'} 判通过=全量绕过）
     for in_expr in tree.find_all(exp.In):
+        if _under_not(in_expr):
+            continue
         if _col_name(in_expr.this).lower() in _CUSTOMER_NAME_COLS:
             for v in in_expr.expressions:
                 if isinstance(v, exp.Literal) and v.is_string:
                     names.add(v.this)
-    # 2) cust_name = '...' —— 单客户场景兼容（左右两侧都可能列名）
+    # 2) cust_name = '...' —— 单客户场景兼容（左右两侧都可能列名；同款排除 NEQ/NOT 包裹）
     for eq in tree.find_all(exp.EQ):
+        if _under_not(eq):
+            continue
         left_name = _col_name(eq.this).lower()
         right = eq.expression  # = 右侧
         if left_name in _CUSTOMER_NAME_COLS and isinstance(right, exp.Literal) and right.is_string:
@@ -91,6 +107,24 @@ def check_customer_scope(sql: str, declared) -> ScopeCheck:
             ok=True, extracted=extracted, declared=declared_set,
             reason="未声明客户名范围，跳过(v1仅对声明集合强校验)",
         )
+    # R5批③（清单安全）：字面子集校验的边界盲区 fail-closed——OR 自由条件（IN ('X') OR 1=1）
+    # 与 UNION 无过滤分支可让「提取字面量 ⊆ 声明」成立而实际结果集越界。v1 严格定位下
+    # 这类写法不可证明，直接拒绝（合法剧本 SQL 均为单 SELECT + cust_name IN/=，不受影响）。
+    try:
+        _tree = sqlglot.parse_one(sql, dialect="postgres")
+    except Exception:
+        _tree = None
+    if _tree is not None:
+        if _tree.find(exp.Or) is not None:
+            return ScopeCheck(
+                ok=False, extracted=extracted, declared=declared_set,
+                reason="SQL 含 OR 自由条件，字面子集校验不可证明(越界风险，v1 严格拒绝)",
+            )
+        if _tree.find(exp.Union) is not None:
+            return ScopeCheck(
+                ok=False, extracted=extracted, declared=declared_set,
+                reason="SQL 含 UNION，分支过滤不可证明(越界风险，v1 严格拒绝)",
+            )
     if not extracted:
         return ScopeCheck(
             ok=False, extracted=extracted, declared=declared_set,
