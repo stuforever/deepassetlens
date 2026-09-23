@@ -230,39 +230,54 @@ async def import_from_book(
 
 
 @router.delete("/progress/{book_id}")
-async def delete_progress(book_id: str):
+async def delete_progress(
+    book_id: str,
+    u: str = Query(""),
+    code: str = Query("", description="访问码（access_code 启用时必填）"),
+    x_access_code: str = Header(""),
+):
+    # R5批⑥（清单安全）：补 H5 用户隔离——原缺 u/code/_h5_ctx，store 固定落 admin
+    # 工作区（H5 用户删不了自己的进度/可越权删 admin 进度，访问码门禁被绕过）
     _validate_book_id(book_id)
-    store = LearningStore()
-    if not store.exists(book_id):
-        raise HTTPException(status_code=404, detail="Progress not found")
-    store.delete(book_id)
-    return {"status": "ok"}
+    with _h5_ctx(u, code, x_access_code):
+        store = LearningStore()
+        if not store.exists(book_id):
+            raise HTTPException(status_code=404, detail="Progress not found")
+        store.delete(book_id)
+        return {"status": "ok"}
 
 
 @router.post("/progress/{book_id}/redo")
-async def redo_progress(book_id: str):
+async def redo_progress(
+    book_id: str,
+    u: str = Query(""),
+    code: str = Query("", description="访问码（access_code 启用时必填）"),
+    x_access_code: str = Header(""),
+):
+    # R5批⑥（清单安全）：同 delete_progress——补 H5 用户隔离
     _validate_book_id(book_id)
-    store = LearningStore()
-    progress = store.load(book_id)
-    if progress is None:
-        raise HTTPException(status_code=404, detail="Progress not found")
-    progress.current_stage = LearningStage.DIAGNOSTIC
-    progress.mastery_levels = {}
-    progress.qualitative_mastery = {}
-    progress.quiz_attempts = []
-    progress.error_records = []
-    progress.repetition_states = {}
-    progress.review_queue = []
-    progress.pending_question = None
-    progress.feynman_retries = {}
-    progress.feynman_explanations = {}
-    progress.stage_failure_counts = {}
-    progress.stage_failure_notes = {}
-    progress.diagnostic = None
-    progress.current_kp_index = 0
-    progress.current_module_id = progress.modules[0].id if progress.modules else ""
-    store.save(progress)
-    return {"status": "ok"}
+    with _h5_ctx(u, code, x_access_code):
+        store = LearningStore()
+        progress = store.load(book_id)
+        if progress is None:
+            raise HTTPException(status_code=404, detail="Progress not found")
+        progress.current_stage = LearningStage.DIAGNOSTIC
+        progress.mastery_levels = {}
+        progress.qualitative_mastery = {}
+        progress.quiz_attempts = []
+        progress.error_records = []
+        progress.repetition_states = {}
+        progress.review_queue = []
+        progress.pending_question = None
+        progress.feynman_retries = {}
+        progress.feynman_explanations = {}
+        progress.stage_failure_counts = {}
+        progress.stage_failure_notes = {}
+        progress.diagnostic = None
+        progress.current_kp_index = 0
+        progress.current_module_id = progress.modules[0].id if progress.modules else ""
+        store.save(progress)
+        return {"status": "ok"}
 
 
 class NotebookRecordInput(BaseModel):
@@ -278,80 +293,90 @@ class GenerateFromNotebookRequest(BaseModel):
 
 
 @router.post("/progress/{book_id}/generate-from-notebook")
-async def generate_from_notebook(book_id: str, body: GenerateFromNotebookRequest):
+async def generate_from_notebook(
+    book_id: str,
+    body: GenerateFromNotebookRequest,
+    u: str = Query(""),
+    code: str = Query("", description="访问码（access_code 启用时必填）"),
+    x_access_code: str = Header(""),
+):
+    # R5批⑥（清单安全）：同 delete_progress——补 H5 用户隔离（LLM 生成模块曾写入
+    # admin 工作区；访问码门禁被绕过）
     _validate_book_id(book_id)
     if not body.records:
         raise HTTPException(status_code=400, detail="No records provided")
+    # R5批⑥：以下主体在 H5 用户上下文内执行（store 根切到请求用户工作区）
+    with _h5_ctx(u, code, x_access_code):
 
-    records_data = [
-        {
-            "type": html.escape(r.type[:50], quote=False),
-            "title": html.escape(r.title[:200], quote=False),
-            "output": html.escape(r.output[:500], quote=False),
-        }
-        for r in body.records[:20]
-    ]
-    records_json = json.dumps(records_data, ensure_ascii=False)
-    from app.services.sishu_full.services.llm import complete
+        records_data = [
+            {
+                "type": html.escape(r.type[:50], quote=False),
+                "title": html.escape(r.title[:200], quote=False),
+                "output": html.escape(r.output[:500], quote=False),
+            }
+            for r in body.records[:20]
+        ]
+        records_json = json.dumps(records_data, ensure_ascii=False)
+        from app.services.sishu_full.services.llm import complete
 
-    language = get_ui_language()
-    system_prompt, prompt = learning_prompts.notebook_generation_prompts(language, records_json)
-    response = await complete(prompt=prompt, system_prompt=system_prompt)
-    # LLMs commonly fence/slightly-malform JSON; use the shared fence-stripping
-    # repair parser instead of bare json.loads so the common case isn't a 502.
-    data = parse_json_response(response, fallback=None)
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=502, detail="LLM returned invalid JSON")
+        language = get_ui_language()
+        system_prompt, prompt = learning_prompts.notebook_generation_prompts(language, records_json)
+        response = await complete(prompt=prompt, system_prompt=system_prompt)
+        # LLMs commonly fence/slightly-malform JSON; use the shared fence-stripping
+        # repair parser instead of bare json.loads so the common case isn't a 502.
+        data = parse_json_response(response, fallback=None)
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=502, detail="LLM returned invalid JSON")
 
-    modules_raw = data.get("modules", [])
-    if not isinstance(modules_raw, list):
-        raise HTTPException(
-            status_code=502, detail="LLM returned invalid structure: modules is not a list"
-        )
-    _ALLOWED_KP_TYPES = {"memory", "concept", "procedure", "design"}
-    modules = []
-    for i, m in enumerate(modules_raw):
-        if not isinstance(m, dict) or "name" not in m:
-            continue
-        fallback_name = learning_prompts.default_module_name(language, i + 1)
-        module_name = str(m.get("name") or fallback_name).strip()[:200] or fallback_name
-        kps = []
-        for j, kp in enumerate(m.get("knowledge_points", [])):
-            if not isinstance(kp, dict) or "name" not in kp:
+        modules_raw = data.get("modules", [])
+        if not isinstance(modules_raw, list):
+            raise HTTPException(
+                status_code=502, detail="LLM returned invalid structure: modules is not a list"
+            )
+        _ALLOWED_KP_TYPES = {"memory", "concept", "procedure", "design"}
+        modules = []
+        for i, m in enumerate(modules_raw):
+            if not isinstance(m, dict) or "name" not in m:
                 continue
-            kp_name = str(kp["name"]).strip()[:200]
-            if len(kp_name) < 2:
-                continue
-            kp_type = str(kp.get("type", "concept")).strip()
-            if kp_type not in _ALLOWED_KP_TYPES:
-                kp_type = "concept"
-            kps.append(
-                KnowledgePoint(
-                    id=f"{book_id}_nb{i}_kp{j}",
-                    name=kp_name,
-                    type=KnowledgeType(kp_type),
-                    module_id=f"{book_id}_nb{i}",
+            fallback_name = learning_prompts.default_module_name(language, i + 1)
+            module_name = str(m.get("name") or fallback_name).strip()[:200] or fallback_name
+            kps = []
+            for j, kp in enumerate(m.get("knowledge_points", [])):
+                if not isinstance(kp, dict) or "name" not in kp:
+                    continue
+                kp_name = str(kp["name"]).strip()[:200]
+                if len(kp_name) < 2:
+                    continue
+                kp_type = str(kp.get("type", "concept")).strip()
+                if kp_type not in _ALLOWED_KP_TYPES:
+                    kp_type = "concept"
+                kps.append(
+                    KnowledgePoint(
+                        id=f"{book_id}_nb{i}_kp{j}",
+                        name=kp_name,
+                        type=KnowledgeType(kp_type),
+                        module_id=f"{book_id}_nb{i}",
+                    )
+                )
+            modules.append(
+                LearningModule(
+                    id=f"{book_id}_nb{i}",
+                    name=module_name,
+                    order=i,
+                    pass_threshold=0.7,
+                    knowledge_points=kps,
                 )
             )
-        modules.append(
-            LearningModule(
-                id=f"{book_id}_nb{i}",
-                name=module_name,
-                order=i,
-                pass_threshold=0.7,
-                knowledge_points=kps,
-            )
-        )
-    _validate_runnable_modules(modules, status_code=502)
-    await _cancel_active_learning_turn(book_id)
-    service = get_learning_service()
-    progress = service.get_or_create(book_id)
-    service.init_modules(progress, modules)
-    progress.current_module_id = modules[0].id
-    progress.current_kp_index = 0
-    service.save(progress)
-    return {
-        "status": "ok",
-        "module_count": len(modules),
-        "modules": [m.model_dump() for m in modules],
-    }
+        _validate_runnable_modules(modules, status_code=502)
+        await _cancel_active_learning_turn(book_id)
+        service = get_learning_service()
+        progress = service.get_or_create(book_id)
+        service.init_modules(progress, modules)
+        progress.current_module_id = modules[0].id
+        progress.current_kp_index = 0
+        service.save(progress)
+        return {
+            "status": "ok",
+            "module_count": len(modules),
+            "modules": [m.model_dump() for m in modules],
+        }
