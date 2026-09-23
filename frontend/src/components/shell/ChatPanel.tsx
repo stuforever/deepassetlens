@@ -1,5 +1,7 @@
 /**
- * ChatPanel（v3 §二）：💬对话滑出面板——新建对话 + 三专家直达 + 最近对话列表。
+ * ChatPanel（v3 §二，批③ §十三换壳）：💬对话面板内容——新建对话 + 最近对话列表。
+ * v4§5.1：删「三专家直达」区（进对话一律走新建对话或首屏专家 Tab）；EXPERTS 常量保留（最近对话行空间色点仍用）。
+ * 宽度/背景/边框由统一壳 ShellPanel 提供（本组件只渲染滚动内容区）。
  * 最近对话=平台 store 会话（wenshu/sishu）+ h5 vendor 会话合并（沿 AppSider 数据源迁移）。
  * v4§九：会话行 hover ⋯ 菜单（重命名/删除）接回（0ef1420 换壳回归修复）——
  * 平台行走 store deleteSessionById/renameSessionById；h5 行走 vendor session-api 并刷新。
@@ -126,8 +128,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
     <div
       data-testid="chat-panel"
       style={{
-        width: 300, flexShrink: 0, overflowY: 'auto', padding: 16,
-        background: 'var(--bg-content, #fff)', borderRight: '1px solid var(--border-subtle, #eee)',
+        overflowY: 'auto', padding: 16,
         display: 'flex', flexDirection: 'column', gap: 12,
       }}
     >
@@ -140,27 +141,6 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
       >
         新建对话
       </Button>
-      <div>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', margin: '2px 0 6px', fontWeight: 600 }}>三专家直达</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {EXPERTS.map((e) => (
-            <div
-              key={e.id}
-              role="button"
-              tabIndex={0}
-              data-testid={`chat-panel-expert-${e.id}`}
-              onClick={() => { navigate(e.path); onClose(); }}
-              style={{
-                flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontSize: 13,
-                border: '1px solid var(--border-subtle, #eee)', display: 'flex', alignItems: 'center', gap: 6,
-              }}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: 99, background: e.color, flexShrink: 0 }} />
-              {e.label}
-            </div>
-          ))}
-        </div>
-      </div>
       <div style={{ flex: 1, minHeight: 0 }}>
         <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', margin: '2px 0 6px', fontWeight: 600 }}>最近对话</div>
         {rows.length === 0 && (

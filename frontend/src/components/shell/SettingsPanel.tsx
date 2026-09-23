@@ -1,6 +1,7 @@
 /**
- * SettingsPanel（v3 §二）：⚙设置滑出面板——设置中心 6 分区入口平铺，进 /settings 体系。
- * 数据源=SETTINGS_CATEGORIES 顶层六分区（lib/settings-nav.ts，E-78⑤ 终版）。
+ * SettingsPanel（v3 §二，批③ §十三换壳）：⚙设置面板内容——设置中心 6 分区入口平铺，进 /settings 体系。
+ * 数据源=SETTINGS_CATEGORIES 顶层六分区（lib/settings-nav.ts，E-78⑤ 终版）；
+ * 宽度/背景/边框由统一壳 ShellPanel 提供（本组件只渲染滚动内容区）。
  */
 import { SETTINGS_CATEGORIES } from '../../lib/settings-nav';
 
@@ -11,8 +12,7 @@ export function SettingsPanel({ onNavigate, onClose }: {
     <div
       data-testid="settings-panel"
       style={{
-        width: 300, flexShrink: 0, overflowY: 'auto', padding: 16,
-        background: 'var(--bg-content, #fff)', borderRight: '1px solid var(--border-subtle, #eee)',
+        overflowY: 'auto', padding: 16,
       }}
     >
       <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', margin: '2px 0 8px', fontWeight: 600 }}>

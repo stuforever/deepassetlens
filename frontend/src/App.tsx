@@ -16,15 +16,23 @@ import {
 import { useStore } from './store/useStore';
 import { antdThemeToken, antdComponents, tokens } from './theme/tokens';
 import UserBadge from './components/UserBadge';
-import ActivityBar, { type ShellPanel } from './components/shell/ActivityBar';
+import ActivityBar, { type ShellPanel as ShellPanelId } from './components/shell/ActivityBar';
 import NavPanel from './components/shell/NavPanel';
 import ChatPanel from './components/shell/ChatPanel';
 import SettingsPanel from './components/shell/SettingsPanel';
+import ShellPanel from './components/shell/ShellPanel';
 import CommandPalette from './components/shell/CommandPalette';
 import AppTabs, { type PageTab } from './components/AppTabs';
 import { expertPageRoutes, matchExpertPage } from './config/expertPages';
 
 const { Header, Content } = Layout;
+
+// 批③ v4 §十三：三面板统一壳标题（调用方传入 ShellPanel；emoji 直接放字符串，文件内已有 emoji 先例）
+const SHELL_PANEL_TITLES: Record<Exclude<ShellPanelId, null>, string> = {
+  chat: '💬 对话',
+  console: '🗂 管理台',
+  settings: '⚙ 设置',
+};
 
 // 三轨M6(U1) D1：A 模板页（对话型）取消页签——切走即卸载（ChatGPT 一致），历史入口=侧栏最近对话
 const TABLESS_MENU_KEYS = (menuKey: string): boolean =>
@@ -42,8 +50,20 @@ const App: React.FC = () => {
 
   const currentMenu = pathToMenuKey[location.pathname] || (location.pathname.startsWith('/e/') ? '' : 'portal');
 
-  // v3 §二：图标条+滑出面板（ActivityBar/NavPanel/ChatPanel/SettingsPanel）——Esc 收起
-  const [shellPanel, setShellPanel] = useState<ShellPanel>(null);
+  // 批③ §十三：图标条 + 统一三态壳（ShellPanel：floating 浮层 / pinned 钉住 / 收起）——Esc 收起（v3 §二 沿革）
+  const [shellPanel, setShellPanel] = useState<ShellPanelId>(null);
+  // 批③ v4 §十三：三面板钉住状态各自独立、localStorage 持久化（全站记住）
+  const [pinnedPanels, setPinnedPanels] = useState<Record<'chat' | 'console' | 'settings', boolean>>(() => ({
+    chat: localStorage.getItem('shell:pinned:chat') === '1',
+    console: localStorage.getItem('shell:pinned:console') === '1',
+    settings: localStorage.getItem('shell:pinned:settings') === '1',
+  }));
+  const togglePin = (p: 'chat' | 'console' | 'settings') =>
+    setPinnedPanels((m) => {
+      const next = { ...m, [p]: !m[p] };
+      localStorage.setItem(`shell:pinned:${p}`, next[p] ? '1' : '0');
+      return next;
+    });
   // v3 #8：⌘K 命令面板
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -308,17 +328,37 @@ const App: React.FC = () => {
           </div>
         </Header>
 
-        <Layout style={{ flexDirection: 'row', overflow: 'hidden', flex: 1, minHeight: 0 }}>
-          {/* 左侧：图标条 + 滑出面板（v3 §二；Esc/再点收起） */}
+        <Layout style={{ flexDirection: 'row', overflow: 'hidden', flex: 1, minHeight: 0, position: 'relative' }}>
+          {/* 左侧：图标条 + 统一三态壳（批③ v4 §十三：floating 浮层不挤主区 / pinned 流内让位；Esc/再点/点外部收起） */}
           <ActivityBar
             activePanel={shellPanel}
             onToggle={(p) => setShellPanel(shellPanel === p ? null : p)}
           />
-          {shellPanel === 'console' && (
-            <NavPanel visible onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />
+          {shellPanel && (
+            <>
+              {/* floating 态：图标条右侧透明捕获层，点外部即收起（pinned 态不渲染） */}
+              {!pinnedPanels[shellPanel] && (
+                <div
+                  data-testid="shell-backdrop"
+                  onClick={() => setShellPanel(null)}
+                  style={{ position: 'absolute', left: 48, top: 0, right: 0, bottom: 0, zIndex: 99, background: 'transparent' }}
+                />
+              )}
+              <ShellPanel
+                panel={shellPanel}
+                title={SHELL_PANEL_TITLES[shellPanel]}
+                pinned={pinnedPanels[shellPanel]}
+                onTogglePin={() => togglePin(shellPanel)}
+                onClose={() => setShellPanel(null)}
+              >
+                {shellPanel === 'console' && (
+                  <NavPanel visible onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />
+                )}
+                {shellPanel === 'chat' && <ChatPanel onClose={() => setShellPanel(null)} />}
+                {shellPanel === 'settings' && <SettingsPanel onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />}
+              </ShellPanel>
+            </>
           )}
-          {shellPanel === 'chat' && <ChatPanel onClose={() => setShellPanel(null)} />}
-          {shellPanel === 'settings' && <SettingsPanel onClose={() => setShellPanel(null)} onNavigate={(path) => navigate(path)} />}
           <CommandPalette open={cmdkOpen} onClose={() => setCmdkOpen(false)} />
           {/* 内容区：页签 + KeepAlive */}
           <Content

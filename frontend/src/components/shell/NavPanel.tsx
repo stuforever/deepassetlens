@@ -1,5 +1,6 @@
 /**
- * NavPanel（v3 §二）：管理台滑出面板——六组平铺、无折叠层级，点项开主区页签。
+ * NavPanel（v3 §二，批③ §十三换壳）：管理台面板内容——六组平铺、无折叠层级，点项开主区页签。
+ * 宽度/背景/边框由统一壳 ShellPanel 提供（本组件只渲染滚动内容区，双列网格原样）。
  * 数据源=NAV_PANEL_GROUPS（menuKey 全复用既有注册表，menuKeyToPath 映射跳转）。
  */
 import { NAV_PANEL_GROUPS, menuKeyToPath } from '../../config/navigation';
@@ -12,8 +13,7 @@ export function NavPanel({ visible, onNavigate, onClose }: {
     <div
       data-testid="nav-panel"
       style={{
-        width: 560, flexShrink: 0, overflowY: 'auto', padding: 16,
-        background: 'var(--bg-content, #fff)', borderRight: '1px solid var(--border-subtle, #eee)',
+        overflowY: 'auto', padding: 16,
       }}
     >
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 24px' }}>
