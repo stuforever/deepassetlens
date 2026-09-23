@@ -38,6 +38,12 @@ class ProgressTracker:
     """Progress tracker"""
 
     def __init__(self, kb_name: str, base_dir: Path):
+        # R5批㉒（清单安全）：kb_name 上游（create_kb body.name）无过滤——'..'/'/'
+        # 可穿越 base_dir 读写 .progress.json
+        import re as _re
+
+        if not isinstance(kb_name, str) or not _re.fullmatch(r"[\w-]{1,128}", kb_name):
+            raise ValueError(f"非法 kb_name: {kb_name!r}")
         self.kb_name = kb_name
         self.base_dir = base_dir
         self.kb_dir = base_dir / kb_name

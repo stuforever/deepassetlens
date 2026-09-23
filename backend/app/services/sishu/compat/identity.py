@@ -174,6 +174,10 @@ def load_users(  # nosec B107 - empty defaults mean "no env fallback supplied".
 
 
 def save_user(username: str, hashed_password: str, role: Role = "user") -> dict[str, Any]:
+    # R5批㉒（清单安全）：partner_ 前缀为合成伙伴命名空间保留（services/partners/
+    # scope.py is_partner_user_id 前缀判定）——真人注册占用即跨账号资产路由混淆。
+    if username.startswith("partner_"):
+        raise ValueError("该用户名前缀为系统保留（partner_），请更换用户名")
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
     # Read-modify-write must be atomic so concurrent first-time registrations
     # cannot each see an empty store and each promote themselves to admin.
