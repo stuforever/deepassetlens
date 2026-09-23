@@ -34,6 +34,8 @@ export type ChatRequestPayload = {
   mode?: 'free_plan' | 'legacy';
   /** 专家地基①：专家维度（缺省 wenshu 兜底，后端 ChatRequest 同默认） */
   expert_id?: string;
+  /** B1（v4§八）：知识库过滤（None/空=不过滤；批①b 附件条 📚 消费） */
+  kb_ids?: string[];
 };
 
 export type ConversationCard = {

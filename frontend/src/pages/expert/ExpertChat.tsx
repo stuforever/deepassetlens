@@ -12,7 +12,7 @@ import { Button, Input, Popconfirm, Select, Spin, Typography, message } from 'an
 import {
   ApiOutlined, ApartmentOutlined, ArrowDownOutlined, BookOutlined, ClearOutlined,
   DatabaseOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
-  RocketOutlined, EditOutlined, SettingOutlined,
+  RocketOutlined, EditOutlined, SettingOutlined, DownloadOutlined,
 } from '@ant-design/icons';
 import ConversationMessageList from '../../components/conversation/ConversationMessageList';
 import UnifiedComposer from '../../components/chat/UnifiedComposer';
@@ -27,6 +27,9 @@ import type { ExpertCard } from '../../services/api';
 import { useStore } from '../../store/useStore';
 import type { ChatMessage, ChatMessagePayload } from '../../components/conversation/types';
 import { thinkReducer, decisionCommittedReducer } from '../../utils/thinkStreamReducer';
+import ComposerAttachmentBar, { type AttachmentSelection } from '../../components/chat/ComposerAttachmentBar';
+import ContextRail from '../../components/chat/ContextRail';
+import { evidenceToSources } from '../../components/chat/EvidenceCapsule';
 import { buildFinalDeliveryView, resolveFinalAnswer } from '../../utils/finalDelivery';
 import { tokens, spaceColors } from '../../theme/tokens';
 
@@ -152,6 +155,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   // 批⓪：路由模拟器审计入口下线（simOpen/Drawer 移除）——批⑥ 引擎台「路由模拟」Tab 后台承接
   const [status, setStatus] = useState<ChatStatus>('ready');
   const [llmConnectionId, setLlmConnectionId] = useState<string | undefined>(undefined);
+  // 批①b（v4§二.4）：附件条选择（📚kb 多选→ChatRequest.kb_ids；⚡技能 B2 前持久化不进请求；🤖模型直通 llmConnectionId）
+  const [attach, setAttach] = useState<AttachmentSelection>({ kbIds: [] });
   const [llmConnections, setLlmConnections] = useState<any[]>([]);
   const [stats, setStats] = useState<{ master: string; business: string; relation: string }>({ master: '-', business: '-', relation: '-' });
 
@@ -298,6 +303,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
           user_selection: userSelection,
           format: 'card',
           llm_connection_id: llmConnectionId,
+          kb_ids: attach.kbIds.length ? attach.kbIds : undefined,  // B1（v4§八）：选中的知识库过滤
           mode: MODE,
           expert_id: slug || 'wenshu',  // 专家地基①④：请求带专家维度
         },
@@ -1050,16 +1056,13 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
       isBusy={isBusy}
       onStop={handleStop}
       leftSlot={
-        <Select
-          size="small"
-          variant="borderless"
-          style={{ width: 130, fontSize: 12 }}
-          placeholder="模型"
-          allowClear
-          value={llmConnectionId}
-          onChange={(v) => setLlmConnectionId(v)}
-          options={llmConnections.map((c: any) => ({ label: c.name || c.model_name || c.id, value: c.id }))}
-          popupMatchSelectWidth={180}
+        <ComposerAttachmentBar
+          expertId={slug || 'wenshu'}
+          value={{ kbIds: attach.kbIds, skillCode: attach.skillCode, modelId: llmConnectionId }}
+          onChange={(next) => {
+            setAttach({ kbIds: next.kbIds, skillCode: next.skillCode });
+            setLlmConnectionId(next.modelId);
+          }}
         />
       }
     />
@@ -1269,6 +1272,73 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
         </div>
       )}
     </div>
+      {/* 批①b（v4§十三.3）：右栏三面板（wenshu；sishu 保留原信任设施右栏 v4§九） */}
+      {slug !== 'sishu' && hasMessages && (
+        <ContextRail
+          expertId={slug || 'wenshu'}
+          evidence={(() => {
+            const lastA = (activeSession?.messages || []).filter((m) => m.role === 'assistant').pop();
+            const sources = evidenceToSources(lastA?.payload?.evidence);
+            return sources.length ? (
+              <div style={{ fontSize: 12 }}>
+                {sources.map((s, i) => (
+                  <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-subtle, #f0f0f0)' }}>
+                    <div style={{ color: 'var(--text-primary)' }}>{s.name}</div>
+                    <div style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{s.type}</div>
+                  </div>
+                ))}
+              </div>
+            ) : <Text type="secondary" style={{ fontSize: 12 }}>本会话暂无证据快照（问答完成后生成）</Text>;
+          })()}
+          config={
+            <ComposerAttachmentBar
+              expertId={slug || 'wenshu'}
+              value={{ kbIds: attach.kbIds, skillCode: attach.skillCode, modelId: llmConnectionId }}
+              onChange={(next) => {
+                setAttach({ kbIds: next.kbIds, skillCode: next.skillCode });
+                setLlmConnectionId(next.modelId);
+              }}
+              testId="rail-attachment-bar"
+            />
+          }
+          artifacts={(() => {
+            const lastA = (activeSession?.messages || []).filter((m) => m.role === 'assistant').pop();
+            const sr = lastA?.payload?.sql_result;
+            const md = lastA?.payload?.final_answer || '';
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+                {sr && sr.columns && sr.columns.length ? (
+                  <Button size="small" icon={<DownloadOutlined />} style={{ justifyContent: 'flex-start' }}
+                          onClick={() => {
+                            const cols: string[] = sr.columns || [];
+                            const rows = [cols.join(',')].concat((sr.rows || []).map((r: any[]) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')));
+                            const blob = new Blob(["\ufeff" + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = 'result.csv';
+                            a.click();
+                          }}>
+                    查询结果 CSV（{sr.row_count ?? (sr.rows || []).length} 行）
+                  </Button>
+                ) : null}
+                {md ? (
+                  <Button size="small" icon={<DownloadOutlined />} style={{ justifyContent: 'flex-start' }}
+                          onClick={() => {
+                            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = 'answer.md';
+                            a.click();
+                          }}>
+                    回答 Markdown
+                  </Button>
+                ) : null}
+                {!sr && !md ? <Text type="secondary" style={{ fontSize: 12 }}>本会话暂无产物</Text> : null}
+              </div>
+            );
+          })()}
+        />
+      )}
       {slug === 'sishu' && trustOpen && (
         <div
           data-testid="sishu-trust-panel"

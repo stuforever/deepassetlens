@@ -7,12 +7,11 @@ import { Typography } from 'antd';
 import { SearchOutlined, ReadOutlined, MobileOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import UnifiedComposer from '../components/chat/UnifiedComposer';
-import { expertsApi } from '../services/api';
-import type { ExpertCard } from '../services/api';
 import { AuthCtx } from '../auth/AuthGate';
 import { tokens, spaceColors } from '../theme/tokens';
 import { useStore } from '../store/useStore';
 import { listSessions } from '../pages/tutor/admin/session-api';
+import { chatTemplates } from '../config/chatTemplates';
 
 const { Text } = Typography;
 
@@ -39,21 +38,9 @@ const NewChatHome: React.FC = () => {
     return saved === 'sishu' || saved === 'h5' || saved === 'wenshu' ? saved : 'wenshu';
   });
   const [question, setQuestion] = useState('');
-  const [cards, setCards] = useState<Record<string, ExpertCard>>({});
   const [h5Rows, setH5Rows] = useState<{ sid: string; title: string; ts: number }[]>([]);
 
   useEffect(() => { localStorage.setItem('newchat-tab', tab); }, [tab]);
-
-  useEffect(() => {
-    (async () => {
-      for (const slug of ['wenshu', 'sishu']) {
-        try {
-          const res = await expertsApi.get(slug);
-          setCards((prev) => ({ ...prev, [slug]: res.data as ExpertCard }));
-        } catch { /* 静默——chips 回落默认 */ }
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     listSessions(20, 0).then((rows) => {
@@ -62,14 +49,6 @@ const NewChatHome: React.FC = () => {
   }, []);
 
   const meta = TAB_META.find((t) => t.slug === tab)!;
-  const chips: string[] = useMemo(() => {
-    if (tab === 'h5') return FALLBACK_CHIPS.h5;
-    const c = cards[tab];
-    const suggs = (c?.suggestions && c.suggestions.length ? c.suggestions : undefined)
-      ?? FALLBACK_CHIPS[tab];
-    return suggs.slice(0, 4);
-  }, [tab, cards]);
-
   // 最近对话卡条 ×5：平台 store 会话（wenshu/sishu，有消息）+ h5 vendor 会话，按近序
   const recent = useMemo(() => {
     const rows: { key: string; title: string; color: string; ts: number; open: () => void }[] = [];
@@ -160,29 +139,56 @@ const NewChatHome: React.FC = () => {
           />
         </div>
 
-        {/* 问法 chips ×4（随专家切换；h5=页面直达跳发布管理） */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 20 }} data-testid="newchat-chips">
-          {chips.map((c) => (
-            <div
-              key={c}
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (tab === 'h5') { navigate('/h5-publish'); return; }
-                setQuestion(c);
-                navigate(`/e/${tab}/chat?new=1&q=${encodeURIComponent(c)}`);
-              }}
-              onKeyDown={(e) => { if (e.key === 'Enter') setQuestion(c); }}
-              style={{
-                padding: '6px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 13,
-                border: '1px solid var(--border-subtle, #e5e7eb)', background: 'var(--bg-content, #fff)',
-                color: 'var(--text-secondary, #555)',
-              }}
-            >
-              {c}
+        {/* 批①b（v4§二.2）：模板宫格 2×4——点击只回填 composer 并聚焦，不直发（铁律） */}
+        {tab !== 'h5' ? (
+          <div style={{ width: '100%', maxWidth: 720, marginTop: 20 }} data-testid="newchat-templates">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {chatTemplates[tab].map((tpl) => (
+                <div
+                  key={tpl.title}
+                  role="button"
+                  tabIndex={0}
+                  data-testid={`newchat-template-${tpl.title}`}
+                  onClick={() => {
+                    setQuestion(tpl.text);
+                    const ta = document.querySelector<HTMLInputElement>("[data-testid='newchat-composer'] textarea");
+                    if (ta) { ta.focus(); }
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { setQuestion(tpl.text); } }}
+                  style={{
+                    padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                    border: '1px solid var(--border-subtle, #e5e7eb)', background: 'var(--bg-content, #fff)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-primary)', fontSize: 13, fontWeight: 600 }}>
+                    {tpl.icon}{tpl.title}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary, #999)', marginTop: 4, minHeight: 18, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {tpl.text || '输入自定义问题'}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 20 }} data-testid="newchat-chips">
+            {FALLBACK_CHIPS.h5.map((c) => (
+              <div
+                key={c}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate('/h5-publish')}
+                style={{
+                  padding: '6px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 13,
+                  border: '1px solid var(--border-subtle, #e5e7eb)', background: 'var(--bg-content, #fff)',
+                  color: 'var(--text-secondary, #555)',
+                }}
+              >
+                {c}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 最近对话横向卡条 ×5 */}
         {recent.length > 0 && (
