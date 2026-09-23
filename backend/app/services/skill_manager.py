@@ -334,7 +334,11 @@ class VersionService:
             from pathlib import Path
             archive_dir = Path(storage.root) / "archives" / skill.skill_code
             archive_dir.mkdir(parents=True, exist_ok=True)
-            archive_name = f"v{version.version}_{zip_path.name}"
+            # R5批⑤（清单安全）：version 来自请求体，直拼归档路径含 '/' '..' 可逃逸
+            # archives 目录写到存储根外。消毒：仅保留安全文件名字符。
+            import re as _re
+            _v_safe = _re.sub(r"[^A-Za-z0-9._-]", "_", str(version.version or "")) or "unknown"
+            archive_name = f"v{_v_safe}_{zip_path.name}"
             archive_path = archive_dir / archive_name
             shutil.move(str(zip_path), str(archive_path))
             if isinstance(version.content, dict):

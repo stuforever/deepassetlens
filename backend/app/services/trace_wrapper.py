@@ -20,6 +20,7 @@
 """
 import os
 import json
+import re
 import time
 import uuid
 import logging
@@ -59,6 +60,28 @@ def _safe_json(obj: Any, limit: int = 4000) -> str:
         return str(obj)[:limit]
 
 
+# ---- R5批⑤（清单安全）：trace 脱敏 ----
+_REDACT_KEY_RE = re.compile(r"password|passwd|token|secret|authorization|api[_-]?key|credential", re.I)
+_RE_PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
+_RE_IDCARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
+
+
+def _redact_value(v: Any, depth: int = 0) -> Any:
+    """递归脱敏：敏感键整值掩码；字符串值掩码手机号/身份证（trace 上报本地+LangSmith 前执行）。"""
+    if depth > 6:
+        return "..."
+    if isinstance(v, str):
+        s = _RE_PHONE.sub("***", v)
+        return _RE_IDCARD.sub("***", s)
+    if isinstance(v, dict):
+        return {k: ("***" if _REDACT_KEY_RE.search(str(k)) else _redact_value(val, depth + 1))
+                for k, val in v.items()}
+    if isinstance(v, (list, tuple)):
+        out = [_redact_value(x, depth + 1) for x in v]
+        return tuple(out) if isinstance(v, tuple) else out
+    return v
+
+
 class _Span:
     """单个 trace span（LLM 调用 / 技能执行 / 状态跳转）"""
 
@@ -91,6 +114,13 @@ class _Span:
 
     def _flush(self):
         duration_ms = int((self.end_time - self.start_time) * 1000) if self.end_time else 0
+        # R5批⑤（清单安全）：inputs/outputs 含用户原始查询/LLM 输出/技能结果（PII/客户
+        # 敏感信息），序列化与三方上报前统一脱敏——键名命中敏感词整值掩码，字符串值
+        # 掩码手机号/身份证。TUPU_TRACE_REDACT=0 可关（调试用，默认开）。
+        _do_redact = os.getenv("TUPU_TRACE_REDACT", "1") != "0"
+        inputs = _redact_value(self.inputs) if _do_redact else self.inputs
+        outputs = _redact_value(self.outputs) if _do_redact else self.outputs
+        metadata = _redact_value(self.metadata) if _do_redact else self.metadata
         record = {
             "trace_id": self.trace_id,
             "span_id": self.span_id,
@@ -98,10 +128,10 @@ class _Span:
             "name": self.name,
             "span_type": self.span_type,
             "duration_ms": duration_ms,
-            "inputs": _safe_json(self.inputs),
-            "outputs": _safe_json(self.outputs),
+            "inputs": _safe_json(inputs),
+            "outputs": _safe_json(outputs),
             "error": self.error,
-            "metadata": _safe_json(self.metadata),
+            "metadata": _safe_json(metadata),
         }
 
         if _LS_CLIENT:
@@ -111,10 +141,10 @@ class _Span:
                     run_id=self.span_id,
                     project_name=_PROJECT,
                     run_type=self.span_type,
-                    inputs=self.inputs,
-                    outputs=self.outputs if not self.error else None,
+                    inputs=inputs,
+                    outputs=outputs if not self.error else None,
                     error=self.error,
-                    extra={"metadata": {**self.metadata, "trace_id": self.trace_id, "duration_ms": duration_ms}},
+                    extra={"metadata": {**metadata, "trace_id": self.trace_id, "duration_ms": duration_ms}},
                     start_time=self.start_time,
                     end_time=self.end_time,
                 )

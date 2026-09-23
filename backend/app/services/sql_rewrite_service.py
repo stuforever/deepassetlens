@@ -51,6 +51,32 @@ _SYSTEM_PROMPT = """你是 Doris SQL 专家。任务：校验 SQL 输出字段�
 """
 
 
+def _verify_rewrite_structure(original: str, rewritten) -> str:
+    """R5批⑤（清单安全）：AI 改写结果结构回验——只允许动 SELECT 投影，FROM/JOIN/WHERE
+    骨架与原句不一致即回退原句（防 LLM 被诱导改写任意 SQL 后入库执行）。"""
+    if not isinstance(rewritten, str) or not rewritten.strip():
+        return original
+    try:
+        import sqlglot
+        a = sqlglot.parse_one(original)
+        b = sqlglot.parse_one(rewritten)
+    except Exception:
+        return original
+    if type(a) is not type(b):
+        return original
+    if a.sql() == b.sql():
+        return rewritten
+    for part in ("from_", "where"):
+        pa, pb = a.args.get(part), b.args.get(part)
+        if (pa.sql() if pa is not None else None) != (pb.sql() if pb is not None else None):
+            return original
+    ja = [j.sql() for j in a.args.get("joins") or []]
+    jb = [j.sql() for j in b.args.get("joins") or []]
+    if ja != jb:
+        return original
+    return rewritten
+
+
 def _parse_json_response(raw: str) -> Dict[str, Any]:
     """清理 LLM 返回的 markdown 代码块并解析 JSON"""
     text = raw.strip()
@@ -122,7 +148,11 @@ def ai_rewrite_sql(
         result = _parse_json_response(raw)
         result.setdefault("matched", False)
         result.setdefault("differences", [])
-        result.setdefault("rewritten_sql", sql)
+        # R5批⑤（清单安全）：rewritten_sql 结构回验——LLM 输出原直透传（经前端应用后
+        # 存 entity.integration_sql 并被 /integration-sql/execute 执行），系统提示词约束
+        # 完全靠模型自觉。回验：只允许改 SELECT 投影，FROM/JOIN/WHERE 骨架必须与原句
+        # 一致，否则回退原句。
+        result["rewritten_sql"] = _verify_rewrite_structure(sql, result.get("rewritten_sql"))
         result["model"] = {"name": conn.name, "model_name": conn.model_name}
         return result
     except Exception as e:
