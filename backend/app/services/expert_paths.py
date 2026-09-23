@@ -42,11 +42,26 @@ def memory_roots(card: Dict) -> List[Path]:
 
 # ---- 记忆插槽②批2：per-user 记忆树根（spec §五/§八，②期 per-user 函数落位于此——Q4 同款单点）----
 
+def _safe_path_segment(kind: str, val: str) -> str:
+    """R5批④（清单安全）：路径段净化——'..'/'/'/'\\\\'/NUL 非法，空/非串拒绝。
+    user=None 归 anonymous 由 memory_user_root 语义决定；空串不再静默并入共享匿名树。"""
+    if not isinstance(val, str):
+        raise ValueError(f"{kind} 非字符串: {val!r}")
+    v = val.strip()
+    if not v or v in (".", "..") or "/" in v or "\\" in v or "\x00" in v:
+        raise ValueError(f"{kind} 非法路径段: {val!r}")
+    return v
+
+
 def memory_expert_root(expert_id: str) -> Path:
-    """专家根（手册在此，spec §五）。"""
-    return _DATA_ROOT / "memory" / expert_id
+    """专家根（手册在此，spec §五）。R5批④：expert_id 净化——原未校验即拼路径，
+    HTTP 入参含 '..'/'/' 可把整棵根移出 data/memory（memory.py /tree /file 直传）。"""
+    return _DATA_ROOT / "memory" / _safe_path_segment("expert_id", expert_id)
 
 
 def memory_user_root(expert_id: str, user: str) -> Path:
-    """用户根（记忆树，spec §五）。"""
-    return _DATA_ROOT / "memory" / expert_id / (user or "anonymous")
+    """用户根（记忆树，spec §五）。R5批④：user 净化——`user or 'anonymous'` 曾把
+    空串静默并入共享匿名树（隔离失效）；None 仍归 anonymous，空串/非法拒绝。"""
+    if user is None:
+        user = "anonymous"
+    return memory_expert_root(expert_id) / _safe_path_segment("user", user)

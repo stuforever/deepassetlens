@@ -56,20 +56,29 @@ def validate_slots(slots: List[Dict[str, Any]], *, consolidator_on: Optional[boo
         names.add(name)
         if t in ("L2_SUMMARY", "L3_PROFILE"):
             has_l2l3 = True
-        if t == "L3_PROFILE" and (not (s.get("slot_key") or "").strip()
-                                  or s.get("slot_key") in keys):         # 规则1
-            raise ValueError(f"slot_key 缺失或重复: {s.get('slot_key')!r}")
         if t == "L3_PROFILE":
-            keys.add(s["slot_key"])
+            _sk = s.get("slot_key")
+            _sk_s = _sk.strip() if isinstance(_sk, str) else ""
+            if not _sk_s or _sk_s in keys:                               # 规则1
+                raise ValueError(f"slot_key 缺失或重复: {_sk!r}")
+            # R5批④（清单安全）：slot_key 同 surface 字符集——原未约束，'/' '..' 空白
+            # 可经 slot_virtual_path 拼出 /memory/L3/../../x.md 逃逸记忆树；非字符串
+            # 入列 .strip() 即崩
+            if not _SURFACE_RE.match(_sk_s):
+                raise ValueError(f"slot_key 格式非法（小写字母数字-_）: {_sk!r}")
+            keys.add(_sk_s)
         if t in ("L1_TRACE", "L2_SUMMARY") and not _SURFACE_RE.match(s.get("surface") or ""):
             raise ValueError(f"surface 格式非法（小写字母数字-_）: {s.get('surface')!r}")  # 规则5
         if t == "RAW_MD":
             path = s.get("path") or ""
-            if s.get("writer") == "agent_edit":                          # 规则3
-                if not path.startswith("/memory/") or len(path.strip("/").split("/")) < 2:
-                    raise ValueError(f"RAW_MD path 必须落在 {{expert}}/{{user}} 记忆树内: {path}")
-                if path.rstrip("/").endswith("AGENTS.md"):
-                    raise ValueError("RAW_MD 槽 path 不得为 AGENTS.md（专家手册受控）")
+            # R5批④（清单安全）：路径合法性不再只查 agent_edit——任意 writer 的 RAW_MD
+            # 在 read=注入 时都经 slot_virtual_path 原样进注入列表；且 '..' 相对段一律拒绝
+            if not path.startswith("/memory/") or len(path.strip("/").split("/")) < 2:
+                raise ValueError(f"RAW_MD path 必须落在 {{expert}}/{{user}} 记忆树内: {path}")
+            if ".." in path.split("/"):
+                raise ValueError(f"RAW_MD path 含相对段: {path}")
+            if path.rstrip("/").endswith("AGENTS.md"):
+                raise ValueError("RAW_MD 槽 path 不得为 AGENTS.md（专家手册受控）")
         if s.get("read") == "注入":                                       # 规则4
             injected.append((int(s.get("order") or 99), slot_virtual_path(s)))
     if has_l2l3 and not consolidator_on:                                 # 规则2

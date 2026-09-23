@@ -38,11 +38,15 @@ def ensure_expert_allowed(request: Request, expert_id: str, action: str = "use")
 
 
 def require_expert(action: str, expert_id: Optional[str] = None):
-    """依赖工厂：action ∈ {"use", "manage"}。expert_id 缺省时从查询参数/路径取
-    （FastAPI 依赖注入 expert_id: str）——固定域路由（/api/tutor 等）显式传 slug。"""
+    """依赖工厂：action ∈ {"use", "manage"}。expert_id 缺省时从路径参数取
+    （FastAPI 按形参名绑定 /{expert_id}）——固定域路由（/api/tutor 等）显式传 slug。"""
+    _fixed = expert_id
 
-    def _dep(request: Request = None, expert_id_param: str = "") -> object:
-        eid = expert_id or expert_id_param
+    def _dep(request: Request = None, expert_id: str = "") -> object:
+        # R5批④（清单安全）：形参名必须为 expert_id——FastAPI 按名绑定路径参数；
+        # 原名 expert_id_param 被当可选查询参数（客户端 ?expert_id_param=X 即改
+        # 授权目标，缺省调用时授权目标完全客户端可控）
+        eid = _fixed or expert_id
         # 批13深水：WS 路由（partners /{id}/ws 等 vendor 续服务面）scope 下 FastAPI
         # 不注入 Request——退匿名判定（auth=0 直通；auth=1 未命中=保守 403 关连接，
         # WS 携带 token 的 auth=1 语义随批15 C5 探针组细化，同 vendor ws_require_auth

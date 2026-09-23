@@ -24,7 +24,11 @@ def _require_admin(request: Request) -> None:
 
 def _tree_root(expert_id: str, user: str, root: str = "user") -> Path:
     from app.services.expert_paths import memory_expert_root, memory_user_root
-    return memory_expert_root(expert_id) if root == "expert" else memory_user_root(expert_id, user)
+    # R5批④：根构造校验失败（穿越/非法段）→ 400，不落 500
+    try:
+        return memory_expert_root(expert_id) if root == "expert" else memory_user_root(expert_id, user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/tree")
