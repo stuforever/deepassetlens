@@ -84,3 +84,11 @@ def test_request_origin_trust_proxy_optin(monkeypatch):
     monkeypatch.setenv("TUPU_TRUST_PROXY", "1")
     req = _Req({"x-forwarded-host": "proxy.example", "x-forwarded-proto": "https"})
     assert mcp._request_origin(req) == "https://proxy.example"
+
+
+def test_book_mount_admin_gated():
+    """R5批⑭：book 域挂载 _admin（原 _auth——仅凭 book_id 可读/改/删任意书籍）。"""
+    import inspect
+    from app.services.sishu_full.api import main as mainmod
+    src = inspect.getsource(mainmod)
+    assert 'book.router, prefix="/api/v1/book", tags=["book"], dependencies=_admin' in src
