@@ -29,7 +29,13 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
   // getUserMedia await 期间二次调用会绕过守卫（双 MediaStream+麦克风泄漏）。
   // stateRef 同步读写，进入即置 "recording" 占位。
   const stateRef = useRef(state);
-  stateRef.current = state;
+  // R5批⑥：删除渲染期无条件回写（原 stateRef.current = state）——await getUserMedia
+  // 期间父组件重渲染会以滞后的渲染态（"idle"）冲掉 start() 置入的 "recording" 占位，
+  // 重入闸被击穿（双 MediaStream+麦克风泄漏）。状态变更统一走同步双写包装器。
+  const setStateRef = useCallback((next: RecorderState) => {
+    stateRef.current = next;
+    setState(next);
+  }, []);
   const start = useCallback(async () => {
     if (stateRef.current !== "idle") return;
     stateRef.current = "recording"; // 同步占位（render state 随后跟上）
@@ -68,10 +74,10 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
       const blob = new Blob(chunksRef.current, { type: mimeType });
       chunksRef.current = [];
       if (!blob.size) {
-        setState("idle");
+        setStateRef("idle");
         return;
       }
-      setState("transcribing");
+      setStateRef("transcribing");
       try {
         const ext = mimeType.includes("ogg")
           ? "ogg"
@@ -98,12 +104,12 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
       } catch (err) {
         setError(err instanceof Error ? err.message : "Transcription failed.");
       } finally {
-        setState("idle");
+        setStateRef("idle");
       }
     };
     recorder.start();
     recorderRef.current = recorder;
-    setState("recording");
+    setStateRef("recording");
   }, [releaseStream, state]);
 
   const stop = useCallback(() => {

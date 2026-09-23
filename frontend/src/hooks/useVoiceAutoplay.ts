@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch, apiUrl } from "../lib/api";
 
@@ -88,8 +88,12 @@ export function useVoiceAutoplayPreference() {
     };
   }, []);
 
-  const setValue = useCallback(async (next: boolean) => {
-    const previous = value; // 三轨M11(:99)：回滚基准
+  // R5批⑥：ref 镜像最新值——原 [] 依赖的 useCallback 捕获首渲染 value，
+  // 回滚基准漂移到历史状态；rollback 也改走本地应用（不再递归 setValue 重发 PUT，
+  // 服务端持续 4xx/5xx 时原实现会形成无界请求循环）。
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const applyLocal = useCallback((next: boolean) => {
     setVal(next);
     cachedGlobal = next;
     if (typeof window !== "undefined") {
@@ -97,20 +101,27 @@ export function useVoiceAutoplayPreference() {
         new CustomEvent(GLOBAL_EVENT, { detail: { value: next } }),
       );
     }
-    // 三轨M11 顺手修(:99)：PUT 失败回滚 UI/缓存/广播（原乐观更新无错误处理——4xx/5xx 被当成功）
-    try {
-      const res = await apiFetch(apiUrl("/api/v1/settings/voice-autoplay"), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voice_autoplay: next }),
-      });
-      if (!res.ok) throw new Error(`voice-autoplay PUT ${res.status}`);
-    } catch (e) {
-      setValue(previous); // 回滚
-      // eslint-disable-next-line no-console
-      console.warn("[useVoiceAutoplay] 保存失败已回滚:", e);
-    }
   }, []);
+
+  const setValue = useCallback(
+    async (next: boolean) => {
+      const previous = valueRef.current; // 三轨M11(:99)：回滚基准（经 ref 取最新值）
+      applyLocal(next);
+      try {
+        const res = await apiFetch(apiUrl("/api/v1/settings/voice-autoplay"), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ voice_autoplay: next }),
+        });
+        if (!res.ok) throw new Error(`voice-autoplay PUT ${res.status}`);
+      } catch (e) {
+        applyLocal(previous); // R5批⑥：仅本地回滚，不重发请求
+        // eslint-disable-next-line no-console
+        console.warn("[useVoiceAutoplay] 保存失败已回滚:", e);
+      }
+    },
+    [applyLocal],
+  );
 
   return { value, setValue, loading };
 }

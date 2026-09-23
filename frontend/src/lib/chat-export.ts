@@ -78,6 +78,10 @@ export function downloadChatMarkdown(
   anchor.href = url;
   const date = new Date().toISOString().slice(0, 10);
   anchor.download = `${sanitizeFilename(options.title || "chat")}-${date}.md`;
+  // R5批⑥：先挂 DOM 再 click——Firefox/Safari 对游离元素可能不触发下载
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  // R5批⑥：延迟回收 Blob URL——同步 revoke 在 Firefox/Safari 可能尚未开始读取
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
