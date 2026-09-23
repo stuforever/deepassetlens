@@ -1,12 +1,13 @@
 /**
  * CommandPalette（v3 #8 / Task 4）：⌘K/Ctrl+K 命令面板——全部页面 + 三专家动作 + 快捷动作。
  * 键盘 ↑↓ 导航 + Enter 执行 + Esc 关闭；顶栏搜索框点击唤起同一面板。
+ * 批③ 审查Minor②：同指 path 去重留最优 label（页面注册项先于专家/快捷动作注册，first-wins 胜出）。
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Input, Modal } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { menuKeyToPath, MENU_LABELS } from '../../config/navigation';
+import { menuKeyToPath, MENU_LABELS, REDIRECT_ONLY_MENU_KEYS } from '../../config/navigation';
 import { EXPERT_PAGES } from '../../config/expertPages';
 
 export interface CommandItem {
@@ -21,13 +22,14 @@ export function buildCommandItems(navigate: (path: string) => void): CommandItem
   // 全部页面（routes 静态注册 + 专家页注册表——label+path 模糊）
   const seen = new Set<string>();
   const push = (key: string, label: string, path: string, hint?: string) => {
-    if (seen.has(path + label)) return;
-    seen.add(path + label);
+    if (seen.has(path)) return; // 批③ 审查Minor②：仅按 path 去重（first-wins——页面规范 label 胜出，同指专家/快捷动作被吸收）
+    seen.add(path);
     items.push({ key, label, hint, run: () => navigate(path) });
   };
   for (const [menuKey, path] of Object.entries(menuKeyToPath)) {
     if (menuKey.startsWith('settings:')) continue; // 子页经设置面板/设置中心内部导航，面板只留分区入口
     if (menuKey === 'home') continue; // /home 重定向 /（避免面板双首页项）
+    if (REDIRECT_ONLY_MENU_KEYS.has(menuKey)) continue; // 批③ 审查Minor①：4合1 退役页不再露出
     push(`page-${menuKey}`, MENU_LABELS[menuKey] || menuKey, path);
   }
   // 三专家动作

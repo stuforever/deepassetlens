@@ -16,14 +16,12 @@ import {
   ApartmentOutlined,
   TeamOutlined,
   ShareAltOutlined,
-  PartitionOutlined,
   TableOutlined,
   NodeIndexOutlined,
   DatabaseOutlined,
   CloudServerOutlined,
   BranchesOutlined,
   UnorderedListOutlined,
-  DeploymentUnitOutlined,
   RocketOutlined,
   BookOutlined,
   SettingOutlined,
@@ -88,11 +86,9 @@ export const NAV_GROUPS: NavGroup[] = [  // ── 三轨M6(U1) 侧栏 4 区重�
     title: '资产管理',
     icon: DatabaseOutlined,
     items: [
-      // 建模
+      // 建模（批③ 审查Minor①：tree_model/matrix_model/gallery 三僵尸项已删——4合1 单入口 /graph 根治，
+      // 键值保留在下方三张映射表供旧路径重定向解析，见 REDIRECT_ONLY_MENU_KEYS）
       { menuKey: 'graph', label: '图谱管理', path: '/graph', icon: ShareAltOutlined },
-      { menuKey: 'tree_model', label: '四区建模', path: '/tree-model', icon: PartitionOutlined },
-      { menuKey: 'matrix_model', label: '资产矩阵', path: '/matrix', icon: TableOutlined },
-      { menuKey: 'gallery', label: '图库', path: '/gallery', icon: DeploymentUnitOutlined },
       { menuKey: 'entity_relation_manage', label: '实体关系', path: '/entity-relation', icon: NodeIndexOutlined },
       // 数据
       { menuKey: 'master_data', label: '主数据', path: '/master-data', icon: DatabaseOutlined },
@@ -134,6 +130,9 @@ export const NAV_GROUPS: NavGroup[] = [  // ── 三轨M6(U1) 侧栏 4 区重�
   },
 ];
 
+/** 批③ 审查Minor①：4合1 单入口（/graph 图谱画布）后退役页——仅保留键值供旧路径重定向解析，命令面板/导航不再露出 */
+export const REDIRECT_ONLY_MENU_KEYS = new Set(['tree_model', 'matrix_model', 'gallery']);
+
 // IA批5 接线：设置中心子页注册表（menuKey 口径 'settings:<页>'，与 routes.tsx settings 路由块
 // 逐一对应）——只进页签/面包屑映射，不进侧栏 NAV_GROUPS（主菜单唯一入口=设置中心）。
 const SETTINGS_PAGES: Array<{ key: string; label: string; path: string }> = [
@@ -170,13 +169,14 @@ const SETTINGS_PAGES: Array<{ key: string; label: string; path: string }> = [
 ];
 
 /**
- * v3 §二（迁移完成后精简入口）：管理台面板分组平铺——六组 18 项。
- * menuKey 全部复用 NAV_GROUPS/既有注册表实测键（Task 1 逐项核对：
- * entity_relation_manage/datasource/doris_config/vector_manage/master_data/activity_data/
- * source/mapping/metric_manager/governance/engine_workbench/llmconfig/memory_admin/
- * expert_grants/security_controls/e:sishu:admin:* ——计划示意键（entity_relation/doris/
- * master/activity/lineage/metric/engine/llm/memory/grants/security/sishu_*）均不存在，已换实）。
- * 「图谱画布」=Task 6 图谱 4 合 1 单入口（/graph 页内四视图）；「技能管理」=3 合 1（/skills?expert=）。
+ * 批③ §5.2（v4 总册 §五）：管理台面板分组平铺——五组 17 项。
+ * menuKey 全部复用 NAV_GROUPS/既有注册表实测键（Task 1 逐项核对：计划示意键
+ * entity_relation/doris/master/activity/lineage/metric/engine/llm/memory/grants/security/
+ * sishu_* 均不存在，已换实）；「图谱画布」=Task 6 图谱 4 合 1 单入口（/graph 页内四视图）。
+ * 批③ §5.3：原「平台能力」「治理与系统」两组移入设置中心——过渡期成员保留在
+ * ⚙ 面板（SettingsPanel 过渡期分组），Task 10 设置八分区落地后再收口。
+ * 「书籍/自主学习/AI写作/伙伴推送」从隐藏专家页提升为私塾管理组正式成员
+ * （导航可见，路由保留 /e/sishu/* 不动）。
  */
 export interface NavPanelItem { menuKey: string; label: string; icon: ReactNode; }
 export interface NavPanelGroup { title: string; items: NavPanelItem[]; }
@@ -187,34 +187,41 @@ export const NAV_PANEL_GROUPS: NavPanelGroup[] = [
   { title: '数据接入', items: [
     { menuKey: 'datasource', label: '数据源', icon: <CloudServerOutlined /> },
     { menuKey: 'doris_config', label: 'Doris 配置', icon: <DatabaseOutlined /> } ] },
-  { title: '平台能力', items: [
-    { menuKey: 'skills', label: '技能管理', icon: <RocketOutlined /> },
-    { menuKey: 'vector_manage', label: '知识库', icon: <BookOutlined /> },
-    { menuKey: 'golden_qa', label: '金标锚定', icon: <FileSearchOutlined /> } ] },
   { title: '数据资产', items: [
     { menuKey: 'master_data', label: '主数据', icon: <DatabaseOutlined /> },
     { menuKey: 'activity_data', label: '活动数据', icon: <NodeIndexOutlined /> },
     { menuKey: 'source', label: '来源表', icon: <TableOutlined /> },
     { menuKey: 'mapping', label: '映射管理', icon: <BranchesOutlined /> },
     { menuKey: 'metric_manager', label: '指标管理', icon: <UnorderedListOutlined /> } ] },
-  { title: '治理与系统', items: [
-    { menuKey: 'governance', label: '运行观测', icon: <FundOutlined /> },
-    { menuKey: 'engine_workbench', label: '引擎台', icon: <ThunderboltOutlined /> },
-    { menuKey: 'llmconfig', label: 'LLM 配置', icon: <SettingOutlined /> },
-    { menuKey: 'memory_admin', label: '记忆', icon: <BookOutlined /> },
-    { menuKey: 'expert_grants', label: '专家赋权', icon: <TeamOutlined /> },
-    { menuKey: 'security_controls', label: '安全中心', icon: <PoweroffOutlined /> } ] },
   { title: '私塾管理', items: [
+    { menuKey: 'e:sishu:book', label: '书籍', icon: <BookOutlined /> },
+    { menuKey: 'e:sishu:self-learning', label: '自主学习', icon: <ReadOutlined /> },
+    { menuKey: 'e:sishu:co-writer', label: 'AI写作', icon: <EditOutlined /> },
+    { menuKey: 'e:sishu:partners', label: '伙伴/推送', icon: <TeamOutlined /> },
     { menuKey: 'e:sishu:admin:mq', label: '母题库', icon: <BookOutlined /> },
     { menuKey: 'e:sishu:admin:book', label: '书源', icon: <ReadOutlined /> },
-    { menuKey: 'e:sishu:admin:settings', label: '教学设置', icon: <SettingOutlined /> },
-    { menuKey: 'h5_publish', label: 'H5 发布管理', icon: <MobileOutlined /> },
-  ] },
+    { menuKey: 'e:sishu:admin:settings', label: '教学设置', icon: <SettingOutlined /> } ] },
+  { title: 'H5 发布管理', items: [
+    { menuKey: 'h5_publish', label: 'H5 发布管理', icon: <MobileOutlined /> } ] },
 ];
 
 /** menuKey -> label（页签标题、面包屑用） */
 export const MENU_LABELS: Record<string, string> = (() => {
-  const out: Record<string, string> = { home: '数据资产探查', h5_publish: 'H5 发布管理' };
+  const out: Record<string, string> = {
+    home: '数据资产探查',
+    h5_publish: 'H5 发布管理',
+    // 审查 Minor：HOME_NAV_ITEM 不在 NAV_GROUPS，补标签消裸键（命令面板 portal 项）
+    portal: '专家门户',
+    // 批③ §5.2：私塾管理组四页提升（EXPERT_PAGES.sishu 顶层页注册）
+    'e:sishu:book': '书籍',
+    'e:sishu:self-learning': '自主学习',
+    'e:sishu:co-writer': 'AI写作',
+    'e:sishu:partners': '伙伴/推送',
+    // 审查 Minor①：4合1 退役页——旧页签标题兜底
+    tree_model: '四区建模',
+    matrix_model: '资产矩阵',
+    gallery: '图库',
+  };
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.menuKey] = it.label;
   }
@@ -226,7 +233,20 @@ export const MENU_LABELS: Record<string, string> = (() => {
 /** menuKey -> path */
 export const menuKeyToPath: Record<string, string> = (() => {
   // 专家地基①：portal=/；home 保留映射（老会话侧栏点击经 /home 重定向进专家对话页）
-  const out: Record<string, string> = { home: '/home', portal: '/', h5_publish: '/h5-publish' };
+  const out: Record<string, string> = {
+    home: '/home',
+    portal: '/',
+    h5_publish: '/h5-publish',
+    // 批③ §5.2：私塾管理组四页提升（EXPERT_PAGES.sishu 顶层页注册）
+    'e:sishu:book': '/e/sishu/book',
+    'e:sishu:self-learning': '/e/sishu/self-learning',
+    'e:sishu:co-writer': '/e/sishu/co-writer',
+    'e:sishu:partners': '/e/sishu/partners',
+    // 批③ 审查Minor①：4合1 退役页——重定向解析保留键（导航/命令面板不再露出）
+    tree_model: '/tree-model',
+    matrix_model: '/matrix',
+    gallery: '/gallery',
+  };
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.menuKey] = it.path;
   }
@@ -237,7 +257,19 @@ export const menuKeyToPath: Record<string, string> = (() => {
 /** path -> menuKey */
 export const pathToMenuKey: Record<string, string> = (() => {
   // 专家地基①：/ → portal（专家门户）；/home → home（重定向过渡态）
-  const out: Record<string, string> = { '/home': 'home', '/': 'portal' };
+  const out: Record<string, string> = {
+    '/home': 'home',
+    '/': 'portal',
+    // 批③ §5.2：私塾管理组四页提升（EXPERT_PAGES.sishu 顶层页注册）
+    '/e/sishu/book': 'e:sishu:book',
+    '/e/sishu/self-learning': 'e:sishu:self-learning',
+    '/e/sishu/co-writer': 'e:sishu:co-writer',
+    '/e/sishu/partners': 'e:sishu:partners',
+    // 批③ 审查Minor①：4合1 退役页——重定向解析保留键
+    '/tree-model': 'tree_model',
+    '/matrix': 'matrix_model',
+    '/gallery': 'gallery',
+  };
   for (const g of NAV_GROUPS) {
     for (const it of g.items) out[it.path] = it.menuKey;
   }

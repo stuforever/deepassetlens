@@ -2,7 +2,6 @@
  * AppTabs - 页面页签条 + KeepAlive 内容区。
  *
  * 标签栏：自定义 div（token 配色），右键 Dropdown 提供"关闭其他/关闭右侧/关闭全部"。
- * 固定首页(home)不可关。
  * 内容区：KeepAlive -- 所有已开页签同时挂载，display:none 隐藏非活动页，切换不重载。
  */
 import React, { Suspense, useRef } from 'react';
