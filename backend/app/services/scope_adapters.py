@@ -106,10 +106,13 @@ def check_scope_for_tool(tool_name: str, tool_call: dict, trusted_scope: Any) ->
         # SQL 型：用 sqlglot 提取 cust_name
         extracted = extract_customer_names(args.sql)
     elif tool_name == "execute_doris_sql":
-        # Doris 双载体：优先 filters，其次 SQL
-        extracted = extract_customer_names_from_filters(args.filters)
-        if not extracted and args.sql:
-            extracted = extract_customer_names(args.sql)
+        # Doris 双载体：R5批㉔——对齐 handler 实际语义（_kg_execute_doris_sql：
+        # entity_code 非空时 sql 完全忽略）。原"优先 filters 次选 sql"在两者同给时
+        # 可用无关 filters 过闸而真实执行的 sql 漏检（烟雾弹通道）。
+        if getattr(args, "entity_code", ""):
+            extracted = extract_customer_names_from_filters(args.filters)
+        else:
+            extracted = extract_customer_names(args.sql) if args.sql else set()
     elif tool_name == "execute_entity_api":
         # 纯 filters 型
         extracted = extract_customer_names_from_filters(args.filters)

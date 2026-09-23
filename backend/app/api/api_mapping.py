@@ -312,6 +312,14 @@ def execute_entity_api_mapping(payload: EntityApiExecuteRequest, db: Session = D
     if not m:
         raise HTTPException(status_code=404, detail=f"对象 {payload.entity_code} 未配置API映射")
     sql = duckdb_engine.build_sql_with_filters(m.pseudo_sql, payload.filters or {})
+    # R5批㉔（清单安全）：执行前强制 AST 只读校验——pseudo_sql 入库侧仅禁 WHERE，
+    # 不要求 SELECT 开头，duckdb_engine.execute_sql 内部亦无守卫（COPY/ATTACH 可达）
+    from app.services.secure_query_executor import validate_sql as _validate_sql
+
+    _chk = _validate_sql(sql)
+    if not _chk.ok:
+        raise HTTPException(status_code=400, detail=f"pseudo_sql 只读校验未通过: {_chk.reason}")
+    sql = _chk.sql or sql
     endpoints = duckdb_engine.load_endpoints_from_db(db)
     try:
         result = duckdb_engine.execute_sql(sql, endpoints)
