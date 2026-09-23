@@ -28,11 +28,19 @@ export function resolveCapabilityPlaygroundConfig(
   defaultTools: string[],
 ): CapabilityPlaygroundConfig {
   const stored = configs[capabilityName];
+  // R5批⑦：localStorage 回读零结构校验——旧 schema/手工改动可能使 enabledTools 非数组
+  // （tools.filter 抛 TypeError 使 resolve 崩溃）、knowledgeBase 非字符串透传下游
+  const storedTools = stored?.enabledTools;
   return {
     enabledTools: Array.from(
-      new Set(filterFrontendTools(stored?.enabledTools ?? defaultTools)),
+      new Set(
+        filterFrontendTools(
+          Array.isArray(storedTools) ? storedTools : defaultTools,
+        ),
+      ),
     ),
-    knowledgeBase: stored?.knowledgeBase ?? "",
+    knowledgeBase:
+      typeof stored?.knowledgeBase === "string" ? stored.knowledgeBase : "",
     config:
       stored?.config && typeof stored.config === "object" ? stored.config : {},
   };

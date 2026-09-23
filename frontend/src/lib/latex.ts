@@ -20,27 +20,34 @@ export function convertLatexDelimiters(content: string): string {
 
   let result = content;
 
-  // editor.md examples sometimes wrap \( ... \) inside $$ ... $$.
-  // In that case the inner delimiters should be stripped rather than rewrapped.
-  result = result.replace(
-    /\$\$\s*\\\(([\s\S]*?)\\\)\s*\$\$/g,
-    (_match, expr) => {
-      return `\n$$\n${expr}\n$$\n`;
-    },
-  );
+  // R5批⑦：公式改写只作用于非代码片段——按围栏码块/行内代码切段（奇数段=代码，原样保留），
+  // 代码示例（正则/Shell 讲解等）不再被 \( \) 改写破坏；跨段超长惰性匹配加 2000 字符上限，
+  // 孤立 \( 与远处 \) 之间的大段正文不再被卷进一个"公式"。
+  const convertSegment = (seg: string): string =>
+    seg
+      // editor.md examples sometimes wrap \( ... \) inside $$ ... $$.
+      // In that case the inner delimiters should be stripped rather than rewrapped.
+      .replace(
+        /\$\$\s*\\\(([\s\S]{0,2000}?)\\\)\s*\$\$/g,
+        (_match, expr) => {
+          return `\n$$\n${expr}\n$$\n`;
+        },
+      )
+      // Convert \[...\] to $$...$$ (block math).
+      // Use a regex that handles multiline content
+      // Note: In JSON strings, \[ becomes \\[ which in JS becomes \[
+      .replace(/\\\[([\s\S]{0,2000}?)\\\]/g, (_match, expr) => {
+        return `\n$$\n${expr}\n$$\n`;
+      })
+      // Convert \(...\) to $...$ (inline math).
+      .replace(/\\\(([\s\S]{0,2000}?)\\\)/g, (_match, expr) => {
+        return ` $${expr}$ `;
+      });
 
-  // Convert \[...\] to $$...$$ (block math).
-  // Use a regex that handles multiline content
-  // Note: In JSON strings, \[ becomes \\[ which in JS becomes \[
-  result = result.replace(/\\\[([\s\S]*?)\\\]/g, (_match, expr) => {
-    return `\n$$\n${expr}\n$$\n`;
-  });
-
-  // Convert \(...\) to $...$ (inline math).
-  // Be careful not to match escaped parentheses in other contexts
-  result = result.replace(/\\\(([\s\S]*?)\\\)/g, (_match, expr) => {
-    return ` $${expr}$ `;
-  });
+  result = result
+    .split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/g)
+    .map((part, i) => (i % 2 === 1 ? part : convertSegment(part)))
+    .join("");
 
   // Also handle cases where LaTeX is directly in the text without proper delimiters
   // e.g., standalone \lim, \frac, etc. that should be wrapped

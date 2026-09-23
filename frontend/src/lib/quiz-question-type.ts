@@ -93,7 +93,10 @@ export function resolveChoiceAnswerKey(
     }
   }
 
-  return directKey;
+  // R5批⑦：未命中任何选项键/选项文本时返回空串而非裸 directKey——原实现返回的值
+  // 很可能不是 options 的合法键，调用方（QuizBlock 判分 selected===correctChoiceKey）
+  // 无兜底补偿，会把所有用户选择静默判错且无法与"答案配置错误"区分。
+  return "";
 }
 
 /**
