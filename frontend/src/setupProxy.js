@@ -44,11 +44,27 @@ module.exports = function (app) {
     })
   );
 
+  // R4批（R#5 / Task 12 Step1）：平台 WS 两径单独 ws:true——partners 会话进度 +
+  // knowledge 任务进度（vendor 引擎退役后由平台后端承接真 WS；7988c0a 闪烁根修时
+  // 随 /api 全量降级）。不做 /api 全量 ws:true：闪烁根因=HPM upgrade 响应者与
+  // WDS4 /ws HMR 套接字竞争写同一连接——本条目精确 glob 不覆盖 /ws，28000 对这两径
+  // 回真 WS 握手，HMR 路径不受影响。
+  app.use(
+    ['/api/v1/partners', '/api/v1/knowledge'],
+    createProxyMiddleware({
+      target: BACKEND,
+      changeOrigin: true,
+      ws: true,
+      proxyTimeout: 0,
+      timeout: 0,
+    })
+  );
+
   // IA批2 曾在此启用 /api ws:true——vendor /api/v1/ws 引擎已随批16deep 物理删除
   // （L7 断言零消费），且 HPM ws:true 的 upgrade 响应者与 WDS4 自身 /ws HMR 套接字
   // 竞争写同一个连接（28000 对 /ws 回裸 HTTP 404 字节被转发→浏览器 Invalid frame
   // header→dev-client 无限重连=页面闪烁）。平台 WS（partners/knowledge progress）
-  // 走 wsUrl() 直连 dev server 同源升级，由 WDS4 自身代理；此处保持 ws:false。
+  // 已由上方精确条目恢复；此处保持 ws:false。
   app.use(
     ['/api'],
     createProxyMiddleware({
