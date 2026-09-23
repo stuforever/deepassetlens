@@ -93,12 +93,18 @@ class TestCheckScopeForTool:
         assert not sc.ok, "filters 越界未拦截"
 
     def test_doris_sql_carrier(self):
-        """execute_doris_sql 优先 filters，其次 SQL。"""
-        # 有 filters 时用 filters
-        tc = {"args": {"sql": "SELECT * FROM t", "filters": {"cust_name": ["客户001"]}}}
+        """execute_doris_sql 载体随 entity_code 走（R5批㉔：handler 实际语义——
+        entity_code 非空时 sql 完全忽略；为空时 sql 即真实载体，filters 不作烟雾弹）。"""
+        # entity_code 非空 → filters 载体（sql 被处理器忽略，不参与校验）
+        tc = {"args": {"sql": "SELECT * FROM t", "filters": {"cust_name": ["客户001"]},
+                        "entity_code": "ent1"}}
         trusted = {"customer_names": ["客户001", "客户003"]}
         sc = check_scope_for_tool("execute_doris_sql", tc, trusted)
         assert sc.ok, sc.reason
+        # entity_code 为空 → sql 载体：无 cust_name 过滤的 sql 不得借无关 filters 过闸
+        tc2 = {"args": {"sql": "SELECT * FROM t", "filters": {"cust_name": ["客户001"]}}}
+        sc2 = check_scope_for_tool("execute_doris_sql", tc2, trusted)
+        assert not sc2.ok, sc2.reason
 
     def test_doris_sql_fallback_to_sql(self):
         """execute_doris_sql 无 filters 时回退到 SQL 提取。"""
