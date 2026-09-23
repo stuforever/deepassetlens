@@ -307,7 +307,16 @@ class PgNotebookSessionStore:
         return n > 0
 
     async def add_entry_to_category(self, entry_id: int, category_id: int) -> bool:
+        # R5批⑧（清单安全）：IDOR——先校验 entry 与 category 均归属当前用户再关联
         with engine.begin() as c:
+            e = c.execute(text(
+                "SELECT 1 FROM sishu_notebook_entries WHERE id=:e AND user_id=:u"),
+                {"e": entry_id, "u": _scope_user()}).scalar()
+            ct = c.execute(text(
+                "SELECT 1 FROM sishu_notebook_categories WHERE id=:c AND user_id=:u"),
+                {"c": category_id, "u": _scope_user()}).scalar()
+            if e is None or ct is None:
+                return False
             try:
                 c.execute(text(
                     "INSERT INTO sishu_notebook_entry_categories (entry_id, category_id) "
@@ -318,10 +327,15 @@ class PgNotebookSessionStore:
         return True
 
     async def remove_entry_from_category(self, entry_id: int, category_id: int) -> bool:
+        # R5批⑧（清单安全）：IDOR——删除条件加双侧归属校验
         with engine.begin() as c:
             n = c.execute(text(
-                "DELETE FROM sishu_notebook_entry_categories WHERE entry_id=:e AND category_id=:c"),
-                {"e": entry_id, "c": category_id}).rowcount
+                "DELETE FROM sishu_notebook_entry_categories ec "
+                "USING sishu_notebook_entries e, sishu_notebook_categories ct "
+                "WHERE ec.entry_id=:e AND ec.category_id=:c "
+                "AND e.id=ec.entry_id AND ct.id=ec.category_id "
+                "AND e.user_id=:u AND ct.user_id=:u"),
+                {"e": entry_id, "c": category_id, "u": _scope_user()}).rowcount
         return n > 0
 
 

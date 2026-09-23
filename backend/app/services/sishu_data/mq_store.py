@@ -456,15 +456,29 @@ class MotherQuestionStorePG:
         return list(seen.values())
 
     def create_tag(self, name: str, color: str | None = None) -> dict:
-        """创建标签实体（存 tags 表）."""
+        """创建标签实体（存 tags 表）。R5批⑧（清单安全）：name 是全局 PK——原
+        ON CONFLICT DO UPDATE 只改 color、user_id 仍属先建者（跨用户状态污染：他人
+        同名建标签会改我的行且自己看不到）。现冲突时校验归属：他人占用 → ValueError，
+        本人同名 → 原地更新 color/doc。"""
         with _cas_lock:
             with engine.begin() as c:
-                c.execute(text("""
-                    INSERT INTO sishu_mq_tags (name, user_id, color, doc)
-                    VALUES (:n, :u, :c, CAST(:d AS JSONB))
-                    ON CONFLICT (name) DO UPDATE SET color=EXCLUDED.color"""),
-                    {"n": name, "u": _scope_user(), "c": color,
-                     "d": json.dumps({"id": name, "name": name, "color": color}, ensure_ascii=False)})
+                u = _scope_user()
+                row = c.execute(text("SELECT user_id FROM sishu_mq_tags WHERE name=:n"),
+                                {"n": name}).first()
+                if row is not None:
+                    if row[0] != u:
+                        raise ValueError(f"标签名已存在且归属其他用户: {name}")
+                    c.execute(text(
+                        "UPDATE sishu_mq_tags SET color=:c, doc=CAST(:d AS JSONB) "
+                        "WHERE name=:n AND user_id=:u"),
+                        {"c": color, "n": name, "u": u,
+                         "d": json.dumps({"id": name, "name": name, "color": color}, ensure_ascii=False)})
+                else:
+                    c.execute(text(
+                        "INSERT INTO sishu_mq_tags (name, user_id, color, doc) "
+                        "VALUES (:n, :u, :c, CAST(:d AS JSONB))"),
+                        {"n": name, "u": u, "c": color,
+                         "d": json.dumps({"id": name, "name": name, "color": color}, ensure_ascii=False)})
             return {"id": name, "name": name, "color": color}
 
     def delete_tag(self, name: str) -> bool:
