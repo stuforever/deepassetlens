@@ -434,6 +434,9 @@ def init_db(db: Session):
     # 附件四 A-1：专家卡 suggestions/params 两列（已有库缺列补齐；create_all 不改已有表）
     _ensure_expert_card_columns(db)
 
+    # B2（v4§三）：skills +type 分型列（scenario|general；NULL=存量未分型）
+    _ensure_skill_type_column(db)
+
     # ⑥-2a（spec D3）：expert 资源公共语义种子（幂等）——wenshu→role viewer→use
     # （登录兜底 viewer→全员可用）；tutor 等不种=默认私有（显式赋权才见）。
     _seed_expert_acl(db)
@@ -471,6 +474,23 @@ def _ensure_expert_card_columns(db: Session):
         except Exception as e:
             db.rollback()
             logger.warning(f"[附件四A-1] kg_expert_profiles.{col} 补列失败（不阻启动）: {e}")
+
+
+def _ensure_skill_type_column(db: Session):
+    """B2（v4§三）：skills +type（scenario|general 分型；NULL=存量未分型，幂等——列存在则跳过；
+    create_all 不改已有表，照 _ensure_expert_card_columns 补列范式）。"""
+    from sqlalchemy import text
+    try:
+        has = db.execute(text(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE "
+            "TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'skills' AND COLUMN_NAME = 'type'")).scalar()
+        if not has:
+            db.execute(text("ALTER TABLE skills ADD COLUMN type VARCHAR(20) NULL"))
+            db.commit()
+            logger.info("[B2] skills.type 分型列已加")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[B2] skills.type 补列失败（不阻启动）: {e}")
 
 
 def _ensure_expert_column(db: Session):

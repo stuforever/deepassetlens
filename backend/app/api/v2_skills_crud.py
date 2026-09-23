@@ -29,11 +29,12 @@ router = APIRouter()
 def list_skills(
     status: Optional[str] = None,
     skill_type: Optional[str] = None,
+    type: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
-    skills = SkillService.list_skills(db, status=status, skill_type=skill_type, skip=skip, limit=limit)
+    skills = SkillService.list_skills(db, status=status, skill_type=skill_type, skip=skip, limit=limit, type=type)
     return APIResponse(
         data=[{
             "skill_id": str(s.skill_id),
@@ -41,6 +42,8 @@ def list_skills(
             "name": s.name,
             "description": s.description,
             "skill_type": s.skill_type,
+            # B2（v4§三）：场景分型 scenario|general（NULL=存量未分型）
+            "type": s.type,
             "status": s.status,
             "current_version_id": str(s.current_version_id) if s.current_version_id else None,
             "tags": s.tags or [],

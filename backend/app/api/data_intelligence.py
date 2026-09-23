@@ -59,6 +59,8 @@ class ChatRequest(BaseModel):
     # B1（v4§八）：📚 知识库选择——None/空=不过滤；非空=检索层按选中队列过滤
     # （prep 注入 RAG 前置块；批① 附件条多选消费）。
     kb_ids: Optional[List[str]] = Field(default=None, description="知识库 id 过滤（None/空=不过滤）")
+    # B2（v4§四）：🎭 角色卡——None=现状等价；非空=装配层基座+风格段（wenshu 预置 3 卡）
+    role_id: Optional[str] = Field(default=None, description="角色卡 id（None=现状等价）")
 
 
 class ChatResponse(BaseModel):

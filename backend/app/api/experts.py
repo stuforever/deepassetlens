@@ -228,6 +228,16 @@ def create_expert(request: Request, expert_id: str = Query(..., alias="id"), bod
     return expert_config.get_card(expert_id)
 
 
+@router.get("/{expert_id}/roles")
+def list_expert_roles(expert_id: str):
+    """B2（v4§四）：专家角色卡列表——批⑤ composer 角色下拉数据源。
+    预置注册表=代码常量（非 DB）：wenshu 3 张（文案照 v4§四）；其他专家空数组（不误挂问数语气）。"""
+    from app.services.wenshu_roles import WENSHU_ROLE_CARDS
+    roles = ([{"role_id": r["role_id"], "name": r["name"], "description": r["description"]}
+              for r in WENSHU_ROLE_CARDS] if expert_id == "wenshu" else [])
+    return {"expert_id": expert_id, "roles": roles}
+
+
 @router.patch("/{expert_id}")
 def patch_expert(expert_id: str, body: ExpertPatchBody, request: Request):
     """改卡→version+1（下一问新 Agent）；enabled=false 红级必须 close_reason（spec §六）。"""

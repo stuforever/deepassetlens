@@ -19,6 +19,9 @@ class Skill(Base):
     description = Column(Text, nullable=True)
 
     skill_type = Column(String(50), nullable=False)
+    # B2（v4§三）：二分法场景分型——scenario=场景技能（下拉可选）/general=通用技能（契约路由
+    # 自动装配，不出现）；NULL=存量未分型。与 skill_type（框架类型 python/sql/claude…）正交。
+    type = Column(String(20), nullable=True)
     status = Column(String(20), nullable=False, default="draft", server_default="draft")
 
     current_version_id = Column(String(36), nullable=True, index=True)

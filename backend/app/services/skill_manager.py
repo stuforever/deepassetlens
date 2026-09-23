@@ -138,6 +138,7 @@ class SkillService:
             name=data["name"],
             description=data.get("description"),
             skill_type=data.get("skill_type", "natural"),
+            type=data.get("type"),
             status=data.get("status", "draft"),
             storage_path=str(storage._skill_path(skill_code)),
             tags=data.get("tags", []),
@@ -168,12 +169,14 @@ class SkillService:
         return db.query(Skill).filter(Skill.skill_code == skill_code.lower()).first()
 
     @staticmethod
-    def list_skills(db: Session, status: Optional[str] = None, skill_type: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Skill]:
+    def list_skills(db: Session, status: Optional[str] = None, skill_type: Optional[str] = None, skip: int = 0, limit: int = 100, type: Optional[str] = None) -> List[Skill]:
         query = db.query(Skill)
         if status:
             query = query.filter(Skill.status == status)
         if skill_type:
             query = query.filter(Skill.skill_type == skill_type)
+        if type:
+            query = query.filter(Skill.type == type)
         return query.order_by(Skill.priority.asc(), Skill.created_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
@@ -182,7 +185,7 @@ class SkillService:
         if not skill:
             raise ValueError("技能不存在")
 
-        for field in ["name", "description", "skill_type", "status", "tags", "priority", "timeout", "retry_policy", "resource_limits", "permissions", "app_type", "target_menu"]:
+        for field in ["name", "description", "skill_type", "type", "status", "tags", "priority", "timeout", "retry_policy", "resource_limits", "permissions", "app_type", "target_menu"]:
             if field in data:
                 setattr(skill, field, data[field])
 

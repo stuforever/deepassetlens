@@ -6,7 +6,7 @@ Skill v2 支持层 —— 请求/响应模型 + 只读目录/序列化工具
 """
 
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 import re
 
@@ -26,6 +26,8 @@ class SkillCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
     skill_type: str = "natural"  # natural|python|sql|http|mixed|claude
+    # B2（v4§三）：场景分型 scenario|general（NULL=未分型）；非法值模型层拒收
+    type: Optional[str] = None
     tags: Optional[List[str]] = None
     priority: int = 0
     timeout: int = 30
@@ -35,12 +37,21 @@ class SkillCreateRequest(BaseModel):
     app_type: Optional[str] = None
     target_menu: Optional[str] = None
 
+    @field_validator("type")
+    @classmethod
+    def _validate_b2_type(cls, v):
+        if v is not None and v not in ("scenario", "general"):
+            raise ValueError("type 须为 scenario|general")
+        return v
+
 
 class SkillUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     skill_type: Optional[str] = None
     status: Optional[str] = None
+    # B2（v4§三）：场景分型 scenario|general；非法值模型层拒收
+    type: Optional[str] = None
     tags: Optional[List[str]] = None
     priority: Optional[int] = None
     timeout: Optional[int] = None
@@ -49,6 +60,13 @@ class SkillUpdateRequest(BaseModel):
     permissions: Optional[Dict[str, Any]] = None
     app_type: Optional[str] = None
     target_menu: Optional[str] = None
+
+    @field_validator("type")
+    @classmethod
+    def _validate_b2_type(cls, v):
+        if v is not None and v not in ("scenario", "general"):
+            raise ValueError("type 须为 scenario|general")
+        return v
 
 
 class VersionCreateRequest(BaseModel):

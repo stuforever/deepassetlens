@@ -58,6 +58,12 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 raise HTTPException(
                     status_code=422,
                     detail=f"surface 白名单外（卡 L1 声明: {_declared0 or '无'}，收到 {req.surface}）")
+    # B2（v4§四）：role_id fail-fast——未知角色卡在开流前 422（否则装配层 ValueError
+    # 会走 fail-safe 回退链沉成 500，前端拿不到可读错误）。
+    if getattr(req, "role_id", None):
+        from app.services.wenshu_roles import WENSHU_ROLE_CARDS as _wrc
+        if req.role_id not in {c["role_id"] for c in _wrc}:
+            raise HTTPException(status_code=422, detail=f"未知角色卡: {req.role_id}")
 
     async def event_iter():
         try:
@@ -113,7 +119,8 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
                 memory_runtime.update_runtime({"surface": req.surface})
 
             from app.services.tupu_deepagent import get_tupu_agent
-            agent = await get_tupu_agent(connection_id=req.llm_connection_id or "", expert_id=req.expert_id)
+            agent = await get_tupu_agent(connection_id=req.llm_connection_id or "", expert_id=req.expert_id,
+                                         role_id=getattr(req, "role_id", None))
 
             # v3.5: 同一会话执行锁 -- 防止同 thread_id 并发请求导致 checkpoint 分叉覆盖
             _session_lock = _get_session_lock(_memory_thread_id)
