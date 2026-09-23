@@ -1,13 +1,15 @@
 /**
- * ChatPanel（v3 §二，批③ §十三换壳）：💬对话面板内容——新建对话 + 最近对话列表。
- * v4§5.1：删「三专家直达」区（进对话一律走新建对话或首屏专家 Tab）；EXPERTS 常量保留（最近对话行空间色点仍用）。
+ * ChatPanel（v3 §二，批③ §十三换壳，批④ v4§六 历史分类）：💬对话面板内容——新建对话 + 四层历史分类。
+ * 分类层叠：📌置顶｜⭐收藏｜按专家（问数/私塾/H5+空间色点）｜组内时间组（今天/本周/更早）。
+ * 置顶/收藏=纯前端 localStorage（hist:pinned/hist:fav，后端 conversation 标签列二期）。
+ * v4§5.1：不设专家直达（进对话一律走新建对话或首屏专家 Tab）；EXPERTS 常量保留（分组空间色点仍用）。
  * 宽度/背景/边框由统一壳 ShellPanel 提供（本组件只渲染滚动内容区）。
  * 最近对话=平台 store 会话（wenshu/sishu）+ h5 vendor 会话合并（沿 AppSider 数据源迁移）。
- * v4§九：会话行 hover ⋯ 菜单（重命名/删除）接回（0ef1420 换壳回归修复）——
- * 平台行走 store deleteSessionById/renameSessionById；h5 行走 vendor session-api 并刷新。
+ * v4§九：会话行 hover ⋯ 菜单（重命名/置顶/收藏/删除）——平台行走 store，h5 行走 vendor session-api 并刷新。
  * R#9：行 ts 统一 normTs 归一（vendor updated_at=秒 → ms）后再排序，h5 会话不再恒沉底。
+ * 批④：>30 条默认截断，「查看全部」破截。
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Dropdown, Input, Modal, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { MoreOutlined, PlusOutlined, MessageOutlined } from '@ant-design/icons';
@@ -42,7 +44,37 @@ const relTime = (ts?: number | null) => {
   return new Date(t).toLocaleDateString();
 };
 
+/** 批④ 时间组（滚动 7 天窗）：今天 / 本周 / 更早 */
+type TimeBucket = 'today' | 'week' | 'earlier';
+const BUCKET_LABELS: Record<TimeBucket, string> = { today: '今天', week: '本周', earlier: '更早' };
+const timeBucket = (ts?: number | null): TimeBucket => {
+  const t = normTs(ts);
+  if (!t) return 'earlier';
+  const now = new Date();
+  const d = new Date(t);
+  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return 'today';
+  if (now.getTime() - t < 7 * 86_400_000) return 'week';
+  return 'earlier';
+};
+
+/** 批④ 置顶/收藏 localStorage（键=「{expert}-{sid}」复合键；后端 conversation 标签列二期） */
+const HIST_PIN_KEY = 'hist:pinned';
+const HIST_FAV_KEY = 'hist:fav';
+const loadHist = (key: string): string[] => {
+  try {
+    const raw = localStorage.getItem(key);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : [];
+  } catch { return []; }
+};
+const saveHist = (key: string, ids: string[]) => {
+  try { localStorage.setItem(key, JSON.stringify(ids)); } catch { /* ignore */ }
+};
+
+const ROW_CAP = 30;
+
 interface Row {
+  key: string;
   sid: string; title: string; expert: ExpertId; ts: number;
   open: () => void;
   rename: (title: string) => Promise<void> | void;
@@ -61,6 +93,10 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
   const [hoverKey, setHoverKey] = useState('');
   const [renamingKey, setRenamingKey] = useState('');
   const [renameVal, setRenameVal] = useState('');
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState(false);
+  const [pins, setPins] = useState<string[]>(() => loadHist(HIST_PIN_KEY));
+  const [favs, setFavs] = useState<string[]>(() => loadHist(HIST_FAV_KEY));
   const refreshH5 = useCallback(() => {
     listSessions(50, 0).then((rows) => setH5Rows(rows || [])).catch(() => { /* 静默空态 */ });
   }, []);
@@ -70,6 +106,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
   for (const s of sessions) {
     if (!s.messages.length) continue;
     rows.push({
+      key: `${(s.expertId || 'wenshu') as string}-${s.id}`,
       sid: s.id, title: s.title, expert: (s.expertId || 'wenshu') as ExpertId,
       ts: normTs(s.createdAt),
       open: () => {
@@ -84,6 +121,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
   for (const vs of [...h5Rows].sort((a, b) => normTs(b.updated_at) - normTs(a.updated_at))) {
     const sid = vs.session_id || vs.id;
     rows.push({
+      key: `tutor-h5-${sid}`,
       sid, title: vs.title || '(未命名)', expert: 'tutor-h5', ts: normTs(vs.updated_at),
       open: () => {
         navigate(`/e/tutor-h5/chat?session=${encodeURIComponent(sid)}`);
@@ -94,6 +132,26 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
     });
   }
   rows.sort((a, b) => b.ts - a.ts);
+
+  const q = search.trim();
+  const filtered = useMemo(
+    () => (q ? rows.filter((r) => r.title.toLowerCase().includes(q.toLowerCase())) : rows),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [q, rows],
+  );
+
+  const toggleHist = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>, lsKey: string) => {
+    setter((prev) => {
+      const next = prev.includes(key) ? prev.filter((x) => x !== key) : [key, ...prev];
+      saveHist(lsKey, next);
+      return next;
+    });
+  };
+
+  // 批④ 四层层叠：📌置顶 → ⭐收藏 → 按专家三组（组内 今天/本周/更早）
+  const pinnedRows = filtered.filter((r) => pins.includes(r.key));
+  const favRows = filtered.filter((r) => favs.includes(r.key) && !pins.includes(r.key));
+  const rest = filtered.filter((r) => !pins.includes(r.key) && !favs.includes(r.key));
 
   const commitRename = (r: Row) => {
     const t = renameVal.trim();
@@ -115,14 +173,122 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
   const rowMenu = (r: Row): MenuProps => ({
     items: [
       { key: 'rename', label: '重命名' },
+      { key: 'pin', label: pins.includes(r.key) ? '取消置顶' : '置顶' },
+      { key: 'fav', label: favs.includes(r.key) ? '取消收藏' : '收藏' },
       { key: 'delete', label: '删除' },
     ],
     onClick: (info) => {
       info.domEvent.stopPropagation();
-      if (info.key === 'rename') { setRenameVal(r.title); setRenamingKey(`${r.expert}-${r.sid}`); }
+      if (info.key === 'rename') { setRenameVal(r.title); setRenamingKey(r.key); }
+      if (info.key === 'pin') toggleHist(r.key, setPins, HIST_PIN_KEY);
+      if (info.key === 'fav') toggleHist(r.key, setFavs, HIST_FAV_KEY);
       if (info.key === 'delete') confirmDelete(r);
     },
   });
+
+  const renderRow = (r: Row) => {
+    const hovered = hoverKey === r.key;
+    return (
+      <div
+        key={r.key}
+        data-testid="chat-panel-session-row"
+        onClick={r.open}
+        onMouseEnter={() => setHoverKey(r.key)}
+        onMouseLeave={() => setHoverKey('')}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px',
+          borderRadius: 8, cursor: 'pointer', fontSize: 13,
+          background: hovered ? 'var(--muted, #f5f5f5)' : 'transparent',
+        }}
+      >
+        <span style={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: EXPERTS.find((e) => e.id === r.expert)?.color || '#999' }} />
+        <MessageOutlined style={{ color: 'var(--text-tertiary, #bbb)', fontSize: 12, flexShrink: 0 }} />
+        {renamingKey === r.key ? (
+          <Input
+            size="small"
+            autoFocus
+            value={renameVal}
+            onChange={(e) => setRenameVal(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onPressEnter={() => commitRename(r)}
+            onBlur={() => commitRename(r)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setRenamingKey(''); }}
+            style={{ flex: 1 }}
+            data-testid="chat-panel-rename-input"
+          />
+        ) : (
+          <Text ellipsis style={{ flex: 1, fontSize: 13 }}>{r.title}</Text>
+        )}
+        <Text type="secondary" style={{ fontSize: 11, flexShrink: 0 }}>{relTime(r.ts)}</Text>
+        <Dropdown menu={rowMenu(r)} trigger={['click']} placement="bottomRight">
+          <Button
+            size="small"
+            type="text"
+            icon={<MoreOutlined />}
+            aria-label="会话操作"
+            data-testid="chat-panel-row-more"
+            onClick={(e) => e.stopPropagation()}
+            style={{ opacity: hovered ? 1 : 0, flexShrink: 0, width: 22, height: 22, marginRight: -6 }}
+          />
+        </Dropdown>
+      </div>
+    );
+  };
+
+  // 30 条硬截（渲染序=层叠序），「查看全部」破截
+  const flat: Row[] = [
+    ...pinnedRows,
+    ...favRows,
+    ...(['wenshu', 'sishu', 'tutor-h5'] as ExpertId[]).flatMap((ex) => rest.filter((r) => r.expert === ex)),
+  ];
+  const shown = expanded ? flat : flat.slice(0, ROW_CAP);
+  const shownSet = new Set(shown.map((r) => r.key));
+
+  const groupHeader = (label: string, color: string | null, testid: string) => (
+    <div
+      data-testid={testid}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary, #888)', margin: '8px 0 4px', fontWeight: 600 }}
+    >
+      {color && <span style={{ width: 8, height: 8, borderRadius: 99, background: color, flexShrink: 0 }} />}
+      {label}
+    </div>
+  );
+
+  const renderLayer = (label: string, testid: string, list: Row[], color: string | null = null) => {
+    const visible = list.filter((r) => shownSet.has(r.key));
+    if (visible.length === 0) return null;
+    return (
+      <div>
+        {groupHeader(label, color, testid)}
+        {visible.map(renderRow)}
+      </div>
+    );
+  };
+
+  const renderExpertLayer = (ex: ExpertId) => {
+    const meta = EXPERTS.find((e) => e.id === ex);
+    if (!meta) return null;
+    const list = rest.filter((r) => r.expert === ex && shownSet.has(r.key));
+    if (list.length === 0) return null;
+    const buckets: TimeBucket[] = ['today', 'week', 'earlier'];
+    return (
+      <div>
+        {groupHeader(meta.label, meta.color, `hist-group-expert-${ex}`)}
+        {buckets.map((bk) => {
+          const bl = list.filter((r) => timeBucket(r.ts) === bk);
+          if (bl.length === 0) return null;
+          return (
+            <div key={bk}>
+              <div data-testid={`hist-bucket-${ex}-${bk}`} style={{ fontSize: 11, color: 'var(--text-tertiary, #aaa)', margin: '4px 0 2px', padding: '0 8px' }}>
+                {BUCKET_LABELS[bk]}
+              </div>
+              {bl.map(renderRow)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -141,60 +307,35 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
       >
         新建对话
       </Button>
+      <Input
+        size="small"
+        allowClear
+        placeholder="搜索历史标题…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        data-testid="chat-panel-search"
+      />
       <div style={{ flex: 1, minHeight: 0 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', margin: '2px 0 6px', fontWeight: 600 }}>最近对话</div>
-        {rows.length === 0 && (
-          <Text type="secondary" style={{ fontSize: 12 }}>暂无对话记录</Text>
+        {filtered.length === 0 && (
+          <Text type="secondary" style={{ fontSize: 12 }}>{q ? '无匹配会话' : '暂无对话记录'}</Text>
         )}
-        {rows.slice(0, 30).map((r) => {
-          const key = `${r.expert}-${r.sid}`;
-          const hovered = hoverKey === key;
-          return (
-            <div
-              key={key}
-              data-testid="chat-panel-session-row"
-              onClick={r.open}
-              onMouseEnter={() => setHoverKey(key)}
-              onMouseLeave={() => setHoverKey('')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px',
-                borderRadius: 8, cursor: 'pointer', fontSize: 13,
-                background: hovered ? 'var(--muted, #f5f5f5)' : 'transparent',
-              }}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: EXPERTS.find((e) => e.id === r.expert)?.color || '#999' }} />
-              <MessageOutlined style={{ color: 'var(--text-tertiary, #bbb)', fontSize: 12, flexShrink: 0 }} />
-              {renamingKey === key ? (
-                <Input
-                  size="small"
-                  autoFocus
-                  value={renameVal}
-                  onChange={(e) => setRenameVal(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onPressEnter={() => commitRename(r)}
-                  onBlur={() => commitRename(r)}
-                  onKeyDown={(e) => { if (e.key === 'Escape') setRenamingKey(''); }}
-                  style={{ flex: 1 }}
-                  data-testid="chat-panel-rename-input"
-                />
-              ) : (
-                <Text ellipsis style={{ flex: 1, fontSize: 13 }}>{r.title}</Text>
-              )}
-              <Text type="secondary" style={{ fontSize: 11, flexShrink: 0 }}>{relTime(r.ts)}</Text>
-              <Dropdown menu={rowMenu(r)} trigger={['click']} placement="bottomRight">
-                <Button
-                  size="small"
-                  type="text"
-                  icon={<MoreOutlined />}
-                  aria-label="会话操作"
-                  data-testid="chat-panel-row-more"
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ opacity: hovered ? 1 : 0, flexShrink: 0, width: 22, height: 22, marginRight: -6 }}
-                />
-              </Dropdown>
-            </div>
-          );
-        })}
+        {renderLayer('📌 置顶', 'hist-group-pinned', pinnedRows)}
+        {renderLayer('⭐ 收藏', 'hist-group-fav', favRows)}
+        {(['wenshu', 'sishu', 'tutor-h5'] as ExpertId[]).map((ex) => (
+          <div key={ex}>{renderExpertLayer(ex)}</div>
+        ))}
+        {!expanded && flat.length > ROW_CAP && (
+          <Button
+            type="link"
+            size="small"
+            block
+            data-testid="hist-expand"
+            onClick={() => setExpanded(true)}
+            style={{ marginTop: 8 }}
+          >
+            查看全部（共 {flat.length} 条）
+          </Button>
+        )}
       </div>
     </div>
   );
