@@ -35,23 +35,29 @@ export async function withClientCache<T>(
     }
   }
 
+  // R5批⑤：归属校验——本请求的结算（回写/清删）仅当缓存槽仍是自己发起时创建的那个
+  // entry 才生效。否则 force 换代/invalidate 清除后，旧在飞请求 resolve 会用陈旧数据
+  // 覆盖新数据、reject 会误删新请求的有效条目或去重入口。
+  const entry: CacheEntry<T> = { expiresAt: now + ttlMs };
   const promise = loader()
     .then((value) => {
-      clientCache.set(key, {
-        data: value,
-        expiresAt: Date.now() + ttlMs,
-      });
+      if (clientCache.get(key) === (entry as CacheEntry<unknown>)) {
+        clientCache.set(key, {
+          data: value,
+          expiresAt: Date.now() + ttlMs,
+        });
+      }
       return value;
     })
     .catch((error) => {
-      clientCache.delete(key);
+      if (clientCache.get(key) === (entry as CacheEntry<unknown>)) {
+        clientCache.delete(key);
+      }
       throw error;
     });
 
-  clientCache.set(key, {
-    promise,
-    expiresAt: now + ttlMs,
-  });
+  entry.promise = promise;
+  clientCache.set(key, entry as CacheEntry<unknown>);
 
   return promise;
 }

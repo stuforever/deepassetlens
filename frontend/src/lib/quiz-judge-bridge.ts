@@ -1,9 +1,13 @@
 /**
  * 引擎批4 4.4：判分桥面——接口面与 lib/quiz-judge.ts 1:1（startQuizJudge/QuizJudgeRequest/
  * QuizJudgeHandle/QuizJudgeHandlers），传输面 WS→桥 SSE（POST /api/v2/skills/capability，
- * skill_code=tutor/quiz，config.action="judge"）。
+ * skill_code=sishu/quiz【R5批⑤ 修正头注释：tutor/quiz 为早期规格命名，实际注册为 sishu/quiz】，
+ * config.action="judge"）。
  * StreamEvent→原 frame 语义映射：stage_start(judge)→started；content→text；result→终文；
- * done→done(ok)；error→error。quizJudge.ts 退役删除（E-24④）。
+ * done→done(ok)；error→error。
+ * R5批⑤：终文口径=content 累计 buffer 优先，result 帧仅作「无增量」兜底回放（done 帧不再
+ * 跳过该兜底）；流尾 flush TextDecoder 并解析无 "\n\n" 结尾的残帧。
+ * quizJudge.ts 退役删除（E-24④）。
  */
 import { apiUrl } from "./api";
 
@@ -69,6 +73,34 @@ export function startQuizJudge(
       let buf = "";
       let finalText: string | null = null;
       let started = false;
+      // R5批⑤：done/error 帧→置收尾标志，与 result 兜底回放在统一出口执行
+      let stopKind: "error" | "done" | null = null;
+      let stopMsg: string | undefined;
+      const processRaw = (raw: string): void => {
+        for (const line of raw.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          let ev: { type?: string; content?: string };
+          try {
+            ev = JSON.parse(line.slice(5).trim());
+          } catch {
+            continue;
+          }
+          if (ev.type === "stage_start" && ev.content === "AI 判分中" && !started) {
+            started = true;
+            handlers.onStart?.();
+          } else if (ev.type === "content" && typeof ev.content === "string") {
+            buffer += ev.content;
+            handlers.onChunk(ev.content);
+          } else if (ev.type === "result" && typeof ev.content === "string") {
+            finalText = ev.content;
+          } else if (ev.type === "error") {
+            stopKind = "error";
+            stopMsg = ev.content ?? "AI judge failed.";
+          } else if (ev.type === "done") {
+            stopKind = "done";
+          }
+        }
+      };
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -77,31 +109,16 @@ export function startQuizJudge(
         while ((idx = buf.indexOf("\n\n")) >= 0) {
           const raw = buf.slice(0, idx);
           buf = buf.slice(idx + 2);
-          for (const line of raw.split("\n")) {
-            if (!line.startsWith("data:")) continue;
-            let ev: { type?: string; content?: string };
-            try {
-              ev = JSON.parse(line.slice(5).trim());
-            } catch {
-              continue;
-            }
-            if (ev.type === "stage_start" && ev.content === "AI 判分中" && !started) {
-              started = true;
-              handlers.onStart?.();
-            } else if (ev.type === "content" && typeof ev.content === "string") {
-              buffer += ev.content;
-              handlers.onChunk(ev.content);
-            } else if (ev.type === "result" && typeof ev.content === "string") {
-              finalText = ev.content;
-            } else if (ev.type === "error") {
-              finalize("error", ev.content ?? "AI judge failed.");
-              return;
-            } else if (ev.type === "done") {
-              finalize("done");
-              return;
-            }
-          }
+          processRaw(raw);
         }
+        if (stopKind) break;
+      }
+      // R5批⑤：流尾兜底——flush 解码器残余多字节序列 + 解析无 "\n\n" 结尾的末帧
+      buf += decoder.decode();
+      if (!stopKind && buf.trim()) processRaw(buf);
+      if (stopKind === "error") {
+        finalize("error", stopMsg);
+        return;
       }
       if (finalText && !buffer.trim()) {
         // 兜底：服务端只回 result 帧（无增量）——终文整块回放
