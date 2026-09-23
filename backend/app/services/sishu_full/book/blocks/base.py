@@ -23,6 +23,18 @@ from ..models import (
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_block_error(exc: BaseException) -> str:
+    """R5批⑮（清单安全）：block.error 会持久化并经 BlockRenderer 渲染给终端用户——
+    剥离 <think>...</think> 等内部推理段，截断长度，避免内部提示词/推理链外泄。"""
+    import re as _re
+
+    s = str(exc)
+    s = _re.sub(r"<think[\s\S]*?</think>", "[内部推理已折叠]", s, flags=_re.I)
+    s = _re.sub(r"<think[\s\S]*$", "[内部推理已折叠]", s, flags=_re.I)
+    s = s.replace(chr(0), "")
+    return s[:400]
+
+
 class GenerationFailure(Exception):
     """Raised by a generator to mark the block as ERROR."""
 
@@ -119,7 +131,7 @@ class BlockGenerator(ABC):
             payload, anchors, metadata = await self._generate(ctx)
         except GenerationFailure as exc:
             block.status = BlockStatus.ERROR
-            block.error = str(exc)
+            block.error = _sanitize_block_error(exc)
             block.metadata = {
                 **block.metadata,
                 "failure": _failure_metadata(exc, self.__class__.__name__),
@@ -130,7 +142,7 @@ class BlockGenerator(ABC):
         except Exception as exc:
             logger.warning(f"Generator {self.__class__.__name__} raised: {exc}", exc_info=True)
             block.status = BlockStatus.ERROR
-            block.error = str(exc)
+            block.error = _sanitize_block_error(exc)
             block.metadata = {
                 **block.metadata,
                 "failure": _failure_metadata(exc, self.__class__.__name__),

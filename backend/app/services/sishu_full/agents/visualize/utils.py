@@ -64,12 +64,17 @@ def build_fallback_html(*, title: str, summary: str = "", note: str = "") -> str
 
     Used when the model fails to produce a renderable HTML document, so the
     user still gets *something* shown in the iframe instead of a blank panel.
+
+    R5批⑮（清单安全）：title/summary/note 先 HTML 转义再换行替换——三者来自 LLM
+    依据用户输入的生成物，原样 f-string 插入 <title>/<h1>/正文 = 注入面（"safe_" 名不副实）。
     """
-    safe_title = (title or "Visualization").strip() or "Visualization"
-    safe_summary = (summary or "").replace("\n", "<br>") or (
+    from html import escape as _html_escape
+
+    safe_title = _html_escape((title or "Visualization").strip() or "Visualization")
+    safe_summary = _html_escape(summary or "").replace("\n", "<br>") or (
         "The model did not return a renderable HTML document."
     )
-    safe_note = (note or "").replace("\n", "<br>")
+    safe_note = _html_escape(note or "").replace("\n", "<br>")
 
     note_block = (
         f'<div class="note"><strong>Note:</strong><br>{safe_note}</div>' if safe_note else ""

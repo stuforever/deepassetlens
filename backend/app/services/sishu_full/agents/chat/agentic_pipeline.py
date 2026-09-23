@@ -592,11 +592,13 @@ class AgenticChatPipeline:
                 try:
                     from app.services.sishu_full.multi_user.context import get_current_user
 
-                    return bool(get_current_user().is_admin)
+                    _user = get_current_user()
                 except Exception:
-                    # Single-user local runtime: APPLICATION isolation is the
-                    # same explicit opt-in posture TutorBot uses for local dev.
-                    return True
+                    # R5批⑮（清单安全）：解析异常不再 fail-open 授予 exec（与外层失败
+                    # 即拒姿态对齐）。「无用户上下文」的本地单用户场景由
+                    # get_current_user 正常返回 local_admin_user 处理，不走异常路径。
+                    return False
+                return bool(_user.is_admin)
             return False
         except Exception:
             logger.warning("exec policy gate failed; disabling exec", exc_info=True)
