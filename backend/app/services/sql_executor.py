@@ -40,12 +40,19 @@ def _get_biz_engine(data_source_id=None):
                 if not ds:
                     ds = db.query(DataSourceConfig).filter(DataSourceConfig.enabled == True).first()
             if ds:
+                # R5批②（清单安全）：凭证改 URL.create——原 f-string 直拼，username/password
+                # 含 @ : / # ? 时破坏 URL 解析（错连主机/库），SQLAlchemy 对凭证自动转义
                 from sqlalchemy import create_engine
-                # 按 db_type 选 driver：postgresql -> psycopg2，其余 -> mysql+pymysql
+                from sqlalchemy.engine import URL as _URL
                 if (ds.db_type or "").lower() in ("postgresql", "postgres", "pg"):
-                    url = f"postgresql+psycopg2://{ds.username}:{ds.password}@{ds.host}:{ds.port}/{ds.database}"
+                    url = _URL.create("postgresql+psycopg2", username=ds.username,
+                                      password=ds.password, host=ds.host,
+                                      port=ds.port, database=ds.database)
                 else:
-                    url = f"mysql+pymysql://{ds.username}:{ds.password}@{ds.host}:{ds.port}/{ds.database}?charset=utf8mb4"
+                    url = _URL.create("mysql+pymysql", username=ds.username,
+                                      password=ds.password, host=ds.host,
+                                      port=ds.port, database=ds.database,
+                                      query={"charset": "utf8mb4"})
                 eng = create_engine(url, pool_pre_ping=True, pool_recycle=3600, pool_size=5, max_overflow=10)
                 _BIZ_ENGINE_CACHE[cache_key] = eng
                 _BIZ_ENGINE_CACHE[f"{cache_key}:source"] = f"{ds.name}({ds.host}:{ds.port}/{ds.database})"
@@ -74,6 +81,16 @@ def build_execute_query_fn(data_source_id=None):
         import json as _json
         from decimal import Decimal
         from datetime import datetime as _dt, date as _date
+        # R5批②（清单安全）：模块级只读防线——只读性原依赖调用方先过 validate_sql
+        # （golden_qa_service 等调用径实测未过，注释声明不成立），此处统一强制 AST 校验。
+        try:
+            from app.services.secure_query_executor import validate_sql as _vsql
+            _chk = _vsql(sql)
+        except Exception as _ve:
+            raise ValueError(f"SQL 只读校验异常: {_ve}")
+        if not _chk.ok:
+            raise ValueError(f"SQL 校验未通过: {_chk.reason}")
+        sql = _chk.sql or sql
         _t0 = _t.time()
         # P5：预聚合加速器拦截（同形单值聚合命中 -> 预聚合表服务，附数据截至标注）
         try:

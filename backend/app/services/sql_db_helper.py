@@ -68,12 +68,20 @@ def get_table_info(tables: Optional[List[str]] = None) -> str:
 
 
 def run_sql(sql: str) -> str:
-    """执行只读 SQL（SQLDatabase.run 自动加 LIMIT 保护）"""
+    """执行只读 SQL。R5批②（清单安全）：原 docstring 声称「SQLDatabase.run 自动加 LIMIT
+    保护」不成立（langchain-community 该方法原样 session.execute，无只读/LIMIT 注入），
+    且挂接 engine 为带完整读写凭据的业务库引擎——现先过 validate_sql AST 级只读校验，
+    不过即拒绝（返回空串并告警）。"""
+    from app.services.secure_query_executor import validate_sql
+    _chk = validate_sql(sql)
+    if not _chk.ok:
+        logger.warning("run_sql 拒绝非只读/不安全 SQL: %s", _chk.reason)
+        return ""
     db = get_sql_database()
     if db is None:
         return ""
     try:
-        return db.run(sql)
+        return db.run(_chk.sql or sql)
     except Exception as e:
         logger.warning("run_sql 失败: %s", e)
         return ""
