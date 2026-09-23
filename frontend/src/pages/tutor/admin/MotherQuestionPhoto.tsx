@@ -7,6 +7,7 @@
  * API 契约原样：fetch('/api/v1/mother-questions/...')，multipart 上传/降级 OCR/查重/入库/转正确题逐字保留。
  */
 import React, { useEffect, useRef, useState } from 'react';
+import AuthedImg from './MotherQuestionAuthedImg'; // UX批③：受鉴权静态挂载图片经 blob 渲染
 import { useNavigate } from 'react-router-dom';
 import { Button, Checkbox, Input, Select, Tag, message } from 'antd';
 import {
@@ -88,7 +89,7 @@ function ImageUpload({
       <div style={{ marginTop: 4, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         {url ? (
           <div style={{ position: 'relative' }} className="mqf-img-group">
-            <img
+            <AuthedImg
               src={url} alt={label}
               style={{ width: 128, height: 128, objectFit: 'cover', borderRadius: 4, border: '1px solid #e5e7eb', cursor: 'pointer' }}
               onClick={() => setZoomOpen(true)}
@@ -123,7 +124,7 @@ function ImageUpload({
       </div>
       {zoomOpen && url && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setZoomOpen(false)}>
-          <img src={url} alt={label} style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }} onClick={(e) => e.stopPropagation()} />
+          <AuthedImg src={url} alt={label} style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }} onClick={(e) => e.stopPropagation()} />
           <Button type="text" icon={<DeleteOutlined style={{ fontSize: 24, color: '#fff' }} />} style={{ position: 'absolute', top: 16, right: 16 }} onClick={() => setZoomOpen(false)} />
         </div>
       )}

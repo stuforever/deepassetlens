@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Input, Select, message } from 'antd';
+import AuthedImg from './MotherQuestionAuthedImg'; // UX批③：受鉴权静态挂载图片经 blob 渲染
 import {
   CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, LoadingOutlined,
   ThunderboltOutlined, UploadOutlined, ZoomInOutlined,
@@ -77,7 +78,7 @@ function ImageUpload({
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
           >
-            <img
+            <AuthedImg
               src={url}
               alt={label}
               onClick={() => setZoomOpen(true)}
@@ -135,7 +136,7 @@ function ImageUpload({
           style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setZoomOpen(false)}
         >
-          <img
+          <AuthedImg
             src={url}
             alt={label}
             onClick={(e) => e.stopPropagation()}
