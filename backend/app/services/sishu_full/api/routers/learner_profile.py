@@ -294,13 +294,14 @@ def post_question_feedback(
 class _AskRequest(BaseModel):
     question: str = ""
     u: str = ""                      # H5 用户标识（默认 default）
+    code: str = ""                   # R5批⑨：访问码（access_code 启用时必填）
     image_base64: str = ""           # 可选：拍照题图 base64 -> OCR 后答疑
     context_hint: str = ""           # 可选：额外上下文（如题目文本）
     max_chars: int = 800
 
 
 @router.post("/ask")
-async def ask(request: _AskRequest):
+async def ask(request: _AskRequest, x_access_code: str = Header("")):
     """H5 拍错题/答疑通用端点：文字提问或拍照题图 -> AI 讲解。
 
     复用 ChatOrchestrator（真实 LLM + 学情画像注入）。*u* 作为会话/画像
@@ -335,9 +336,11 @@ async def ask(request: _AskRequest):
     prompt_parts.append("请识别这道题并给出：1）题目考查的知识点；2）分步解答；3）易错点提醒。")
 
     # 学情画像注入（按 u），在 h5 用户上下文下读取（数据隔离）
-    from app.services.sishu_full.multi_user.h5 import resolve_h5_current_user
+    from app.services.sishu_full.multi_user.h5 import h5_user_guarded
 
-    h5_user_ctx = resolve_h5_current_user(u)
+    # R5批⑨（清单安全）：走统一守卫——原 resolve_h5_current_user 无访问码校验，
+    # access_code 启用时本端点=门禁绕过点
+    h5_user_ctx = h5_user_guarded(u, request.code or "", x_access_code)
     with user_context(h5_user_ctx):
         context_hint = request.context_hint or _profile_summary_for(u)
         answer = await answer_with_orchestrator(

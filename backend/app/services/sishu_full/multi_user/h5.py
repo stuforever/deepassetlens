@@ -166,9 +166,13 @@ def h5_user_guarded(
     - u 缺省/空 -> admin（桌面不受访问码约束）
     - access_code 非空时要求 ``?code=`` / ``X-Access-Code`` 匹配，否则 401
     - u 非法 -> h5_slug 抛 HTTP 400
+    R5批⑨（清单安全）：纯空白 u（如 ?u=%20）不再视作缺省=admin——否则访问码启用时
+    空白输入即在门禁前直通 local_admin_user（h5_scope_dep 同输入得 401，双轨漏洞）。
     """
-    if not isinstance(u, str) or not u.strip():
+    if u is None or u == "":
         return local_admin_user()
+    if not isinstance(u, str):
+        raise HTTPException(status_code=400, detail="非法 u")
     if not access_code_ok(u, code or x_access_code):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -185,7 +189,6 @@ __all__ = [
     "h5_workspace_root",
     "h5_scope",
     "h5_user",
-    "resolve_h5_current_user",
     "current_admin",
     "is_admin_scope",
     "h5_scope_dep",
