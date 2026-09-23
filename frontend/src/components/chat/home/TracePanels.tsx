@@ -1754,7 +1754,6 @@ function TraceRowItem({
                 display: "flex",
                 flexDirection: "column",
                 gap: 6,
-                fontStyle: "italic",
                 lineHeight: 1.6,
               }}
             >
@@ -1824,8 +1823,7 @@ function TraceRowItem({
                     WebkitLineClamp: isChatRound ? 3 : 2,
                     WebkitBoxOrient: "vertical",
                     overflow: "hidden",
-                    ...(isChatRound ? { fontStyle: "italic" } : {}),
-                  }}
+                    }}
                 >
                   {headline}
                 </span>

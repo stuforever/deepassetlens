@@ -142,7 +142,6 @@ export default function AnimationBlock({ block }: AnimationBlockProps) {
           background: "rgba(255,255,255,0.4)",
           padding: 16,
           fontSize: 12,
-          fontStyle: "italic",
           color: "#6b7280",
         }}
       >

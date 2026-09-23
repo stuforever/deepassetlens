@@ -128,7 +128,7 @@ function SubagentLine({ channel, text }: { channel: string; text: string }) {
       );
     case "reasoning":
       return (
-        <div className="whitespace-pre-wrap break-words pl-4 text-[12px] italic leading-[1.6] text-[var(--muted-foreground)]">
+        <div className="whitespace-pre-wrap break-words pl-4 text-[12px] leading-[1.6] text-[var(--muted-foreground)]">
           {text}
         </div>
       );

@@ -143,7 +143,6 @@ export default function ModelThinkingCard({
           <div
             style={{
               fontSize: 11,
-              fontStyle: "italic",
               color: "rgba(107,114,128,0.7)",
             }}
           >

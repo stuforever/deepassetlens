@@ -76,6 +76,26 @@ export const fontSize = {
   small: 12,
 } as const;
 
+/* ---------- 附录A 排版标准（批②——v4 附录A 全站唯一，组件只引用不自定义） ---------- */
+export const fontFamily = {
+  /** A.1 正文/界面（antd 默认栈） */
+  sans: '-apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+  /** A.1 机器概念（SQL/表名/字段/耗时数字） */
+  mono: '"SF Mono", Consolas, "Courier New", monospace',
+} as const;
+
+/** A.2 字阶 T1-T5（行高随级） */
+export const typography = {
+  t1: { fontSize: 20, lineHeight: '28px', fontWeight: 600 }, // 页头标题
+  t2: { fontSize: 16, lineHeight: '24px', fontWeight: 600 }, // 区块/抽屉标题
+  t3: { fontSize: 14, lineHeight: '22px', fontWeight: 400 }, // 正文基准
+  t4: { fontSize: 12, lineHeight: '20px', fontWeight: 400 }, // 辅助/时间戳
+  t5: { fontSize: 12, lineHeight: '18px', fontWeight: 500 }, // 胶囊/chips
+} as const;
+
+/** A.5 间距 4px 步进 6 档（组件内禁非 4 倍数） */
+export const spacing = [4, 8, 12, 16, 24, 32] as const;
+
 export const fontWeight = {
   regular: 400,
   medium: 500,

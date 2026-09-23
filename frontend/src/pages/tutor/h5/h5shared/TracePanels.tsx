@@ -1672,7 +1672,6 @@ function TraceRowItem({
               style={{
                 display: "grid",
                 rowGap: 6,
-                fontStyle: "italic",
                 lineHeight: 1.6,
               }}
             >
@@ -1742,7 +1741,7 @@ function TraceRowItem({
                     WebkitLineClamp: isChatRound ? 3 : 2,
                     WebkitBoxOrient: "vertical",
                     overflow: "hidden",
-                    fontStyle: isChatRound ? "italic" : undefined,
+                    
                   }}
                 >
                   {headline}

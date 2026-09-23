@@ -188,7 +188,7 @@ const StepItem: React.FC<{ item: ThinkItem; index: number; isLast: boolean; isAc
         ) : null}
         {/* R1: 修正后重试标记--关联到被拒绝的步骤 */}
         {item.retry_of_step ? (
-          <Text style={{ fontSize: 10, color: 'var(--color-warning, #faad14)', fontStyle: 'italic' }}>↻ 修正#{item.retry_of_step}</Text>
+          <Text style={{ fontSize: 10, color: 'var(--color-warning, #faad14)' }}>↻ 修正#{item.retry_of_step}</Text>
         ) : null}
         <StatusTag preset={strat.preset} style={{ margin: 0, fontSize: 11 }}>{strat.label}</StatusTag>
         {item.action ? <Text type="secondary" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.action}</Text> : null}

@@ -26,7 +26,7 @@ export default function InteractiveBlock({ block }: InteractiveBlockProps) {
 
   if (!content.trim()) {
     return (
-      <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/40 p-4 text-xs italic text-[var(--muted-foreground)]">
+      <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/40 p-4 text-xs text-[var(--muted-foreground)]">
         {t("(Interactive payload is empty)")}
       </div>
     );

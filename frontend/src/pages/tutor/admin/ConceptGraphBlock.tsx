@@ -201,7 +201,7 @@ export default function ConceptGraphBlock({
           }}
         >
           {index.chapters.length === 0 && (
-            <li style={{ fontSize: 12, fontStyle: "italic", color: mutedForeground }}>
+            <li style={{ fontSize: 12, color: mutedForeground }}>
               （暂无章节）
             </li>
           )}

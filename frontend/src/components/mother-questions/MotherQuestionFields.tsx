@@ -173,7 +173,7 @@ function ImageUpload({
             )}
           </div>
         ) : readOnly ? (
-          <p className="text-xs text-muted-foreground italic w-32 h-32 flex items-center justify-center border rounded">{t("No image")}</p>
+          <p className="text-xs text-muted-foreground w-32 h-32 flex items-center justify-center border rounded">{t("No image")}</p>
         ) : (
           <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading} data-testid={areaTestId ? `${areaTestId}-btn` : undefined}
             className="w-32 h-32 border-2 border-dashed rounded flex flex-col items-center justify-center text-xs text-muted-foreground hover:bg-accent">

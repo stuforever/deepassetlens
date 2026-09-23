@@ -44,7 +44,7 @@ export default function FlashCardsBlock({ block }: FlashCardsBlockProps) {
           {showBack ? card.back : card.front}
         </span>
         {!showBack && card.hint && (
-          <span className="text-xs italic text-[var(--muted-foreground)]">
+          <span className="text-xs text-[var(--muted-foreground)]">
             {t("Hint")}: {card.hint}
           </span>
         )}

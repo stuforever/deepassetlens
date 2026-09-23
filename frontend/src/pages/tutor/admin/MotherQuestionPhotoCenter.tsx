@@ -119,7 +119,7 @@ function ImageUpload({
             )}
           </div>
         ) : readOnly ? (
-          <div style={{ width: 128, height: 128, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e5e7eb', borderRadius: 4, fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>无图</div>
+          <div style={{ width: 128, height: 128, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e5e7eb', borderRadius: 4, fontSize: 12, color: '#6b7280' }}>无图</div>
         ) : (
           <Button
             type="dashed"

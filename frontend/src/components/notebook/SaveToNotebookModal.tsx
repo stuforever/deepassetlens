@@ -676,7 +676,7 @@ export default function SaveToNotebookModal({
                             margin: 0,
                             fontSize: 12,
                             lineHeight: "20px",
-                            fontStyle: empty ? "italic" : "normal",
+                            fontStyle: "normal",
                             color: empty ? `${MUTED_FG}b3` : `${FG}d9`,
                           }}
                         >

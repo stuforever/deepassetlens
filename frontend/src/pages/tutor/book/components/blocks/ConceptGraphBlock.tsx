@@ -115,7 +115,7 @@ export default function ConceptGraphBlock({
         </h3>
         <ol className="space-y-1.5">
           {index.chapters.length === 0 && (
-            <li className="text-xs italic text-[var(--muted-foreground)]">
+            <li className="text-xs text-[var(--muted-foreground)]">
               {t("(No chapters yet)")}
             </li>
           )}

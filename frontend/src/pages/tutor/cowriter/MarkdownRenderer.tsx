@@ -100,7 +100,7 @@ export default function MarkdownRenderer({
       <strong style={{ fontWeight: 600, color: FG }}>{children}</strong>
     ),
     em: ({ children }: { children?: ReactNode }) => (
-      <em style={{ fontStyle: "italic" }}>{children}</em>
+      <em style={{ fontWeight: 500 }}>{children}</em>
     ),
     a: ({ children }: { children?: ReactNode }) => (
       <span style={{ textDecoration: "underline", textUnderlineOffset: 2 }}>
@@ -333,7 +333,6 @@ export default function MarkdownRenderer({
           margin: gap,
           borderLeft: `3px solid ${MUTED_FG}`,
           paddingLeft: 16,
-          fontStyle: "italic",
           color: MUTED_FG,
         }}
         {...lineAttr(node)}

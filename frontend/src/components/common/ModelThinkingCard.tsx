@@ -168,7 +168,6 @@ export default function ModelThinkingCard({
           <div
             style={{
               fontSize: 11,
-              fontStyle: "italic",
               color:
                 "color-mix(in srgb, var(--muted-foreground, #64748b) 70%, transparent)",
             }}

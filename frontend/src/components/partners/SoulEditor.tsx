@@ -230,7 +230,6 @@ export default function SoulEditor({
             <p
               style={{
                 fontSize: 13,
-                fontStyle: "italic",
                 color: "var(--muted-foreground, #64748b)",
               }}
             >

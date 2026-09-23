@@ -250,7 +250,7 @@ export default function QuizFollowupTabBody({
                 />
               </div>
             ) : context.answerImages.length === 0 ? (
-              <div style={{ fontSize: 12, fontStyle: "italic", color: MUTED_FG }}>
+              <div style={{ fontSize: 12, color: MUTED_FG }}>
                 暂无文字作答。
               </div>
             ) : null}

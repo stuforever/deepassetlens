@@ -334,7 +334,7 @@ export default function RichMarkdownRenderer({
         {children}
       </strong>
     ),
-    em: ({ node, children }) => <em style={{ fontStyle: "italic" }}>{children}</em>,
+    em: ({ node, children }) => <em style={{ fontWeight: 500 }}>{children}</em>,
     a: ({ node, children }) => (
       <span style={{ textDecoration: "underline", textUnderlineOffset: 2 }}>{children}</span>
     ),
@@ -916,7 +916,6 @@ export default function RichMarkdownRenderer({
         style={{
           borderLeft: `3px solid ${VAR_MUTED_FG}`,
           paddingLeft: 16,
-          fontStyle: "italic",
           color: VAR_MUTED_FG,
           ...gap,
         }}

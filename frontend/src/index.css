@@ -5,6 +5,15 @@
  */
 
 :root {
+  /* 批② 附录A 排版（A.1 字族/A.2 字阶——组件只引用 var()） */
+  --font-sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", Consolas, "Courier New", monospace;
+  --fs-t1: 20px; --lh-t1: 28px;
+  --fs-t2: 16px; --lh-t2: 24px;
+  --fs-t3: 14px; --lh-t3: 22px;
+  --fs-t4: 12px; --lh-t4: 20px;
+  --fs-t5: 12px; --lh-t5: 18px;
+
   /* 品牌色 */
   --color-primary: #2563EB;
   --color-primary-hover: #1D4ED8;
@@ -256,9 +265,9 @@ input:focus-visible,
   50% { opacity: 0.3; }
 }
 
-/* B2 对话旗舰页：悬浮 composer 聚焦主色描边环（S3 阴影保持） */
+/* 批②（附录B.2-3）：composer 聚焦只变 1px 边框色——禁阴影环/描边扩散 */
 .dal-composer:focus-within {
-  box-shadow: var(--elevation-s3), 0 0 0 1.5px var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
 }
 /* 渐变发送按钮：hover 保持渐变（antd primary hover 会盖掉背景图） */
 .dal-send-btn.ant-btn-primary:hover {

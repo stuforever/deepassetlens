@@ -190,7 +190,7 @@ export default function QuizFollowupTabBody({
                 />
               </div>
             ) : context.answerImages.length === 0 ? (
-              <div className="text-[12px] italic text-[var(--muted-foreground)]">
+              <div className="text-[12px] text-[var(--muted-foreground)]">
                 {t("No answer recorded.")}
               </div>
             ) : null}

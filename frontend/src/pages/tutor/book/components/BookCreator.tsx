@@ -1152,7 +1152,7 @@ function ProposalForm({
         </span>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {selectedKbs.length === 0 ? (
-            <span className="text-xs italic text-[var(--muted-foreground)]">
+            <span className="text-xs text-[var(--muted-foreground)]">
               {t(
                 "No knowledge bases selected. The book will rely on general knowledge.",
               )}

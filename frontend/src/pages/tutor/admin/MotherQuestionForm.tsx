@@ -103,7 +103,7 @@ function ImageUpload({
             )}
           </div>
         ) : readOnly ? (
-          <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.45)', fontStyle: 'italic', width: 128, height: 128, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #d9d9d9', borderRadius: 6 }}>
+          <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.45)', width: 128, height: 128, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #d9d9d9', borderRadius: 6 }}>
             无图片
           </p>
         ) : (

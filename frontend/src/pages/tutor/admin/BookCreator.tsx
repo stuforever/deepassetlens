@@ -1544,7 +1544,7 @@ function ProposalForm({
           >
             {selectedKbs.length === 0 ? (
               <span
-                style={{ fontSize: 12, fontStyle: "italic", color: MUTED_FG }}
+                style={{ fontSize: 12, color: MUTED_FG }}
               >
                 未选择知识库。本书将依赖通用知识生成。
               </span>

@@ -1049,7 +1049,7 @@ const ResolvedAskUserCard = memo(function ResolvedAskUserCard({
                     {value ? (
                       value
                     ) : (
-                      <span style={{ fontStyle: "italic" }}>（已跳过）</span>
+                      <span style={{ color: "var(--text-tertiary, #999)" }}>（已跳过）</span>
                     )}
                   </div>
                 </div>

@@ -912,7 +912,7 @@ const ResolvedAskUserCard = memo(function ResolvedAskUserCard({
                     {value ? (
                       value
                     ) : (
-                      <span className="italic">{t("(skipped)")}</span>
+                      <span style={{ color: "var(--muted-foreground, #64748b)" }}>{t("(skipped)")}</span>
                     )}
                   </div>
                 </div>

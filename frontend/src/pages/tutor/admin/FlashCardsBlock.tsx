@@ -97,7 +97,7 @@ export default function FlashCardsBlock({ block }: FlashCardsBlockProps) {
         </span>
         {!showBack && card.hint && (
           <span
-            style={{ fontSize: 12, fontStyle: "italic", color: mutedForeground }}
+            style={{ fontSize: 12, color: mutedForeground }}
           >
             {"提示"}: {card.hint}
           </span>

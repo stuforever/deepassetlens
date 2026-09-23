@@ -295,7 +295,7 @@ export function ActivityBody({
   if (activity.isEmpty && !configSection) {
     return (
       <SectionCard icon={Wrench} title={t("Session activity")}>
-        <div className="px-3.5 py-5 text-center text-[12px] italic text-[var(--muted-foreground)]/80">
+        <div className="px-3.5 py-5 text-center text-[12px] text-[var(--muted-foreground)]/80">
           {t(
             "As you chat, the tools and references you use — and the files the tutor generates — will appear here.",
           )}
