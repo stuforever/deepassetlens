@@ -93,6 +93,22 @@ class ChatCompletionsImagegenAdapter(BaseImagegenAdapter):
                 raise GenerationProviderError("Malformed image data URI.")
             content_type = header[5:].split(";", 1)[0].strip() or "image/png"
             return base64.b64decode(encoded), content_type
+        # R5批㉑（清单安全）：SSRF 防线——仅 http(s)，拒绝环回/私网/链路本地/保留段
+        # 字面 IP 与 localhost 系主机名（src 来自模型输出，prompt 用户可控可诱导）
+        from urllib.parse import urlparse as _urlparse
+        import ipaddress as _ip
+
+        _u = _urlparse(src)
+        if _u.scheme not in ("http", "https") or not _u.hostname:
+            raise GenerationProviderError("仅允许 http(s) 图片 URL")
+        try:
+            _addr = _ip.ip_address(_u.hostname)
+            if _addr.is_loopback or _addr.is_private or _addr.is_link_local or _addr.is_reserved:
+                raise GenerationProviderError("拒绝指向内网/环回的图片 URL")
+        except ValueError:
+            _hn = _u.hostname.lower().rstrip(".")
+            if _hn == "localhost" or _hn.endswith((".localhost", ".local", ".internal")):
+                raise GenerationProviderError("拒绝指向内网的图片 URL")
         resp = await client.get(src)
         raise_for_provider(resp, "Image download")
         content_type = resp.headers.get("content-type") or "image/png"

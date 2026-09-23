@@ -131,7 +131,7 @@ async def exchange_code_for_openid(
     *,
     appid: str = "",
     secret: str = "",
-    mock_mode: bool = True,
+    mock_mode: bool = False,  # R5批㉑（清单安全）：默认关 mock（登录身份伪造面），调用方显式传或走服务端 env
 ) -> str:
     """WeChat OAuth2: exchange an authorization code for the user's openid.
 

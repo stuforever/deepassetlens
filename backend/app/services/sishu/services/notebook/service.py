@@ -114,6 +114,12 @@ class NotebookManager:
             json.dump(index, f, indent=2, ensure_ascii=False)
 
     def _get_notebook_file(self, notebook_id: str) -> Path:
+        # R5批㉑（清单安全）：notebook_id 来自路径参数/请求体列表，未校验即拼路径
+        # （'..'/'/' 可穿越笔记本目录读写删除）
+        import re as _re
+
+        if not isinstance(notebook_id, str) or not _re.fullmatch(r"[\w-]{1,64}", notebook_id):
+            raise ValueError(f"非法 notebook_id: {notebook_id!r}")
         return self._dir() / f"{notebook_id}.json"
 
     def _load_notebook(self, notebook_id: str) -> dict | None:
