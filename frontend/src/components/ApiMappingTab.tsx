@@ -456,7 +456,7 @@ function ApiEndpointSection() {
         title={pagEp ? `分页/缓存配置 · ${pagEp.name} [${pagEp.table_name}]` : '分页/缓存配置'}
         open={!!pagEp}
         onClose={() => setPagEp(null)}
-        width={420}
+        width={400}
         extra={<Space>
           <Button onClick={() => setPagEp(null)}>取消</Button>
           <Button type="primary" onClick={savePagination}>保存</Button>

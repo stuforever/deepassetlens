@@ -65,7 +65,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ search, filters = [], extra, styl
         title="更多筛选"
         open={moreOpen}
         onClose={() => setMoreOpen(false)}
-        width={320}
+        width={400}
         extra={
           <Button type="primary" size="small" onClick={() => setMoreOpen(false)}>应用</Button>
         }

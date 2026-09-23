@@ -290,7 +290,7 @@ const GoldenQaManager: React.FC = () => {
         title="新增金标"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={520}
+        width={560}
         footer={
           <DrawerFooter>
             <Button onClick={() => setDrawerOpen(false)}>取消</Button>
