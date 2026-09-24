@@ -1043,7 +1043,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   // 三轨M7(U2) §3.3：sishu 右栏信任设施（课本章节/教学设置/书库——可折叠）
   // E-99：本 useState 必须位于 cardError/!card 早退之前——React 钩子序守恒
   // （原位置在早退后致 hooks 数逐渲染递增→整页 crash「Rendered more hooks...」）。
-  const [trustOpen, setTrustOpen] = useState<boolean>(() => slug === 'sishu');
+
 
   // S5（HITL v2）：批准/拒绝人审中断 -> POST /chat/freeplan/resume（服务端据此恢复同 thread 续跑）
   // 稳定引用（useCallback + 仅依赖状态 setter），保证消息行 memo 不失效；线程 id 由调用方（消息 payload）携带。
@@ -1111,7 +1111,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   return (
     <div style={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden', background: 'var(--bg-page)' }}>
       {/* v3 §2.4 空间色：对话页页头 3px 色条（wenshu 蓝） */}
-      <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: spaceColors.wenshu, zIndex: 5 }} />
+      <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: slug === 'sishu' ? spaceColors.sishu : spaceColors.wenshu, zIndex: 5 }} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 批⓪ 审计模拟下线：路由模拟器后台化（批⑥ 引擎台「路由模拟」Tab 复用 RouteSimulator）；
           对话页只留「发问-回答-依据」（v4 §十二.3），Drawer 组件文件保留。 */}
@@ -1200,11 +1200,16 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
 
           {/* 统计胶囊（S1 卡：图标 + tabular-nums 数字 + 12px 说明） */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[
-              { label: '主数据实体', value: stats.master, icon: <DatabaseOutlined />, color: tokens.colors.primary },
-              { label: '业务实体', value: stats.business, icon: <ApartmentOutlined />, color: tokens.colors.ai },
-              { label: '关系', value: stats.relation, icon: <ShareAltOutlined />, color: tokens.colors.info },
-            ].map((c) => (
+            {(slug === 'sishu'
+              ? [
+                  { label: '待复习', value: tutorProfile ? `${tutorProfile.due_count} 题` : '—', icon: <BookOutlined />, color: spaceColors.sishu },
+                  { label: '连续学习', value: tutorProfile ? `${tutorProfile.streak_days} 天` : '—', icon: <RocketOutlined />, color: tokens.colors.ai },
+                ]
+              : [
+                  { label: '主数据实体', value: stats.master, icon: <DatabaseOutlined />, color: tokens.colors.primary },
+                  { label: '业务实体', value: stats.business, icon: <ApartmentOutlined />, color: tokens.colors.ai },
+                  { label: '关系', value: stats.relation, icon: <ShareAltOutlined />, color: tokens.colors.info },
+                ]).map((c) => (
               <div
                 key={c.label}
                 className="dal-stat-capsule"
@@ -1262,8 +1267,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
               ))}
             </div>
           )}
-          {slug !== 'sishu' && (
-          /* 2×2 建议卡（带图标，hover 抬升 S2；规格 maxWidth 720） */
+          {/* UX3批2：建议卡两空间恒渲染 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: CONTENT_WIDTH }}>
             {SUGGESTIONS.map((item, i) => (
               <div
@@ -1288,12 +1292,11 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
               </div>
             ))}
           </div>
-          )}
         </div>
       )}
     </div>
-      {/* 批①b（v4§十三.3）：右栏三面板（wenshu；sishu 保留原信任设施右栏 v4§九） */}
-      {slug !== 'sishu' && hasMessages && (
+      {/* UX3批2（A7）：ContextRail 两空间恒渲染 */}
+      {hasMessages && (
         <ContextRail
           expertId={slug || 'wenshu'}
           evidence={(() => {
@@ -1358,53 +1361,6 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
             );
           })()}
         />
-      )}
-      {slug === 'sishu' && trustOpen && (
-        <div
-          data-testid="sishu-trust-panel"
-          style={{
-            width: 232, flexShrink: 0, borderLeft: `1px solid ${tokens.colors.border}`,
-            background: 'var(--bg-content)', padding: 16, overflowY: 'auto',
-            borderTop: `3px solid ${spaceColors.sishu}`,
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: tokens.fontWeight.semibold }}>学情上下文</span>
-            <Button size="small" type="text" onClick={() => setTrustOpen(false)}>收起</Button>
-          </div>
-          {[
-            { label: '课本章节', path: '/settings/curriculum/chapters' },
-            { label: '教学设置', path: '/e/sishu/admin/settings' },
-            { label: '书库', path: '/e/sishu/book' },
-          ].map((e) => (
-            <div
-              key={e.label}
-              data-testid={`sishu-trust-${e.label}`}
-              onClick={() => navigate(e.path)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-                borderRadius: tokens.radius.default, cursor: 'pointer', fontSize: 13,
-                color: 'var(--text-primary)',
-              }}
-              onMouseEnter={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'var(--bg-muted)'; }}
-              onMouseLeave={(ev) => { (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-            >
-              <BookOutlined style={{ color: spaceColors.sishu }} />
-              {e.label}
-            </div>
-          ))}
-        </div>
-      )}
-      {slug === 'sishu' && !trustOpen && (
-        <Button
-          size="small"
-          type="text"
-          data-testid="sishu-trust-open"
-          onClick={() => setTrustOpen(true)}
-          style={{ position: 'absolute', top: 60, right: 8, zIndex: 5 }}
-        >
-          学情
-        </Button>
       )}
     </div>
   );
