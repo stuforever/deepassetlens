@@ -109,7 +109,7 @@ const ZH: Record<string, string> = {
   "Delete “{{name}}”": "删除 “{{name}}”",
   "Delete profile": "删除当前配置文件",
   "Provider connection": "提供商连接",
-  "Profile": "配置文件",
+  "Profile": "+ 新建配置",
   "Models": "模型列表",
   "Model": "模型",
   "Delete": "删除",
@@ -1726,10 +1726,35 @@ function ProfileFields({
   isDeprecatedSearchProvider: boolean;
   isPerplexityMissingKey: boolean;
 }) {
-  const { providers, updateProfileField, updateModelField } = useSettings();
+  const { providers, updateProfileField, updateProfileBoolField, updateModelField } = useSettings();
   const [extraOpen, setExtraOpen] = useState(false);
 
-  const providerValue =
+    // UX2批（LLM 配置改造）：思考模式/图片输入能力开关（仅 llm 服务渲染）
+  const llmCapsUi =
+    service === "llm" ? (
+      <div style={{ marginTop: 12, display: "flex", gap: 18, alignItems: "center" }} data-testid="llm-capability-toggles">
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: FG }}>
+          思考模式（深度推理）
+          <input
+            type="checkbox"
+            checked={profile.default_mode === "deep"}
+            onChange={(e) => updateProfileBoolField(service, "default_mode", e.target.checked)}
+            data-testid="llm-thinking-toggle"
+          />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: FG }}>
+          图片输入
+          <input
+            type="checkbox"
+            checked={profile.vision === true}
+            onChange={(e) => updateProfileBoolField(service, "vision", e.target.checked)}
+            data-testid="llm-vision-toggle"
+          />
+        </label>
+      </div>
+    ) : null;
+
+const providerValue =
     service === "search" ? profile.provider || "" : profile.binding || "";
   const providerOption = (providers[service] || []).find(
     (option) => option.value === providerValue,

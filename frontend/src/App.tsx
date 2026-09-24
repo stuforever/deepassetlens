@@ -74,6 +74,18 @@ const App: React.FC = () => {
     setPanelWidths((m) => ({ ...m, [p]: w }));
     if (commit) localStorage.setItem(`shell:width:${p}`, String(w));
   };
+
+  // UX3批1（P0-A）：浮层面板外点关闭改 pointerdown-outside——透明 backdrop 会吃掉主区第一击
+  useEffect(() => {
+    if (!shellPanel || pinnedPanels[shellPanel]) return;
+    const onDoc = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.('[data-testid="shell-panel"], [data-shell-iconbar]')) return;
+      setShellPanel(null);
+    };
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
+  }, [shellPanel, pinnedPanels]);
   // UX2批⑦（反馈⑥套娃）：钉住=锁定——面板内导航/会话点击不再自隐（原 onClose 无视钉住态强制隐藏）
   const closeUnlessPinned = (p: 'chat' | 'console' | 'settings') => {
     if (!pinnedPanels[p]) setShellPanel(null);
@@ -350,14 +362,8 @@ const App: React.FC = () => {
           />
           {shellPanel && (
             <>
-              {/* floating 态：图标条右侧透明捕获层，点外部即收起（pinned 态不渲染） */}
-              {!pinnedPanels[shellPanel] && (
-                <div
-                  data-testid="shell-backdrop"
-                  onClick={() => setShellPanel(null)}
-                  style={{ position: 'absolute', left: 48, top: 0, right: 0, bottom: 0, zIndex: 99, background: 'transparent' }}
-                />
-              )}
+              {/* UX3批1（P0-A）：透明 backdrop 已删——外点关闭改 document pointerdown-outside
+                  （backdrop 会吃掉主区第一击：点发送/表格等首击只收面板不出效果） */}
               <ShellPanel
                 panel={shellPanel}
                 title={SHELL_PANEL_TITLES[shellPanel]}

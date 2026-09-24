@@ -19,6 +19,7 @@ export default function ActivityBar({ activePanel, onToggle }: {
   return (
     <div
       data-testid="activity-bar"
+      data-shell-iconbar=""  // UX3批1：外点关闭豁免区标记
       style={{
         width: 48, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
         padding: '12px 0', gap: 8, background: 'var(--bg-content, #fff)',

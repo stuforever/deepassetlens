@@ -185,7 +185,7 @@ const sidebarMenuItems = SETTINGS_SECTIONS.filter((s) => s.items.length > 0).map
  * 枢纽态（pathname==='/settings'）主区渲染 SettingsHub（并行件——无 <Routes> 架构下
  * Outlet 为空，见文件头注）；子页态 = <Outlet />。Provider/TourOverlay 沿源 layout 挂布局层。
  */
-export default function SettingsLayout() {
+export default function SettingsLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const isHub = location.pathname === '/settings';
@@ -193,7 +193,7 @@ export default function SettingsLayout() {
   return (
     <SettingsProvider>
       <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-        <aside
+        <aside data-testid="settings-layout-sidebar"
           style={{
             width: 200,
             flexShrink: 0,
@@ -213,7 +213,7 @@ export default function SettingsLayout() {
           />
         </aside>
         <main style={{ flex: 1, minWidth: 0 }}>
-          <SettingsMain>{isHub ? <SettingsHub /> : <Outlet />}</SettingsMain>
+          <SettingsMain>{isHub ? <SettingsHub /> : (children ?? <Outlet />)}</SettingsMain>
         </main>
       </div>
       {/* 挂布局层：跨路由引导在枢纽与子页间导航时存活（源 layout 注释语义） */}

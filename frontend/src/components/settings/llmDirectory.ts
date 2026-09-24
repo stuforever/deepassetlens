@@ -88,6 +88,16 @@ export async function fetchLlmConnectionRows(): Promise<LLMConnectionRow[]> {
 }
 
 /** ③行集 → vendor services.llm 块（CatalogService 形状，ServiceConfigEditor 零改消费）。 */
+/** UX2批：capabilities JSON 读取（容错——NULL/损坏回空对象） */
+function rowCaps(row: LLMConnectionRow): { vision?: boolean; thinking?: boolean; tool_call?: boolean } {
+  try {
+    const c = rowExtra(row).capabilities;
+    return c && typeof c === 'object' ? (c as { vision?: boolean; thinking?: boolean; tool_call?: boolean }) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function rowsToLlmService(rows: LLMConnectionRow[]): CatalogService {
   const groups = new Map<string, LLMConnectionRow[]>();
   for (const row of rows) {
@@ -121,6 +131,9 @@ export function rowsToLlmService(rows: LLMConnectionRow[]): CatalogService {
       api_key: head.api_key ?? '',
       api_version: strVal(extra.api_version),
       extra_headers: parseExtraHeaders(extra.extra_headers),
+      // UX2批（LLM 配置改造）：能力位映射——思考模式（extra_config.default_mode）/图片输入（capabilities.vision）
+      default_mode: strVal(extra.default_mode, 'quick'),
+      vision: rowCaps(head).vision === true,
       models,
     });
   }
@@ -138,7 +151,9 @@ export function rowsToLlmService(rows: LLMConnectionRow[]): CatalogService {
 /** 便捷封装：拉取并转换；③不可达返回 null（调用方退回 vendor 数据面）。 */
 export async function loadLlmDirectory(): Promise<{ rows: LLMConnectionRow[]; block: CatalogService } | null> {
   try {
-    const rows = await fetchLlmConnectionRows();
+    // UX2批（LLM 配置改造）：LLM 页只管 chat 连接——embedding 行归嵌入模型页，防串页
+    const allRows = await fetchLlmConnectionRows();
+    const rows = allRows.filter((r) => (r.capability || 'chat') !== 'embedding'); // UX2批：embedding 行归嵌入页
     return { rows, block: rowsToLlmService(rows) };
   } catch (err) {
     console.error('[llmDirectory] ③连接目录加载失败:', err);
@@ -205,12 +220,17 @@ export async function saveLlmDirectory(
         api_key: profile.api_key || null,
         model_name: model.model,
         is_default: isDefault,
+        // UX2批（LLM 配置改造）：思考模式（default_mode）+ 图片输入（capabilities.vision）落库
+        default_mode: (profile as { default_mode?: string }).default_mode || 'quick',
+        capabilities: { ...rowCaps(prevRow!), vision: (profile as { vision?: boolean }).vision === true },
         extra_config: {
           source: 'llm-config',
           profile_key: profileKey,
           profile_name: profile.name,
           api_version: profile.api_version ?? '',
           extra_headers: extraHeaders,
+          // UX2批（反馈②续）：思考模式档位——get_chat_model 按 default_mode==='deep' 注入 thinking
+          default_mode: (profile as { default_mode?: string }).default_mode || 'quick',
           ...(model.context_window != null ? { context_window: model.context_window } : {}),
           ...(model.context_window_source != null ? { context_window_source: model.context_window_source } : {}),
           ...(model.context_window_detected_at != null ? { context_window_detected_at: model.context_window_detected_at } : {}),
@@ -248,6 +268,8 @@ export async function saveLlmDirectory(
   }
 
   for (const row of prevRows) {
+    // UX2批：保护非 chat 行（embedding 等）——LLM 页保存不删其它页的连接
+    if ((row.capability || 'chat') !== 'chat') continue;
     if (!nextRowIds.has(row.id)) {
       try {
         await llmAdminApi.deleteConnection(row.id);

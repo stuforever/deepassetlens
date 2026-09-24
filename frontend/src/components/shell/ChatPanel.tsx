@@ -307,7 +307,12 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
         block
         icon={<PlusOutlined />}
         data-testid="chat-panel-new"
-        onClick={() => { setActiveSessionId(''); navigate('/'); onClose(); }}
+        // UX3批1（P0-C）：新建留守当前空间（?new=1 契约=UX2批③），不再跳门户/关面板
+        onClick={() => {
+          setActiveSessionId('');
+          const slug = location.pathname.startsWith('/e/') ? (location.pathname.split('/')[2] || 'wenshu') : 'wenshu';
+          navigate(slug === 'tutor-h5' ? '/e/tutor-h5/chat' : `/e/${slug}/chat?new=1`);
+        }}
       >
         新建对话
       </Button>

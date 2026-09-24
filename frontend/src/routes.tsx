@@ -8,6 +8,7 @@ import RequireAdmin from './components/RequireAdmin';
 // IA批5 接线：KeepAlive 无 <Routes> 嵌套上下文——settings 子页直接渲染，useSettings 需自备
 // Provider（统一壳：每页签独立 Provider，保存/引导/主题状态互不串扰）。
 import { SettingsProvider } from './components/settings/SettingsContext';
+import SettingsLayoutShell from './pages/settings/SettingsLayout'; // UX3批1：设置子页挂壳（与 lazy SettingsLayout 同件别名区分）
 
 // 路由懒加载：每页独立 chunk（webpackChunkName 控制产物名）。
 // KeepAlive 语义不受影响——lazy 只影响「首次打开某页签时的模块加载」，已挂载页签不卸载。
@@ -25,11 +26,14 @@ const DorisConfigPage = lazy(() => import(/* webpackChunkName: "config" */ './pa
 // IA批4 4.5：知识中心 16 件复刻承接 /vector（menuKey vector_manage 不变）；VectorManagePanel 退役 git rm
 const KnowledgePage = lazy(() => import(/* webpackChunkName: "knowledge" */ './pages/knowledge/KnowledgePage'));
 const settingsPage = (Comp: React.ComponentType): React.FC =>
+  // UX3批1（P0-B）：31 设置子页统一挂 SettingsLayout 壳（二级侧栏常驻）
   function SettingsPageShell() {
     return (
-      <SettingsProvider>
-        <Comp />
-      </SettingsProvider>
+      <SettingsLayoutShell>
+        <SettingsProvider>
+          <Comp />
+        </SettingsProvider>
+      </SettingsLayoutShell>
     );
   };
 // IA批5 5.5：LLMConfigManager 退役（/llm-config 改挂设置中心复刻 llm 页——上方 settings 路由块）

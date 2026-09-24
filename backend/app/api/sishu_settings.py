@@ -214,6 +214,14 @@ def save_ui_settings(settings: dict[str, Any]) -> None:
         json.dump(settings, handle, ensure_ascii=False, indent=2)
 
 
+import hmac as _hmac
+import uuid as _uuid
+
+# UX批（反馈测试运行）：诊断 SSE 凭据——EventSource 带不了 Authorization 头，
+# start（已鉴权）铸造一次性 run_token，events/cancel 凭 token 放行
+_RUN_TOKENS: dict[str, str] = {}
+
+
 def _require_settings_admin() -> None:
     if not get_current_user().is_admin:
         raise HTTPException(
@@ -606,12 +614,17 @@ async def update_enabled_tools(update: EnabledToolsUpdate):
 async def start_service_test(service: str, payload: CatalogPayload | None = None):
     _require_settings_admin()
     run = get_config_test_runner().start(service, payload.catalog if payload else None)
-    return {"run_id": run.id}
+    _tok = _uuid.uuid4().hex
+    _RUN_TOKENS[run.id] = _tok
+    return {"run_id": run.id, "run_token": _tok}
 
 
 @router.get("/tests/{service}/{run_id}/events")
-async def stream_service_test_events(service: str, run_id: str, request: Request):
-    _require_settings_admin()
+async def stream_service_test_events(service: str, run_id: str, request: Request, run_token: str = ""):
+    _expected = _RUN_TOKENS.get(run_id)
+    if not (_expected and _hmac.compare_digest(_expected, str(run_token))):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="诊断流凭据无效")
+    _RUN_TOKENS.pop(run_id, None)
     runner = get_config_test_runner()
     run = runner.get(run_id)
 
@@ -634,8 +647,22 @@ async def stream_service_test_events(service: str, run_id: str, request: Request
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.post("/tests/{service}/{run_id}/cancel")
-async def cancel_service_test(service: str, run_id: str):
+@router.get("/tests/{service}/{run_id}/poll")
+async def poll_service_test_events(service: str, run_id: str):
+    """UX批：轮询式诊断事件查询（替代 SSE EventSource——fetch 可带 Bearer 头）。"""
     _require_settings_admin()
+    runner = get_config_test_runner()
+    run = runner.get(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="诊断运行不存在")
+    return {"events": run.snapshot(0), "status": run.status if hasattr(run, 'status') else "running"}
+
+
+@router.post("/tests/{service}/{run_id}/cancel")
+async def cancel_service_test(service: str, run_id: str, run_token: str = ""):
+    _expected = _RUN_TOKENS.get(run_id)
+    if not (_expected and _hmac.compare_digest(_expected, str(run_token))):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="诊断流凭据无效")
+    _RUN_TOKENS.pop(run_id, None)
     get_config_test_runner().cancel(run_id)
     return {"message": "Cancelled"}

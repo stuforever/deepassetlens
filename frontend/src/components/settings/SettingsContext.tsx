@@ -112,6 +112,9 @@ export type CatalogProfile = {
   extra_headers?: Record<string, string> | string;
   proxy?: string;
   max_results?: number;
+  // UX2批（LLM 配置改造）：思考模式档位 + 图片输入能力位（落 capabilities/default_mode）
+  default_mode?: string;
+  vision?: boolean;
   models: CatalogModel[];
 };
 
@@ -523,6 +526,11 @@ type SettingsContextValue = {
     service: ServiceName,
     field: keyof CatalogProfile,
     value: string,
+  ) => void;
+  updateProfileBoolField: (
+    service: ServiceName,
+    field: keyof CatalogProfile,
+    value: boolean,
   ) => void;
   updateModelField: (
     service: ServiceName,
@@ -975,6 +983,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     },
     [mutateCatalog],
   );
+  // UX2批（LLM 配置改造）：能力位布尔写（思考模式/图片输入）
+  const updateProfileBoolField = useCallback(
+    (service: ServiceName, field: keyof CatalogProfile, value: boolean) => {
+      mutateCatalog((next) => {
+        const profile = getActiveProfile(next, service);
+        if (!profile) return;
+        (profile[field] as boolean | undefined) = value;
+      });
+    },
+    [mutateCatalog],
+  );
 
   const updateModelField = useCallback(
     (service: ServiceName, field: keyof CatalogModel, value: string) => {
@@ -1195,100 +1214,63 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         );
         const payload = (await response.json()) as {
           run_id?: string;
+          run_token?: string;
           detail?: string;
         };
         if (!response.ok || !payload.run_id) {
           throw new Error(payload.detail || t("Could not start diagnostics."));
         }
-        const source = new EventSource(
-          `/api/v1/settings/tests/${service}/${payload.run_id}/events`,
-          { withCredentials: true },
-        );
-        eventSourceRef.current = source;
-        source.onmessage = (event) => {
-          const entry = JSON.parse(event.data) as {
-            type: string;
-            message: string;
-            catalog?: Catalog;
-            detected_dim?: number;
-            default_dim?: number;
-            supported_dimensions?: number[];
-            supports_variable_dimensions?: boolean;
-            model_known?: boolean;
-            active_dim?: number;
-            active_dim_source?: string;
-            context_window?: number;
-            source?: string;
-            detail?: string;
-            detected_at?: string;
-          };
-          setLogs((current) => `${current}[${entry.type}] ${entry.message}\n`);
-          if (service === "llm" && entry.type === "context_window") {
-            const detected =
-              typeof entry.context_window === "number"
-                ? entry.context_window
-                : Number.parseInt(String(entry.context_window ?? ""), 10);
-            if (Number.isFinite(detected) && detected > 0) {
-              setLlmContextDetection({
-                profileId: runProfileId,
-                modelId: runModelId,
-                contextWindow: detected,
-                source: entry.source || "metadata",
-                detail: entry.detail,
-                detectedAt: entry.detected_at,
-              });
+        // UX批（测试运行修复）：EventSource 带不了 Authorization 头——start 铸造的
+        // run_token 经 URL 携带（一次性凭据，events 端点校验放行）
+        // UX批（测试运行修复）：EventSource 带不了 Bearer 头→改轮询（fetch 自动带凭据）
+        const poll = async () => {
+          try {
+            const r = await fetch(
+              `/api/v1/settings/tests/${service}/${payload.run_id}/poll`,
+              { headers: { "Content-Type": "application/json" } },
+            );
+            if (!r.ok) throw new Error(`poll ${r.status}`);
+            const data = (await r.json()) as { events: Array<Record<string, unknown>>; status: string };
+            const evts = data.events || [];
+            for (const entry of evts) {
+              const et = entry as { type?: string; message?: string; catalog?: Catalog; detected_dim?: number; default_dim?: number; supported_dimensions?: number[]; supports_variable_dimensions?: boolean; model_known?: boolean; active_dim?: number; active_dim_source?: string; context_window?: number; source?: string; detail?: string; detected_at?: string };
+              setLogs((current) => `${current}[${et.type}] ${et.message}
+`);
+              if (service === "llm" && et.type === "context_window") {
+                const detected = typeof et.context_window === "number" ? et.context_window : Number.parseInt(String(et.context_window ?? ""), 10);
+                if (Number.isFinite(detected) && detected > 0) {
+                  setLlmContextDetection({ profileId: runProfileId, modelId: runModelId, contextWindow: detected, source: et.source || "metadata", detail: et.detail, detectedAt: et.detected_at });
+                }
+              }
+              if (et.type === "capabilities") {
+                setEmbeddingCapabilities({ detected_dim: et.detected_dim, default_dim: et.default_dim, supported_dimensions: et.supported_dimensions, supports_variable_dimensions: et.supports_variable_dimensions, model_known: et.model_known, active_dim: et.active_dim, active_dim_source: et.active_dim_source });
+              }
+              if (et.catalog) {
+                setCatalog(et.catalog as Catalog);
+                setDraft(cloneCatalog(et.catalog as Catalog));
+              }
+              if (et.type === "completed" || et.type === "failed") {
+                setTestRunning(null);
+                setDiagnosticsResults((current) => ({
+                  ...current,
+                  [service]: { state: et.type === "completed" ? "success" : "failed", message: et.message || "", profileId: runProfileId, modelId: runModelId },
+                }));
+                setToast(et.message || "");
+                return;
+              }
             }
-          }
-          if (entry.type === "capabilities") {
-            setEmbeddingCapabilities({
-              detected_dim: entry.detected_dim,
-              default_dim: entry.default_dim,
-              supported_dimensions: entry.supported_dimensions,
-              supports_variable_dimensions: entry.supports_variable_dimensions,
-              model_known: entry.model_known,
-              active_dim: entry.active_dim,
-              active_dim_source: entry.active_dim_source,
-            });
-          }
-          if (entry.catalog) {
-            setCatalog(entry.catalog);
-            setDraft(cloneCatalog(entry.catalog));
-          }
-          if (entry.type === "completed" || entry.type === "failed") {
-            source.close();
-            eventSourceRef.current = null;
+            if (data.status === "completed" || data.status === "failed") {
+              setTestRunning(null);
+              return;
+            }
+            setTimeout(poll, 2000);
+          } catch {
             setTestRunning(null);
-            setDiagnosticsResults((current) => ({
-              ...current,
-              [service]: {
-                state: entry.type === "completed" ? "success" : "failed",
-                message: entry.message,
-                profileId: runProfileId,
-                modelId: runModelId,
-              },
-            }));
-            setToast(entry.message);
+            setLogs((current) => `${current}[failed] 诊断轮询断开
+`);
           }
         };
-        source.onerror = () => {
-          source.close();
-          eventSourceRef.current = null;
-          setTestRunning(null);
-          setLogs(
-            (current) =>
-              `${current}[failed] ${t("Diagnostics stream disconnected.")}\n`,
-          );
-          setDiagnosticsResults((current) => ({
-            ...current,
-            [service]: {
-              state: "failed",
-              message: t("Diagnostics stream disconnected."),
-              profileId: runProfileId,
-              modelId: runModelId,
-            },
-          }));
-          setToast(t("Diagnostics stream disconnected"));
-        };
+        poll();
       } catch (error) {
         const message =
           error instanceof Error
@@ -1390,6 +1372,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       addModel,
       removeActiveModel,
       updateProfileField,
+      updateProfileBoolField,
       updateModelField,
       updateModelBoolField,
       updateContextWindowField,
