@@ -314,6 +314,11 @@ class PathService:
 
     def get_book_root(self, book_id: str) -> Path:
         """Per-book root directory."""
+        # UX批⑤（清单安全 R5批⑯余项）：book_id 净化——'..'/'/' 等穿越字符拒绝，
+        # 防 delete_book 等 rmtree 调用越出书籍工作区（storage.py:249 清单项）
+        import re as _re
+        if not _re.fullmatch(r"[A-Za-z0-9_\-]+", str(book_id or "")):
+            raise ValueError(f"非法 book_id: {book_id!r}")
         return self.get_book_dir() / f"book_{book_id}"
 
     def get_book_manifest_file(self, book_id: str) -> Path:
