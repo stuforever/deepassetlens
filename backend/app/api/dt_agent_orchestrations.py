@@ -248,7 +248,19 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
     memory_thread_id = _expert_thread_id(user_prefix, EXPERT_ID, session_id)
 
     from langchain_core.messages import HumanMessage
-    input_state = {"messages": [HumanMessage(content="".join(parts))]}
+    # UX批⑤续（模型多模态）：chat 路图片附件以 image_url 进 HumanMessage——
+    # 原纯文本构造=agent「图像内容为空」的根因
+    _img_atts = [a for a in (getattr(req, "attachments", None) or [])
+                 if isinstance(a, dict) and str(a.get("type", "")).lower() == "image" and a.get("base64")]
+    if _img_atts:
+        _ucontent: list = [{"type": "text", "text": "".join(parts)}]
+        for _a in _img_atts:
+            _mime = str(_a.get("mime_type") or "image/png")
+            _ucontent.append({"type": "image_url",
+                              "image_url": {"url": f"data:{_mime};base64,{_a.get('base64')}"}})
+        input_state = {"messages": [HumanMessage(content=_ucontent)]}
+    else:
+        input_state = {"messages": [HumanMessage(content="".join(parts))]}
     config = {"configurable": {"thread_id": memory_thread_id, "checkpoint_ns": "bridge"},
               "recursion_limit": 80}
 
@@ -584,7 +596,7 @@ async def run_wrong_intake(req, session_id: str, turn_id: str, user_prefix: str)
     # UX批⑤（用户反馈⑥）：图片附件→rapidocr 识别+红笔检测，识别文本注入抽取 prompt——
     # 文本模型无视觉也能全流程（拍照→识别→问答式抽取→确认卡→落库）
     # 多轮累积：本 session 的历史消息（含首轮 OCR 文本）全部进入抽取 prompt
-    _WRONG_INTAKE_HISTORY[session_id] = _WRONG_INTAKE_HISTORY.get(session_id, "")
+    # （UX批⑤续修正：此处不得重置——重置=每轮清空，多轮信息永不收敛）
     atts = getattr(req, "attachments", None) or []
     ocr_note = ""
     for att in atts:
@@ -672,9 +684,22 @@ async def run_wrong_intake(req, session_id: str, turn_id: str, user_prefix: str)
         # UX批⑤：多轮累积——本轮消息（含 OCR 注入）并入会话历史，抽取读全量
         _WRONG_INTAKE_HISTORY[session_id] = (_WRONG_INTAKE_HISTORY.get(session_id, "") + msg + chr(10)).strip()
         _hist = _WRONG_INTAKE_HISTORY[session_id]
+        # UX批⑤续（用户确认模型多模态）：图片直传模型（data URL image_url），
+        # OCR 文本保留为辅助段（红笔标记提示+公式兜底双保险）
+        _img_atts = [a for a in (getattr(req, "attachments", None) or [])
+                     if isinstance(a, dict) and str(a.get("type", "")).lower() == "image" and a.get("base64")]
+        if _img_atts:
+            _ucontent: list = [{"type": "text", "text": _hist}]
+            for _a in _img_atts:
+                _mime = str(_a.get("mime_type") or "image/png")
+                _ucontent.append({"type": "image_url",
+                                  "image_url": {"url": f"data:{_mime};base64,{_a.get('base64')}"}})
+            _user_msg = {"role": "user", "content": _ucontent}
+        else:
+            _user_msg = {"role": "user", "content": _hist}
         resp = get_chat_model(temperature=0).invoke([
             {"role": "system", "content": _EXTRACTION_SYSTEM},
-            {"role": "user", "content": _hist}])
+            _user_msg])
         txt = str(resp.content)
         card = json.loads(txt[txt.find("{"):txt.rfind("}") + 1])
     except Exception as e:

@@ -59,12 +59,17 @@ with sync_playwright() as p:
       if (btn) btn.click();
     }""")
     pg.wait_for_timeout(700)
-    opened = pg.evaluate("""() => {
-      const el = [...document.querySelectorAll('div,button')].find(e => (e.innerText || '').trim() === '错题录入');
-      if (el) { el.click(); return true; }
-      return false;
-    }""")
-    check("① 错题录入能力项点击", opened)
+    opened = False
+    for _ in range(8):
+        opened = pg.evaluate("""() => {
+          const el = [...document.querySelectorAll('div,button')].find(e => (e.innerText || '').trim() === '错题录入');
+          if (el) { el.click(); return true; }
+          return false;
+        }""")
+        if opened:
+            break
+        pg.wait_for_timeout(1500)
+    check("① 错题录入能力项点击", bool(opened))
     pg.wait_for_timeout(800)
 
     # ② 上传真图
