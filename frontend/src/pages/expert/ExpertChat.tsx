@@ -168,6 +168,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   // 批⓪：路由模拟器审计入口下线（simOpen/Drawer 移除）——批⑥ 引擎台「路由模拟」Tab 后台承接
   const [status, setStatus] = useState<ChatStatus>('ready');
   const [llmConnectionId, setLlmConnectionId] = useState<string | undefined>(undefined);
+  // UX3批3：右栏受控宽（localStorage rail:width 持久）
+  const [railW, setRailW] = useState(() => Number(localStorage.getItem('rail:width')) || 320);
   // 批①b（v4§二.4）：附件条选择（📚kb 多选→ChatRequest.kb_ids；⚡技能 v2 场景分型持久化不进请求；🤖模型直通 llmConnectionId；🎭角色 B2 role_id→ChatRequest）
   const [attach, setAttach] = useState<AttachmentSelection>({ kbIds: [] });
   const [llmConnections, setLlmConnections] = useState<any[]>([]);
@@ -1299,6 +1301,8 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
       {hasMessages && (
         <ContextRail
           expertId={slug || 'wenshu'}
+          width={railW}
+          onWidthChange={(w, commit) => { setRailW(w); if (commit) { try { localStorage.setItem('rail:width', String(w)); } catch {} } }}
           evidence={(() => {
             const lastA = (activeSession?.messages || []).filter((m) => m.role === 'assistant').pop();
             const sources = evidenceToSources(lastA?.payload?.evidence);
