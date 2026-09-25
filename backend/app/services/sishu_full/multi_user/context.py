@@ -32,9 +32,21 @@ def get_current_user_or_none() -> CurrentUser | None:
 def user_from_token_payload(payload: Any | None) -> CurrentUser:
     if payload is None:
         return local_admin_user()
-    user_id = str(getattr(payload, "user_id", "") or "")
+    # 权限重构T6.3（design §7 批2）：平台载荷（.sub/.roles——PlatformBridgePayload/
+    # AuthUser）与 vendor TokenPayload（.user_id/.role）双形态。slug=username——
+    # 分目录键随管理面用户名（唯一性由建号 409 保证），vendor 旧 id 目录孤儿化登记。
+    sub = str(getattr(payload, "sub", "") or "")
     username = str(getattr(payload, "username", "") or "local")
-    role = str(getattr(payload, "role", "user") or "user")
+    if sub:
+        # 平台形态：admin 角色判定走 roles 集；slug=username
+        roles = list(getattr(payload, "roles", []) or [])
+        role = "admin" if "admin" in roles else str(getattr(payload, "role", "user") or "user")
+        user_id = username
+    else:
+        user_id = str(getattr(payload, "user_id", "") or "")
+        role = str(getattr(payload, "role", "user") or "user")
+        if not user_id:
+            user_id = "local-admin" if role == "admin" and username == "local" else username
     if role not in {"admin", "user"}:
         role = "user"
     if not user_id:

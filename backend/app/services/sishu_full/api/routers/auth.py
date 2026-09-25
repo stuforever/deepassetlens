@@ -236,9 +236,62 @@ def _install_current_user(payload: TokenPayload | None) -> _CtxToken:
     return set_current_user(user)
 
 
+class PlatformBridgePayload:
+    """权限重构T6（design §7 批1/批2 双轨桥）：平台 AuthUser → vendor TokenPayload
+    兼容载荷。attr 双形态（.sub/.roles 平台侧 + .user_id/.role vendor 侧），
+    user_from_token_payload 按 T6.3 双形态消费。"""
+
+    def __init__(self, platform_user) -> None:
+        self.sub = platform_user.sub
+        self.roles = list(getattr(platform_user, "roles", []) or [])
+        self.user_id = platform_user.sub
+        self.username = platform_user.username
+        self.role = "admin" if "admin" in self.roles else "user"
+        self.email = getattr(platform_user, "email", None)
+
+
+def _platform_state_user(request: Request | None):
+    """平台 AuthMiddleware 注入的 request.state.user（非匿名才有效）。"""
+    if request is None:
+        return None
+    u = getattr(request.state, "user", None)
+    return u if (u is not None and not getattr(u, "is_anonymous", False)) else None
+
+
+async def platform_require_auth(request: Request = None):
+    """T6.1 换轨依赖（_auth 族）：require_expert("use","sishu") 执法 + vendor
+    ContextVar 桥（path_service 分目录语义不变）。
+    auth=0（匿名）→ _install_current_user(None)——vendor local-admin 语义原样保留
+    （design §7 批2「local-admin 语义保留」），目录不漂移。"""
+    from app.services.expert_auth import require_expert
+
+    user = require_expert("use", "sishu")(request) if request is not None else None
+    if user is None or getattr(user, "is_anonymous", False):
+        _install_current_user(None)
+        return None
+    payload = PlatformBridgePayload(user)
+    _install_current_user(payload)
+    return payload
+
+
+async def platform_require_admin(request: Request = None):
+    """T6.1 换轨依赖（_admin 族）：require_permission("sishu","manage") 执法 + 桥。
+    auth=0 匿名 → local-admin 语义（同 platform_require_auth）。"""
+    from app.core.auth import require_permission
+
+    user = require_permission("sishu", "manage")(request) if request is not None else None
+    if user is None or getattr(user, "is_anonymous", False):
+        _install_current_user(None)
+        return None
+    payload = PlatformBridgePayload(user)
+    _install_current_user(payload)
+    return payload
+
+
 async def require_auth(
     authorization: str | None = Header(default=None, alias="Authorization"),
     dt_token: str | None = Cookie(default=None),
+    request: Request = None,
 ) -> TokenPayload | None:
     """
     FastAPI dependency that enforces authentication when AUTH_ENABLED=true.
@@ -262,6 +315,14 @@ async def require_auth(
     endpoint to read the unset default. That regression was the root cause
     of #481.
     """
+    # T6 双轨①：平台中间件已验签（request.state.user 非匿名）→ 桥接载荷装
+    # vendor ContextVar 后直接返回（vendor JWT 流保留给灰度期老会话）。
+    plat = _platform_state_user(request)
+    if plat is not None:
+        payload = PlatformBridgePayload(plat)
+        _install_current_user(payload)
+        return payload
+
     if not AUTH_ENABLED:
         _install_current_user(None)
         return None
@@ -319,11 +380,27 @@ async def ws_require_auth(ws: WebSocket) -> _CtxToken | _WsAuthFailed:
 
     token = ws.query_params.get("token") or ws.cookies.get(_COOKIE_NAME)
     payload = decode_token(token) if token else None
-    if not payload:
-        await ws.close(code=4001)
-        return ws_auth_failed
+    if payload:
+        return _install_current_user(payload)
+    # T6 双轨②：vendor token 未命中 → 平台 JWT 验签（ENABLE_AUTH=1 语义；
+    # ?token= 携平台 Bearer，失败仍 4001 close——design §7 批1 WS 口径）
+    if token:
+        try:
+            from app.core.auth import _verify_jwt as _plat_verify
+            from app.core.database import SessionLocal as _SL
 
-    return _install_current_user(payload)
+            claims = _plat_verify(token)
+            _db = _SL()
+            try:
+                from app.core.auth import _upsert_user as _plat_upsert
+                _au = _plat_upsert(_db, claims)
+            finally:
+                _db.close()
+            return _install_current_user(PlatformBridgePayload(_au))
+        except Exception:
+            pass  # 平台验签失败 → 原 4001 流
+    await ws.close(code=4001)
+    return ws_auth_failed
 
 
 async def require_admin(

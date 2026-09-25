@@ -9,10 +9,13 @@ from app.services.sishu_full.api.routers.auth import require_auth as _dt_require
 from app.services.sishu_full.api.routers import auth as auth_router  # noqa: E402
 from app.services.sishu_full.api.routers import chat as chat_router  # noqa: E402
 
-# 原仓 main.py `_auth = [Depends(require_auth)]` 的同位接线（指 vendor 内 auth 模块）：
-# Header/Cookie 形签名对 WS 路由可解（原仓注释即为此设计）；AUTH_ENABLED=false 时放行
-# 并安装桌面语义用户——与 dt_auth_shim 在 auth=0 下行为等价；auth=1 实测项归批18/20.2/20.3。
-_auth = [Depends(_dt_require_auth)]
+# 原仓 main.py `_auth = [Depends(require_auth)]` 的同位接线。
+# 权限重构T6.1（design §7 批1）：换轨平台依赖——require_expert("use","sishu") 执法
+# + 平台→vendor ContextVar 桥（platform_require_auth，path_service 分目录语义不变）。
+# vendor _dt_require_auth 保留符号（WS 族内部仍消费其 ws_require_auth 桥）。
+from app.services.sishu_full.api.routers.auth import platform_require_auth  # noqa: E402
+
+_auth = [Depends(platform_require_auth)]
 
 # 原导入路径零改码（vendor 子树原结构）
 from app.services.sishu_full.api.routers import mother_question  # noqa: E402
@@ -55,10 +58,12 @@ from app.services.sishu_full.api.routers import (  # noqa: E402
 from app.services.sishu_full.api.routers import tools as tools_router  # noqa: E402
 from app.services.sishu_full.multi_user.router import router as multi_user_router  # noqa: E402
 from app.services.sishu_full.api.routers.auth import require_admin as _dt_require_admin  # noqa: E402
+# 权限重构T6.1：_admin 换轨 require_permission("sishu","manage")（桥接同上）。
+from app.services.sishu_full.api.routers.auth import platform_require_admin  # noqa: E402
 from app.services.sishu_full.learning.curriculum import router as curriculum_router  # noqa: E402
 
 # 原仓 main.py L551 `_admin = [Depends(require_admin)]`（partners 域——管理面路由族）
-_admin = [Depends(_dt_require_admin)]
+_admin = [Depends(platform_require_admin)]
 
 tutor_routers = [
     (mother_question.router, "/api/v1/mother-questions", ["mother-questions"], _auth),
