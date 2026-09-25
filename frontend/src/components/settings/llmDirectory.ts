@@ -215,10 +215,12 @@ export async function saveLlmDirectory(
           : prevRow.name
         : uniqueName(desiredName, takenNames);
       const baseFields = {
-        name: connName,
-        base_url: profile.base_url,
-        api_key: profile.api_key || null,
-        model_name: model.model,
+        // UX3修BUG：写入前 trim——智谱连接曾存入 'GLM-5.3-FlashX '（尾随空格），
+        // build_chat_model 原样透传 model，部分上游因空格 404。
+        name: connName.trim(),
+        base_url: (profile.base_url || '').trim(),
+        api_key: (profile.api_key || '').trim() || null,
+        model_name: (model.model || '').trim(),
         is_default: isDefault,
         // UX2批（LLM 配置改造）：思考模式（default_mode）+ 图片输入（capabilities.vision）落库
         default_mode: (profile as { default_mode?: string }).default_mode || 'quick',

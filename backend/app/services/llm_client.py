@@ -278,7 +278,9 @@ def build_chat_model(
     if not api_key:
         raise RuntimeError("API Key 未配置或环境变量未设置")
 
-    model_name = getattr(item, "model_name", None) or "gpt-3.5-turbo"
+    # UX3修BUG：strip——存量连接 model_name 曾带尾随空格（'GLM-5.3-FlashX '），
+    # 部分上游对空格模型名 404；读取口统一兜底（写入侧前端 llmDirectory 已 trim）。
+    model_name = (getattr(item, "model_name", None) or "gpt-3.5-turbo").strip()
     base_url = _build_base_url(item)
     temp = temperature if temperature is not None else float(getattr(item, "temperature", 0.2) or 0.2)
     tmo = float(timeout or getattr(item, "timeout_seconds", 60) or 60)

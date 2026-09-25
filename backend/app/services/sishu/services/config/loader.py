@@ -255,7 +255,9 @@ def get_agent_params(module_name: str) -> dict:
     # adding a new capability seeded with non-default tokens (e.g. visualize at
     # 16k) doesn't require existing users to hand-edit their stale agents.yaml.
     # Imported lazily to avoid a circular dependency with services.setup.
-    from app.services.sishu.services.setup.init import DEFAULT_AGENTS_SETTINGS
+    # sishu 树无 setup 包（种子数据在 sishu_full 树）——跨树取用（napcat.py 同款先例）；
+    # 断链曾致设置页 LLM 诊断流 [failed] No module named 'app.services.sishu.services.setup'。
+    from app.services.sishu_full.services.setup.init import DEFAULT_AGENTS_SETTINGS
 
     seeded: dict[str, Any] = DEFAULT_AGENTS_SETTINGS
     for key in section:

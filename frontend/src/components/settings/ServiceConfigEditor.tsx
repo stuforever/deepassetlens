@@ -51,6 +51,7 @@ import type {
 import {
   CheckCircleOutlined,
   CodeOutlined,
+  CopyOutlined,
   DeleteOutlined,
   DownOutlined,
   EditOutlined,
@@ -113,6 +114,8 @@ const ZH: Record<string, string> = {
   "Models": "模型列表",
   "Model": "模型",
   "Delete": "删除",
+  "Duplicate profile": "复制配置",
+  "Duplicate the currently selected profile with its models.": "复制当前配置及其模型列表。",
   "Rename model": "重命名模型",
   "Model ID": "模型 ID",
   "Context Window": "上下文窗口",
@@ -242,6 +245,7 @@ export function ServiceConfigEditor({ service }: { service: ServiceName }) {
     testRunning,
     mutateCatalog,
     addProfile,
+    duplicateProfile,
     removeActiveProfile,
     addModel,
     removeActiveModel,
@@ -648,6 +652,43 @@ export function ServiceConfigEditor({ service }: { service: ServiceName }) {
                 paddingTop: 8,
               }}
             >
+              {/* UX3修BUG：复制当前档（含模型/能力位/Key）——草稿级副本，保存草稿后经③适配器落库。
+                  此前后端 /duplicate 端点无 UI 入口（孤儿能力），用户侧「复制」不可用。 */}
+              <button
+                onClick={() => duplicateProfile(service)}
+                disabled={!activeProfile || isManagedCodex}
+                data-testid={`service-duplicate-profile-${service}`}
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "center",
+                  gap: 6,
+                  borderRadius: 8,
+                  padding: "6px 12px",
+                  textAlign: "left",
+                  fontSize: 11,
+                  fontFamily: "inherit",
+                  color: mutedA(0.6),
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  opacity: !activeProfile || isManagedCodex ? 0.3 : 1,
+                  transition: "background-color 0.15s, color 0.15s",
+                  marginBottom: 4,
+                }}
+                {...hoverProps({
+                  backgroundColor: MUTED_BG,
+                  color: FG,
+                })}
+                title={
+                  activeProfile && !isManagedCodex
+                    ? t("Duplicate the currently selected profile with its models.")
+                    : undefined
+                }
+              >
+                <CopyOutlined style={{ fontSize: 12, flexShrink: 0 }} />
+                {t("Duplicate profile")}
+              </button>
               <button
                 onClick={() => removeActiveProfile(service)}
                 disabled={!activeProfile || isManagedCodex}

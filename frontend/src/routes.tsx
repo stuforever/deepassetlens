@@ -7,8 +7,9 @@ import { expertPageRoutes } from './config/expertPages';
 import RequireAdmin from './components/RequireAdmin';
 // IA批5 接线：KeepAlive 无 <Routes> 嵌套上下文——settings 子页直接渲染，useSettings 需自备
 // Provider（统一壳：每页签独立 Provider，保存/引导/主题状态互不串扰）。
-import { SettingsProvider } from './components/settings/SettingsContext';
 import SettingsLayoutShell from './pages/settings/SettingsLayout'; // UX3批1：设置子页挂壳（与 lazy SettingsLayout 同件别名区分）
+// UX3修BUG：SettingsProvider 随双 Provider 脑裂修复从本文件移除（见 settingsPage 注）——
+// 子页统一消费 SettingsLayout 壳内布局层 Provider。
 
 // 路由懒加载：每页独立 chunk（webpackChunkName 控制产物名）。
 // KeepAlive 语义不受影响——lazy 只影响「首次打开某页签时的模块加载」，已挂载页签不卸载。
@@ -26,13 +27,15 @@ const DorisConfigPage = lazy(() => import(/* webpackChunkName: "config" */ './pa
 // IA批4 4.5：知识中心 16 件复刻承接 /vector（menuKey vector_manage 不变）；VectorManagePanel 退役 git rm
 const KnowledgePage = lazy(() => import(/* webpackChunkName: "knowledge" */ './pages/knowledge/KnowledgePage'));
 const settingsPage = (Comp: React.ComponentType): React.FC =>
-  // UX3批1（P0-B）：31 设置子页统一挂 SettingsLayout 壳（二级侧栏常驻）
+  // UX3批1（P0-B）：31 设置子页统一挂 SettingsLayout 壳（二级侧栏常驻）。
+  // UX3修BUG：剥内层 <SettingsProvider>——它嵌在 SettingsLayout 自己的 Provider 内形成
+  // 双 Provider 脑裂：子页编辑器消费本包裹器实例的 draft，壳内 SettingsMain 工具栏消费
+  // 布局层 draft——编辑器任何改动都不点亮工具栏保存键（LLM 页实测保存永久禁用）。
+  // 剥后子页与壳共用布局层单一 Provider（编辑/保存/应用同源）。
   function SettingsPageShell() {
     return (
       <SettingsLayoutShell>
-        <SettingsProvider>
-          <Comp />
-        </SettingsProvider>
+        <Comp />
       </SettingsLayoutShell>
     );
   };

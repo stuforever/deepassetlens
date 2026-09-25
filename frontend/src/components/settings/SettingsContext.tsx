@@ -519,6 +519,7 @@ type SettingsContextValue = {
   // Catalog mutation
   mutateCatalog: (mutator: (next: Catalog) => void) => void;
   addProfile: (service: ServiceName) => void;
+  duplicateProfile: (service: ServiceName) => void;
   removeActiveProfile: (service: ServiceName) => void;
   addModel: (service: ServiceName) => void;
   removeActiveModel: (service: ServiceName) => void;
@@ -896,6 +897,37 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       });
     },
     [embeddingDefaultDim, language, mutateCatalog, providers],
+  );
+
+  // UX3修BUG：复制当前档（草稿级——与新建/删除同范式，保存草稿→应用后经③适配器落库）。
+  // 深拷贝含 models/能力位/思考模式等全部字段；模型 id 重造防③行 id 对账串档。
+  const duplicateProfile = useCallback(
+    (service: ServiceName) => {
+      mutateCatalog((next) => {
+        const target = next.services[service];
+        const src = target.profiles.find((p) => p.id === target.active_profile_id);
+        if (!src) return;
+        const existing = new Set(target.profiles.map((p) => p.name));
+        let name = `${src.name} 副本`;
+        let n = 2;
+        while (existing.has(name)) {
+          name = `${src.name} 副本(${n})`;
+          n += 1;
+        }
+        const profileId = `${service}-profile-${Date.now()}`;
+        const copied = JSON.parse(JSON.stringify(src)) as typeof src;
+        copied.id = profileId;
+        copied.name = name;
+        copied.models = copied.models.map((m, i) => ({
+          ...m,
+          id: `${service}-model-${Date.now()}-${i}`,
+        }));
+        target.profiles.push(copied);
+        target.active_profile_id = profileId;
+        if (copied.models[0]) target.active_model_id = copied.models[0].id;
+      });
+    },
+    [mutateCatalog],
   );
 
   const removeActiveProfile = useCallback(
@@ -1368,6 +1400,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       updateCodeBlockWrapLongLines,
       mutateCatalog,
       addProfile,
+      duplicateProfile,
       removeActiveProfile,
       addModel,
       removeActiveModel,
@@ -1398,6 +1431,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [
       addModel,
       addProfile,
+      duplicateProfile,
       applyDetectedContextWindow,
       applyCatalog,
       applying,
