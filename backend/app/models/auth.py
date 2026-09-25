@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Integer, DateTime, JSON, ForeignKey, UniqueConstraint, Index,
-    Boolean,
+    Boolean, CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -99,4 +99,30 @@ class ResourceACL(Base):
     )
 
 
-__all__ = ["User", "Role", "UserRole", "ResourceACL"]
+class AuthAuditLog(Base):
+    """审计日志（权限重构 T1，design §6.1）。
+
+    工具判定全量落痕（调用量低）；API 判定只落 deny。
+    decision 三值约束保证审计可对账（allow/deny/approval——approval 为 T8a 写类
+    审批三态预留位）。
+    """
+    __tablename__ = "auth_audit_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ts = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    user_sub = Column(String(64), nullable=False, index=True)
+    resource_type = Column(String(64), nullable=False)
+    resource_id = Column(String(255), nullable=False)
+    action = Column(String(32), nullable=False)
+    decision = Column(String(16), nullable=False)  # allow | deny | approval
+    reason = Column(String(500), nullable=True)
+    session_id = Column(String(64), nullable=True)
+    turn_id = Column(String(64), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("decision IN ('allow', 'deny', 'approval')", name="ck_audit_decision"),
+        Index("ix_audit_ts_resource", "ts", "resource_type"),
+    )
+
+
+__all__ = ["User", "Role", "UserRole", "ResourceACL", "AuthAuditLog"]
