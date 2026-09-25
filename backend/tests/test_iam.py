@@ -89,3 +89,193 @@ def test_auth_audit_log_model():
     ck = [c for c in constraints if c.__class__.__name__ == "CheckConstraint"]
     assert any(all(v in str(c.sqltext) for v in ("decision", "allow", "deny", "approval"))
                for c in ck), ck
+
+
+# ---------------------------------------------------------------------------
+# 任务 2：iam 管理面 9 端点（design §5.2）
+# ---------------------------------------------------------------------------
+
+import uuid as _uuid  # noqa: E402
+
+import pytest  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.models.auth import Role as RoleM  # noqa: E402
+from app.models.auth import User as UserM  # noqa: E402
+from app.models.auth import UserRole as UserRoleM  # noqa: E402
+
+
+@pytest.fixture()
+def iam_env(monkeypatch):
+    """iam 路由独立 app：ENABLE_AUTH=1 + get_current_user 可换装（守卫矩阵三人格）。
+
+    人格语义对齐计划 2.1：admin 全通 / 仅 auth.read 者 GET 过写 403 / 无授权
+    （student2 语义）全 403。DB 行角色默认授权语义（验收 #4 地基）由
+    test_role_default_permissions_db_authoritative 单独钉。
+    """
+    import app.core.auth as core_auth
+    import app.api.iam as iam_mod
+    from app.core.database import SessionLocal, engine
+    from app.models.auth import AuthAuditLog
+
+    # 测试基建：审计表随 T1 落模型，live DB 建表走后端启动 create_all——
+    # 测试进程独立跑时按需补建（checkfirst 幂等）。
+    AuthAuditLog.__table__.create(bind=engine, checkfirst=True)
+
+    monkeypatch.setattr(core_auth, "ENABLE_AUTH", True)
+    holder = {"user": None}
+
+    def _fake_current_user(request):
+        u = holder.get("user")
+        if u is None:
+            raise AssertionError("测试未设置当前用户")
+        return u
+
+    monkeypatch.setattr(core_auth, "get_current_user", _fake_current_user)
+
+    app = FastAPI()
+    app.include_router(iam_mod.router, prefix="/api/v1/iam")  # 与 main.py 挂载同口径
+    with TestClient(app) as client:
+        yield {"client": client, "holder": holder, "db": SessionLocal()}
+
+
+@pytest.fixture()
+def iam_cleanup(iam_env):
+    """iamtest_* 行清理（live DB 纪律同 m02——先登记后跑，测后清场）。"""
+    db = iam_env["db"]
+    yield
+    UserRoleM  # noqa: B018 —— mapper 确认
+    # sub 前缀清理 + 建号面残留（POST /users 用随机 uuid 作 sub，按用户名兜底捞）
+    orphan_subs = [u.sub for u in db.query(UserM).filter(UserM.username.like("iamtest_%")).all()]
+    all_subs = {r[0] for r in db.query(UserRoleM.user_sub).filter(UserRoleM.user_sub.like("iamtest_%")).all()}
+    all_subs.update(orphan_subs)
+    if all_subs:
+        db.query(UserRoleM).filter(UserRoleM.user_sub.in_(all_subs)).delete(synchronize_session=False)
+    db.query(UserM).filter(UserM.username.like("iamtest_%")).delete(synchronize_session=False)
+    db.query(UserM).filter(UserM.sub.like("iamtest_%")).delete(synchronize_session=False)
+    db.query(RoleM).filter(RoleM.code.like("iamtest_%")).delete(synchronize_session=False)
+    from app.models.auth import AuthAuditLog
+    db.query(AuthAuditLog).filter(AuthAuditLog.user_sub.like("iamtest_%")).delete(synchronize_session=False)
+    db.commit()
+
+
+def _user(persona_roles, sub="iamtest_u1"):
+    from app.core.auth import AuthUser
+    return AuthUser(sub=sub, username="iamtester", email=None, groups=[], roles=persona_roles)
+
+
+def test_iam_guard_matrix(iam_env, iam_cleanup):
+    """admin 全通 / auth.read 人格 GET 过写 403 / 无授权 403（student2 语义）。"""
+    c = iam_env["client"]
+    iam_env["holder"]["user"] = _user(["iamtest_admin_ro"])  # 无 auth 权限人格
+    assert c.get("/api/v1/iam/vocab").status_code == 403
+
+    iam_env["holder"]["user"] = _user(["admin"])
+    assert c.get("/api/v1/iam/vocab").status_code == 200
+    body = c.get("/api/v1/iam/vocab").json()["data"]
+    assert body == PERMISSION_VOCAB
+
+    # auth.read-only 人格：经 DB 行默认授权（iamtest_reader 角色带 auth:read）
+    db = iam_env["db"]
+    db.add(RoleM(code="iamtest_reader", name="读-only", is_system=False,
+                 default_permissions={"auth": ["read"]}))
+    db.commit()
+    iam_env["holder"]["user"] = _user(["iamtest_reader"])
+    assert c.get("/api/v1/iam/vocab").status_code == 200
+    assert c.get("/api/v1/iam/users").status_code == 200
+    assert c.post("/api/v1/iam/roles", json={"code": "iamtest_x", "name": "x"}).status_code == 403
+
+
+def test_iam_users_crud_flow(iam_env, iam_cleanup):
+    """建号（T2 本地建号面，T3 换 ST SDK）→ 列表含角色/last_login → 启停 → 角色整体替换。"""
+    c = iam_env["client"]
+    iam_env["holder"]["user"] = _user(["admin"], sub="iamtest_admin")
+
+    db = iam_env["db"]
+    db.add(RoleM(code="iamtest_r1", name="r1", is_system=False, default_permissions={}))
+    db.add(RoleM(code="iamtest_r2", name="r2", is_system=False, default_permissions={}))
+    db.commit()
+
+    r = c.post("/api/v1/iam/users", json={
+        "username": "iamtest_new", "email": "iamtest_new@x.local",
+        "display_name": "测试号", "roles": ["iamtest_r1"],
+    })
+    assert r.status_code == 200, r.text
+    sub = r.json()["data"]["sub"]
+
+    # 角色整体替换语义：初始 1 角色 → 换成 2 → user_roles 恰 2 行 → 再换 0 → 恰 0 行
+    r = c.put(f"/api/v1/iam/users/{sub}/roles", json={"roles": ["iamtest_r1", "iamtest_r2"]})
+    assert r.status_code == 200, r.text
+    rows = db.query(UserRoleM).filter(UserRoleM.user_sub == sub).all()
+    assert {x.role_code for x in rows} == {"iamtest_r1", "iamtest_r2"}
+    assert all(x.granted_by == "iamtest_admin" for x in rows)
+
+    r = c.put(f"/api/v1/iam/users/{sub}/roles", json={"roles": []})
+    assert r.status_code == 200
+    db.commit()  # 结束本会话 REPEATABLE READ 快照——端点走独立会话提交，必须重开读
+    assert db.query(UserRoleM).filter(UserRoleM.user_sub == sub).count() == 0
+
+    # 未知角色 → 400
+    assert c.put(f"/api/v1/iam/users/{sub}/roles", json={"roles": ["no_such_role"]}).status_code == 400
+
+    # PATCH 启停 + 列表字段
+    assert c.patch(f"/api/v1/iam/users/{sub}", json={"is_active": False}).status_code == 200
+    r = c.get("/api/v1/iam/users", params={"kw": "iamtest_new"})
+    items = r.json()["data"]["items"]
+    row = next(x for x in items if x["sub"] == sub)
+    assert row["is_active"] is False and row["display_name"] == "测试号"
+    assert "roles" in row and "last_login_at" in row
+
+
+def test_iam_roles_flow(iam_env, iam_cleanup):
+    """建自定义角色 → 重名/大写拒 → PATCH 默认权限 → system 拒改名拒删 → 有成员 409。"""
+    c = iam_env["client"]
+    iam_env["holder"]["user"] = _user(["admin"], sub="iamtest_admin")
+
+    assert c.post("/api/v1/iam/roles", json={
+        "code": "iamtest_r1", "name": "角色一", "description": "d",
+    }).status_code == 200
+    # 重名
+    assert c.post("/api/v1/iam/roles", json={"code": "iamtest_r1", "name": "dup"}).status_code in (400, 409)
+    # code 口径：小写字母数字下划线
+    assert c.post("/api/v1/iam/roles", json={"code": "BadCode", "name": "x"}).status_code == 422
+
+    # PATCH：自定义可改名；system 只许改 default_permissions
+    assert c.patch("/api/v1/iam/roles/iamtest_r1", json={
+        "default_permissions": {"auth": ["read"]},
+    }).status_code == 200
+    db = iam_env["db"]
+    db.add(RoleM(code="iamtest_sys", name="系统样例", is_system=True, default_permissions={}))
+    db.commit()
+    assert c.patch("/api/v1/iam/roles/iamtest_sys", json={"name": "改名"}).status_code in (400, 409)
+    assert c.delete("/api/v1/iam/roles/iamtest_sys").status_code in (400, 403, 409)
+
+    # 有成员 409
+    u = UserM(sub="iamtest_u2", username="iamtester2")
+    db.add(u)
+    db.add(UserRoleM(user_sub="iamtest_u2", role_code="iamtest_r1", granted_by="seed"))
+    db.commit()
+    assert c.delete("/api/v1/iam/roles/iamtest_r1").status_code == 409
+
+    # 空成员自定义角色可删
+    db.add(RoleM(code="iamtest_r3", name="r3", is_system=False, default_permissions={}))
+    db.commit()
+    assert c.delete("/api/v1/iam/roles/iamtest_r3").status_code == 200
+
+    # 列表含成员数
+    r = c.get("/api/v1/iam/roles")
+    row = next(x for x in r.json()["data"] if x["code"] == "iamtest_r1")
+    assert row["member_count"] == 1 and row["is_system"] is False
+
+
+def test_role_default_permissions_db_authoritative(iam_env, iam_cleanup):
+    """DB 行 default_permissions 参与判定（验收 #4 地基；🛠 §6.1 tool:execute 前提）。"""
+    c = iam_env["client"]
+    db = iam_env["db"]
+    db.add(RoleM(code="iamtest_reader", name="读-only", is_system=False,
+                 default_permissions={"auth": ["read"]}))
+    db.commit()
+    iam_env["holder"]["user"] = _user(["iamtest_reader"])
+    assert c.get("/api/v1/iam/vocab").status_code == 200  # iamtest_reader DB 行 auth:read 生效
+    assert c.post("/api/v1/iam/roles", json={"code": "iamtest_x2", "name": "x"}).status_code == 403

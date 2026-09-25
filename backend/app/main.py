@@ -22,6 +22,7 @@ from .api import (
     golden_qa,
     feedback,
     guards,
+    iam,
     capabilities,)
 from .models.base import Base
 # 确保模型注册到 Base.metadata（避免循环导入，在这里集中导入）
@@ -312,6 +313,8 @@ def read_root():
 
 # v1 API（兼容旧接口）
 app.include_router(auth_api.router, prefix="/api/v1", tags=["auth"])
+# 权限重构T2：iam 管理面（design §5.2——自带 require_permission 守卫；端点内自校验）
+app.include_router(iam.router, prefix="/api/v1/iam", tags=["iam"])
 app.include_router(concept.router, prefix="/api/v1", tags=["concepts"])
 app.include_router(mapping.router, prefix="/api/v1", tags=["mappings"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])

@@ -499,9 +499,24 @@ def get_current_user(request: Request) -> AuthUser:
     return user
 
 
-def _has_permission_via_role_default(roles: List[str], resource_type: str, action: str) -> bool:
+def _has_permission_via_role_default(
+    db: Optional[Session], roles: List[str], resource_type: str, action: str
+) -> bool:
+    # 权限重构 T2（验收 #4 地基）：DB auth_roles.default_permissions 行权威——
+    # 角色有 DB 行（含显式 {}）则整行取代静态映射，矩阵编辑器的收缩/扩张都生效；
+    # 无 DB 行回退静态 _DEFAULT_ROLE_PERMS（兼容未播种角色）。🛠 design §6.1
+    # "auth_roles.default_permissions 的 tool:execute" 也以此为前提。
+    db_rows: Dict[str, Optional[dict]] = {}
+    if db is not None and roles:
+        from app.models.auth import Role as RoleModel
+
+        for row in db.query(RoleModel).filter(RoleModel.code.in_(roles)).all():
+            db_rows[row.code] = row.default_permissions
     for r in roles:
-        perms = _DEFAULT_ROLE_PERMS.get(r) or {}
+        if r in db_rows and db_rows[r] is not None:
+            perms = db_rows[r] or {}
+        else:
+            perms = _DEFAULT_ROLE_PERMS.get(r) or {}
         if "*" in perms.get("*", []):
             return True
         rt_perms = perms.get(resource_type) or perms.get("*", [])
@@ -548,7 +563,7 @@ def check_permission(
     """完整权限判定（角色默认 + ACL）。admin 一票通过。"""
     if user.is_admin():
         return True
-    if _has_permission_via_role_default(user.roles, resource_type, action):
+    if _has_permission_via_role_default(db, user.roles, resource_type, action):
         return True
     if _has_permission_via_acl(db, user, resource_type, resource_id, action):
         return True
