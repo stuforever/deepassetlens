@@ -363,11 +363,21 @@ def _sync_scenario_skills(db: Session):
     from ..models.skill import Skill
 
     storage = get_skill_storage()
-    scen_dir = Path(storage.root) / "scenarios"
-    if not scen_dir.exists():
+    # 权限重构T8b（design §8.5）：glob 扩展 tutor/*/SKILL.md（skill_code="tutor/<name>"，
+    # 与 scenarios 同构）——教学技能包融入平台技能体系，技能管理页可见可管。
+    _skill_dirs = [("scenarios", "scenarios"), ("tutor", "tutor")]
+    any_dir = False
+    for _dirname, _prefix in _skill_dirs:
+        if (Path(storage.root) / _dirname).exists():
+            any_dir = True
+    if not any_dir:
         return
-    for md in scen_dir.glob("*/SKILL.md"):
-        skill_code = f"scenarios/{md.parent.name}"
+    for _dirname, _prefix in _skill_dirs:
+      _dir = Path(storage.root) / _dirname
+      if not _dir.exists():
+        continue
+      for md in _dir.glob("*/SKILL.md"):
+        skill_code = f"{_prefix}/{md.parent.name}"
         meta = storage.parse_skill_md(skill_code)
         existing = db.query(Skill).filter(Skill.skill_code == skill_code).first()
         name = meta.get("name") or md.parent.name
