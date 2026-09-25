@@ -11,16 +11,17 @@
  * 安装点：expertPages.ts 顶部（模块加载期一次执行）。
  * 幂等：已有 Authorization header 的请求不重复注入。
  */
-import { getStoredToken, isTokenValid } from "./auth/oidc";
+// 权限重构T7：token 源切 ST 会话（oidc.ts 退役）
+import { getAccessToken, isAccessTokenFresh } from "./auth/st";
 
 if (typeof window !== "undefined") {
   const _origFetch = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const t = getStoredToken();
-    if (t && isTokenValid(t)) {
+    const t = getAccessToken();
+    if (t && isAccessTokenFresh(t)) {
       const headers = new Headers(init?.headers);
       if (!headers.has("Authorization")) {
-        headers.set("Authorization", `${t.token_type} ${t.access_token}`);
+        headers.set("Authorization", `Bearer ${t}`);
         init = { ...init, headers };
       }
     }

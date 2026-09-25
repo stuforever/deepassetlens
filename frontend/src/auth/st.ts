@@ -52,3 +52,39 @@ export function isAccessTokenFresh(token: string): boolean {
     return true; // 非 JWT 形态（理论不会）——交给后端判
   }
 }
+
+
+/** 登出：撤销 ST 会话（服务端 revoke）+ 清本地存储。 */
+export async function logoutST(): Promise<void> {
+  try {
+    const t = getAccessToken();
+    if (t) {
+      await fetch('/api/v1/auth/session', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${t}` },
+      });
+    }
+  } catch {
+    // 尽力而为——本地会话必清
+  }
+  clearSession();
+}
+
+/** 身份层配置（T7 起 ST-only 口径）。 */
+export async function fetchAuthConfig(): Promise<{ enableAuth: boolean; provider: string }> {
+  const r = await fetch('/api/v1/auth/config');
+  if (!r.ok) throw new Error(`auth/config 失败 ${r.status}`);
+  const j = await r.json();
+  const d = j.data || {};
+  return { enableAuth: Boolean(d.enable_auth), provider: d.provider || 'supertokens' };
+}
+
+/** 当前用户（/auth/me；ST 通道）。 */
+export async function fetchMeST(): Promise<any> {
+  const t = getAccessToken();
+  const headers: Record<string, string> = t ? { Authorization: `Bearer ${t}` } : {};
+  const r = await fetch('/api/v1/auth/me', { headers });
+  if (!r.ok) throw new Error(`me 失败 ${r.status}`);
+  const j = await r.json();
+  return j.data;
+}

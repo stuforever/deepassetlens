@@ -16,7 +16,7 @@
 
 // ---- 以下类型按使用面内联自 DeepTutor web/lib/unified-ws.ts（定义逐字保留）----
 
-import { getStoredToken } from "../../../auth/oidc";
+import { getAccessToken } from "../../../auth/st";
 
 type StreamEventType =
   | "stage_start"
@@ -250,8 +250,8 @@ async function expectJson<T>(response: Response): Promise<T> {
 // cookie 裸 fetch，未带 token 的 sessions 调用一律 401 -> expectJson 硬跳 /login 死循环。
 function authHeaders(): Record<string, string> {
   try {
-    const t = getStoredToken();
-    return t ? { Authorization: `${t.token_type} ${t.access_token}` } : {};
+    const t = getAccessToken();
+    return t ? { Authorization: `Bearer ${t}` } : {};
   } catch {
     return {};
   }

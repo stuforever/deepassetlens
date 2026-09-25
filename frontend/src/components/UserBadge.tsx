@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { Button, Dropdown, Space, Tooltip } from 'antd';
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { AuthCtx } from '../auth/AuthGate';
-import { logout } from '../auth/oidc';
+import { logoutST } from '../auth/st';
 import { StatusTag } from './shell';
 import { tokens } from '../theme/tokens';
 
@@ -46,7 +46,7 @@ const UserBadge: React.FC = () => {
             key: 'logout',
             icon: <LogoutOutlined />,
             label: '登出',
-            onClick: () => logout(),
+            onClick: () => { logoutST(); window.location.href = '/login'; },
           }]
         : []),
     ],

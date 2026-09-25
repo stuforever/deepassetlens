@@ -22,99 +22,99 @@
 #   tupu MySQL       : 3306   (主数据/配置库)
 #   tupu ES          : 11200  (复用 docker-es01-1，PS 索引 + 量测数据)
 
-x-authentik-env: &authentik-env
-  AUTHENTIK_REDIS__HOST: authentik_redis
-  AUTHENTIK_POSTGRESQL__HOST: authentik_postgres
-  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
-  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
-  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set in .env.infra}
-  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-tupu_change_me_authentik_secret}
-  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
-  AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
-  AUTHENTIK_LOG_LEVEL: ${AUTHENTIK_LOG_LEVEL:-info}
-  # Bootstrap：首次启动自动创建 akadmin 超管 + API Token，便于脚本化配置
-  AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:?set in .env.infra}
-  AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-tupu_bootstrap_token_change_me_xxxxxxxxxxxxxxxxxx}
-  AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@tupu.local}
+# [T7 存档·Authentik 退役 2026-09-25] x-authentik-env: &authentik-env
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_REDIS__HOST: authentik_redis
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_POSTGRESQL__HOST: authentik_postgres
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set in .env.infra}
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-tupu_change_me_authentik_secret}
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_LOG_LEVEL: ${AUTHENTIK_LOG_LEVEL:-info}
+# [T7 存档·Authentik 退役 2026-09-25]   # Bootstrap：首次启动自动创建 akadmin 超管 + API Token，便于脚本化配置
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:?set in .env.infra}
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-tupu_bootstrap_token_change_me_xxxxxxxxxxxxxxxxxx}
+# [T7 存档·Authentik 退役 2026-09-25]   AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@tupu.local}
 
 services:
-  # --------------------------------------------------------------------- #
-  # Authentik 依赖：Postgres + Redis (内置网络，不暴露到宿主)
-  # --------------------------------------------------------------------- #
-  authentik_postgres:
-    image: postgres:16-alpine
-    container_name: tupu_authentik_pg
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
-      POSTGRES_DB: ${AUTHENTIK_PG_DB:-authentik}
-      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set in .env.infra}
-    volumes:
-      - authentik_pg_data:/var/lib/postgresql/data
-    networks:
-      - tupu_infra
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U ${AUTHENTIK_PG_USER:-authentik} -d ${AUTHENTIK_PG_DB:-authentik}
-      interval: 10s
-      timeout: 5s
-      retries: 6
+# [T7 存档·Authentik 退役 2026-09-25]   # --------------------------------------------------------------------- #
+# [T7 存档·Authentik 退役 2026-09-25]   # Authentik 依赖：Postgres + Redis (内置网络，不暴露到宿主)
+# [T7 存档·Authentik 退役 2026-09-25]   # --------------------------------------------------------------------- #
+# [T7 存档·Authentik 退役 2026-09-25]   authentik_postgres:
+# [T7 存档·Authentik 退役 2026-09-25]     image: postgres:16-alpine
+# [T7 存档·Authentik 退役 2026-09-25]     container_name: tupu_authentik_pg
+# [T7 存档·Authentik 退役 2026-09-25]     restart: unless-stopped
+# [T7 存档·Authentik 退役 2026-09-25]     environment:
+# [T7 存档·Authentik 退役 2026-09-25]       POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
+# [T7 存档·Authentik 退役 2026-09-25]       POSTGRES_DB: ${AUTHENTIK_PG_DB:-authentik}
+# [T7 存档·Authentik 退役 2026-09-25]       POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set in .env.infra}
+# [T7 存档·Authentik 退役 2026-09-25]     volumes:
+# [T7 存档·Authentik 退役 2026-09-25]       - authentik_pg_data:/var/lib/postgresql/data
+# [T7 存档·Authentik 退役 2026-09-25]     networks:
+# [T7 存档·Authentik 退役 2026-09-25]       - tupu_infra
+# [T7 存档·Authentik 退役 2026-09-25]     healthcheck:
+# [T7 存档·Authentik 退役 2026-09-25]       test:
+# [T7 存档·Authentik 退役 2026-09-25]         - CMD-SHELL
+# [T7 存档·Authentik 退役 2026-09-25]         - pg_isready -U ${AUTHENTIK_PG_USER:-authentik} -d ${AUTHENTIK_PG_DB:-authentik}
+# [T7 存档·Authentik 退役 2026-09-25]       interval: 10s
+# [T7 存档·Authentik 退役 2026-09-25]       timeout: 5s
+# [T7 存档·Authentik 退役 2026-09-25]       retries: 6
 
-  authentik_redis:
-    image: redis:7-alpine
-    container_name: tupu_authentik_redis
-    restart: unless-stopped
-    command: --save 60 1 --loglevel warning
-    volumes:
-      - authentik_redis_data:/data
-    networks:
-      - tupu_infra
-    healthcheck:
-      test: [CMD, redis-cli, ping]
-      interval: 10s
-      timeout: 3s
-      retries: 6
+# [T7 存档·Authentik 退役 2026-09-25]   authentik_redis:
+# [T7 存档·Authentik 退役 2026-09-25]     image: redis:7-alpine
+# [T7 存档·Authentik 退役 2026-09-25]     container_name: tupu_authentik_redis
+# [T7 存档·Authentik 退役 2026-09-25]     restart: unless-stopped
+# [T7 存档·Authentik 退役 2026-09-25]     command: --save 60 1 --loglevel warning
+# [T7 存档·Authentik 退役 2026-09-25]     volumes:
+# [T7 存档·Authentik 退役 2026-09-25]       - authentik_redis_data:/data
+# [T7 存档·Authentik 退役 2026-09-25]     networks:
+# [T7 存档·Authentik 退役 2026-09-25]       - tupu_infra
+# [T7 存档·Authentik 退役 2026-09-25]     healthcheck:
+# [T7 存档·Authentik 退役 2026-09-25]       test: [CMD, redis-cli, ping]
+# [T7 存档·Authentik 退役 2026-09-25]       interval: 10s
+# [T7 存档·Authentik 退役 2026-09-25]       timeout: 3s
+# [T7 存档·Authentik 退役 2026-09-25]       retries: 6
 
-  # --------------------------------------------------------------------- #
-  # Authentik 主服务：server (HTTP/HTTPS) + worker (后台任务)
-  # --------------------------------------------------------------------- #
-  authentik_server:
-    image: ghcr.io/goauthentik/server:2024.10
-    container_name: tupu_authentik_server
-    restart: unless-stopped
-    command: server
-    environment:
-      <<: *authentik-env
-    ports:
-      - "${AUTHENTIK_PORT_HTTP:-9100}:9000"
-      - "${AUTHENTIK_PORT_HTTPS:-9143}:9443"
-    depends_on:
-      authentik_postgres:
-        condition: service_healthy
-      authentik_redis:
-        condition: service_healthy
-    networks:
-      - tupu_infra
+# [T7 存档·Authentik 退役 2026-09-25]   # --------------------------------------------------------------------- #
+# [T7 存档·Authentik 退役 2026-09-25]   # Authentik 主服务：server (HTTP/HTTPS) + worker (后台任务)
+# [T7 存档·Authentik 退役 2026-09-25]   # --------------------------------------------------------------------- #
+# [T7 存档·Authentik 退役 2026-09-25]   authentik_server:
+# [T7 存档·Authentik 退役 2026-09-25]     image: ghcr.io/goauthentik/server:2024.10
+# [T7 存档·Authentik 退役 2026-09-25]     container_name: tupu_authentik_server
+# [T7 存档·Authentik 退役 2026-09-25]     restart: unless-stopped
+# [T7 存档·Authentik 退役 2026-09-25]     command: server
+# [T7 存档·Authentik 退役 2026-09-25]     environment:
+# [T7 存档·Authentik 退役 2026-09-25]       <<: *authentik-env
+# [T7 存档·Authentik 退役 2026-09-25]     ports:
+# [T7 存档·Authentik 退役 2026-09-25]       - "${AUTHENTIK_PORT_HTTP:-9100}:9000"
+# [T7 存档·Authentik 退役 2026-09-25]       - "${AUTHENTIK_PORT_HTTPS:-9143}:9443"
+# [T7 存档·Authentik 退役 2026-09-25]     depends_on:
+# [T7 存档·Authentik 退役 2026-09-25]       authentik_postgres:
+# [T7 存档·Authentik 退役 2026-09-25]         condition: service_healthy
+# [T7 存档·Authentik 退役 2026-09-25]       authentik_redis:
+# [T7 存档·Authentik 退役 2026-09-25]         condition: service_healthy
+# [T7 存档·Authentik 退役 2026-09-25]     networks:
+# [T7 存档·Authentik 退役 2026-09-25]       - tupu_infra
 
-  authentik_worker:
-    image: ghcr.io/goauthentik/server:2024.10
-    container_name: tupu_authentik_worker
-    restart: unless-stopped
-    command: worker
-    environment:
-      <<: *authentik-env
-    depends_on:
-      authentik_postgres:
-        condition: service_healthy
-      authentik_redis:
-        condition: service_healthy
-    networks:
-      - tupu_infra
+# [T7 存档·Authentik 退役 2026-09-25]   authentik_worker:
+# [T7 存档·Authentik 退役 2026-09-25]     image: ghcr.io/goauthentik/server:2024.10
+# [T7 存档·Authentik 退役 2026-09-25]     container_name: tupu_authentik_worker
+# [T7 存档·Authentik 退役 2026-09-25]     restart: unless-stopped
+# [T7 存档·Authentik 退役 2026-09-25]     command: worker
+# [T7 存档·Authentik 退役 2026-09-25]     environment:
+# [T7 存档·Authentik 退役 2026-09-25]       <<: *authentik-env
+# [T7 存档·Authentik 退役 2026-09-25]     depends_on:
+# [T7 存档·Authentik 退役 2026-09-25]       authentik_postgres:
+# [T7 存档·Authentik 退役 2026-09-25]         condition: service_healthy
+# [T7 存档·Authentik 退役 2026-09-25]       authentik_redis:
+# [T7 存档·Authentik 退役 2026-09-25]         condition: service_healthy
+# [T7 存档·Authentik 退役 2026-09-25]     networks:
+# [T7 存档·Authentik 退役 2026-09-25]       - tupu_infra
 
-  # --------------------------------------------------------------------- #
-  # Qdrant 向量库 (替代当前 MySQL JSON 列 + 内存手算余弦)
-  # --------------------------------------------------------------------- #
+# [T7 存档·Authentik 退役 2026-09-25]   # --------------------------------------------------------------------- #
+# [T7 存档·Authentik 退役 2026-09-25]   # Qdrant 向量库 (替代当前 MySQL JSON 列 + 内存手算余弦)
+# [T7 存档·Authentik 退役 2026-09-25]   # --------------------------------------------------------------------- #
   qdrant:
     image: qdrant/qdrant:v1.12.4
     container_name: tupu_qdrant
@@ -244,11 +244,8 @@ services:
       - "${SUPERTOKENS_PORT:-13567}:3567"
     networks:
       - tupu_infra
-    healthcheck:
-      test: ["CMD", "bash", "-c", "wget -qO- http://localhost:3567/hello || curl -sf http://localhost:3567/hello"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
+    # 健康检查省略：ST 镜像（JRE 精简版）无 wget/curl；/dev/tcp bashism 不可用。
+    # 存活判定用 /hello 端点外部探测（实测 200）。
 
 networks:
   tupu_infra:
