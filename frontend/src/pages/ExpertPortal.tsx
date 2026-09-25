@@ -63,7 +63,7 @@ const NewChatHome: React.FC = () => {
       navigate('/h5-publish');
       return;
     }
-    navigate(`/e/${slug}/chat`);
+    navigate(`/e/${slug}/chat?new=1`); // UX3修：?new=1 强制新会话（不复用残留活跃位）
   };
 
   return (

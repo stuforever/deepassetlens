@@ -142,6 +142,10 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     const sp = new URLSearchParams(location.search);
     if (sp.get('new') !== '1') return;
     newChatIntentRef.current = true;
+    // UX3修（BUG1）：清活跃位——store 刷新后自动指向最近历史会话（useStore init
+    // activeSessionId=_initialSessions[0]），仅设发送意图不清显示会照旧渲染历史对话。
+    // 置空串 → activeSession=undefined → hasMessages=false → 欢迎页；首问由意图位建新会话。
+    useStore.getState().setActiveSessionId('');
     sp.delete('new');
     navigate({ pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps

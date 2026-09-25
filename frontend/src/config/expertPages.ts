@@ -71,10 +71,11 @@ const PartnersNew = lazy(() => import(/* webpackChunkName: "dt-partners-new" */ 
 const PartnerDetail = lazy(() => import(/* webpackChunkName: "dt-partners-detail" */ '../pages/tutor/partners/PartnerDetail'));
 const SelfLearning = lazy(() => import(/* webpackChunkName: "dt-self-learning" */ '../pages/tutor/learning/SelfLearning'));
 
-// 引擎批2 2.5/2.6：DT 桌面对话窗口（home 页复刻壳+桥 SSE 态源——AgentChatContext）。
-// 静态路径 /e/sishu/chat 压过 routes.tsx 的 /e/:slug/chat 参数路由（v6 静态优先）；
-// ExpertChat 收归 wenshu（/e/wenshu/chat）——计划 2.6。
-const TutorHomeChat = lazy(() => import(/* webpackChunkName: "dt-tutor-home-chat" */ '../pages/tutor/chat/TutorHomeChat'));
+// 引擎批2 2.5/2.6 → UX3修：DT 桌面对话窗口原挂 TutorHomeChat（home 页复刻壳+桥 SSE 态源）。
+// UX3修：私塾对话收敛问数风格——/e/sishu/chat 改挂 ExpertChat（slug-aware：琥珀色条+
+// today-panel 统计胶囊+sishu 宫格），与 /e/wenshu/chat 同组件同骨架；静态路径仍压过
+// routes.tsx 的 /e/:slug/chat 参数路由（v6 静态优先）。TutorHomeChat 全库无引用，移除挂载。
+const ExpertChat = lazy(() => import(/* webpackChunkName: "expert-chat" */ '../pages/expert/ExpertChat'));
 
 const TUTOR_H5_PAGES: ExpertPageConfig[] = [
   // IA 件批1：16 条路由从 /e/sishu/{h5,notebook} 迁出 → /e/tutor-h5/*（menuKey 同步换前缀）；
@@ -147,7 +148,7 @@ export const EXPERT_PAGES: Record<string, ExpertPageConfig[]> = {
     // IA批6 6.3：桌面自主学习（use——与 h5 版 /e/tutor-h5/learn 并存，DT 本就两页各自 1:1）
     { path: '/e/sishu/self-learning', element: withUseGuard(SelfLearning), label: '自主学习', menuKey: 'e:sishu:self-learning' },
     // 引擎批2 2.6：DT 桌面对话窗口（navigation.tsx e:sishu:chat 既有占位→真路由）
-    { path: '/e/sishu/chat', element: withUseGuard(TutorHomeChat, 'sishu'), label: '对话', menuKey: 'e:sishu:chat' },
+    { path: '/e/sishu/chat', element: withUseGuard(ExpertChat, 'sishu'), label: '对话', menuKey: 'e:sishu:chat' }, // UX3修：风格收敛=问数同组件
     // 引擎批5 5.5：书籍工作台（DT book/page.tsx 1:1 壳件）
     { path: '/e/sishu/book', element: withUseGuard(BookWorkbench, 'sishu'), label: '书籍', menuKey: 'e:sishu:book' },
   ],

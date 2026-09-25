@@ -81,9 +81,13 @@ with sync_playwright() as p:
     pg.wait_for_timeout(400)
     pg.locator("[data-testid='chat-panel-new']").click()
     pg.wait_for_timeout(1500)
-    check("P0-C URL=?new=1 留守私塾", "/e/sishu/chat" in pg.url and "new=1" in pg.url, pg.url[:80])
+    # UX3修：?new=1 契约自 UX2批(6f1aaff) 起为「消费即剥」——意图效果 replace-navigate 清参；
+    # 留守语义由后两条承载（仍在本空间色条+面板未关）。断言从"参数留存"改"参数已消费"。
+    check("P0-C URL=?new=1 已消费（留守私塾）", "/e/sishu/chat" in pg.url and "new=1" not in pg.url, pg.url[:80])
     check("P0-C space-color-bar 仍可见", pg.locator("[data-testid='space-color-bar']").count() >= 1)
     check("P0-C 面板未关闭", pg.locator("[data-testid='chat-panel']").is_visible())
+    # UX3修：新建后落欢迎页（活跃位已清——与 BUG1 同契约）；sishu 宫格仅在欢迎视图渲染
+    check("P0-C 新建落欢迎页", pg.locator("[data-testid='sishu-space-grid']").count() >= 1)
     pg.screenshot(path=str(SCR / "_ux3p0_c.png"))
 
     check("零 pageerror", len(pageerrors) == 0, str(pageerrors[:2]))
