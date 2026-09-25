@@ -62,6 +62,14 @@ class TupuAgentState(DeepAgentState):
     last_step: NotRequired[str]                               # 本轮命中步骤 id
 
 
+def _tool_registry_frozen():
+    from app.services.permission_vocab import TOOL_REGISTRY
+    return TOOL_REGISTRY
+
+
+TOOL_REGISTRY_FROZEN = _tool_registry_frozen()
+
+
 class TupuAgentContext(TypedDict):
     """F4: DeepAgent 原生运行时上下文（不进 checkpoint，不混入消息历史）。
 
@@ -958,7 +966,7 @@ def _assembly_cache_key(connection_id, gver, cver, fhash, expert_id, card_versio
     return key
 
 
-async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict = None, role_id: str = None):
+async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict = None, role_id: str = None, user=None):
     """按能力开关条件装配 DeepAgent（批13-Q 4.1）。失败抛异常，由 create_tupu_agent 包装器 fail-safe。
     专家地基①（2026-09-12 spec §五）：card=专家配置卡——提示词基座/工具面/路径/权限四类按卡参数化，
     能力开关检查逻辑零改动（卡=装配参数，链=平台）。
@@ -1026,6 +1034,27 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         _rf = [t for t in _all_mcp if getattr(t, "name", "") == "read_file"]
         if _rf and "read_file" not in {getattr(t, "name", "") for t in mcp_tools}:
             mcp_tools = mcp_tools + _rf
+    # 权限重构T5（design §6.2 装载点）：用户维度过滤——专家白名单（上）∩ 用户/角色
+    # 权限（本步），fail-closed。ENABLE_AUTH=0 / admin 原样全量（缓存键无 #u 因子，
+    # 开发态零变化）。非注册表面（read_file 等框架工具）按 🛠R14 面外声明放行。
+    _t5_allowed_names = None
+    if user is not None and not getattr(user, "is_anonymous", False):
+        try:
+            from app.core.database import SessionLocal as _SL
+            from app.services.tool_gate import filter_tools_for_user as _ftfu
+            _dbu = _SL()
+            try:
+                _allowed = _ftfu(_dbu, user, [getattr(t, "name", "") for t in mcp_tools])
+            finally:
+                _dbu.close()
+            _before = len(mcp_tools)
+            mcp_tools = [t for t in mcp_tools
+                         if getattr(t, "name", "") not in TOOL_REGISTRY_FROZEN
+                         or getattr(t, "name", "") in _allowed]
+            _t5_allowed_names = _allowed
+            logger.info(f"[T5] 工具面用户过滤: {user.sub} {_before}->{len(mcp_tools)} 件")
+        except Exception as _tg_err:
+            logger.warning(f"[T5] 工具面过滤异常（fail-open 兜底放行——装配方非执法点）: {_tg_err}")
     # ⑤R R1（批12）：教学九件进程内 twin 随先行版教学面退役移除——
     # 先行版 MCP 教学工具族已从 mcp_server 注册表摘除（twin 覆盖层失锚），
     # 教学能力由 vendor 复刻件（deeptutor learning 原生工具+路由族）承接。
@@ -1164,7 +1193,14 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     # 运行时读 ContextVar 不可行（langgraph 同步工具在 executor 线程，ContextVars 不跨线程）。
     from app.services.memory_slots import normalize_memory_field as _nmf_sp
     _agent_edit_paths = _agent_edit_slot_rels(card)
-    middleware_list.insert(0, SkillPolicyMiddleware(agent_edit_paths=_agent_edit_paths))
+    # 权限重构T5（design §6.2 派发点）：用户身份+专家工具面+装配期允许清单注入——
+    # awrap_tool_call 前置复核（check_tool_call），拒绝返回结构化 tool_error + 审计落痕。
+    middleware_list.insert(0, SkillPolicyMiddleware(
+        agent_edit_paths=_agent_edit_paths,
+        user=user,
+        expert_tools=(card or {}).get("tools"),
+        allowed_tools=_t5_allowed_names if user is not None else None,
+    ))
     logger.info("[SkillPolicy] 受控执行契约中间件已装配（最外层闸门，技能/步骤/模板/引擎/终止硬校验）")
     # 记忆插槽②（spec §六）：L1 轨迹——洋葱最外层（SkillPolicy 之前；守卫拒绝也记）。
     # wenshu slots=[] → 不装配（no-op）；manifest 记 memory_trace: active|inactive。
@@ -1366,7 +1402,7 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_i
     caps = {p["capability_id"]: p for p in capability_config.get_policies()}
     _last = _LAST_GOOD_ASSEMBLY.get(expert_id) or {}  # 批6 E3：按专家取回退快照（不跨专家串卡）
     try:
-        agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps, card=card, role_id=role_id)
+        agent = await _build_agent(checkpointer=checkpointer, connection_id=connection_id, caps=caps, card=card, role_id=role_id, user=user)
         _LAST_GOOD_ASSEMBLY[expert_id] = {"caps": caps,
                                           "caps_version": capability_config.get_version(),
                                           "card": card}
@@ -1383,7 +1419,7 @@ async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_i
                     updated_by="assembly", _sync=True)
                 return await _build_agent(checkpointer=checkpointer, connection_id=connection_id,
                                           caps=_last["caps"],
-                                          card=_last.get("card"), role_id=role_id)
+                                          card=_last.get("card"), role_id=role_id, user=user)
             except Exception as e2:
                 logger.error(f"[Capability] 回退装配也失败（fail-closed 阻止创建）: {e2}")
                 try:
@@ -1508,7 +1544,7 @@ def _assert_tool_call_capable(conn_id, caps) -> None:
                          f"请在 LLM 配置页改用支持工具调用的连接")
 
 
-async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu", role_id: str = None):
+async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu", role_id: str = None, user=None):
     """获取 tupu DeepAgent（按 connection_id + capability 版本缓存，让前端选模型/能力开关真正生效）。
 
     v3.6: 按 connection_id 缓存不同模型的 Agent 实例（空串用默认模型）。
@@ -1555,7 +1591,12 @@ async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu", rol
             raise
         except Exception as _gate_err:
             logger.warning(f"[模型目录化] 门控预检异常（放行交由装配兜底）: {_gate_err}")
+    # 权限重构T5：auth=1 且非匿名时缓存键加 #u 因子（按用户装配工具面）；
+    # ENABLE_AUTH=0 / 匿名 admin → 键不变（开发态零影响）。
+    _t5_user = user if (user is not None and not getattr(user, "is_anonymous", False)) else None
     _cache_key = _assembly_cache_key(connection_id, _gver, _cver, _fhash, expert_id, _ecard_ver, role_id=role_id)
+    if _t5_user is not None:
+        _cache_key += f"#u{_t5_user.sub}"
     if _cache_key not in _GLOBAL_AGENTS:
         async with _AGENT_INIT_LOCK:
             if _cache_key not in _GLOBAL_AGENTS:

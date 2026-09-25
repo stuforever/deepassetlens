@@ -121,6 +121,14 @@ _CORRECTION_GUIDES = {    "TABLE_MISSING": "表 {t} 不存在。调用 search_en
 _CORRECTION_GUIDE_EMPTY = "结果为空。调用 sample_column_values 检查过滤值是否真实存在，复核时间范围与口径。"
 
 
+def _tool_registry_snapshot():
+    from app.services.permission_vocab import TOOL_REGISTRY
+    return TOOL_REGISTRY
+
+
+TOOL_REGISTRY_SNAPSHOT = _tool_registry_snapshot()
+
+
 class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     """受控执行契约硬校验中间件。
 
@@ -133,12 +141,19 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
     def __init__(self, catalog=None, dispatcher: Optional[Callable[..., Awaitable[None]]] = None,
                  max_violations: int = MAX_VIOLATIONS,
                  allow_missing_contract: bool = False,
-                 agent_edit_paths: Optional[frozenset] = None) -> None:
+                 agent_edit_paths: Optional[frozenset] = None,
+                 user=None, expert_tools=None, allowed_tools=None) -> None:
         self._catalog = catalog or get_catalog()
         self._max_violations = max_violations
         self._dispatcher = dispatcher
         # P0-1 fail-closed：默认契约缺失即拒绝全部工具；仅显式标识的兼容/测试模式放行
         self._allow_missing_contract = allow_missing_contract
+        # 权限重构T5（design §6.2 派发点）：用户身份+专家工具面+装配期允许清单——
+        # 装配期快照注入（同 agent_edit 快照理由：ContextVars 不跨 executor 线程）。
+        # user=None / allowed_tools=None → auth=0 匿名等价，门控零动作。
+        self._t5_user = user
+        self._t5_expert_tools = frozenset(expert_tools or ()) or None
+        self._t5_allowed = frozenset(allowed_tools) if allowed_tools is not None else None
         # ②批补验（spec §五三重防线第二层）：agent_edit 槽路径白名单——**装配期快照**
         # （卡版本变更→Agent 重建→新快照）。不读 ContextVar：langgraph 把同步工具调用放
         # executor 线程，ContextVars 不跨线程（②补验实证 #9）。空集=现状等值（wenshu）。
@@ -156,6 +171,11 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
             if self._allow_missing_contract:
                 return await handler(request)
             return await self._reject_no_contract(request, tool_name, tc_id)
+
+        # ---- T5 工具门控（design §6.2 派发点复核：先鉴权后契约）----
+        gate_denial = self._t5_gate(tool_name)
+        if gate_denial is not None:
+            return self._t5_reject(request, tool_name, tc_id, gate_denial)
 
         # ---- 前置校验（不调 handler 即拒绝）----
         # P2（三轮评审）：_precheck 现为 async —— SQL 模板命中时在 handler 前 await 派发
@@ -192,6 +212,36 @@ class SkillPolicyMiddleware(AgentMiddleware[Any, Any, Any]):
         except Exception as e:
             logger.warning(f"[SkillPolicy] postcheck 异常: {e}")
         return result
+    def _t5_gate(self, tool_name: str):
+        """T5 派发复核：check_tool_call 三态（写类恒拒/未注册拒/专家面外拒/只读粗
+        粒度/EXEC 仅 ACL）。user 未注入（auth=0 匿名装配）→ 零动作放行。"""
+        if self._t5_user is None and self._t5_allowed is None:
+            return None
+        from app.core.database import SessionLocal
+        from app.services.tool_gate import check_tool_call
+
+        db = SessionLocal()
+        try:
+            # 派发判定为最终权威（ACL 时变下比装配期清单更新鲜；审计由
+            # check_tool_call 内部落痕，allow/deny 与实际执行一致）
+            decision = check_tool_call(
+                db, self._t5_user, tool_name,
+                expert_tools=self._t5_expert_tools,
+                session_ctx=None,
+            )
+            return None if decision.allowed else decision
+        finally:
+            db.close()
+
+    def _t5_reject(self, request, tool_name: str, tc_id, decision):
+        """T5 拒绝：结构化 tool_error + 审计（check_tool_call 内已落痕）。"""
+        msg = (f"SkillPolicy·已阻断[工具授权] 工具 {tool_name} 调用被拒绝：{decision.reason}。"
+               f"如需使用请联系管理员授权（资源类型 tool）。")
+        try:
+            return ToolMessage(content=msg, tool_call_id=tc_id or "")
+        except Exception:
+            return {"role": "tool", "tool_call_id": tc_id or "", "content": msg}
+
     async def _reject_no_contract(self, request, tool_name: str, tc_id) -> ToolMessage:
         """P0-1：受控契约缺失时拒绝调用（fail-closed），不执行任何工具。"""
         msg = (f"SkillPolicy·已阻断[受控契约缺失] 工具 {tool_name} 因无受控契约被拒绝（fail-closed）。"

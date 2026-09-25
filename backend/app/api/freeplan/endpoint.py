@@ -120,7 +120,7 @@ def chat_freeplan_stream(req: ChatRequest, request: Request):
 
             from app.services.tupu_deepagent import get_tupu_agent
             agent = await get_tupu_agent(connection_id=req.llm_connection_id or "", expert_id=req.expert_id,
-                                         role_id=getattr(req, "role_id", None))
+                                         role_id=getattr(req, "role_id", None), user=_current_user)
 
             # v3.5: 同一会话执行锁 -- 防止同 thread_id 并发请求导致 checkpoint 分叉覆盖
             _session_lock = _get_session_lock(_memory_thread_id)

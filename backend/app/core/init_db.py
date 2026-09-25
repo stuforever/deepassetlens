@@ -438,6 +438,13 @@ def init_db(db: Session):
     _ensure_skill_type_column(db)
     # 权限重构T3：legacy_sub 回滚门列（幂等）
     _ensure_auth_legacy_sub_column(db)
+    # 权限重构T5（🛠R7）：工具权限上线种子——只读粗粒度入全角色默认 + EXEC ACL
+    # 补非 viewer 角色（幂等）
+    try:
+        from ..services.tool_gate import seed_tool_permissions
+        seed_tool_permissions(db)
+    except Exception as e:
+        logger.warning(f"[T5] 工具权限种子失败（不阻启动）: {e}")
 
     # ⑥-2a（spec D3）：expert 资源公共语义种子（幂等）——wenshu→role viewer→use
     # （登录兜底 viewer→全员可用）；tutor 等不种=默认私有（显式赋权才见）。

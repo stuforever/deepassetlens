@@ -171,10 +171,20 @@ async def create_user(
         result = await ep_recipe.asyncio.sign_up(
             "", payload.email or f"{payload.username}@local.tupu", payload.password)
         if isinstance(result, EmailAlreadyExistsError):
-            raise HTTPException(status_code=409, detail="邮箱已在身份层注册")
-        if not isinstance(result, SignUpOkResult):
+            # 身份层已有该邮箱——取回其 user id 续用（镜像行照建）；不静默新建身份
+            from supertokens_python import asyncio as st_asyncio
+            from supertokens_python.types import AccountInfo
+
+            users = await st_asyncio.list_users_by_account_info(
+                "public", AccountInfo(email=payload.email or f"{payload.username}@local.tupu"),
+                user_context=None)
+            if not users:
+                raise HTTPException(status_code=409, detail="邮箱已在身份层注册但取回失败")
+            sub = users[0].id
+        elif isinstance(result, SignUpOkResult):
+            sub = result.user.id
+        else:
             raise HTTPException(status_code=503, detail=f"ST 建号失败: {result}")
-        sub = result.user.id
         if db.query(User).filter(User.sub == sub).first():
             raise HTTPException(status_code=409, detail="该身份镜像已存在")
     else:
@@ -319,3 +329,43 @@ def delete_role(
     db.delete(row)
     db.commit()
     return {"code": 200, "data": {"code": code}}
+
+
+@router.get("/audit")
+def list_audit(
+    resource_type: Optional[str] = Query(default=None),
+    decision: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    _: AuthUser = Depends(require_permission("auth", "read")),
+    db: Session = Depends(get_db),
+):
+    """审计日志分页+筛选（design §5.2 表末行；数据源随 T5 工具门控落痕）。"""
+    from app.models.auth import AuthAuditLog
+
+    q = db.query(AuthAuditLog)
+    if resource_type:
+        q = q.filter(AuthAuditLog.resource_type == resource_type)
+    if decision:
+        q = q.filter(AuthAuditLog.decision == decision)
+    total = q.count()
+    rows = (q.order_by(AuthAuditLog.ts.desc())
+            .offset((page - 1) * page_size).limit(page_size).all())
+    return {"code": 200, "data": {
+        "items": [
+            {
+                "id": r.id,
+                "ts": r.ts.isoformat() if r.ts else None,
+                "user_sub": r.user_sub,
+                "resource_type": r.resource_type,
+                "resource_id": r.resource_id,
+                "action": r.action,
+                "decision": r.decision,
+                "reason": r.reason,
+                "session_id": r.session_id,
+                "turn_id": r.turn_id,
+            }
+            for r in rows
+        ],
+        "total": total, "page": page, "page_size": page_size,
+    }}
