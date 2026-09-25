@@ -9,6 +9,9 @@ import {
   popReturnTo,
   fetchMe,
 } from './oidc';
+import { getAccessToken, getRefreshToken, isAccessTokenFresh } from './st';
+import { tryRefresh } from '../services/http';
+import Login from '../pages/Login';
 
 export interface AuthContext {
   user: any | null;
@@ -27,10 +30,11 @@ interface Props {
 const CALLBACK_PATH = '/auth/callback';
 
 const AuthGate: React.FC<Props> = ({ children }) => {
-  const [phase, setPhase] = useState<'init' | 'login' | 'exchange' | 'ready' | 'error'>('init');
+  const [phase, setPhase] = useState<'init' | 'login' | 'st-login' | 'exchange' | 'ready' | 'error'>('init');
   const [errMsg, setErrMsg] = useState<string>('');
   const [user, setUser] = useState<any | null>(null);
   const [enableAuth, setEnableAuth] = useState<boolean>(false);
+  const [loginTick, setLoginTick] = useState(0); // T4：登录成功后重跑初始化
 
   useEffect(() => {
     (async () => {
@@ -62,6 +66,33 @@ const AuthGate: React.FC<Props> = ({ children }) => {
           return;
         }
 
+        // 权限重构T4：ST provider——自研登录页（不再跳 Authentik）
+        if (cfg.provider === 'supertokens') {
+          let t = getAccessToken();
+          // access token 过期且有 refresh → 先续期（验收 #2：会话刷新不踢登录）
+          if (t && !isAccessTokenFresh(t) && getRefreshToken()) {
+            if (await tryRefresh()) t = getAccessToken();
+          }
+          if (t && isAccessTokenFresh(t)) {
+            const me = await fetchMe();
+            setUser(me);
+            setPhase('ready');
+            return;
+          }
+          // 无 access token 但 refresh 在 → 续期后恢复会话
+          if (!t && getRefreshToken()) {
+            const refreshed = await tryRefresh();
+            if (refreshed) {
+              const me = await fetchMe();
+              setUser(me);
+              setPhase('ready');
+              return;
+            }
+          }
+          setPhase('st-login');
+          return;
+        }
+
         // 已有有效 token
         const t = getStoredToken();
         if (isTokenValid(t)) {
@@ -79,13 +110,21 @@ const AuthGate: React.FC<Props> = ({ children }) => {
         setPhase('error');
       }
     })();
-  }, []);
+  }, [loginTick]);
 
   if (phase === 'init') {
     return <FullScreen><Spin size="large" /><div style={{ marginTop: 12, fontSize: 13, color: "var(--text-tertiary)" }}>加载权限配置...</div></FullScreen>;
   }
   if (phase === 'login') {
     return <FullScreen><Spin size="large" /><div style={{ marginTop: 12, fontSize: 13, color: "var(--text-tertiary)" }}>跳转 Authentik 登录...</div></FullScreen>;
+  }
+  if (phase === 'st-login') {
+    // 权限重构T4：ST provider 登录态——自研登录页（成功后重跑初始化）
+    return (
+      <AuthCtx.Provider value={{ user, enableAuth, authReady: false }}>
+        <Login onSuccess={() => setLoginTick((v) => v + 1)} />
+      </AuthCtx.Provider>
+    );
   }
   if (phase === 'exchange') {
     return <FullScreen><Spin size="large" /><div style={{ marginTop: 12, fontSize: 13, color: "var(--text-tertiary)" }}>登录态交换中...</div></FullScreen>;

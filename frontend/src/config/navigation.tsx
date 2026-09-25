@@ -149,6 +149,10 @@ const SETTINGS_PAGES: Array<{ key: string; label: string; path: string }> = [
   { key: 'settings:appearance', label: '外观', path: '/settings/appearance' },
   { key: 'settings:network', label: '网络', path: '/settings/network' },
   { key: 'settings:llm', label: 'LLM', path: '/settings/llm' },
+  // 权限重构T4：权限管理分区（design §5.3）
+  { key: 'settings:iam-users', label: '用户管理', path: '/settings/iam/users' },
+  { key: 'settings:iam-roles', label: '角色管理', path: '/settings/iam/roles' },
+  { key: 'settings:iam-audit', label: '审计日志', path: '/settings/iam/audit' },
   { key: 'settings:embedding', label: '嵌入模型', path: '/settings/embedding' },
   { key: 'settings:stt', label: '语音识别', path: '/settings/stt' },
   { key: 'settings:tts', label: '语音合成', path: '/settings/tts' },

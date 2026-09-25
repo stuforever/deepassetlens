@@ -69,6 +69,11 @@ const SettingsChat = lazy(() => import(/* webpackChunkName: "settings-chat" */ '
 const SettingsCurriculum = lazy(() => import(/* webpackChunkName: "settings-curriculum" */ './pages/settings/curriculum'));
 const SettingsAttachments = lazy(() => import(/* webpackChunkName: "settings-attachments" */ './pages/settings/attachments'));
 const SettingsLlm = lazy(() => import(/* webpackChunkName: "settings-llm" */ './pages/settings/llm'));
+// 权限重构T4：iam 管理面三页 + 自研登录页（design §5.3/§4.4）
+const SettingsIamUsers = lazy(() => import(/* webpackChunkName: "settings-iam-users" */ './pages/settings/iam/UsersPage'));
+const SettingsIamRoles = lazy(() => import(/* webpackChunkName: "settings-iam-roles" */ './pages/settings/iam/RolesPage'));
+const SettingsIamAudit = lazy(() => import(/* webpackChunkName: "settings-iam-audit" */ './pages/settings/iam/AuditPage'));
+const StLogin = lazy(() => import(/* webpackChunkName: "st-login" */ './pages/Login'));
 const SettingsEmbedding = lazy(() => import(/* webpackChunkName: "settings-embedding" */ './pages/settings/embedding'));
 const SettingsStt = lazy(() => import(/* webpackChunkName: "settings-stt" */ './pages/settings/stt'));
 const SettingsTts = lazy(() => import(/* webpackChunkName: "settings-tts" */ './pages/settings/tts'));
@@ -155,6 +160,10 @@ export const routes: RouteConfig[] = [
     { path: '/settings/appearance', element: settingsPage(SettingsAppearance), label: '外观', menuKey: 'settings:appearance', hideInMenu: true },
     { path: '/settings/network', element: settingsPage(SettingsNetwork), label: '网络', menuKey: 'settings:network', hideInMenu: true },
     { path: '/settings/llm', element: settingsPage(SettingsLlm), label: 'LLM', menuKey: 'settings:llm', hideInMenu: true },
+    // 权限重构T4：权限管理分区（design §5.3）
+    { path: '/settings/iam/users', element: settingsPage(SettingsIamUsers), label: '用户管理', menuKey: 'settings:iam-users', hideInMenu: true },
+    { path: '/settings/iam/roles', element: settingsPage(SettingsIamRoles), label: '角色管理', menuKey: 'settings:iam-roles', hideInMenu: true },
+    { path: '/settings/iam/audit', element: settingsPage(SettingsIamAudit), label: '审计日志', menuKey: 'settings:iam-audit', hideInMenu: true },
     { path: '/settings/embedding', element: settingsPage(SettingsEmbedding), label: '嵌入模型', menuKey: 'settings:embedding', hideInMenu: true },
     { path: '/settings/stt', element: settingsPage(SettingsStt), label: '语音识别', menuKey: 'settings:stt', hideInMenu: true },
     { path: '/settings/tts', element: settingsPage(SettingsTts), label: '语音合成', menuKey: 'settings:tts', hideInMenu: true },

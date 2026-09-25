@@ -618,4 +618,35 @@ export const memoryApi = {
     guardsClient.get('/memory/events', { params, ...config }),
 };
 
+
+
+// ---------------------------------------------------------------------------
+// 权限重构T4（design §5.2/§5.3）：iam 管理面（用户/角色/审计）
+// ---------------------------------------------------------------------------
+
+export const iamApi = {
+  getVocab: () => api.get('/iam/vocab'),
+  listUsers: (params?: { kw?: string; page?: number; page_size?: number }) =>
+    api.get('/iam/users', { params }),
+  createUser: (data: { username: string; email?: string; display_name?: string; roles: string[]; password?: string }) =>
+    api.post('/iam/users', data),
+  patchUser: (sub: string, data: { is_active?: boolean; display_name?: string }) =>
+    api.patch(`/iam/users/${sub}`, data),
+  replaceUserRoles: (sub: string, roles: string[]) =>
+    api.put(`/iam/users/${sub}/roles`, { roles }),
+  listRoles: () => api.get('/iam/roles'),
+  createRole: (data: { code: string; name: string; description?: string; default_permissions?: Record<string, string[]> }) =>
+    api.post('/iam/roles', data),
+  patchRole: (code: string, data: { name?: string; description?: string; default_permissions?: Record<string, string[]> }) =>
+    api.patch(`/iam/roles/${code}`, data),
+  deleteRole: (code: string) => api.delete(`/iam/roles/${code}`),
+  listAudit: (params?: { resource_type?: string; decision?: string; page?: number; page_size?: number }) =>
+    api.get('/iam/audit', { params }),
+  checkPermission: (resourceType: string, action: string, resourceId = '') =>
+    api.get('/auth/check', { params: { resource_type: resourceType, action, resource_id: resourceId } }),
+  listGrants: (params: { principal_type: string; principal_id: string }) =>
+    api.get('/auth/grants', { params }),
+  revokeGrant: (id: number) => api.delete(`/auth/grant/${id}`),
+};
+
 export default api;

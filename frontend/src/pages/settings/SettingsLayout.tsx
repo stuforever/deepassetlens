@@ -37,7 +37,7 @@ import {
   RocketOutlined,
   SearchOutlined,
   SoundOutlined,
-  TeamOutlined,
+  KeyOutlined, SafetyOutlined, TeamOutlined,
   ThunderboltOutlined,
   ToolOutlined,
   VideoCameraOutlined,
@@ -156,6 +156,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     key: 'security',
     title: '安全',
     items: [{ path: '/security-controls', label: '安全控制中心', icon: PoweroffOutlined }],
+  },
+  {
+    key: 'iam',
+    title: '权限管理',
+    items: [
+      { path: '/settings/iam/users', label: '用户管理', icon: TeamOutlined },
+      { path: '/settings/iam/roles', label: '角色管理', icon: SafetyOutlined },
+      { path: '/expert-grants', label: '专家赋权', icon: KeyOutlined },
+      { path: '/settings/iam/audit', label: '审计日志', icon: FileSearchOutlined },
+    ],
   },
   {
     key: 'teaching',

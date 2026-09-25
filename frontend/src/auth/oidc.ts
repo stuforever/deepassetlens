@@ -10,6 +10,8 @@
  */
 
 const STORAGE_KEY = 'tupu.oidc';
+// 权限重构T4：ST 通道取 token（fetchMe 双通道兼容——T7 后 oidc 面整体退役）
+import { getAccessToken } from './st';
 const VERIFIER_KEY = 'tupu.oidc.code_verifier';
 const STATE_KEY = 'tupu.oidc.state';
 const RETURN_KEY = 'tupu.oidc.return_to';
@@ -23,6 +25,7 @@ export interface OidcConfig {
   token_endpoint: string;
   end_session_endpoint: string;
   scopes: string[];
+  provider?: string;
 }
 
 export interface TokenBundle {
@@ -197,9 +200,12 @@ export async function logout(): Promise<void> {
 // ----- userinfo（从 backend /me） -----
 
 export async function fetchMe(): Promise<any> {
-  const t = getStoredToken();
+  // 权限重构T4：ST 通道优先——ST 登录态下本函数由 AuthGate 调用，须带 ST access token
+  const st = getAccessToken();
+  const t = st ? null : getStoredToken();
   const headers: Record<string, string> = {};
-  if (t) headers['Authorization'] = `${t.token_type} ${t.access_token}`;
+  if (st) headers['Authorization'] = `Bearer ${st}`;
+  else if (t) headers['Authorization'] = `${t.token_type} ${t.access_token}`;
   const r = await fetch('/api/v1/auth/me', { headers });
   if (!r.ok) throw new Error(`me 失败 ${r.status}`);
   const json = await r.json();

@@ -300,13 +300,15 @@ def test_full_create_all_83_tables_no_conflict():
     变异锚点：任一模型 __tablename__ 重复/表模型被删 → 计数漂移；
     main.py 移除集中导入 → 循环导入或注册不全 → 导入/计数/建表红。
     表数演进：83（M01 基线）→ 84（2026-09-09 剧本定位提速件① kg_entity_lookup_cache，spec §三 表 83→84）
-    → 86（2026-09-12 专家地基① kg_expert_profiles+expert_events 两表，spec §四；函数名保留 M01 历史锚点字样）。"""
+    → 86（2026-09-12 专家地基① kg_expert_profiles+expert_events 两表，spec §四）
+    → 87（2026-09-25 权限重构T1 auth_audit_log 审计表，design §6.1；函数名保留 M01 历史锚点字样）。"""
     import app.main as _main_mod  # 集中注册全部模型；导入成功即无循环导入
     from app.models.base import Base
     from app.core.database import engine
 
     tables = dict(Base.metadata.tables)
-    assert len(tables) == 86, f"注册表数漂移：{len(tables)} ≠ 86（84+2026-09-12 专家地基①两表）"
+    assert len(tables) == 87, f"注册表数漂移：{len(tables)} ≠ 87（86+2026-09-25 权限重构T1 审计表）"
+    assert "auth_audit_log" in tables, "权限重构T1 审计表未注册"
     # 五个域模型文件各抽一表（spec §三 分组全景）
     for t in ("kg_concepts", "kg_task_queue", "skills", "auth_users", "kg_knowledge_base"):
         assert t in tables, f"域表缺失：{t}"
