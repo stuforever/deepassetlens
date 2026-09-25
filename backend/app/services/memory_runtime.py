@@ -55,3 +55,18 @@ def current_user_strict() -> str:
 
 def reset() -> None:
     _memory_runtime.set(None)
+
+
+def current_runtime() -> Optional[dict]:
+    """T8a：裸读（无缺省兜底）——None=未置位（/mcp 无头请求）。"""
+    return _memory_runtime.get()
+
+
+def set_runtime_token(rt: dict):
+    """T8a：ContextVar token 级 set（ASGI 中间件 finally reset 用）。"""
+    return _memory_runtime.set(rt)
+
+
+def reset_runtime_token(token) -> None:
+    """T8a：token 级 reset（配对 set_runtime_token）。"""
+    _memory_runtime.reset(token)

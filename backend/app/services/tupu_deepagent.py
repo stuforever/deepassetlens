@@ -966,6 +966,21 @@ def _assembly_cache_key(connection_id, gver, cver, fhash, expert_id, card_versio
     return key
 
 
+_TUTOR_TOOL_NAMES = frozenset({
+    "fsrs_due", "fsrs_review", "mastery_query", "grade_answer",
+    "generate_practice", "select_exercises", "wrong_question_add",
+    "wrong_question_query", "export_wrong_book",
+    "mother_question_find_or_create", "analyze_wrong_questions"})
+
+
+def _strip_tutor_tools_for_rollback(tools):
+    """T8a 灰度回滚（design §8.3）：SISHU_MCP_TUTOR_TOOLS=0 时剥离教学 11 件——
+    回退「编排承接+空 MCP 教学面」现状，秒级零重部署。返回 (dropped, kept)。"""
+    dropped = [t for t in tools if getattr(t, "name", "") in _TUTOR_TOOL_NAMES]
+    kept = [t for t in tools if getattr(t, "name", "") not in _TUTOR_TOOL_NAMES]
+    return dropped, kept
+
+
 async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict = None, role_id: str = None, user=None):
     """按能力开关条件装配 DeepAgent（批13-Q 4.1）。失败抛异常，由 create_tupu_agent 包装器 fail-safe。
     专家地基①（2026-09-12 spec §五）：card=专家配置卡——提示词基座/工具面/路径/权限四类按卡参数化，
@@ -992,6 +1007,17 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     _mcp_headers = {}
     if _internal_token:
         _mcp_headers["Authorization"] = f"Bearer {_internal_token}"
+    # 权限重构T8a（design §8.2）：用户身份跨 MCP 边界——X-Tupu-User + HMAC 签名
+    # （±300s）。auth=0 匿名 → 'anonymous'（教学工具落 anonymous 桶=开发态语义）；
+    # auth=1 真实用户 → sub。铁律①不变：身份走传输头，绝不进模型可见参数面。
+    _t5u = user if (user is not None and not getattr(user, "is_anonymous", False)) else None
+    _tupu_user = _t5u.sub if _t5u is not None else "anonymous"
+    try:
+        from app.services.mcp_server import user_sig_header as _user_sig
+        _mcp_headers["X-Tupu-User"] = _tupu_user
+        _mcp_headers["X-Tupu-User-Sig"] = _user_sig(_tupu_user)
+    except Exception as _hdr_err:
+        logger.warning(f"[T8a] 用户头注入失败（按无头处理）: {_hdr_err}")
     mcp_client = MultiServerMCPClient({
         "tupu-kg": {"url": "http://127.0.0.1:28000/mcp/sse", "transport": "sse", "headers": _mcp_headers}
     })
@@ -1055,6 +1081,13 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
             logger.info(f"[T5] 工具面用户过滤: {user.sub} {_before}->{len(mcp_tools)} 件")
         except Exception as _tg_err:
             logger.warning(f"[T5] 工具面过滤异常（fail-open 兜底放行——装配方非执法点）: {_tg_err}")
+    # 权限重构T8a（design §8.3 双轨/回滚）：SISHU_MCP_TUTOR_TOOLS=0 → 剥教学 11 件
+    # 出 MCP 面（回退「编排承接+空 MCP 面」现状=回滚路径，秒级零重部署）；
+    # =1（缺省）走 MCP 面（本件薄包装）。twin 灰度期保留=编排承接面本身。
+    if _os.getenv("SISHU_MCP_TUTOR_TOOLS", "1") != "1":
+        _dropped, mcp_tools = _strip_tutor_tools_for_rollback(mcp_tools)
+        if _dropped:
+            logger.info(f"[T8a] 灰度开关=0：剥离教学 {len(_dropped)} 件（编排承接现状回退）")
     # ⑤R R1（批12）：教学九件进程内 twin 随先行版教学面退役移除——
     # 先行版 MCP 教学工具族已从 mcp_server 注册表摘除（twin 覆盖层失锚），
     # 教学能力由 vendor 复刻件（deeptutor learning 原生工具+路由族）承接。

@@ -4,7 +4,7 @@
 单一事实源纪律：
 - PERMISSION_VOCAB：11 资源类型 × 合法动作词，原样 design §5.1；GET /api/v1/iam/vocab
   原样吐出（T2），前端矩阵编辑器数据源。
-- TOOL_REGISTRY：全集 = mcp_server 实际注册集（W5 回挂教学 11 件前 = 19 件，含
+- TOOL_REGISTRY：全集 = mcp_server 实际注册集（T8a 回挂教学 11 件后 = 30 件，含
   search_kb 🛠R1）。**漂移由 tests/test_iam.py 用 mcp.list_tools() 实测断言把关**——
   本文件用字面量集合而靘认证 mcp_server 导入，避免权限判定路径反向依赖 MCP 服务
   模块（重导入链）；新增/摘除 MCP 工具时必须同步本表，测试会拦住遗漏。
@@ -59,16 +59,31 @@ TOOL_REGISTRY: FrozenSet[str] = frozenset({
     "search_kb",
     # 执行类（受 validate_safe_sql / ScopeChecker / 引擎锁定闸门保护）
     "execute_sql", "execute_api_sql", "execute_entity_api", "execute_doris_sql",
+    # T8a 教学读面 7 件（LLM 臂两件数据面只读，落审计）
+    "fsrs_due", "mastery_query", "wrong_question_query", "select_exercises",
+    "analyze_wrong_questions", "grade_answer", "generate_practice",
+    # T8a 教学写面 4 件（应用域写——两段臂+确认流+审计）
+    "fsrs_review", "wrong_question_add", "mother_question_find_or_create",
+    "export_wrong_book",
 })
 
-# 只读类（15）：允许/拒绝二态，角色默认 tool:execute 覆盖
-READONLY_TOOLS: FrozenSet[str] = TOOL_REGISTRY - {
+# 执行类（T8a 后 8 件：原 4 execute_* + 教学写 4）：仅 ACL 显式授予（🛠R5）
+EXEC_TOOLS: FrozenSet[str] = frozenset({
     "execute_sql", "execute_api_sql", "execute_entity_api", "execute_doris_sql",
+    # T8a 教学写 4 件（design §8.4——应用域写：learning_* 四表 owner=当前用户，
+    # 编排确认流+两段臂+审计三保险；系统级恒拒类语义只留给 shell/文件系统级）
+    "fsrs_review", "wrong_question_add",
+    "mother_question_find_or_create", "export_wrong_book",
+})
+
+# T8a 教学写 4 件（EXEC 的子集——种子/两段臂定位用）
+TUTOR_EXEC_TOOLS: FrozenSet[str] = EXEC_TOOLS & {
+    "fsrs_review", "wrong_question_add",
+    "mother_question_find_or_create", "export_wrong_book",
 }
 
-# 执行类（T1 时点 4 件；T8a 回挂后 = 8：+ fsrs_review / wrong_question_add /
-# mother_question_find_or_create / export_wrong_book）：仅 ACL 显式授予
-EXEC_TOOLS: FrozenSet[str] = TOOL_REGISTRY - READONLY_TOOLS
+# 只读类（T8a 后 22）：允许/拒绝二态，角色默认 tool:execute 覆盖
+READONLY_TOOLS: FrozenSet[str] = TOOL_REGISTRY - EXEC_TOOLS
 
 # 写类恒拒（6，系统级面外——与引擎 ABSOLUTE_FORBIDDEN 同集，关系由测试钉住）
 WRITE_TOOLS: FrozenSet[str] = frozenset({

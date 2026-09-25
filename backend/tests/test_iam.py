@@ -50,17 +50,21 @@ def test_tool_registry_matches_mcp_server():
 
     registered = {t.name for t in asyncio.run(mcp.list_tools())}
     assert TOOL_REGISTRY == registered
-    assert len(TOOL_REGISTRY) == 19
+    assert len(TOOL_REGISTRY) == 30  # T8a：19 + 教学读 7 + 教学写 4
     assert "search_kb" in TOOL_REGISTRY          # 🛠R1：不在 GENERIC 但已注册——必须入册
     assert "read_file" not in TOOL_REGISTRY      # 框架工具面外（design §6.1 R14）
     # 三分类划分：READONLY ∪ EXEC == REGISTRY（WRITE 是系统级面外集合，不在注册表）
     assert not (READONLY_TOOLS & EXEC_TOOLS)
     assert READONLY_TOOLS | EXEC_TOOLS == TOOL_REGISTRY
-    assert len(READONLY_TOOLS) == 15
-    assert len(EXEC_TOOLS) == 4
-    assert EXEC_TOOLS == {
-        "execute_sql", "execute_api_sql", "execute_entity_api", "execute_doris_sql",
-    }
+    assert len(READONLY_TOOLS) == 22
+    assert len(EXEC_TOOLS) == 8
+    assert {"execute_sql", "execute_api_sql", "execute_entity_api", "execute_doris_sql"} < EXEC_TOOLS
+    # T8a：教学 11 件全入册（读 7 在只读、写 4 在 EXEC）
+    from app.services.permission_vocab import TUTOR_EXEC_TOOLS
+    assert TUTOR_EXEC_TOOLS <= EXEC_TOOLS
+    for n in ("fsrs_due", "mastery_query", "wrong_question_query", "select_exercises",
+              "analyze_wrong_questions", "grade_answer", "generate_practice"):
+        assert n in READONLY_TOOLS, n
 
 
 def test_write_tools_align_with_engine_forbidden():
@@ -75,7 +79,8 @@ def test_write_tools_align_with_engine_forbidden():
     assert WRITE_TOOLS == ABSOLUTE_FORBIDDEN_TOOLS
     assert len(WRITE_TOOLS) == 6
     assert DATA_TOOLS <= TOOL_REGISTRY
-    assert DATA_TOOLS == EXEC_TOOLS  # T1 时点两集合同值；T8a 拆分时改本断言
+    # T8a：EXEC(8) 与引擎 DATA_TOOLS(4) 有意分叉——DATA ⊂ EXEC（写 4 件非引擎数据工具）
+    assert DATA_TOOLS < EXEC_TOOLS
 
 
 def test_auth_audit_log_model():

@@ -12,8 +12,132 @@
 from typing import Any
 from mcp.server.fastmcp import FastMCP
 
+import logging
+from typing import Callable
+
 # 业务逻辑单一源（@tool 和 MCP tool 共用）
 from app.services.tupu_deepagent import dispatch_kg_action
+
+# ---------------------------------------------------------------------------
+# 权限重构T8a（design §8.2/§8.4）：/mcp 面 UserContext ASGI 中间件 + EXEC 两段臂
+# ---------------------------------------------------------------------------
+import hashlib as _hashlib
+import hmac as _hmac
+import json as _json2
+import os as _os2
+import time as _time2
+
+
+class UserContextASGIMiddleware:
+    """🔴-4 解法（design §8.2）：跨 MCP 边界传递用户身份。
+
+    ①验 internal token（沿用现口径——auth=1 时平台 AuthMiddleware 已挡 /mcp，
+      此处二次校验防直接绕行；auth=0 开发态放行）；②X-Tupu-User + HMAC 签名
+      （±300s 新鲜度）→ memory_runtime 置 ContextVar；③缺头 → 不置位 → 教学工具
+      经 current_user_strict fail-closed（与外部无头 client 同语义）。
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            return await self.app(scope, receive, send)
+        headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
+        internal = _os2.environ.get("TUPU_INTERNAL_TOKEN", "")
+        authz = headers.get(b"authorization", b"").decode("latin-1")
+        if internal and not (authz.startswith("Bearer ") and _hmac.compare_digest(authz[7:].strip(), internal)):
+            # internal token 校验失败（auth=1 态平台中间件前置已挡；此处兜底）
+            body = _json2.dumps({"detail": "MCP 端点需 Bearer 内部 token"}).encode()
+            await send({"type": "http.response.start", "status": 401,
+                        "headers": [(b"content-type", b"application/json"),
+                                    (b"content-length", str(len(body)).encode())]})
+            await send({"type": "http.response.body", "body": body})
+            return
+
+        user = headers.get(b"x-tupu-user", b"").decode("latin-1") or ""
+        sig = headers.get(b"x-tupu-user-sig", b"").decode("latin-1") or ""
+        reset_token = None
+        if user and sig:
+            ok, err = _verify_user_sig(user, sig)
+            if ok:
+                from app.services import memory_runtime as _mr
+                reset_token = _mr.set_runtime_token({"expert_id": "wenshu", "user": user,
+                                                     "session_id": "", "turn_id": ""})
+            else:
+                _log.warning("[T8a] X-Tupu-User 签名校验失败（%s）——按无头处理", err[:60])
+        try:
+            return await self.app(scope, receive, send)
+        finally:
+            if reset_token is not None:
+                from app.services import memory_runtime as _mr
+                _mr.reset_runtime_token(reset_token)
+
+
+def _verify_user_sig(user: str, sig: str) -> tuple:
+    """X-Tupu-User-Sig = HMAC_SHA256(TUPU_INTERNAL_TOKEN, user|ts)（±300s，§8.2）。"""
+    try:
+        s, ts_s = sig.rsplit(".", 1)
+        ts = int(ts_s)
+    except (ValueError, AttributeError):
+        return False, "签名格式非法"
+    if abs(_time2.time() - ts) > 300:
+        return False, "签名过期"
+    key = (_os2.environ.get("TUPU_INTERNAL_TOKEN") or "tupu-dev-internal").encode()
+    expect = _hmac.new(key, f"{user}|{ts}".encode(), _hashlib.sha256).hexdigest()
+    return (True, "") if _hmac.compare_digest(s, expect) else (False, "签名不匹配")
+
+
+def user_sig_header(user: str) -> str:
+    """agent 侧同款签名（_build_agent 注入 X-Tupu-User-Sig 用——算法单一源）。"""
+    ts = int(_time2.time())
+    key = (_os2.environ.get("TUPU_INTERNAL_TOKEN") or "tupu-dev-internal").encode()
+    s = _hmac.new(key, f"{user}|{ts}".encode(), _hashlib.sha256).hexdigest()
+    return f"{s}.{ts}"
+
+
+def _exec_audit(tool: str, user: str, decision: str, reason: str) -> None:
+    """T8a 两段臂双审计（①=approval ②=allow/deny）。尽力而为不阻塞。"""
+    try:
+        from app.core.database import SessionLocal as _SL
+        from app.models.auth import AuthAuditLog as _AAL
+        from app.services import memory_runtime as _mr
+        db = _SL()
+        try:
+            rt = _mr.current_runtime() or {}
+            db.add(_AAL(user_sub=user or "anonymous", resource_type="tool",
+                        resource_id=tool, action="execute", decision=decision,
+                        reason=(reason or "")[:500],
+                        session_id=rt.get("session_id"), turn_id=rt.get("turn_id")))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as _e:
+        _log.warning(f"[T8a] EXEC 审计失败（不阻塞）: {_e}")
+
+
+def _two_arm(tool: str, args: dict, confirm_token: str, summary: str, execute):
+    """EXEC 两段臂通用体（design §8.4）：无 token=预检臂①（签发 pending）；
+    携 token=执行臂②（校验才执行）。双审计：①approval ②allow/deny。"""
+    from app.services import memory_runtime as _mr
+    user = _mr.current()["user"]  # 未置位→anonymous 缺省（两段臂绑定用，教学件另有 strict）
+    if not confirm_token:
+        from app.services.tool_confirm import issue as _issue
+        _exec_audit(tool, user, "approval", f"预检臂①：{summary[:120]}")
+        return {"status": "pending_confirmation", "summary": summary,
+                "confirm_token": _issue(tool, args, user),
+                "hint": "携 confirm_token 原参数重调本工具即执行（确认卡为触发器）"}
+    from app.services.tool_confirm import verify as _verify
+    ok, err = _verify(tool, args, user, confirm_token)
+    if not ok:
+        _exec_audit(tool, user, "deny", f"执行臂②拒绝：{err}")
+        return {"status": "denied", "error": err}
+    out = execute()
+    _exec_audit(tool, user, "allow", "执行臂②完成")
+    return out
+
+
+_log = logging.getLogger("tupu.mcp")
 
 mcp = FastMCP("tupu-kg")
 
@@ -187,9 +311,12 @@ def batch_entity_source_mode(entity_codes: list) -> dict:
 
 
 @mcp.tool()
-def execute_api_sql(sql: str) -> dict:
-    """执行多源 API 联邦 SQL（DuckDB，WHERE/JOIN 自动下推到 API 参数）。虚拟表名从 /api-endpoints/tables 查。"""
-    return _with_result_ref(dispatch_kg_action("execute_api_sql", {"sql": sql}))
+def execute_api_sql(sql: str, confirm_token: str = "") -> dict:
+    """执行多源 API 联邦 SQL（DuckDB，WHERE/JOIN 自动下推到 API 参数）。虚拟表名从 /api-endpoints/tables 查。
+    T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    return _two_arm("execute_api_sql", {"sql": sql}, confirm_token,
+                    f"执行多源 API 联邦查询：{sql[:160]}",
+                    lambda: _with_result_ref(dispatch_kg_action("execute_api_sql", {"sql": sql})))
 
 
 @mcp.tool()
@@ -202,8 +329,12 @@ def execute_entity_api(entity_code: str, filters: dict = {}) -> dict:
       - {"列": [v1, v2]}                        IN 匹配
       - {"列": {"_range": [[">=", a], ["<=", b]]}}  范围匹配
     例：execute_entity_api(entity_code="dim_ps_project_def",
-                           filters={"ProjectDescription": {"contains": "李钢柱"}})"""
-    return _with_result_ref(dispatch_kg_action("execute_entity_api", {"entity_code": entity_code, "filters": filters or {}}))
+                           filters={"ProjectDescription": {"contains": "李钢柱"}})
+    T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    args = {"entity_code": entity_code, "filters": filters or {}}
+    return _two_arm("execute_entity_api", args, confirm_token,
+                    f"执行对象 API 映射查询：{entity_code}",
+                    lambda: _with_result_ref(dispatch_kg_action("execute_entity_api", args)))
 
 
 @mcp.tool()
@@ -212,8 +343,12 @@ def execute_doris_sql(entity_code: str = "", sql: str = "", filters: dict = {}) 
 
     优先传 entity_code：自动加载平台预配的 integration_sql + doris_catalog，并按 filters 下推 WHERE，无需自己拼 SQL。
     仅当对象未配 integration_sql 时才传 sql 自建，且 sql 必须用 3 段命名 catalog.db.table（否则报 No database selected）。
+    T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。
     """
-    return _with_result_ref(dispatch_kg_action("execute_doris_sql", {"entity_code": entity_code, "sql": sql, "filters": filters or {}}))
+    args = {"entity_code": entity_code, "sql": sql, "filters": filters or {}}
+    return _two_arm("execute_doris_sql", args, confirm_token,
+                    f"执行 Doris 整合查询：{entity_code or sql[:100]}",
+                    lambda: _with_result_ref(dispatch_kg_action("execute_doris_sql", args)))
 
 
 @mcp.tool()
@@ -225,10 +360,66 @@ def sample_column_values(entity_code: str, column: str, limit: int = 50) -> dict
 
 
 # ---------------------------------------------------------------------------
-# ⑤R R1（批12）：先行版教学工具族退役移除（原九件+⑤补补 fsrs_due/fsrs_review，共 11 件）——
-# 能力由 vendor 复刻件承接（deeptutor learning 原生 practice_generator/exercise_selector/
-# grading + self_learning/learner_profile 路由族）；学习域数据落 PG learning_* 四表冻结（M00 登记）。
+# 权限重构T8a（v1.3 W5）：教学 11 件重新回挂——薄包装单源消费 tutor_inprocess.SPECS
+# （拷贝源纪律：description 逐字沿用 SPECS，不许手抄）；user 由 /mcp 面 UserContext
+# 中间件置位（X-Tupu-User+HMAC），impl 内 current_user_strict fail-closed（🔴-4）；
+# 写 4 件走 EXEC 两段臂（design §8.4：无 confirm_token=预检臂①，携 token=执行臂②）。
+# 只读 7 件直通（user_strict 解析后调 impl）。灰度开关 SISHU_MCP_TUTOR_TOOLS=0 时
+# _build_agent 剥离本面回退编排承接（twin/编排=回滚路径，design §8.3）。
 # ---------------------------------------------------------------------------
+from app.services.learning.tutor_inprocess import SPECS as _TUTOR_SPECS
+from app.services.memory_runtime import current_user_strict as _tutor_user_strict
+
+_TUTOR_WRITE_4 = frozenset({"wrong_question_add", "fsrs_review",
+                            "mother_question_find_or_create", "export_wrong_book"})
+
+
+def _register_tutor_tools() -> int:
+    import inspect as _inspect
+
+    registered = 0
+    for _spec in _TUTOR_SPECS:
+        _sig = _inspect.signature(_spec["impl"])
+        _params = list(_sig.parameters.values())[1:]  # 剥 user 首参
+        _is_write = _spec["name"] in _TUTOR_WRITE_4
+
+        def _mk(pkeys: list, write: bool, name: str):
+            def _run(**kwargs):
+                user = _tutor_user_strict()  # fail-closed：runtime 未置位即抛（🔴-4）
+                args = {k: kwargs.get(k) for k in pkeys}
+                # impl 运行期按 _impl_{name} 规约解析（单源 twin 同款命名）——
+                # 测试 monkeypatch 可达；注册期捕获引用则 patch 不可达（e2e 实测）。
+                from app.services.learning import tutor_inprocess as _ti
+                impl = getattr(_ti, f"_impl_{name}")
+                if write:
+                    def _exec():
+                        return impl(user, **args)
+                    return _two_arm(name, args, kwargs.get("confirm_token", ""),
+                                    f"教学写操作 {name}：{str(args)[:120]}", _exec)
+                return impl(user, **args)
+
+            full = list(_params)
+            if write:
+                full.append(_inspect.Parameter("confirm_token", _inspect.Parameter.KEYWORD_ONLY,
+                                               default=""))
+            _run.__signature__ = _sig.replace(parameters=full, return_annotation=dict)
+            _run.__annotations__ = {q.name: q.annotation for q in _params
+                                    if q.annotation is not _inspect.Parameter.empty}
+            _run.__annotations__["return"] = dict  # FastMCP 输出模型显式化（dict 直通）
+            if write:
+                _run.__annotations__["confirm_token"] = str
+            _run.__name__ = str(name)
+            _run.__doc__ = str(_spec["description"]) + (
+                " T8a 两段臂：先无 confirm_token 调用取 pending_confirmation，再携 token 原参数重调执行。"
+                if write else "")
+            return _run
+
+        mcp.tool()(_mk([q.name for q in _params], _is_write, str(_spec["name"])))
+        registered += 1
+    return registered
+
+
+_TUTOR_REGISTERED = _register_tutor_tools()
 
 
 # ---------------------------------------------------------------------------
@@ -244,4 +435,7 @@ def mount_mcp(app) -> None:
 
     内部 deepagent 和外部 client 都连 /mcp/sse。
     """
-    app.mount("/mcp", mcp.sse_app())
+    # 权限重构T8a（design §8.2）：UserContext ASGI 中间件包装——X-Tupu-User+HMAC
+    # 签名验签 → memory_runtime 置位（教学工具 current_user_strict 数据源）。
+    # /mcp 仅内部可达（loopback/compose 内网），不对外发布端口（§8.2 暴露面纪律）。
+    app.mount("/mcp", UserContextASGIMiddleware(mcp.sse_app()))
