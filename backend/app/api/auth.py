@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import (
     ENABLE_AUTH,
+    AUTH_PROVIDER,
     AuthUser,
     get_current_user,
     require_permission,
@@ -27,6 +28,159 @@ from app.core.database import get_db
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ---------------------------------------------------------------------------
+# SuperTokens 会话端点（T3，design §4.4 🛠R2）
+# 实施裁定：不挂 ST 全局中间件——AuthMiddleware 纯 ASGI 先例（BaseHTTPMiddleware
+# 断 SSE 流）；SDK 的 *_without_request_response 会话函数直接驱动，cookie 由本面手写。
+# ---------------------------------------------------------------------------
+
+_st_initialized = False
+
+
+def _ensure_st_init() -> None:
+    """supertokens-python 惰性初始化（仅登录签发/建号用，验签仍走自研 JWKS）。"""
+    global _st_initialized
+    if _st_initialized:
+        return
+    from supertokens_python import InputAppInfo, SupertokensConfig, init
+    from supertokens_python.recipe import emailpassword, session
+
+    init(
+        supertokens_config=SupertokensConfig(
+            connection_uri=os.environ.get("SUPERTOKENS_CONNECTION_URI", "http://127.0.0.1:13567"),
+            api_key=os.environ.get("SUPERTOKENS_API_KEY") or None,
+        ),
+        app_info=InputAppInfo(
+            app_name="tupu",
+            api_domain=os.environ.get("TUPU_API_DOMAIN", "http://localhost:23000"),
+            website_domain=os.environ.get("TUPU_WEBSITE_DOMAIN", "http://localhost:23000"),
+        ),
+        framework="fastapi",
+        mode="asgi",
+        recipe_list=[
+            session.init(anti_csrf="NONE"),  # Bearer 头通道，无浏览器 SDK 的 CSRF 语义
+            emailpassword.init(),
+        ],
+    )
+    _st_initialized = True
+
+
+def _token_pair(tokens) -> tuple:
+    """get_all_session_tokens_dangerously 兼容面：0.29.2 返回 dict。"""
+    if isinstance(tokens, dict):
+        return tokens.get("accessToken") or tokens.get("access_token"), tokens.get("refreshToken") or tokens.get("refresh_token")
+    return tokens.access_token, tokens.refresh_token
+
+
+def _st_recipe_user_id(user_id: str):
+    from supertokens_python.types import RecipeUserId
+
+    return RecipeUserId(user_id)
+
+
+def _set_st_cookies(response, access_token: str, refresh_token: str) -> None:
+    """设计 §4.4：sAccessToken + sRefreshToken（HttpOnly）双 cookie——兼容 H5/SDK 通道。"""
+    secure = os.environ.get("TUPU_HTTPS", "0") == "1"
+    response.set_cookie("sAccessToken", access_token, httponly=True, samesite="lax", secure=secure, path="/")
+    response.set_cookie("sRefreshToken", refresh_token, httponly=True, samesite="lax", secure=secure, path="/")
+
+
+class SessionLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class SessionRefreshRequest(BaseModel):
+    refresh_token: Optional[str] = None  # 缺省读 sRefreshToken cookie
+
+
+@router.post("/session")
+async def st_login(payload: SessionLoginRequest, response=None):
+    """登录签发：ST SDK signin → 创建会话 → 返回 access_token + 用户镜像（🛠R2）。"""
+    _ensure_st_init()
+    from supertokens_python.recipe.emailpassword import asyncio as ep_asyncio
+    from supertokens_python.recipe.emailpassword.interfaces import WrongCredentialsError
+    from supertokens_python.recipe.session import asyncio as session_recipe
+
+    result = await ep_asyncio.sign_in("", payload.email, payload.password)
+    if isinstance(result, WrongCredentialsError):
+        raise HTTPException(status_code=401, detail="邮箱或密码错误")
+
+    s = await session_recipe.create_new_session_without_request_response(
+        "", _st_recipe_user_id(result.user.id), disable_anti_csrf=True,
+    )
+    access_token, refresh_token = _token_pair(s.get_all_session_tokens_dangerously())
+
+    from app.core.database import SessionLocal
+    from app.core.auth import _upsert_user
+
+    email = None
+    try:
+        email = result.user.emails[0]
+    except (AttributeError, IndexError):
+        pass
+    db = SessionLocal()
+    try:
+        user = _upsert_user(db, {
+            "sub": result.user.id,
+            "email": email,
+            "preferred_username": email.split("@")[0] if email else result.user.id,
+        })
+    finally:
+        db.close()
+
+    body = {"code": 200, "data": {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "user": user.to_dict(),
+    }}
+    from fastapi.responses import JSONResponse
+    resp = JSONResponse(body)
+    _set_st_cookies(resp, access_token, refresh_token)
+    return resp
+
+
+@router.post("/session/refresh")
+async def st_refresh(request: Request, payload: Optional[SessionRefreshRequest] = None):
+    """会话续期（🛠R2）：读 sRefreshToken cookie 或 body → SDK refresh → 新 access_token。"""
+    _ensure_st_init()
+    from supertokens_python.recipe.session import asyncio as session_recipe
+
+    refresh_token = (payload.refresh_token if payload else None) or request.cookies.get("sRefreshToken")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="缺少 refresh token")
+    try:
+        s = await session_recipe.refresh_session_without_request_response(
+            refresh_token, disable_anti_csrf=True,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"refresh 失败: {exc}") from exc
+    access_token, refresh_token = _token_pair(s.get_all_session_tokens_dangerously())
+    from fastapi.responses import JSONResponse
+    resp = JSONResponse({"code": 200, "data": {"access_token": access_token}})
+    _set_st_cookies(resp, access_token, refresh_token)
+    return resp
+
+
+@router.delete("/session")
+async def st_logout(request: Request):
+    """登出：凭 Bearer access token 撤销会话（🛠R2 revoke）。"""
+    _ensure_st_init()
+    from supertokens_python.recipe.session import asyncio as session_recipe
+
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="缺少 Authorization: Bearer <token>")
+    try:
+        s = await session_recipe.get_session_without_request_response(auth_header[7:].strip())
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"会话无效: {exc}") from exc
+    if s is None:
+        raise HTTPException(status_code=401, detail="会话不存在")
+    await session_recipe.revoke_session(s.get_handle())
+    return {"code": 200, "data": {"revoked": s.get_handle()}}
 
 
 @router.post("/dev-login")
@@ -59,7 +213,17 @@ def dev_login():
 
 @router.get("/config")
 def auth_config():
-    """OIDC 公开配置（前端登录跳转用）。"""
+    """身份层公开配置（T3 改 provider 口径——design §4.4）。
+
+    provider=supertokens 时只暴露登录路径与 JWKS（不再暴露 Authentik OIDC 端点）；
+    provider=authentik（双跑期缺省）保留 OIDC 字段供旧前端登录流。"""
+    data: Dict[str, Any] = {"enable_auth": ENABLE_AUTH, "provider": AUTH_PROVIDER}
+    if AUTH_PROVIDER == "supertokens":
+        data.update({
+            "login_path": "/api/v1/auth/session",
+            "refresh_path": "/api/v1/auth/session/refresh",
+        })
+        return {"code": 200, "data": data}
     base = os.environ.get("AUTHENTIK_BASE_URL", "http://localhost:9100")
     issuer = os.environ.get("AUTHENTIK_ISSUER", f"{base}/application/o/tupu/")
     client_id = os.environ.get(
@@ -68,19 +232,16 @@ def auth_config():
     redirect = os.environ.get(
         "AUTHENTIK_FRONTEND_REDIRECT", "http://localhost:3000/auth/callback"
     )
-    return {
-        "code": 200,
-        "data": {
-            "enable_auth": ENABLE_AUTH,
-            "issuer": issuer,
-            "client_id": client_id,
-            "redirect_uri": redirect,
-            "authorization_endpoint": f"{base}/application/o/authorize/",
-            "token_endpoint": f"{base}/application/o/token/",
-            "end_session_endpoint": f"{issuer}end-session/",
-            "scopes": ["openid", "profile", "email", "groups"],
-        },
-    }
+    data.update({
+        "issuer": issuer,
+        "client_id": client_id,
+        "redirect_uri": redirect,
+        "authorization_endpoint": f"{base}/application/o/authorize/",
+        "token_endpoint": f"{base}/application/o/token/",
+        "end_session_endpoint": f"{issuer}end-session/",
+        "scopes": ["openid", "profile", "email", "groups"],
+    })
+    return {"code": 200, "data": data}
 
 
 @router.get("/me")

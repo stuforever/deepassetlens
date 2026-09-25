@@ -39,3 +39,4 @@ jieba>=0.42.1
 # 数据处理 / 配置解析
 pandas>=2.0.0
 pyyaml>=6.0
+supertokens-python==0.29.2  # CDI 5.2——配 Core 9.3.x（registry 最新 tag；0.31.x 需 CDI 5.4 无对应镜像）

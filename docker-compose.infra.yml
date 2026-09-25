@@ -216,6 +216,40 @@ services:
       timeout: 5s
       retries: 6
 
+  # --------------------------------------------------------------------- #
+  # SuperTokens Core（权限体系重构 T3，design §4.1）——身份层单容器
+  # - 数据落 tupu_pg 的 supertokens 库（Core 首次启动自动建表）
+  # - 宿主端口 13567（≥10000 端口纪律，AGENTS.md 端口表已登记）
+  # - 镜像定版禁 latest（🛠R10：registry.supertokens.io 为官方现行源，
+  #   Docker Hub 同名镜像已停更）；tag 于 T3 执行时经 docker pull 确认写死
+  # - API_KEYS 走 .env.infra 的 SUPERTOKENS_API_KEY（密钥纪律 design §8.2）
+  # --------------------------------------------------------------------- #
+  tupu_supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:9.3.0
+    container_name: tupu_supertokens
+    restart: unless-stopped
+    depends_on:
+      tupu_pg:
+        condition: service_healthy
+    environment:
+      # 实施实测（T3）：9.3.0 镜像不解析 POSTGRESQL_CONNECTION_URI（连接池始终
+      # 落 localhost 默认致启动失败）——用显式分项变量（官方等价配置面）。
+      POSTGRESQL_HOST: tupu_pg
+      POSTGRESQL_PORT: "5432"
+      POSTGRESQL_USER: ${TUPU_PG_USER:-postgres}
+      POSTGRESQL_PASSWORD: ${TUPU_PG_PASSWORD:-postgres}
+      POSTGRESQL_DATABASE_NAME: supertokens
+      API_KEYS: "${SUPERTOKENS_API_KEY:?set in .env.infra}"
+    ports:
+      - "${SUPERTOKENS_PORT:-13567}:3567"
+    networks:
+      - tupu_infra
+    healthcheck:
+      test: ["CMD", "bash", "-c", "wget -qO- http://localhost:3567/hello || curl -sf http://localhost:3567/hello"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
 networks:
   tupu_infra:
     name: tupu_infra

@@ -34,6 +34,7 @@
 | 前端 dev server | （本地进程） | **23000** | - | React dev server |
 | MySQL | tupu_mysql | **3306** | 3306 | tupu 主库（root/<.env.infra>） |
 | PostgreSQL | tupu_pg | **25432** | 5432 | pg_tupu（项目域实体业务数据） |
+| SuperTokens Core | tupu_supertokens | **13567** | 3567 | 身份层（T3 权限重构；数据落 tupu_pg/supertokens 库） |
 | Elasticsearch | docker-es01-1 | **11200** | 9200 | ES（elastic/infini_rag_flow） |
 | Doris FE | tupu_doris_fe | **9030** | 9030 | Doris MySQL 协议查询 |
 | Doris FE HTTP | tupu_doris_fe | **18030** | 8030 | Doris Web UI |

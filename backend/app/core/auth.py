@@ -76,19 +76,30 @@ AUTHENTIK_JWKS_URL = os.environ.get(
 AUTHENTIK_AUDIENCE = os.environ.get(
     "AUTHENTIK_AUDIENCE", "VzFcIQaMB1b2ETPl7oMg4bAF6VS25BbzERyZTPQf"
 )
-GROUP_ROLE_MAP = {
-    "tupu-admin": "admin",
-    "tupu-operator": "operator",
-    "tupu-viewer": "viewer",
+# 权限重构T3（design §4.2）：身份提供方表驱动 + 双跑。AUTH_PROVIDER 只决定"登录签发
+# 面向前端暴露的口径"；验签双跑期两路 token 都收（_verify_jwt 依 iss 提示排序候选）。
+AUTH_PROVIDER = os.environ.get("AUTH_PROVIDER", "authentik")  # authentik|supertokens
+SUPERTOKENS_JWKS_URL = os.environ.get(
+    # 实施实测（T3）：Core 9.x 公开 JWKS = /.well-known/jwks.json（无需 api-key）；
+    # design §4.2 初稿写的 /auth/jwt/jwks.json 是废弃路径（镜像内 "Unknown API" 实证）
+    "SUPERTOKENS_JWKS_URL", "http://127.0.0.1:13567/.well-known/jwks.json"
+)
+_PROVIDERS = {
+    "authentik": {"jwks": AUTHENTIK_JWKS_URL, "issuer": AUTHENTIK_ISSUER, "aud": AUTHENTIK_AUDIENCE},
+    # ST access token 不校验 iss/aud——验签+exp 即可（design §4.2）
+    "supertokens": {"jwks": SUPERTOKENS_JWKS_URL, "issuer": None, "aud": None},
 }
+# 🛠R6（v1.1）：GROUP_ROLE_MAP 整体退役——auth_user_roles 自 T3 起为唯一角色权威，
+# 登录不再从 group claim 覆盖角色（双跑期管理页的角色编辑才不会被登录冲掉）。
 # 不需要鉴权的路径（前缀匹配）
 _PUBLIC_PATHS = (
     "/",
     "/docs",
     "/openapi.json",
     "/redoc",
-    "/api/v1/auth/config",  # 暴露 OIDC discovery 给前端
+    "/api/v1/auth/config",  # 暴露身份层配置给前端
     "/api/v1/auth/dev-login",  # 开发模式登录（仅 ENABLE_AUTH=0）
+    "/api/v1/auth/session",  # T3：ST 登录签发/续期（design §4.4）
 )
 # /api/v1/auth/me 走"可选 token"逻辑：有就解析，无就匿名
 _OPTIONAL_AUTH_PATHS = (
@@ -103,88 +114,132 @@ _INTERNAL_SERVICE_NAME = "tupu-agent"
 
 
 # --------------------------------------------------------------------------- #
-# JWKS 缓存
+# JWKS 缓存（provider 分桶——design §4.2 🛠：双跑期 ST/Authentik 键互不串）
 # --------------------------------------------------------------------------- #
 
 
 _JWKS_LOCK = threading.Lock()
-_JWKS_CACHE: Dict[str, Any] = {"keys": [], "fetched_at": 0.0, "ttl": 600}
+_JWKS_CACHE: Dict[str, Dict[str, Any]] = {
+    p: {"keys": [], "fetched_at": 0.0, "ttl": 600} for p in _PROVIDERS
+}
 
 
-def _fetch_jwks() -> List[Dict[str, Any]]:
+def _fetch_remote_jwks(url: str) -> List[Dict[str, Any]]:
+    """远端 JWKS 拉取薄封装（测试 monkeypatch 点——请求出网逻辑收敛于此）。"""
+    r = requests.get(url, timeout=5)
+    r.raise_for_status()
+    return r.json().get("keys") or []
+
+
+def _fetch_jwks(provider: str) -> List[Dict[str, Any]]:
     with _JWKS_LOCK:
+        bucket = _JWKS_CACHE.setdefault(provider, {"keys": [], "fetched_at": 0.0, "ttl": 600})
         now = time.time()
-        if now - _JWKS_CACHE.get("fetched_at", 0) < _JWKS_CACHE["ttl"] and _JWKS_CACHE.get("keys"):
-            return _JWKS_CACHE["keys"]
+        if now - bucket.get("fetched_at", 0) < bucket["ttl"] and bucket.get("keys"):
+            return bucket["keys"]
         try:
-            r = requests.get(AUTHENTIK_JWKS_URL, timeout=5)
-            r.raise_for_status()
-            keys = r.json().get("keys") or []
-            _JWKS_CACHE["keys"] = keys
-            _JWKS_CACHE["fetched_at"] = now
+            keys = _fetch_remote_jwks(_PROVIDERS[provider]["jwks"])
+            bucket["keys"] = keys
+            bucket["fetched_at"] = now
             return keys
         except Exception as exc:
             # 拉不到时返回旧缓存（如果有）；都没有就抛
-            if _JWKS_CACHE.get("keys"):
-                return _JWKS_CACHE["keys"]
-            raise RuntimeError(f"无法拉取 Authentik JWKS: {exc}") from exc
+            if bucket.get("keys"):
+                return bucket["keys"]
+            raise RuntimeError(f"无法拉取 {provider} JWKS: {exc}") from exc
 
 
-def _verify_jwt(token: str) -> Dict[str, Any]:
-    """RS256 验签 + 校验 iss/aud/exp，返回 claims。失败抛 HTTPException 401。"""
-    try:
-        unverified = jwt.get_unverified_header(token)
-    except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=401, detail=f"无效 JWT 头部: {exc}")
-
-    kid = unverified.get("kid")
-    keys = _fetch_jwks()
+def _verify_provider_jwt(token: str, provider: str) -> Dict[str, Any]:
+    """单 provider 验签：RS256 + kid 匹配；iss/aud 仅 authentik 桶校验（ST 无 iss/aud）。"""
+    p = _PROVIDERS[provider]
+    if provider == "supertokens":
+        # ST 通道不校验 iss/aud，但拒绝 Authentik 签发方的 iss——否则双跑期
+        # Authentik 签发、aud 校验失败的令牌会经宽松 ST 通道漏过（M02 wrong-aud
+        # 用例实证）。ST 自身 JWT 的 iss = api_domain + "/auth"（实施实测），
+        # 形态任意，故只精确拒 Authentik issuer。
+        unverified_iss = jwt.decode(token, options={"verify_signature": False}).get("iss")
+        if unverified_iss is not None and unverified_iss == AUTHENTIK_ISSUER:
+            raise jwt.PyJWTError(f"非 ST 签发令牌（iss={unverified_iss}）")
+    kid = jwt.get_unverified_header(token).get("kid")
     pubkey = None
-    for k in keys:
+    for k in _fetch_jwks(provider):
         if k.get("kid") == kid:
             pubkey = jwt.algorithms.RSAAlgorithm.from_jwk(k)
             break
     if pubkey is None:
-        raise HTTPException(status_code=401, detail=f"JWKS 找不到 kid={kid}")
+        raise jwt.PyJWTError(f"{provider} JWKS 找不到 kid={kid}")
 
+    options = {"verify_signature": True, "verify_exp": True,
+               "verify_aud": bool(p["aud"]), "verify_iss": bool(p["issuer"])}
+    kwargs: Dict[str, Any] = {}
+    if p["aud"]:
+        kwargs["audience"] = p["aud"]
+    if p["issuer"]:
+        kwargs["issuer"] = p["issuer"]
+    return jwt.decode(token, pubkey, algorithms=["RS256"], options=options, **kwargs)
+
+
+def _verify_jwt(token: str) -> Dict[str, Any]:
+    """双跑验签入口（design §4.2）：按未验签 iss 提示排序候选（ST → Authentik 为先），
+    任一 provider 通过即放行；两路皆败 401。失败原因不外泄（防探测）。"""
     try:
-        claims = jwt.decode(
-            token,
-            pubkey,
-            algorithms=["RS256"],
-            audience=AUTHENTIK_AUDIENCE,
-            issuer=AUTHENTIK_ISSUER,
-            options={"verify_signature": True, "verify_aud": True, "verify_iss": True, "verify_exp": True},
-        )
-        # 补充：调 userinfo 端点拿完整 profile（access_token 默认不含 username/groups）
-        try:
-            userinfo_url = AUTHENTIK_ISSUER.rstrip("/").rsplit("/o/", 1)[0] + "/o/userinfo/"
-            r = requests.get(
-                userinfo_url,
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=5,
-            )
-            if r.status_code == 200:
-                ui = r.json() or {}
-                # 合并 (userinfo 字段不覆盖关键的 sub/iss/aud/exp)
-                for k, v in ui.items():
-                    if k not in claims and v is not None:
-                        claims[k] = v
-                # 显式覆盖几个常用字段
-                for k in ("preferred_username", "email", "name", "groups", "nickname"):
-                    if ui.get(k) is not None:
-                        claims[k] = ui[k]
-        except Exception:
-            pass  # userinfo 拿不到不影响验签
-        return claims
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token 已过期")
-    except jwt.InvalidAudienceError:
-        raise HTTPException(status_code=401, detail="audience 不匹配")
-    except jwt.InvalidIssuerError:
-        raise HTTPException(status_code=401, detail="issuer 不匹配")
+        jwt.get_unverified_header(token)
     except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=401, detail=f"JWT 验证失败: {exc}")
+        raise HTTPException(status_code=401, detail=f"无效 JWT 头部: {exc}")
+    try:
+        iss = jwt.decode(token, options={"verify_signature": False}).get("iss")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail=f"无效 JWT 载荷: {exc}")
+
+    if iss is None or "api.supertokens.io" in iss or "supertokens" in iss:
+        candidates = ["supertokens", "authentik"]
+    elif iss == AUTHENTIK_ISSUER:
+        candidates = ["authentik", "supertokens"]
+    else:
+        candidates = ["supertokens", "authentik"]  # 未知 iss：两路都试，全败即 401
+
+    last_error: Optional[Exception] = None
+    for provider in candidates:
+        try:
+            claims = _verify_provider_jwt(token, provider)
+            # Authentik 路径补充：调 userinfo 拿完整 profile（access_token 默认不含
+            # username/groups）；ST token 无 userinfo 面，跳过。
+            if provider == "authentik":
+                try:
+                    userinfo_url = AUTHENTIK_ISSUER.rstrip("/").rsplit("/o/", 1)[0] + "/o/userinfo/"
+                    r = requests.get(
+                        userinfo_url,
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=5,
+                    )
+                    if r.status_code == 200:
+                        ui = r.json() or {}
+                        for k, v in ui.items():
+                            if k not in claims and v is not None:
+                                claims[k] = v
+                        for k in ("preferred_username", "email", "name", "groups", "nickname"):
+                            if ui.get(k) is not None:
+                                claims[k] = ui[k]
+                except Exception:
+                    pass  # userinfo 拿不到不影响验签
+            return claims
+        except HTTPException:
+            raise
+        except jwt.ExpiredSignatureError as exc:
+            raise HTTPException(status_code=401, detail="Token 已过期") from exc
+        except jwt.InvalidAudienceError as exc:
+            # aud/iss 定错属终判——authentik 提示令牌 aud 不匹配无需再试 ST
+            # （ST 通道已拒他方 iss），保留原错误语义（M02 契约）
+            raise HTTPException(status_code=401, detail="audience 不匹配") from exc
+        except jwt.InvalidIssuerError as exc:
+            raise HTTPException(status_code=401, detail="issuer 不匹配") from exc
+        except jwt.PyJWTError as exc:
+            last_error = exc
+            continue
+        except RuntimeError as exc:
+            last_error = exc
+            continue
+    raise HTTPException(status_code=401, detail=f"JWT 验证失败: {last_error}")
 
 
 # --------------------------------------------------------------------------- #
@@ -239,8 +294,18 @@ _ANONYMOUS = AuthUser(
 
 
 def _upsert_user(db: Session, claims: Dict[str, Any]) -> AuthUser:
-    """根据 JWT claims upsert auth_users + 同步角色。"""
-    from app.models.auth import User, UserRole, Role
+    """根据 JWT claims upsert auth_users（T3 重写——design §4.3，🛠R3/R6/R12）。
+
+    - 匹配顺序：sub → legacy_sub → email（email 多行=查重跳过+告警，防静默错绑）；
+    - email/legacy_sub 命中 → 同事务 sub 迁移（旧值写 legacy_sub，user_roles 与
+      principal_type='user' 的 ACL 引用同步）；
+    - 角色权威在库：登录不再从 group claim 覆盖（🛠R6），无角色兜底 viewer。
+    """
+    import logging
+
+    logger = logging.getLogger("tupu.auth")
+
+    from app.models.auth import ResourceACL, Role, User, UserRole
 
     sub = claims.get("sub")
     if not sub:
@@ -256,9 +321,50 @@ def _upsert_user(db: Session, claims: Dict[str, Any]) -> AuthUser:
     if isinstance(groups, str):
         groups = [groups]
 
-    # upsert User
     user = db.query(User).filter(User.sub == sub).first()
     if user is None:
+        # 🛠R3：sub 未命中 → legacy_sub → email（唯一行才迁）兜底匹配
+        legacy = db.query(User).filter(User.legacy_sub == sub).first() if sub else None
+        if legacy is None and email:
+            email_rows = db.query(User).filter(User.email == email).all()
+            if len(email_rows) == 1:
+                legacy = email_rows[0]
+            elif len(email_rows) > 1:
+                logger.warning(
+                    "[auth] 同 email %s 命中 %d 行，跳过 sub 迁移（新建镜像行），"
+                    "请人工裁定归属（🛠R12）", email, len(email_rows),
+                )
+        if legacy is not None and legacy.sub != sub:
+            old_sub = legacy.sub
+            # 复制式迁移（design §4.3 同事务三表）：auth_user_roles.user_sub 的 FK
+            # 只有 ON DELETE CASCADE、无 ON UPDATE CASCADE——父行原位改 PK 会被
+            # MySQL 1451 拒绝，故「插新行 → 搬子表 → 删旧行」：
+            new_row = User(
+                sub=sub,
+                legacy_sub=old_sub,
+                username=username,
+                email=email,
+                display_name=claims.get("name") or username,
+                groups_snapshot=groups,
+                is_active=legacy.is_active,
+                last_login_at=datetime.utcnow(),
+                created_at=legacy.created_at,
+            )
+            db.add(new_row)
+            db.flush()  # 新父行先落（子表 FK 目标才存在）
+            db.query(UserRole).filter(UserRole.user_sub == old_sub).update(
+                {"user_sub": sub}, synchronize_session=False)
+            db.query(ResourceACL).filter(
+                ResourceACL.principal_type == "user",
+                ResourceACL.principal_id == old_sub).update(
+                {"principal_id": sub}, synchronize_session=False)
+            db.delete(legacy)
+            db.commit()
+            roles = sorted({ur.role_code for ur in
+                            db.query(UserRole).filter(UserRole.user_sub == sub).all()})
+            return AuthUser(sub=sub, username=username, email=email,
+                            groups=groups, roles=roles, is_anonymous=False)
+
         user = User(
             sub=sub,
             username=username,
@@ -276,27 +382,15 @@ def _upsert_user(db: Session, claims: Dict[str, Any]) -> AuthUser:
         user.groups_snapshot = groups
         user.last_login_at = datetime.utcnow()
 
-    # 同步角色：从 group claim 映射 + 写 user_roles
-    target_roles = {GROUP_ROLE_MAP[g] for g in groups if g in GROUP_ROLE_MAP}
-    if not target_roles:
-        target_roles = {"viewer"}  # 兜底
-
-    # 确保 Role 行存在
-    for rcode in target_roles:
-        if not db.query(Role).filter(Role.code == rcode).first():
-            db.add(Role(
-                code=rcode,
-                name=rcode.title(),
-                is_system=True,
-                default_permissions=_DEFAULT_ROLE_PERMS.get(rcode, {}),
-            ))
-
-    # 同步 user_roles：删除多余、补充新增
-    existing = {ur.role_code for ur in db.query(UserRole).filter(UserRole.user_sub == sub).all()}
-    for to_add in target_roles - existing:
-        db.add(UserRole(user_sub=sub, role_code=to_add, granted_by="system_oidc"))
-    for to_del in existing - target_roles:
-        db.query(UserRole).filter(UserRole.user_sub == sub, UserRole.role_code == to_del).delete()
+    # 🛠R6：group-claim 角色覆盖退役——角色权威在 auth_user_roles，登录只读不写；
+    # 无任何角色的用户兜底 viewer（语义保留）。
+    roles = {ur.role_code for ur in db.query(UserRole).filter(UserRole.user_sub == sub).all()}
+    if not roles:
+        roles = {"viewer"}
+        if not db.query(Role).filter(Role.code == "viewer").first():
+            db.add(Role(code="viewer", name="Viewer", is_system=True,
+                        default_permissions=_DEFAULT_ROLE_PERMS.get("viewer", {})))
+        db.add(UserRole(user_sub=sub, role_code="viewer", granted_by="system_fallback"))
 
     db.commit()
 
@@ -305,7 +399,7 @@ def _upsert_user(db: Session, claims: Dict[str, Any]) -> AuthUser:
         username=username,
         email=email,
         groups=groups,
-        roles=sorted(target_roles),
+        roles=sorted(roles),
         is_anonymous=False,
     )
 

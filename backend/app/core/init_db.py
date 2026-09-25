@@ -436,6 +436,8 @@ def init_db(db: Session):
 
     # B2（v4§三）：skills +type 分型列（scenario|general；NULL=存量未分型）
     _ensure_skill_type_column(db)
+    # 权限重构T3：legacy_sub 回滚门列（幂等）
+    _ensure_auth_legacy_sub_column(db)
 
     # ⑥-2a（spec D3）：expert 资源公共语义种子（幂等）——wenshu→role viewer→use
     # （登录兜底 viewer→全员可用）；tutor 等不种=默认私有（显式赋权才见）。
@@ -474,6 +476,24 @@ def _ensure_expert_card_columns(db: Session):
         except Exception as e:
             db.rollback()
             logger.warning(f"[附件四A-1] kg_expert_profiles.{col} 补列失败（不阻启动）: {e}")
+
+
+def _ensure_auth_legacy_sub_column(db: Session):
+    """权限重构T3（🛠R3 回滚门）：auth_users +legacy_sub 列（幂等——列存在则跳过；
+    create_all 不改已有表，照 _ensure_skill_type_column 补列范式）。"""
+    from sqlalchemy import text
+    try:
+        has = db.execute(text(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE "
+            "TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'auth_users' AND COLUMN_NAME = 'legacy_sub'")).scalar()
+        if not has:
+            db.execute(text("ALTER TABLE auth_users ADD COLUMN legacy_sub VARCHAR(64) NULL"))
+            db.execute(text("CREATE INDEX ix_auth_users_legacy_sub ON auth_users (legacy_sub)"))
+            db.commit()
+            logger.info("[T3] auth_users.legacy_sub 回滚门列已加")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[T3] auth_users.legacy_sub 补列失败（不阻启动）: {e}")
 
 
 def _ensure_skill_type_column(db: Session):

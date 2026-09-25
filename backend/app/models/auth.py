@@ -30,6 +30,9 @@ class User(Base):
 
     # Authentik sub (UUID 字符串) 作主键，避免本地数字 id 冲突
     sub = Column(String(64), primary_key=True)
+    # 权限重构T3（🛠R3 回滚门）：sub 迁移前的旧值（Authentik sub）——回滚
+    # AUTH_PROVIDER=authentik 后按 sub → legacy_sub → email 兜底匹配已迁移用户
+    legacy_sub = Column(String(64), nullable=True, index=True)
     username = Column(String(128), nullable=False, index=True)
     email = Column(String(255), nullable=True)
     display_name = Column(String(128), nullable=True)

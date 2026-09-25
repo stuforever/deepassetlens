@@ -145,16 +145,41 @@ def list_users(
 
 
 @router.post("/users")
-def create_user(
+async def create_user(
     payload: UserCreate,
     user: AuthUser = Depends(require_permission("auth", "write")),
     db: Session = Depends(get_db),
 ):
-    """建用户：镜像行 + 初始角色（T2 本地面；T3 换 ST SDK 建号——见模块头注）。"""
+    """建用户：ST SDK 建号 + 镜像行 + 初始角色（design §5.2）。
+
+    T2 为本地面；T3 起身份创建走 SuperTokens（emailpassword sign_up），ST 不可达
+    报 503（禁静默本地建号——身份与镜像行失配会让迁移语义失效）。带 password 走
+    ST 建号，不带则本地面（测试/服务号）。"""
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=409, detail="用户名已存在")
     _validate_role_codes(db, payload.roles)
-    sub = str(uuid.uuid4())
+
+    if payload.password:
+        from app.api.auth import _ensure_st_init
+        from supertokens_python.recipe import emailpassword as ep_recipe
+        from supertokens_python.recipe.emailpassword.interfaces import (
+            EmailAlreadyExistsError,
+            SignUpOkResult,
+        )
+
+        _ensure_st_init()
+        result = await ep_recipe.asyncio.sign_up(
+            "", payload.email or f"{payload.username}@local.tupu", payload.password)
+        if isinstance(result, EmailAlreadyExistsError):
+            raise HTTPException(status_code=409, detail="邮箱已在身份层注册")
+        if not isinstance(result, SignUpOkResult):
+            raise HTTPException(status_code=503, detail=f"ST 建号失败: {result}")
+        sub = result.user.id
+        if db.query(User).filter(User.sub == sub).first():
+            raise HTTPException(status_code=409, detail="该身份镜像已存在")
+    else:
+        sub = str(uuid.uuid4())
+
     db.add(User(
         sub=sub,
         username=payload.username,
