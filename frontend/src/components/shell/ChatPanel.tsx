@@ -307,11 +307,11 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
         block
         icon={<PlusOutlined />}
         data-testid="chat-panel-new"
-        // UX3批1（P0-C）：新建留守当前空间（?new=1 契约=UX2批③），不再跳门户/关面板
+        // UX3修复（用户裁定）：新建会话永远回首页门户——由用户在首页三卡按需选空间；
+        // ?new=1 契约在 ExpertChat（清活跃位）与 TutorHomeChat（桥 reset）各自落地。
         onClick={() => {
           setActiveSessionId('');
-          const slug = location.pathname.startsWith('/e/') ? (location.pathname.split('/')[2] || 'wenshu') : 'wenshu';
-          navigate(slug === 'tutor-h5' ? '/e/tutor-h5/chat' : `/e/${slug}/chat?new=1`);
+          navigate('/');
         }}
       >
         新建对话

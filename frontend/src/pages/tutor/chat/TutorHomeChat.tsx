@@ -6,10 +6,10 @@
 "use client";
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart3, BookMarked, BrainCircuit, Clapperboard, ClipboardCheck, Code2, Compass, Database,
-  FileSearch, Globe, GraduationCap, Image as ImageIcon, Lightbulb, MessageSquare,
+  FileSearch, Flame, Globe, GraduationCap, Image as ImageIcon, Lightbulb, MessageSquare,
   Microscope, PenLine, Sparkles, BookmarkPlus, Download, PanelRight,
   type LucideIcon,
 } from "lucide-react";
@@ -90,6 +90,10 @@ import type { SelectedHistorySession } from "../../../components/chat/HistorySes
 import type { SelectedQuestionEntry } from "../../../components/chat/QuestionBankPicker";
 import { listSkills } from "../../../lib/skills-api";
 import { useStore } from "../../../store/useStore";
+// UX3修复：欢迎区风格收敛数据源（色素/像素对齐问数）——设计 token + sishu 卡
+import { tokens, spaceColors } from "../../../theme/tokens";
+import { expertsApi } from "../../../services/api";
+import type { ExpertCard } from "../../../services/api";
 import { AgentChatProvider, useAgentChat, type AgentMessageItem } from "./AgentChatContext";
 
 // next/dynamic → React.lazy（CRA 无 SSR；批2.3 垫片同款）
@@ -407,6 +411,39 @@ function TutorHomeChatInner() {
     }
     setWelcomeGreeting(bucket[Math.floor(Math.random() * bucket.length)]);
   }, []);
+
+  /* ---- UX3修复（用户裁定）：?new=1 新建契约——门户卡进入/KeepAlive 复活均强制全新会话：
+     桥 reset 清 sessionId/messages（中止在途流）→ 落欢迎页，随后剥参保持 URL 干净。
+     修复曾现的「点私塾卡仍显示上轮对话」——组件被 KeepAlive 保活时不会自行重置。 ---- */
+  const location = useLocation();
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    if (sp.get("new") !== "1") return;
+    reset();
+    sp.delete("new");
+    navigate({ pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : "" }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
+  /* ---- UX3修复：欢迎区风格收敛数据源（只供视觉，失败静默降级，不碰桥功能面）——
+     sishu 卡（suggestions/tagline）+ today-panel 胶囊动态数（同 ExpertChat 批16deep 17.1 平台面）。 ---- */
+  const [sishuCard, setSishuCard] = useState<ExpertCard | null>(null);
+  const [tutorProfile, setTutorProfile] = useState<{ due_count: number; streak_days: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    expertsApi.get("sishu").then((res) => {
+      if (alive) setSishuCard(res.data as ExpertCard);
+    }).catch(() => undefined);
+    fetch("/api/v1/learning/today-panel").then((r) => r.json()).then((j) => {
+      if (alive && j && (j.due_count !== undefined || j.streak_days !== undefined)) {
+        setTutorProfile({ due_count: j.due_count ?? 0, streak_days: j.streak_days ?? 0 });
+      }
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+  const sishuSuggestions = (sishuCard?.suggestions && sishuCard.suggestions.length > 0
+    ? sishuCard.suggestions
+    : sishuCard?.ui_config?.suggestions) ?? ["帮我出三道二次函数练习题", "拍一张错题照片录入错题本", "生成本周的复习计划"];
 
   const firstUserTitle = useMemo(
     () => state.messages.find((msg) => msg.role === "user")?.content.trim().replace(/\s+/g, " ").slice(0, 80) || "",
@@ -866,7 +903,8 @@ function TutorHomeChatInner() {
 
   const cancelStreamingTurn = useCallback(() => stop(), [stop]);
   const handleMessagesClick = useCallback(() => { /* DT：点击消息区收浮层（菜单关闭由组件内部处理） */ }, []);
-  const navigateToHome = useCallback(() => navigate("/e/sishu", { replace: true }), [navigate]);
+  // UX3修复（用户裁定）：新建会话永远回首页门户——由用户在首页三卡按需选空间
+  const navigateToHome = useCallback(() => navigate("/", { replace: true }), [navigate]);
 
   /* ---- 新会话 ---- */
   const newSession = useCallback(() => { reset(); navigateToHome(); }, [reset, navigateToHome]);
@@ -913,9 +951,58 @@ function TutorHomeChatInner() {
           {/* 消息区（DT L1982-2075 1:1） */}
           <div className="flex w-full flex-1 min-h-0 flex-col">
             {!hasMessages ? (
-              <div className="animate-fade-in flex w-full flex-1 flex-col items-center justify-center px-6 pb-8 gap-8" style={{ minHeight: "fit-content" }}>
-                <div className="flex w-full max-w-[960px] items-center justify-center gap-4">
-                  <h1 className="font-serif text-[40px] font-medium leading-[1.1] tracking-[-0.015em] text-[var(--foreground)]">{t(welcomeGreeting)}</h1>
+              <div className="animate-fade-in flex w-full flex-1 flex-col items-center justify-center px-6 pb-8" style={{ minHeight: "fit-content" }}>
+                {/* UX3修复：欢迎区对齐问数视觉语言（色素/像素）——渐变大标题+副标语+today-panel 动态数。
+                    问候语文案是功能保留（DT L660-696 时段桶），仅呈现样式从衬线收敛为问数渐变题 */}
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                  <div
+                    style={{
+                      fontSize: tokens.fontSize.display,
+                      fontWeight: 700,
+                      letterSpacing: "-0.02em",
+                      background: tokens.brandGradient,
+                      WebkitBackgroundClip: "text",
+                      backgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      color: "transparent",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {t(welcomeGreeting)}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 14, color: "var(--text-tertiary, #999)" }}>
+                    {sishuCard?.ui_config?.welcome?.tagline ?? "出题 · 判分 · 错题本 · 学情规划"}
+                  </div>
+                  {tutorProfile && (tutorProfile.due_count > 0 || tutorProfile.streak_days > 0) && (
+                    <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.info }}>
+                      今日有 {tutorProfile.due_count} 题待复习，已连续学习 {tutorProfile.streak_days} 天
+                    </div>
+                  )}
+                </div>
+                {/* 统计胶囊（同问数 S1 卡规格——图标+tabular-nums 数字+12px 说明） */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                  {[
+                    { label: "待复习", value: tutorProfile ? `${tutorProfile.due_count} 题` : "—", icon: <BookMarked className="h-4 w-4" />, color: spaceColors.sishu },
+                    { label: "连续学习", value: tutorProfile ? `${tutorProfile.streak_days} 天` : "—", icon: <Flame className="h-4 w-4" />, color: tokens.colors.ai },
+                  ].map((c) => (
+                    <div
+                      key={c.label}
+                      data-testid={`sishu-capsule-${c.label}`}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "10px 18px", borderRadius: tokens.radius.card,
+                        background: "var(--bg-content, #fff)",
+                        border: `1px solid ${tokens.colors.border}`,
+                        boxShadow: tokens.elevation.s1,
+                      }}
+                    >
+                      <span style={{ color: c.color, fontSize: 16, display: "inline-flex" }}>{c.icon}</span>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary, #222)", lineHeight: 1.2, fontVariantNumeric: "tabular-nums" }}>{c.value}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-tertiary, #999)" }}>{c.label}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 {/* UX2批⑧：7 功能入口已下沉管理台（v4§5.2 私塾管理组）——首屏宫格移除（用户反馈⑧） */}
               </div>
@@ -1069,6 +1156,33 @@ function TutorHomeChatInner() {
               prefillInputRef={prefillInputRef}
             />
             </div>
+            {/* UX3修复：建议卡（问数同款两列卡规格）——仅欢迎视图渲染；点击经 prefill 预填不直发，
+                送信链路仍是桥 send（功能不换）。宽度对齐 ChatComposer 欢迎态 max-w-[768px]。 */}
+            {!hasMessages && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, width: "100%", maxWidth: 768, margin: "0 auto", padding: "0 24px 16px" }}>
+                {sishuSuggestions.map((item, i) => (
+                  <div
+                    key={`suggest-${i}`}
+                    role="button"
+                    tabIndex={0}
+                    data-testid={`sishu-suggest-${i}`}
+                    onClick={() => prefillInputRef.current?.(item)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); prefillInputRef.current?.(item); } }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "12px 14px", borderRadius: tokens.radius.card,
+                      background: "var(--bg-content, #fff)",
+                      border: `1px solid ${tokens.colors.border}`,
+                      boxShadow: tokens.elevation.s1,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4 shrink-0" style={{ color: spaceColors.sishu }} />
+                    <span style={{ fontSize: 13, color: "var(--text-primary, #222)", lineHeight: 1.6 }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div
               aria-hidden="true"
               className="shrink-0"
