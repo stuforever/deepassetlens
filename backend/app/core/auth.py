@@ -376,10 +376,16 @@ def _upsert_user(db: Session, claims: Dict[str, Any]) -> AuthUser:
         )
         db.add(user)
     else:
-        user.username = username
-        user.email = email
-        user.display_name = claims.get("name") or username
-        user.groups_snapshot = groups
+        # T3 实测修复：ST access token 的 JWT claims 只带 sub/exp——**缺字段不回填
+        # 缺省值**（原实现 preferred_username 或 email or sub 恒真，每请求把管理面
+        # 用户名改成 sub、email 清空）。仅在 claims 真携带时更新。
+        if claims.get("preferred_username"):
+            user.username = claims["preferred_username"]
+        if email:
+            user.email = email
+        if claims.get("name"):
+            user.display_name = claims["name"]
+        user.groups_snapshot = groups or user.groups_snapshot
         user.last_login_at = datetime.utcnow()
 
     # 🛠R6：group-claim 角色覆盖退役——角色权威在 auth_user_roles，登录只读不写；
@@ -394,10 +400,12 @@ def _upsert_user(db: Session, claims: Dict[str, Any]) -> AuthUser:
 
     db.commit()
 
+    # T3 实测修复：展示名以 DB 行为准（ST JWT claims 无 preferred_username/email，
+    # 用 claims 链会把管理面用户名顶成 sub、email 顶成 None——/auth/me 实测）
     return AuthUser(
         sub=sub,
-        username=username,
-        email=email,
+        username=user.username or username,
+        email=user.email,
         groups=groups,
         roles=sorted(roles),
         is_anonymous=False,
@@ -586,7 +594,8 @@ class AuthMiddleware:
 
 
 def get_current_user(request: Request) -> AuthUser:
-    user: Optional[AuthUser] = getattr(request.state, "user", None)
+    # request=None（直调默认形参）与未走中间件同归匿名——AttributeError 防护
+    user: Optional[AuthUser] = getattr(request.state, "user", None) if request is not None else None
     if user is None:
         # 未走中间件（比如直接调函数测试）→ 返回匿名
         return _ANONYMOUS

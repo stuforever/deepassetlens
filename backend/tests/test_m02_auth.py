@@ -267,7 +267,7 @@ def test_auth_on_forged_token_401(monkeypatch):
     monkeypatch.setattr("app.core.auth.ENABLE_AUTH", True)
     jwk, _ = _make_token_kit("m02-forged-kid")
     _, attacker_pem = _make_token_kit("m02-forged-kid")  # 另一对密钥，kid 撞库
-    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda: [jwk])
+    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda provider: [jwk])  # T3：provider 分桶签名
     from fastapi.testclient import TestClient
     from app.core.auth import AUTHENTIK_ISSUER, AUTHENTIK_AUDIENCE
     client = TestClient(_mw_app())
@@ -290,7 +290,7 @@ def test_auth_on_expired_token_401(monkeypatch):
     变异锚点：verify_exp 关闭/exp 判定删 → 过期 token 200 红。"""
     monkeypatch.setattr("app.core.auth.ENABLE_AUTH", True)
     jwk, pem = _make_token_kit("m02-exp-kid")
-    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda: [jwk])
+    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda provider: [jwk])  # T3：provider 分桶签名
     from fastapi.testclient import TestClient
     from app.core.auth import AUTHENTIK_ISSUER, AUTHENTIK_AUDIENCE
     claims = {
@@ -310,7 +310,7 @@ def test_auth_on_wrong_aud_401(monkeypatch):
     变异锚点：verify_aud 关闭/audience 比对删 → 跨应用 token 200 红。"""
     monkeypatch.setattr("app.core.auth.ENABLE_AUTH", True)
     jwk, pem = _make_token_kit("m02-aud-kid")
-    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda: [jwk])
+    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda provider: [jwk])  # T3：provider 分桶签名
     from fastapi.testclient import TestClient
     from app.core.auth import AUTHENTIK_ISSUER
     claims = {
@@ -332,7 +332,7 @@ def test_auth_on_valid_token_upsert_user(monkeypatch, db):
     from datetime import datetime
     monkeypatch.setattr("app.core.auth.ENABLE_AUTH", True)
     jwk, pem = _make_token_kit("m02-valid-kid")
-    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda: [jwk])
+    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda provider: [jwk])  # T3：provider 分桶签名
     from fastapi.testclient import TestClient
     from app.core.auth import AUTHENTIK_ISSUER, AUTHENTIK_AUDIENCE
     from app.models.auth import User, UserRole
@@ -463,7 +463,7 @@ def test_auth_on_sse_stream_passthrough(monkeypatch):
     import asyncio
     monkeypatch.setattr("app.core.auth.ENABLE_AUTH", True)
     jwk, pem = _make_token_kit("m02-sse-kid")
-    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda: [jwk])
+    monkeypatch.setattr("app.core.auth._fetch_jwks", lambda provider: [jwk])  # T3：provider 分桶签名
     from app.core.auth import AUTHENTIK_ISSUER, AUTHENTIK_AUDIENCE, AuthMiddleware, AuthUser
 
     def _fake_upsert(_db, _claims):

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.services.sishu_full.api.routers.auth import require_admin
+from app.services.sishu_full.api.vendor_bridge import require_admin
 from app.services.sishu_full.knowledge.kb_types import SUBAGENT_KB_TYPE
 from app.services.sishu_full.multi_user.knowledge_access import current_kb_manager
 from app.services.sishu_full.multi_user.partner_access import assert_partner_allowed, visible_partner_cards

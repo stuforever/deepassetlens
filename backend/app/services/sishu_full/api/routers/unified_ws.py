@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 @router.websocket("/ws")
 async def unified_websocket(ws: WebSocket) -> None:
-    from app.services.sishu_full.api.routers.auth import ws_auth_failed, ws_require_auth
+    from app.services.sishu_full.api.vendor_bridge import ws_auth_failed, ws_require_auth
     from app.services.sishu_full.multi_user.context import reset_current_user
 
     user_token = await ws_require_auth(ws)

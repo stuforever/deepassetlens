@@ -2615,7 +2615,7 @@ async def clear_progress(kb_name: str):
 @router.websocket("/{kb_name}/progress/ws")
 async def websocket_progress(websocket: WebSocket, kb_name: str):
     """WebSocket endpoint for real-time progress updates"""
-    from app.services.sishu_full.api.routers.auth import ws_auth_failed, ws_require_auth
+    from app.services.sishu_full.api.vendor_bridge import ws_auth_failed, ws_require_auth
     from app.services.sishu_full.multi_user.context import reset_current_user
 
     user_token = await ws_require_auth(websocket)

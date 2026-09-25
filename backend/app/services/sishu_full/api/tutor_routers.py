@@ -5,15 +5,15 @@
 from fastapi import Depends
 
 # 原导入路径零改码（vendor 子树原结构）
-from app.services.sishu_full.api.routers.auth import require_auth as _dt_require_auth  # noqa: E402
-from app.services.sishu_full.api.routers import auth as auth_router  # noqa: E402
 from app.services.sishu_full.api.routers import chat as chat_router  # noqa: E402
 
 # 原仓 main.py `_auth = [Depends(require_auth)]` 的同位接线。
 # 权限重构T6.1（design §7 批1）：换轨平台依赖——require_expert("use","sishu") 执法
 # + 平台→vendor ContextVar 桥（platform_require_auth，path_service 分目录语义不变）。
-# vendor _dt_require_auth 保留符号（WS 族内部仍消费其 ws_require_auth 桥）。
-from app.services.sishu_full.api.routers.auth import platform_require_auth  # noqa: E402
+# 权限重构T6批3：vendor routers/auth 物理删除——桥迁 vendor_bridge（require_auth/
+# require_admin vendor JWT 流随之退役，身份源=平台 AuthMiddleware/平台 JWT）。
+from app.services.sishu_full.api.vendor_bridge import codex_callback_router  # noqa: E402
+from app.services.sishu_full.api.vendor_bridge import platform_require_auth  # noqa: E402
 
 _auth = [Depends(platform_require_auth)]
 
@@ -57,9 +57,8 @@ from app.services.sishu_full.api.routers import (  # noqa: E402
 )
 from app.services.sishu_full.api.routers import tools as tools_router  # noqa: E402
 from app.services.sishu_full.multi_user.router import router as multi_user_router  # noqa: E402
-from app.services.sishu_full.api.routers.auth import require_admin as _dt_require_admin  # noqa: E402
 # 权限重构T6.1：_admin 换轨 require_permission("sishu","manage")（桥接同上）。
-from app.services.sishu_full.api.routers.auth import platform_require_admin  # noqa: E402
+from app.services.sishu_full.api.vendor_bridge import platform_require_admin  # noqa: E402
 from app.services.sishu_full.learning.curriculum import router as curriculum_router  # noqa: E402
 
 # 原仓 main.py L551 `_admin = [Depends(require_admin)]`（partners 域——管理面路由族）
@@ -121,9 +120,9 @@ tutor_routers = [
     # 引擎批6 6.3：unified_ws.router 卸挂（原 L118=L562）——统一 WS 退役，对话面走桥
     # POST /api/v2/skills/capability SSE；vendor 树物理文件保留（裁定点 A——A4 基线不破坏）。
     # ⑤R R2（批13）A1 二轮：auth/chat 两族补挂（原 L421/L440 无 deps）——同前缀 tupu 自有
-    # 路由（⑥-2a auth 面/chat 引擎）先注册恒优先，vendor 件仅补 tupu 缺位路径
-    # （auth/status、auth/profile、chat/sessions 等），同路径不遮蔽自有面=合并裁定承接。
-    (auth_router.router, "/api/v1/auth", ["auth"], None),                      # 原 L421（public）
+    # 路由（⑥-2a auth 面/chat 引擎）先注册恒优先。T6批3：vendor auth 面退役，
+    # /api/v1/auth 前缀仅余 codex OAuth 回调投递点（vendor_bridge 承接）。
+    (codex_callback_router, "/api/v1/auth", ["auth"], None),                   # 原 L421（public）
     (chat_router.router, "/api/v1", ["chat"], _auth),                          # 原 L440
 ]
 

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.services.sishu_full.api.routers.auth import require_admin
+from app.services.sishu_full.api.vendor_bridge import require_admin
 from app.services.sishu_full.knowledge.manager import KnowledgeBaseManager
 from app.services.sishu_full.services.config.model_catalog import ModelCatalogService
 from app.services.sishu_full.services.skill.service import SkillService

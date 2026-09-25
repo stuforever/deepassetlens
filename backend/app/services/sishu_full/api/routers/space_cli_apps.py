@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.services.sishu_full.api.routers.auth import require_admin
+from app.services.sishu_full.api.vendor_bridge import require_admin
 from app.services.sishu_full.core.i18n import t
 from app.services.sishu_full.multi_user.paths import current_owner_id
 from app.services.sishu_full.multi_user.tool_access import allowed_cli_apps, exec_override

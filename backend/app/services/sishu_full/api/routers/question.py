@@ -69,7 +69,7 @@ async def websocket_mimic_generate(websocket: WebSocket):
         "max_questions": 5  // optional
     }
     """
-    from app.services.sishu_full.api.routers.auth import ws_auth_failed, ws_require_auth
+    from app.services.sishu_full.api.vendor_bridge import ws_auth_failed, ws_require_auth
     from app.services.sishu_full.multi_user.context import reset_current_user
 
     user_token = await ws_require_auth(websocket)
@@ -367,7 +367,7 @@ async def websocket_mimic_generate(websocket: WebSocket):
 
 @router.websocket("/generate")
 async def websocket_question_generate(websocket: WebSocket):
-    from app.services.sishu_full.api.routers.auth import ws_auth_failed, ws_require_auth
+    from app.services.sishu_full.api.vendor_bridge import ws_auth_failed, ws_require_auth
     from app.services.sishu_full.multi_user.context import reset_current_user
 
     user_token = await ws_require_auth(websocket)

@@ -362,10 +362,12 @@ class _AuthedStatic:
         from starlette.requests import Request as _Request
         from starlette.responses import JSONResponse as _JSONResponse
 
-        from .api.routers.auth import require_auth as _require_auth
+        # 权限重构T6批3：vendor routers/auth 退役——桥在 vendor_bridge（request 关键字
+        # 直调；require_auth 手工取头，位置传参会绑错参）。
+        from app.services.sishu_full.api.vendor_bridge import require_auth as _require_auth
 
         try:
-            await _require_auth(_Request(scope, receive=receive))
+            await _require_auth(request=_Request(scope, receive=receive))
         except _HTTPException as exc:
             resp = _JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
             await resp(scope, receive, send)
@@ -411,7 +413,6 @@ app.mount(
 from app.services.sishu_full.api.routers import (
     agent_config,
     attachments,
-    auth,
     book,
     capabilities_settings,
     chat,
@@ -448,12 +449,9 @@ from app.services.sishu_full.api.routers import (
 )
 from app.services.sishu_full.multi_user.router import router as multi_user_router  # noqa: E402
 
-# Auth router is public — login/logout/register/status require no token
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
-
-# All other routers require a valid session when AUTH_ENABLED=true.
-# require_auth is a no-op when AUTH_ENABLED=false, so this is safe for local use.
-from app.services.sishu_full.api.routers.auth import require_admin, require_auth  # noqa: E402
+# 权限重构T6批3：vendor auth 面（login/register/status/users）退役——身份源=平台桥。
+# require_auth is a no-op when platform auth is disabled, so this is safe for local use.
+from app.services.sishu_full.api.vendor_bridge import require_admin, require_auth  # noqa: E402
 
 _auth = [Depends(require_auth)]
 # Partner data is anchored at the admin workspace (data/partners) and shared

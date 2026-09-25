@@ -1,48 +1,16 @@
 # -*- coding: utf-8 -*-
 """R5批⑬（清单安全）契约测试。
 
-- auth：PB 模式 first-user 判定改查 PB（原查本地库恒 True=闸门失效）；查询失败 fail-closed
 - system：/test/* 三端点 admin 门控（原非管理员可调且回显模型/异常串）
 - space_mcp：redirect_uri 不再默认信任 x-forwarded-*（伪造=授权码引到攻击者域）
-变异锚点：pb 判定/管理门/转发头信任任一回退 → 对应测红。
+变异锚点：管理门/转发头信任任一回退 → 对应测红。
+（T6批3：原 auth PB first-user 判定用例随 vendor auth 面退役——PB 分支已物理删除。）
 """
 import pytest
 from fastapi import HTTPException
 
-from app.services.sishu_full.services import auth as authsvc
 from app.services.sishu_full.api.routers import system as sysmod
 from app.services.sishu_full.api.routers import space_mcp as mcp
-
-
-class _PB:
-    def __init__(self, items):
-        self._items = items
-
-    def collection(self, name):
-        class _C:
-            def __init__(self, items):
-                self._items = items
-            def get_list(self, page=1, per_page=1):
-                class _R:
-                    pass
-                r = _R()
-                r.items = self._items
-                return r
-        return _C(self._items)
-
-
-def test_pb_is_first_user(monkeypatch):
-    monkeypatch.setattr("app.services.sishu_full.services.pocketbase_client.get_pb_client",
-                        lambda: _PB([]))
-    assert authsvc.pb_is_first_user() is True
-    monkeypatch.setattr("app.services.sishu_full.services.pocketbase_client.get_pb_client",
-                        lambda: _PB(["u1"]))
-    assert authsvc.pb_is_first_user() is False
-    def _boom():
-        raise RuntimeError("pb down")
-    monkeypatch.setattr("app.services.sishu_full.services.pocketbase_client.get_pb_client",
-                        _boom)
-    assert authsvc.pb_is_first_user() is False  # fail-closed
 
 
 class _U:

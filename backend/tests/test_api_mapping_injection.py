@@ -131,23 +131,25 @@ def test_rebuild_endpoints_admin_passes_gate(monkeypatch):
 
 @pytest.fixture()
 def _kg_seed():
-    """PG kg 域种子：一条哨兵概念。"""
+    """PG kg 域种子：一条哨兵概念。commit 后 rollback 不删行——teardown 必须显式删除，
+    否则每次跑测试都向真实库累积哨兵残骸（2026-09-24 曾积累 191 条后清理）。"""
     from app.core.database import SessionLocal
     from app.models.base import Concept
     import uuid
     db = SessionLocal()
-    sent = None
+    sid = str(uuid.uuid4())
     try:
-        sent = Concept(id=str(uuid.uuid4()), name=f"M1原子性哨兵{uuid.uuid4().hex[:6]}",
-                       level=1, area_index=1, sort_order=0)
-        db.add(sent)
+        db.add(Concept(id=sid, name=f"M1原子性哨兵{uuid.uuid4().hex[:6]}",
+                       level=1, area_index=1, sort_order=0))
         db.commit()
-        yield sent.id
+        yield sid
     finally:
         try:
             db.rollback()
+            db.query(Concept).filter(Concept.id == sid).delete(synchronize_session=False)
+            db.commit()
         except Exception:
-            pass
+            db.rollback()
         db.close()
 
 

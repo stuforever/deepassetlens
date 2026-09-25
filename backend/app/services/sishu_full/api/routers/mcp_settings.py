@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
-from app.services.sishu_full.api.routers.auth import require_admin
+from app.services.sishu_full.api.vendor_bridge import require_admin
 from app.services.sishu_full.core.i18n import t
 from app.services.sishu_full.services.mcp import (
     MCPConfig,

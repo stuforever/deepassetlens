@@ -500,7 +500,7 @@ async def book_websocket(ws: WebSocket) -> None:
         {"type": "compile_page",     "book_id": "...", "page_id": "..."}
         {"type": "regenerate_block", "book_id": "...", "page_id": "...", "block_id": "...", "params_override": {}}
     """
-    from app.services.sishu_full.api.routers.auth import ws_auth_failed, ws_require_auth
+    from app.services.sishu_full.api.vendor_bridge import ws_auth_failed, ws_require_auth
     from app.services.sishu_full.multi_user.context import reset_current_user
 
     user_token = await ws_require_auth(ws)

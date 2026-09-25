@@ -2,7 +2,7 @@
  * 复刻自 DeepTutor 原仓 web/components/settings/SettingsSectionGrid.tsx（整件 1:1，批5 5.2 壳族）。
  * 替换点：next/link → react-router-dom Link（href→to）；lucide（ArrowUpRight、leaf.icon）→
  * @ant-design/icons（ArrowUpOutlined 旋转 45° 等价 ↗、icon 以 style.fontSize 调用）；
- * @/lib/auth fetchAuthStatus → 就地等价内联（fetch('/api/v1/auth/status')，!ok/异常返回 null，
+ * 平台 /auth/me 等价内联（T6批3：vendor /auth/status 退役；!ok/异常返回 null，
  * 仅取本组件消费的 enabled/is_admin；401→login 跳转为原仓鉴权专属不复刻）；
  * react-i18next → tupu 无 i18next（中文产品），tr 恒取 Lang.zh；Tailwind → 内联样式 +
  * 页内 <style>（hover 位移/阴影、sm:grid-cols-2 进样式块；leaf.tile 为 settings-nav 提供的
@@ -303,7 +303,7 @@ function LeafCard({
   );
 }
 
-/** 原仓 lib/auth.fetchAuthStatus 的等价内联（见头注）。 */
+/** 平台 /auth/me 口径的等价内联（T6批3：vendor /auth/status 面退役）。 */
 type AuthStatus = {
   enabled: boolean;
   authenticated: boolean;
@@ -316,10 +316,20 @@ type AuthStatus = {
 
 async function fetchAuthStatus(): Promise<AuthStatus | null> {
   try {
-    const res = await fetch("/api/v1/auth/status");
+    const res = await fetch("/api/v1/auth/me");
     if (!res.ok) return null;
-    const status: AuthStatus = await res.json();
-    return status;
+    const j = await res.json();
+    const u = j?.data || {};
+    const roles: string[] = Array.isArray(u.roles) ? u.roles : [];
+    const isAdmin = roles.includes("admin");
+    return {
+      enabled: !u.is_anonymous,
+      authenticated: true,
+      user_id: u.sub,
+      username: u.username,
+      role: isAdmin ? "admin" : "user",
+      is_admin: isAdmin,
+    };
   } catch {
     return null;
   }
