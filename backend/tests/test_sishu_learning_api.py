@@ -48,11 +48,15 @@ class TestEnforcementMounting:
 
     def test_mount_prefixes_match_vendor(self):
         """挂载表与 vendor tutor_routers 装配行逐字对齐（前端契约零改）。
-        main.py 实挂由部署检查/L2 重放覆盖（28000 实测 200）。"""
+        main.py 实挂由部署检查/L2 重放覆盖（28000 实测 200）。
+        切换 R5：vendor 死行（_SISHU_BATCH6_UNMOUNTED 全集）文件已删——
+        vendor 表无该键=有意删除（平台承接为唯一服务面），跳过比对。"""
         from app.api.sishu_learning import SISHU_MOUNTS
         from app.services.sishu_full.api.tutor_routers import tutor_routers as _tt
         vendor_map = {tags[0]: prefix for _r, prefix, tags, _d in _tt if tags}
         for _r, prefix, tags in SISHU_MOUNTS:
+            if tags[0] not in vendor_map:
+                continue  # R5 删除面：vendor 行已物理移除，平台=唯一
             assert vendor_map.get(tags[0]) == prefix, \
                 f"{tags[0]} 前缀漂移: 平台={prefix} vendor={vendor_map.get(tags[0])}"
 
