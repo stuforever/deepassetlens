@@ -5,7 +5,7 @@ run_wrong_intake（抽取→确认卡→落库）；其余技能「未就绪」e
 批5 book-generate——分批交付中间态，台账登记）。
 
 共享流循环 _agent_stream（批3 重构，chat 复用同路径——批1 冒烟 19/19 回归护航）：
-- agent：get_tupu_agent(connection_id="", expert_id="tutor")（L116 同款）
+- agent：get_tupu_agent(卡默认连接, expert_id="sishu")（R0-① 卡连接语义）
 - thread：expert_paths.thread_id(user_prefix, "tutor", session_id)（L93-94 同款三段键）
 - config：{"configurable": {"thread_id": ..., "checkpoint_ns": "bridge"}, "recursion_limit": 80}
   （prep.py L64 同构；checkpoint_ns="bridge"=与 freeplan 隔离的记忆域）
@@ -242,7 +242,14 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
                         *, on_first_content=None, stage_label: str = "answer") -> AsyncGenerator[Dict[str, Any], None]:
     """共享 agent 流循环（批1 run_chat 主体抽取——事件翻译表逐帧同型）。"""
     from app.services.tupu_deepagent import get_tupu_agent
-    agent = await get_tupu_agent(connection_id="", expert_id=EXPERT_ID)
+    # 切换 R0-①（G5 收尾）：卡默认连接语义——sishu 卡 llm_connection_id 真值时按卡选模
+    # （专家卡编辑面已暴露该字段），空=平台默认连接（一处配模型两专家生效）。
+    from app.services.expert_config import get_card as _get_card
+    try:
+        _card_conn = (_get_card(EXPERT_ID) or {}).get("llm_connection_id") or ""
+    except Exception:
+        _card_conn = ""
+    agent = await get_tupu_agent(connection_id=_card_conn, expert_id=EXPERT_ID)
     from app.services.expert_paths import thread_id as _expert_thread_id
     user_prefix = user_prefix_of(req)
     memory_thread_id = _expert_thread_id(user_prefix, EXPERT_ID, session_id)
