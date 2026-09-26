@@ -42,11 +42,19 @@ def _kg_entities():
     db.add(ent)
     db.commit()
     yield {"db": db, "l1": str(l1.id), "l2": str(l2.id), "ent": str(ent.id), "tag": tag}
+    # commit 后 rollback 不删行——种子必须显式自清，否则每次跑测试都向真实库累积残骸
+    # （M3L1/M3L2/M3_ENT 系列 2026-09-24 曾积累 300+ 条后清理）
     try:
         db.rollback()
-        db.close()
+        from app.models.base import EntityConceptLink
+        db.query(EntityConceptLink).filter(
+            EntityConceptLink.entity_id == str(ent.id)).delete(synchronize_session=False)
+        db.query(Entity).filter(Entity.id == str(ent.id)).delete(synchronize_session=False)
+        db.query(Concept).filter(Concept.id.in_([str(l1.id), str(l2.id)])).delete(synchronize_session=False)
+        db.commit()
     except Exception:
-        pass
+        db.rollback()
+    db.close()
 
 
 def test_entity_update_rejects_non_l2l4_concept(_kg_entities):
@@ -146,7 +154,16 @@ def test_update_links_removes_survivors(_kg_entities):
             EntityConceptLink.concept_id == str(l0.id)).count()
         assert leftover == 0, "mode 区间外的幸存旧链接未清理"
     finally:
-        db.rollback()
+        # 种子自清（同 _kg_entities：commit 后 rollback 不删行）
+        try:
+            db.rollback()
+            db.query(EntityConceptLink).filter(
+                EntityConceptLink.entity_id == str(ent.id)).delete(synchronize_session=False)
+            db.query(Entity).filter(Entity.id == str(ent.id)).delete(synchronize_session=False)
+            db.query(Concept).filter(Concept.id.in_([str(l2.id), str(l0.id)])).delete(synchronize_session=False)
+            db.commit()
+        except Exception:
+            db.rollback()
         db.close()
 
 
@@ -180,9 +197,9 @@ def test_import_excel_is_sync_and_capped():
     import app.api.entity_relation_manage as erm
     fn = erm.import_entity_relations_excel
     assert not inspect.iscoroutinefunction(fn), "导入端点应为同步 def（线程池执行，不阻塞事件循环）"
-    sig = inspect.signature(fn)
-    assert any(p.default for p in sig.parameters.values()
-               if isinstance(p.default, (int, float)) and p.default), "应带大小上限参数"
+    # 上限=模块级常量（比可覆盖形参更强：客户端无法经查询参数放大上限）
+    assert getattr(erm, "_MAX_IMPORT_EXCEL_BYTES", 0) == 10 * 1024 * 1024, "应带 10MB 上限常量"
+    assert "max_upload_bytes" not in inspect.signature(fn).parameters, "上限不得暴露为可覆盖形参"
 
 
 def test_import_excel_rejects_oversize(monkeypatch):

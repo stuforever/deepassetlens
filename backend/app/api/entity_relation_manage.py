@@ -75,9 +75,11 @@ def _norm_uuid_str(v: Optional[str], field_name: str = "id") -> Optional[str]:
 
 
 def _sanitize_cell(v):
-    """三轨M3 顺手修（:571）：Excel 公式注入防线——以 = + - @ 制表符开头的单元格前置单引号。"""
-    s = _clean_text(v) if v is not None else ""
-    if isinstance(s, str) and s[:1] in ("=", "+", "-", "@", "	"):
+    """Excel 公式注入防线——以 = + - @ 制表符开头的单元格前置单引号（防 DDE/公式注入）。"""
+    if v is None:
+        return None
+    s = str(v)
+    if s[:1] in ("=", "+", "-", "@", "	"):
         return "'" + s
     return s
 
@@ -575,6 +577,10 @@ def export_entity_relations_excel(
         "关联说明": row["join_expr"],
         "备注": row["remark"],
     } for row in rows]
+    # 公式注入防线：关系名称/字段/关联说明/备注等均为用户可控文本，导出前逐格套用
+    for _r in export_rows:
+        for _k in _r:
+            _r[_k] = _sanitize_cell(_r[_k])
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -585,12 +591,17 @@ def export_entity_relations_excel(
     return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+_MAX_IMPORT_EXCEL_BYTES = 10 * 1024 * 1024  # 模块级常量，避免暴露为可被客户端覆盖的查询参数
+
+
 @router.post("/entity-relation-manager/import/excel")
-def import_entity_relations_excel(file: UploadFile = File(...), db: Session = Depends(get_db),
-                                  max_upload_bytes: int = 10 * 1024 * 1024):
+def import_entity_relations_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """三轨M3/6：改同步 def（FastAPI 自动入线程池，不再阻塞事件循环）+ 上传 10MB 上限。"""
-    contents = file.file.read()  # 同步 def：走底层 SpooledTemporaryFile 同步读
-    if len(contents) > max_upload_bytes:
+    # 先用声明大小拦截，再带上限读取——避免超大文件先整体载入内存
+    if file.size is not None and file.size > _MAX_IMPORT_EXCEL_BYTES:
+        raise HTTPException(status_code=413, detail="上传文件超过 10MB 上限")
+    contents = file.file.read(_MAX_IMPORT_EXCEL_BYTES + 1)
+    if len(contents) > _MAX_IMPORT_EXCEL_BYTES:
         raise HTTPException(status_code=413, detail="上传文件超过 10MB 上限")
     excel_data = pd.read_excel(io.BytesIO(contents), sheet_name=None)
     if "实体关系清单" not in excel_data:
