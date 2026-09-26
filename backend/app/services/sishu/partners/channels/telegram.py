@@ -913,6 +913,11 @@ class TelegramChannel(BaseChannel):
         if not await self._is_group_message_for_bot(message):
             return
 
+        # ACL 前置：allowlist 校验先于媒体下载/ASR 转写执行，
+        # 防 allowlist 之外的用户无限制触发文件下载、磁盘写入与转写开销
+        if not self.is_allowed(sender_id):
+            return
+
         # Build content from text and/or media
         content_parts = []
         media_paths = []

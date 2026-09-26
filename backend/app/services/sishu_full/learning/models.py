@@ -159,6 +159,9 @@ class RepetitionState(BaseModel):
     reps: int = 0
     lapses: int = 0
     fsrs: bool = False  # True when this state is driven by FSRS-5
+    # ── C-修复：FSRS 时间基准穿透（同 sishu 侧）──
+    last_review: float | None = None
+    elapsed_days: float | None = None
 
 
 class ReviewTask(BaseModel):

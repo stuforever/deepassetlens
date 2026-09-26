@@ -59,7 +59,18 @@ class BookStorage:
     # ── Path helpers ─────────────────────────────────────────────────────
 
     def book_root(self, book_id: str) -> Path:
-        return self.path_service.get_book_root(book_id)
+        # C-安全修复：book_id 未校验直接拼路径——"../x" 可越出书库根目录，
+        # DELETE /books/{id} 等破坏性路径可删除任意目录。白名单校验 + resolve 兜底。
+        import re as _re
+        code = str(book_id or "").strip()
+        if not _re.match(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$", code) or ".." in code:
+            raise ValueError(f"非法 book_id: {code[:60]}")
+        root = self.path_service.get_book_root(code)
+        root_res = root.resolve()
+        book_base = self.path_service.get_book_dir().resolve()
+        if root_res != book_base and book_base not in root_res.parents:
+            raise ValueError(f"book_id 越界: {code[:60]}")
+        return root
 
     def ensure_book_root(self, book_id: str) -> Path:
         return self.path_service.ensure_book_root(book_id)

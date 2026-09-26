@@ -67,8 +67,15 @@ class AgentCoordinator:
         difficulty: str = "",
         question_types: list[str] | None = None,
         per_type_counts: dict[str, int] | None = None,
+        # 旧 WebSocket 路由契约字段（兼容门面）：preference 为旧版偏好提示
+        # （新管线无对应参数，接受以保签名兼容）；question_type 为单题型简写，
+        # 映射进 question_types。
+        preference: str = "",
+        question_type: str = "",
     ) -> dict[str, Any]:
         """Generate a quiz from a topic using the new pipeline."""
+        if question_type and not question_types:
+            question_types = [question_type]
 
         context = self._build_context(user_message=user_topic)
         pipeline = self._build_pipeline()

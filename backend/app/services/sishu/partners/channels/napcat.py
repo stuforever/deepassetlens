@@ -33,7 +33,7 @@ from app.services.sishu.partners.channels.base import BaseChannel
 from app.services.sishu.partners.config.paths import get_media_dir
 from app.services.sishu.partners.config.schema import DeliveryOverrides
 from app.services.sishu.partners.helpers import safe_filename
-from app.services.sishu.partners.network import validate_url_target
+from app.services.sishu_full.partners.network import validate_url_target
 
 _DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=60)
 _ACTION_TIMEOUT = 20.0

@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
+
+from app.core.auth import ENABLE_AUTH, get_current_user
 
 from app.services.sishu_full.multi_user.h5 import h5_slug
 from app.services.sishu_full.multi_user.paths import USERS_ROOT
@@ -131,7 +133,14 @@ def get_h5_settings() -> dict[str, str]:
 @settings_router.get("")
 def read_settings(
     u: str = Query("", description="H5 用户标识：带 u 时不回明文访问码"),
+    request: Request = None,
 ):
+    # C-安全修复：空 u（管理员语义）在鉴权开启时必须为 admin 用户——
+    # u 是客户端可控参数，原实现省略 u 即可读取明文 access_code。
+    if ENABLE_AUTH and not (isinstance(u, str) and u.strip()):
+        _user = get_current_user(request)
+        if _user is None or not _user.is_admin():
+            raise HTTPException(403, "仅管理员可读取 H5 设置")
     """GET /api/v1/h5-settings。
 
     R1-a：带 u（H5 用户）只回 public_base + has_access_code，不回明文 access_code；
@@ -150,7 +159,14 @@ def read_settings(
 def write_settings(
     payload: dict = Body(default={}),
     u: str = Query("", description="H5 用户标识：带 u 时禁止修改（仅管理员可改）"),
+    request: Request = None,
 ):
+    # C-安全修复：空 u（管理员语义）在鉴权开启时必须为 admin 用户——
+    # 原实现"省略 u"即可绕过 403 篡改 access_code / public_base。
+    if ENABLE_AUTH and not (isinstance(u, str) and u.strip()):
+        _user = get_current_user(request)
+        if _user is None or not _user.is_admin():
+            raise HTTPException(403, "仅管理员可修改 H5 设置")
     """PUT /api/v1/h5-settings <- {public_base?, access_code?}（校验前缀）。
 
     R1-b：仅 u 缺省（管理员）可修改；带 u（H5 用户）一律 403，防匿名篡改

@@ -104,7 +104,12 @@ class SandboxExecutor:
         perms = permissions or {}
         safe_globals = SandboxExecutor.create_safe_globals(perms)
         if inject_globals:
-            safe_globals.update(inject_globals)
+            # 注入字典不得覆盖沙箱门控数据：__builtins__ 会整体替换受限 builtins
+            # （可带回 __import__/open），__permissions__ 会篡改权限判定
+            _reserved = {"__builtins__", "__permissions__"}
+            safe_globals.update(
+                {k: v for k, v in inject_globals.items() if k not in _reserved}
+            )
             logger.debug(f"SandboxExecutor: 注入的全局变量: {list(inject_globals.keys())}")
         logs: list = []
         start_ts = _time.time()

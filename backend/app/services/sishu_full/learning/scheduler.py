@@ -133,17 +133,24 @@ class FsrsSpacedRepetitionScheduler:
             reps=int(card.get("reps", 0)),
             lapses=int(card.get("lapses", 0)),
             fsrs=True,
+            last_review=(float(card["last_review"]) if card.get("last_review") is not None else None),
+            elapsed_days=(float(card["elapsed_days"]) if card.get("elapsed_days") is not None else None),
         )
 
     def _state_to_card(self, state: RepetitionState) -> dict:
+        # C-修复：时间基准随 state 穿透（原实现硬编码 now/0，衰减失真）
+        now_ts = time.time()
+        lr = float(state.last_review) if getattr(state, "last_review", None) is not None else now_ts
+        ed = (float(state.elapsed_days) if getattr(state, "elapsed_days", None) is not None
+              else max(0.0, (now_ts - lr) / 86400.0))
         return {
             "stability": float(state.stability) if state.stability is not None else 1.0,
             "difficulty": float(state.difficulty) if state.difficulty is not None else self._fsrs.DEFAULT_W[4],
             "reps": int(state.reps),
             "lapses": int(state.lapses),
             "due": state.next_review_at,
-            "last_review": time.time(),
-            "elapsed_days": 0,
+            "last_review": lr,
+            "elapsed_days": ed,
         }
 
     def schedule_next(

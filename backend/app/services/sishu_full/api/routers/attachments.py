@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# 允许在本站源 inline 预览的类型白名单：这些类型无法携带可执行脚本。
+# text/html、image/svg+xml、未知类型等一律降级为 attachment + octet-stream，
+# 阻断「上传 evil.html/evil.svg → 同源渲染执行脚本」的存储型 XSS 通路。
+_INLINE_SAFE_TYPES = {
+    "application/pdf",
+    "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/avif",
+    "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/x-m4a",
+    "video/mp4", "video/webm", "video/ogg", "video/quicktime",
+    "text/plain", "text/csv", "application/json",
+}
+
 
 def _content_disposition(filename: str, *, disposition: str = "inline") -> str:
     """Build a Content-Disposition header that survives non-ASCII filenames.
@@ -68,11 +79,22 @@ async def get_attachment(
     if not media_type:
         media_type = "application/octet-stream"
 
+    # 非 inline 安全类型（html/svg/未知后缀等）强制下载，避免同源脚本执行
+    disposition = "inline"
+    if media_type not in _INLINE_SAFE_TYPES:
+        media_type = "application/octet-stream"
+        disposition = "attachment"
+
     # ``inline`` lets the browser preview the file when possible while still
     # honouring the suggested filename for the drawer's download action.
     headers = {
-        "Content-Disposition": _content_disposition(target.name),
+        "Content-Disposition": _content_disposition(target.name, disposition=disposition),
         # User-uploaded data; do not let intermediaries cache it.
         "Cache-Control": "private, max-age=0, must-revalidate",
+        # 禁止浏览器嗅探改判 Content-Type（否则 text/plain 也会被嗅探成 html 执行）
+        "X-Content-Type-Options": "nosniff",
     }
+    if disposition == "inline":
+        # 沙箱化预览文档（unique origin、无脚本）：PDF 内嵌 JS 亦不执行
+        headers["Content-Security-Policy"] = "sandbox"
     return FileResponse(path=str(target), media_type=media_type, headers=headers)

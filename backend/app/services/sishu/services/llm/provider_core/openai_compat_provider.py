@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 import json_repair
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AuthenticationError
 
 from app.services.sishu.services.llm.capabilities import disable_response_format_at_runtime
 from app.services.sishu.services.llm.openai_http_client import openai_client_kwargs
@@ -721,6 +721,10 @@ class OpenAICompatProvider(LLMProvider):
                     retry_kwargs.pop("response_format", None)
                     return self._parse(await self._client.chat.completions.create(**retry_kwargs))
                 raise
+        except AuthenticationError:
+            # C-修复：认证错误透传给子类（github_copilot 的换 token 重试分支
+            # 依赖捕获它；基类吞掉后该分支不可达，token 过期永不自愈）
+            raise
         except Exception as e:
             if tools and self._is_tool_format_error(e):
                 return await self.chat_stream(
@@ -858,6 +862,9 @@ class OpenAICompatProvider(LLMProvider):
                 content=f"Error calling LLM: stream stalled for more than {idle_timeout_s} seconds",
                 finish_reason="error",
             )
+        except AuthenticationError:
+            # C-修复：同 chat——认证错误透传（流式 token 刷新）
+            raise
         except Exception as e:
             return self._handle_error(e)
 

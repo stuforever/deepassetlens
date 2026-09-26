@@ -114,21 +114,24 @@ export async function replay(): Promise<number> {
         continue;
       }
       // 网络可达但业务拒绝（如访问码 401）：重试也可能失败，仅递增计数
-    } catch {
-      /* 仍离线，保留 */
-    }
-    const next: OutboxEntry = { ...e, retries: (e.retries || 0) + 1, ts: Date.now() };
-    if (next.retries >= MAX_RETRIES) {
-      await remove(e.attempt_id);
-      console.warn("[h5-outbox] drop after retries", e.attempt_id);
-    } else {
-      try {
-        const db = await openDb();
-        await txDone(db, "readwrite", (s) => s.put(next));
-        db.close();
-      } catch {
-        /* ignore */
+      const nextFail: OutboxEntry = { ...e, retries: (e.retries || 0) + 1, ts: Date.now() };
+      if (nextFail.retries >= MAX_RETRIES) {
+        await remove(e.attempt_id);
+        console.warn("[h5-outbox] drop after retries", e.attempt_id);
+      } else {
+        try {
+          const dbFail = await openDb();
+          await txDone(dbFail, "readwrite", (s) => s.put(nextFail));
+          dbFail.close();
+        } catch {
+          /* ignore */
+        }
       }
+      continue;
+    } catch {
+      // C-修复：仍离线不计重试、保留条目——原实现离线也递增 retries，
+      // 周期 replay 下连续 5 轮离线会把暂存的答题上报永久删除（学习记录丢失）
+      continue;
     }
   }
   return ok;

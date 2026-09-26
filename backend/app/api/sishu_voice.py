@@ -125,7 +125,13 @@ async def speech_to_text(
 ) -> dict[str, str]:
     """Transcribe an uploaded audio clip using the active STT provider."""
     with _h5_gate(u, code, x_access_code):
-        audio = await file.read()
+        # 先用声明大小拦截，再带上限读取——避免超大 multipart 先整体载入内存
+        if file.size is not None and file.size > _MAX_AUDIO_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Audio exceeds the 25 MB limit.",
+            )
+        audio = await file.read(_MAX_AUDIO_BYTES + 1)
         if not audio:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty audio upload.")
         if len(audio) > _MAX_AUDIO_BYTES:

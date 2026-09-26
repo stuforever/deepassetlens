@@ -103,6 +103,11 @@ class TrafficController:
         # prevents queue jumping.
         try:
             await self._wait_for_token()
+        except asyncio.CancelledError:
+            # C-修复：CancelledError 继承 BaseException，except Exception 捕不到
+            # ——取消（客户端断连/上游超时）时信号量同样必须归还，否则并发槽永久泄漏
+            self._semaphore.release()
+            raise
         except Exception:
             # If rate limiter fails/cancels, release semaphore
             self._semaphore.release()

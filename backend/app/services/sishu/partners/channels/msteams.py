@@ -44,6 +44,10 @@ from app.services.sishu.partners.channels.base import BaseChannel
 from app.services.sishu.partners.config.paths import get_runtime_subdir
 from app.services.sishu.partners.config.schema import DeliveryOverrides
 
+# webhook 请求体上限：Teams activity 为小体积 JSON，1MB 已远超需要；
+# 防止客户端声明超大 Content-Length 造成内存耗尽/慢速占用
+_MAX_WEBHOOK_BODY_BYTES = 1024 * 1024
+
 MSTEAMS_AVAILABLE = (
     importlib.util.find_spec("jwt") is not None
     and importlib.util.find_spec("cryptography") is not None
@@ -178,6 +182,10 @@ class MSTeamsChannel(BaseChannel):
 
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
+                    if length > _MAX_WEBHOOK_BODY_BYTES:
+                        self.send_response(413)
+                        self.end_headers()
+                        return
                     raw = self.rfile.read(length) if length > 0 else b"{}"
                     payload = json.loads(raw.decode("utf-8"))
                 except Exception as e:

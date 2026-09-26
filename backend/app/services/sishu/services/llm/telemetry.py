@@ -32,18 +32,33 @@ def track_llm_call(
         Decorator function
     """
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    def decorator(func):
+        import inspect as _inspect
+        if _inspect.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                logger.debug("LLM call to %s: %s", provider_name, func.__name__)
+                try:
+                    result = await func(*args, **kwargs)
+                    logger.debug("LLM call to %s completed successfully", provider_name)
+                    return result
+                except Exception as e:
+                    logger.warning("LLM call to %s failed: %s", provider_name, e)
+                    raise
+            return wrapper
+
+        # C-修复：同步函数（如 anthropic.stream 返回异步生成器对象）原装饰器
+        # await func 会 TypeError——补同步 wrapper。
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):
             logger.debug("LLM call to %s: %s", provider_name, func.__name__)
             try:
-                result = await func(*args, **kwargs)
+                result = func(*args, **kwargs)
                 logger.debug("LLM call to %s completed successfully", provider_name)
                 return result
             except Exception as e:
                 logger.warning("LLM call to %s failed: %s", provider_name, e)
                 raise
-
         return wrapper
 
     return decorator

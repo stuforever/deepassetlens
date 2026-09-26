@@ -124,6 +124,9 @@ async def capability(req: CapabilityRequest):
                 ev = _evt("error", "bridge", "session_store", content=f"h5 会话隔离失败: {e}",
                           session_id=session_id, turn_id=turn_id)
                 yield f"event: error\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                # C-安全修复：h5 访问码校验失败（401）必须终止流——原实现仅发
+                # error 事件后继续 dispatch，未授权请求照样执行。
+                return
         try:
             dispatch_req = req
             if is_regen and regen_content:

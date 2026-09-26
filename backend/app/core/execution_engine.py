@@ -8,6 +8,7 @@ import re
 import uuid
 import traceback
 import sys
+import threading
 import types
 import concurrent.futures
 import logging
@@ -25,6 +26,19 @@ from app.core.jsonschema_validator import validate_input
 from app.core.skill_storage import get_skill_storage, SkillStorage
 
 logger = logging.getLogger(__name__)
+
+# G-DoS：跨技能调用链防护——混合技能经 execute_by_code 重入引擎，
+# DAG 校验只覆盖单技能内部步骤，A→B→A 循环引用会无限递归耗尽资源
+_MAX_SKILL_NESTING_DEPTH = 8
+_skill_chain_ctx = threading.local()
+
+
+def _current_skill_chain() -> list:
+    chain = getattr(_skill_chain_ctx, "chain", None)
+    if chain is None:
+        chain = []
+        _skill_chain_ctx.chain = chain
+    return chain
 
 
 from .execution_engine_support import SandboxExecutor, TemplateRenderer
@@ -59,7 +73,10 @@ class PythonExecutor(SkillExecutor):
 
         # 加载常用语气词并注入到脚本全局变量
         inject_globals = {}
-        inject_globals["_db_session"] = self.db
+        # 宿主 DB 会话按权限注入（fail-closed）：拿到 _db_session 即可绕过沙箱全部门控
+        # 读写任意表，因此仅当技能显式声明 permissions.database=true 时才注入
+        if (skill.permissions or {}).get('database', False):
+            inject_globals["_db_session"] = self.db
         try:
             from app.models.base import CommonStopWord
             rows = self.db.query(CommonStopWord).filter(CommonStopWord.enabled == True).all()
@@ -213,6 +230,18 @@ class HTTPExecutor(SkillExecutor):
             import urllib.request
             import urllib.parse
 
+            # SSRF 防护：URL 由 input_payload 模板渲染而来，仅放行公网 http(s)；
+            # 重定向每一跳同样校验；响应读取带上限防内存耗尽
+            from app.core.url_guard import validate_public_http_url, SsrfBlockedUrlError
+            validate_public_http_url(rendered_url)
+
+            class _SSRFGuardRedirectHandler(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg, headers, newurl):
+                    validate_public_http_url(newurl)
+                    return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+            _MAX_HTTP_RESPONSE_BYTES = 10 * 1024 * 1024
+
             req = urllib.request.Request(
                 url=rendered_url,
                 data=body.encode('utf-8') if body else None,
@@ -220,8 +249,12 @@ class HTTPExecutor(SkillExecutor):
                 method=method
             )
 
-            with urllib.request.urlopen(req, timeout=skill.timeout) as response:
-                response_body = response.read().decode('utf-8')
+            opener = urllib.request.build_opener(_SSRFGuardRedirectHandler)
+            with opener.open(req, timeout=skill.timeout) as response:
+                response_body = response.read(_MAX_HTTP_RESPONSE_BYTES + 1).decode('utf-8', errors='replace')
+                if len(response_body) > _MAX_HTTP_RESPONSE_BYTES:
+                    return {"success": False, "error": "HTTP 响应超过 10MB 上限"}
+
                 try:
                     response_data = json.loads(response_body)
                 except json.JSONDecodeError:
@@ -236,6 +269,12 @@ class HTTPExecutor(SkillExecutor):
                     }
                 }
 
+        except SsrfBlockedUrlError as e:
+            return {
+                "success": False,
+                "error": f"目标地址被 SSRF 防护拦截: {e}",
+                "type": "permission_denied"
+            }
         except Exception as e:
             return {
                 "success": False,
@@ -546,6 +585,34 @@ class ExecutionEngineV2:
         if not skill:
             return {"success": False, "error": "技能不存在"}
 
+        return self._execute_skill_checked(skill, input_payload, version_id, created_via)
+
+    def _execute_skill_checked(self, skill: Skill, input_payload: dict,
+                               version_id: Optional[uuid.UUID],
+                               created_via: str) -> dict:
+        """跨技能循环引用/嵌套深度防护后执行（G-DoS）。"""
+        chain = _current_skill_chain()
+        if skill.skill_code in chain:
+            return {
+                "success": False,
+                "error": f"检测到跨技能循环引用: {' -> '.join(chain + [skill.skill_code])}",
+                "type": "circular_reference",
+            }
+        if len(chain) >= _MAX_SKILL_NESTING_DEPTH:
+            return {
+                "success": False,
+                "error": f"跨技能嵌套深度超过上限 {_MAX_SKILL_NESTING_DEPTH}",
+                "type": "nesting_limit",
+            }
+        chain.append(skill.skill_code)
+        try:
+            return self._execute_skill_inner(skill, input_payload, version_id, created_via)
+        finally:
+            chain.pop()
+
+    def _execute_skill_inner(self, skill: Skill, input_payload: dict,
+                             version_id: Optional[uuid.UUID],
+                             created_via: str) -> dict:
         # 熔断检查：技能下线时禁止执行
         if skill.status == "archived":
             return {
@@ -567,7 +634,7 @@ class ExecutionEngineV2:
 
         # 创建执行记录
         log = ExecutionService.create_execution(
-            self.db, skill_id, version_id, input_payload, created_via
+            self.db, skill.skill_id, version_id, input_payload, created_via
         )
         execution_code = log.execution_code
 
@@ -644,10 +711,11 @@ class ExecutionEngineV2:
         if not skill:
             return {"success": False, "error": f"技能不存在: {skill_code}"}
 
-        return self.execute(
-            skill.skill_id,
+        return self._execute_skill_checked(
+            skill,
             input_payload,
-            created_via="workflow" if parent_execution_code else "manual"
+            None,
+            "workflow" if parent_execution_code else "manual"
         )
 
     def _validate_input(self, input_schema: dict, input_payload: dict) -> dict:

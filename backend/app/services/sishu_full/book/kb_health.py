@@ -37,7 +37,11 @@ def fingerprint_kb(kb_name: str, manager: KnowledgeBaseManager | None = None) ->
 
     Returns ``""`` when the KB does not exist (so callers can detect deletion).
     """
-    mgr = manager or KnowledgeBaseManager()
+    # C-修复：默认构造的相对 base_dir 随进程 CWD 漂移——改用与全站一致的
+    # 规范 base_dir 解析（multi_user.knowledge_access.current_kb_base_dir）。
+    if manager is None:
+        from app.services.sishu_full.multi_user.knowledge_access import current_kb_base_dir
+        manager = KnowledgeBaseManager(base_dir=str(current_kb_base_dir()))
     if kb_name not in mgr.list_knowledge_bases():
         return ""
     base_dir: Path = mgr.base_dir / kb_name / "raw"
@@ -59,7 +63,11 @@ def fingerprint_kb(kb_name: str, manager: KnowledgeBaseManager | None = None) ->
 def fingerprint_kbs(
     kb_names: list[str], manager: KnowledgeBaseManager | None = None
 ) -> dict[str, str]:
-    mgr = manager or KnowledgeBaseManager()
+    # C-修复：默认构造的相对 base_dir 随进程 CWD 漂移——改用与全站一致的
+    # 规范 base_dir 解析（multi_user.knowledge_access.current_kb_base_dir）。
+    if manager is None:
+        from app.services.sishu_full.multi_user.knowledge_access import current_kb_base_dir
+        manager = KnowledgeBaseManager(base_dir=str(current_kb_base_dir()))
     return {name: fingerprint_kb(name, manager=mgr) for name in kb_names}
 
 

@@ -115,18 +115,23 @@ async def st_login(payload: SessionLoginRequest, response=None):
 
     from app.core.database import SessionLocal
     from app.core.auth import _upsert_user
+    from app.models.auth import User as UserM
 
     email = None
     try:
-        email = result.user.emails[0]
-    except (AttributeError, IndexError):
+        email = (result.user.emails or [None])[0]
+    except AttributeError:
         pass
     db = SessionLocal()
     try:
+        # 镜像用户名保护：admin 建号时已定 username——登录不改写（否则 email 前缀
+        # 或 sub 会顶掉管理面用户名，e2e 实测）。仅新建镜像时才用 email 前缀。
+        existing = db.query(UserM).filter(UserM.sub == result.user.id).first()
+        preferred = existing.username if existing else (email.split("@")[0] if email else result.user.id)
         user = _upsert_user(db, {
             "sub": result.user.id,
             "email": email,
-            "preferred_username": email.split("@")[0] if email else result.user.id,
+            "preferred_username": preferred,
         })
     finally:
         db.close()
