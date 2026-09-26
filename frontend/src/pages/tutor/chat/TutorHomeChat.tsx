@@ -977,7 +977,16 @@ function TutorHomeChatInner() {
                     {sishuCard?.ui_config?.welcome?.tagline ?? "出题 · 判分 · 错题本 · 学情规划"}
                   </div>
                   {tutorProfile && (tutorProfile.due_count > 0 || tutorProfile.streak_days > 0) && (
-                    <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.info }}>
+                    /* 私塾界面T2（设计 §三 #3）：动态数裸文字 chip 化——琥珀 12% 底 pill，
+                       文案一字不改；渲染条件不变（sishu 且 due>0 或 streak>0）。 */
+                    <div
+                      style={{
+                        marginTop: 10, display: "inline-flex", alignItems: "center",
+                        padding: "4px 12px", borderRadius: 999,
+                        background: "color-mix(in srgb, #D97706 12%, transparent)",
+                        fontSize: 12, fontWeight: 500, color: "#D97706",
+                      }}
+                    >
                       今日有 {tutorProfile.due_count} 题待复习，已连续学习 {tutorProfile.streak_days} 天
                     </div>
                   )}
@@ -986,7 +995,7 @@ function TutorHomeChatInner() {
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
                   {[
                     { label: "待复习", value: tutorProfile ? `${tutorProfile.due_count} 题` : "—", icon: <BookMarked className="h-4 w-4" />, color: spaceColors.sishu },
-                    { label: "连续学习", value: tutorProfile ? `${tutorProfile.streak_days} 天` : "—", icon: <Flame className="h-4 w-4" />, color: tokens.colors.ai },
+                    { label: "连续学习", value: tutorProfile ? `${tutorProfile.streak_days} 天` : "—", icon: <Flame className="h-4 w-4" />, color: spaceColors.sishu },  /* 私塾界面T2：紫→琥珀（同一空间单一强调色，AI 紫退场） */
                   ].map((c) => (
                     <div
                       key={c.label}
@@ -1180,7 +1189,8 @@ function TutorHomeChatInner() {
                       cursor: "pointer",
                     }}
                   >
-                    <Sparkles className="h-4 w-4 shrink-0" style={{ color: spaceColors.sishu }} />
+                    {/* 私塾界面T2：建议卡图标琥珀→蓝（动作色纪律，同问数建议卡） */}
+                    <Sparkles className="h-4 w-4 shrink-0" style={{ color: tokens.colors.primary }} />
                     <span style={{ fontSize: 13, color: "var(--text-primary, #222)", lineHeight: 1.6 }}>{item}</span>
                   </div>
                 ))}
