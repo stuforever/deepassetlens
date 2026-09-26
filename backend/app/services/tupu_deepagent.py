@@ -982,6 +982,53 @@ def _strip_tutor_tools_for_rollback(tools):
     return dropped, kept
 
 
+def _research_subagent_spec(model, parent_tools):
+    """切换 R3（G2）：research B 档子代理规格（design §五 B 档=课文主题调研+报告）。
+
+    三节点语义与双轨 run_research 同源（大纲→分节→汇总）；citation/token_tracker
+    以主线审计/追踪面替代。工具=父面 ∩ {search_kb} + 进程内 web_search（twin
+    ddgs 检索包装——非 MCP 面，仅供子代理）。"""
+    keep = {"search_kb"}
+    tools = [t for t in (parent_tools or []) if getattr(t, "name", "") in keep]
+    tools = tools + [_web_search_tool()]
+    prompt = (
+        "你是深度调研子代理。对给定主题产出结构化研究报告：\n"
+        "1. 大纲：先给出报告标题与 3-5 个小节（每节列要点）。\n"
+        "2. 分节撰写：逐节展开（Markdown，300-600 字，有依据地展开，不编造具体数据；"
+        "可用 search_kb 检索知识库、web_search 补外部事实）。\n"
+        "3. 汇总：合并为一篇结构化报告（标题+导语+各节+结论），不改写事实。\n"
+        "完成调研后直接输出最终报告全文。")
+    return {
+        "name": "research-analyst",
+        "description": "深度调研子代理：给定主题产出结构化研究报告（大纲→分节→汇总）。需要调研报告时委派本代理。",
+        "system_prompt": prompt,
+        "model": model,
+        "tools": tools,
+    }
+
+
+def _web_search_tool():
+    """R3：twin web_search（ddgs）进程内工具包装——research 子代理检索面。"""
+    from langchain_core.tools import tool as _tool
+
+    @_tool
+    async def web_search(query: str, max_results: int = 5) -> str:
+        """联网搜索：返回与 query 相关的网页结果（标题+摘要+链接），用于补充
+        知识库之外的外部事实。一次搜索即可，不要反复搜索同一主题。"""
+        from app.api.dt_agent_orchestrations import _web_search as _impl
+        try:
+            hits = await _impl(query, max_results=max(1, min(int(max_results), 8)))
+            if not hits:
+                return "（无结果）"
+            lines = [f"- {h.get('title', '')}: {str(h.get('snippet', ''))[:200]} ({h.get('url', '')})"
+                     for h in hits]
+            return "\n".join(lines)
+        except Exception as e:
+            return f"（搜索失败：{e}）"
+
+    return web_search
+
+
 def _ask_user_tool():
     """G1 询问 Future：专家卡 ask_user 进程内工具（design §三 G1）。
 
@@ -1373,6 +1420,13 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
             logger.info(f"[Capability] subagents 已装配（{len(_subagents)} 个规格：{[s['name'] for s in _subagents]}）")
         else:
             logger.warning("[Capability] subagents 开启但全部规格被护栏拒绝（回退串行定位）")
+    # 切换 R3（G2，design §三）：专家卡挂 research B 档子代理（大纲→分节→汇总）——
+    # 主 agent 经 task("research-analyst", ...) 委派调研；wenshu 问数面零感知。
+    if _is_expert_card:
+        _spec = _research_subagent_spec(model, mcp_tools)
+        if _spec["tools"]:
+            _subagents = list(_subagents or []) + [_spec]
+            logger.info("[R3] research-analyst 子代理已挂（B 档，工具 %d 件）" % len(_spec["tools"]))
 
     # 批13-Q：debug 能力 -> create_deep_agent(debug=True)（框架图执行详细日志，开发排障用）。
     _debug = _on("debug")
