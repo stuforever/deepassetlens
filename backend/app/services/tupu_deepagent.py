@@ -1455,7 +1455,7 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
     return agent
 
 
-async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_id: str = "wenshu", role_id: str = None):
+async def create_tupu_agent(checkpointer=None, connection_id: str = "", expert_id: str = "wenshu", role_id: str = None, user=None):
     """创建 tupu DeepAgent（业务工具走 MCP）——批13-Q fail-safe 包装器。
 
     按能力开关（capability_config）条件装配；新配置装配失败自动回退上一可用版本
@@ -1690,6 +1690,7 @@ async def get_tupu_agent(connection_id: str = "", expert_id: str = "wenshu", rol
                     connection_id=connection_id or None,
                     expert_id=expert_id,
                     role_id=role_id,
+                    user=user,
                 )
                 _GLOBAL_AGENTS[_cache_key] = agent
                 _evict_old_agents(_cache_key)
