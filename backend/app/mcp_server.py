@@ -320,7 +320,7 @@ def execute_api_sql(sql: str, confirm_token: str = "") -> dict:
 
 
 @mcp.tool()
-def execute_entity_api(entity_code: str, filters: dict = {}) -> dict:
+def execute_entity_api(entity_code: str, filters: dict = {}, confirm_token: str = "") -> dict:
     """执行对象 API 映射（对象来源 API 时用，伪逻辑 SQL + 过滤条件自动下推）。
     filters 格式（值类型决定匹配方式；禁止把条件整段当字符串传入）：
       - {"列": 值}                              精确匹配（=）
@@ -338,7 +338,7 @@ def execute_entity_api(entity_code: str, filters: dict = {}) -> dict:
 
 
 @mcp.tool()
-def execute_doris_sql(entity_code: str = "", sql: str = "", filters: dict = {}) -> dict:
+def execute_doris_sql(entity_code: str = "", sql: str = "", filters: dict = {}, confirm_token: str = "") -> dict:
     """执行 Doris 整合 SQL（source_mode=sql_integration 的对象取数用）。
 
     优先传 entity_code：自动加载平台预配的 integration_sql + doris_catalog，并按 filters 下推 WHERE，无需自己拼 SQL。
@@ -420,6 +420,59 @@ def _register_tutor_tools() -> int:
 
 
 _TUTOR_REGISTERED = _register_tutor_tools()
+
+
+# ---------------------------------------------------------------------------
+# 切换 v3.0 R0-③（G6）：文档生成 4 件——vendor skills/builtin/{docx,pptx,xlsx,pdf}
+# 平台化重写，生成库留用（app/services/doc_tools.py），EXEC 两段臂确认流全走平台。
+# 产物落 data/exports/documents/，写后回读校验；4 件皆写文件 → EXEC 类。
+# ---------------------------------------------------------------------------
+from app.services import doc_tools as _dt
+
+
+@mcp.tool()
+def generate_docx(blocks: list, output_name: str = "文档.docx", confirm_token: str = "") -> dict:
+    """生成 Word 文档（.docx）。blocks 每项一种块：
+    {"type":"heading","text":标题,"level":1} / {"type":"para","text":段落} /
+    {"type":"bullet","text":要点} / {"type":"number","text":编号项} /
+    {"type":"table","headers":[表头],"rows":[[行]]}。返回生成文件路径。
+    T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    args = {"blocks": blocks, "output_name": output_name}
+    return _two_arm("generate_docx", args, confirm_token,
+                    f"生成 Word 文档 {output_name}（{len(blocks or [])} 个块）",
+                    lambda: _dt.generate_docx(blocks, output_name))
+
+
+@mcp.tool()
+def generate_pptx(slides: list, output_name: str = "演示.pptx", confirm_token: str = "") -> dict:
+    """生成 PowerPoint 演示文稿（.pptx）。slides 每项 {"title":页标题,"bullets":[要点列表]}，
+    首页自动用标题版式。返回生成文件路径。
+    T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    args = {"slides": slides, "output_name": output_name}
+    return _two_arm("generate_pptx", args, confirm_token,
+                    f"生成演示文稿 {output_name}（{len(slides or [])} 页）",
+                    lambda: _dt.generate_pptx(slides, output_name))
+
+
+@mcp.tool()
+def generate_xlsx(sheets: list, output_name: str = "表格.xlsx", confirm_token: str = "") -> dict:
+    """生成 Excel 工作簿（.xlsx）。sheets 每项 {"name":表名,"headers":[表头],"rows":[[行]]}。
+    返回生成文件路径。T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    args = {"sheets": sheets, "output_name": output_name}
+    return _two_arm("generate_xlsx", args, confirm_token,
+                    f"生成 Excel {output_name}（{len(sheets or [])} 个工作表）",
+                    lambda: _dt.generate_xlsx(sheets, output_name))
+
+
+@mcp.tool()
+def generate_pdf(blocks: list, output_name: str = "文档.pdf", confirm_token: str = "") -> dict:
+    """生成 PDF 文档。blocks 块格式同 generate_docx（heading/para/bullet/number/table），
+    中文渲染内置 STSong-Light 字体。返回生成文件路径。
+    T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    args = {"blocks": blocks, "output_name": output_name}
+    return _two_arm("generate_pdf", args, confirm_token,
+                    f"生成 PDF 文档 {output_name}（{len(blocks or [])} 个块）",
+                    lambda: _dt.generate_pdf(blocks, output_name))
 
 
 # ---------------------------------------------------------------------------

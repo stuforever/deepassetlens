@@ -44,21 +44,22 @@ def test_vocab_resource_types():
 def test_tool_registry_matches_mcp_server():
     """TOOL_REGISTRY 全集 = mcp_server 实际注册集（🛠R1：fail-closed 防已注册工具隐身）。
 
-    W5/T8a 回挂教学 11 件前注册集=19 件；本测试在 T8a 后同步改为 30 件口径。
+    W5/T8a 回挂教学 11 件前注册集=19 件；T8a 后 30 件；切换 R0-③ 文档生成 4 件后 34 件口径。
     """
     from app.mcp_server import mcp
 
     registered = {t.name for t in asyncio.run(mcp.list_tools())}
     assert TOOL_REGISTRY == registered
-    assert len(TOOL_REGISTRY) == 30  # T8a：19 + 教学读 7 + 教学写 4
+    assert len(TOOL_REGISTRY) == 34  # T8a：19 + 教学读 7 + 教学写 4；R0-③：+文档 4
     assert "search_kb" in TOOL_REGISTRY          # 🛠R1：不在 GENERIC 但已注册——必须入册
     assert "read_file" not in TOOL_REGISTRY      # 框架工具面外（design §6.1 R14）
     # 三分类划分：READONLY ∪ EXEC == REGISTRY（WRITE 是系统级面外集合，不在注册表）
     assert not (READONLY_TOOLS & EXEC_TOOLS)
     assert READONLY_TOOLS | EXEC_TOOLS == TOOL_REGISTRY
     assert len(READONLY_TOOLS) == 22
-    assert len(EXEC_TOOLS) == 8
+    assert len(EXEC_TOOLS) == 12
     assert {"execute_sql", "execute_api_sql", "execute_entity_api", "execute_doris_sql"} < EXEC_TOOLS
+    assert {"generate_docx", "generate_pptx", "generate_xlsx", "generate_pdf"} < EXEC_TOOLS
     # T8a：教学 11 件全入册（读 7 在只读、写 4 在 EXEC）
     from app.services.permission_vocab import TUTOR_EXEC_TOOLS
     assert TUTOR_EXEC_TOOLS <= EXEC_TOOLS
@@ -71,7 +72,8 @@ def test_write_tools_align_with_engine_forbidden():
     """WRITE 恒拒 6 件 = query_contract.ABSOLUTE_FORBIDDEN_TOOLS（design §8.4 WRITE=6）。
 
     同时钉住引擎侧 DATA_TOOLS ⊆ 注册表——v1.4 实施裁定：DATA_TOOLS 语义是引擎
-    一致性判定、T8a 后 EXEC(8)≠DATA(4)，故 query_contract 常量原地保留不 import
+    一致性判定、EXEC(12)≠DATA(4)（T8a 教学写 4、R0-③ 文档 4 相继入 EXEC），
+    故 query_contract 常量原地保留不 import
     vocab（反向才绑权限口径），漂移由本断言把关。
     """
     from app.services.query_contract import ABSOLUTE_FORBIDDEN_TOOLS, DATA_TOOLS
@@ -79,7 +81,7 @@ def test_write_tools_align_with_engine_forbidden():
     assert WRITE_TOOLS == ABSOLUTE_FORBIDDEN_TOOLS
     assert len(WRITE_TOOLS) == 6
     assert DATA_TOOLS <= TOOL_REGISTRY
-    # T8a：EXEC(8) 与引擎 DATA_TOOLS(4) 有意分叉——DATA ⊂ EXEC（写 4 件非引擎数据工具）
+    # EXEC(12) 与引擎 DATA_TOOLS(4) 有意分叉——DATA ⊂ EXEC（写 4 件非引擎数据工具）
     assert DATA_TOOLS < EXEC_TOOLS
 
 

@@ -4,13 +4,15 @@
 单一事实源纪律：
 - PERMISSION_VOCAB：11 资源类型 × 合法动作词，原样 design §5.1；GET /api/v1/iam/vocab
   原样吐出（T2），前端矩阵编辑器数据源。
-- TOOL_REGISTRY：全集 = mcp_server 实际注册集（T8a 回挂教学 11 件后 = 30 件，含
-  search_kb 🛠R1）。**漂移由 tests/test_iam.py 用 mcp.list_tools() 实测断言把关**——
+- TOOL_REGISTRY：全集 = mcp_server 实际注册集（T8a 回挂教学 11 件 + R0-③ 文档生成
+  4 件后 = 34 件，含 search_kb 🛠R1）。**漂移由 tests/test_iam.py 用 mcp.list_tools()
+  实测断言把关**——
   本文件用字面量集合而靘认证 mcp_server 导入，避免权限判定路径反向依赖 MCP 服务
   模块（重导入链）；新增/摘除 MCP 工具时必须同步本表，测试会拦住遗漏。
 - 三分类（🛠R5 语义写死）：
   - READONLY_TOOLS：角色默认 tool:execute 覆盖，允许/拒绝二态；
-  - EXEC_TOOLS：仅 ACL 显式授予（角色默认不含）。注意 T8a 后 EXEC=8（+教学写 4），
+  - EXEC_TOOLS：仅 ACL 显式授予（角色默认不含）。注意 R0-③ 后 EXEC=12（教学写 4
+    +文档生成 4），
     与引擎侧 query_contract.DATA_TOOLS（恒 4，引擎一致性判定语义）**有意分叉**——
     两者关系由 test_write_tools_align_with_engine_forbidden 钉住；
   - WRITE_TOOLS：系统级面外 6 件恒拒（= query_contract.ABSOLUTE_FORBIDDEN_TOOLS），
@@ -65,6 +67,8 @@ TOOL_REGISTRY: FrozenSet[str] = frozenset({
     # T8a 教学写面 4 件（应用域写——两段臂+确认流+审计）
     "fsrs_review", "wrong_question_add", "mother_question_find_or_create",
     "export_wrong_book",
+    # 切换 R0-③（G6）：文档生成 4 件（写文件 → EXEC 两段臂）
+    "generate_docx", "generate_pptx", "generate_xlsx", "generate_pdf",
 })
 
 # 执行类（T8a 后 8 件：原 4 execute_* + 教学写 4）：仅 ACL 显式授予（🛠R5）
@@ -74,6 +78,8 @@ EXEC_TOOLS: FrozenSet[str] = frozenset({
     # 编排确认流+两段臂+审计三保险；系统级恒拒类语义只留给 shell/文件系统级）
     "fsrs_review", "wrong_question_add",
     "mother_question_find_or_create", "export_wrong_book",
+    # R0-③ 文档生成 4 件（产物文件写入 data/exports/documents/，写前确认）
+    "generate_docx", "generate_pptx", "generate_xlsx", "generate_pdf",
 })
 
 # T8a 教学写 4 件（EXEC 的子集——种子/两段臂定位用）

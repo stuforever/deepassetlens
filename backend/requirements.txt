@@ -40,3 +40,9 @@ jieba>=0.42.1
 pandas>=2.0.0
 pyyaml>=6.0
 supertokens-python==0.29.2  # CDI 5.2——配 Core 9.3.x（registry 最新 tag；0.31.x 需 CDI 5.4 无对应镜像）
+
+# 文档生成 MCP 工具 4 件依赖（切换 R0-③ G6：generate_docx/pptx/xlsx/pdf）
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
+reportlab==5.0.0
