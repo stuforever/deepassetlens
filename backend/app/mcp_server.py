@@ -476,6 +476,51 @@ def generate_pdf(blocks: list, output_name: str = "文档.pdf", confirm_token: s
 
 
 # ---------------------------------------------------------------------------
+# 切换 R2：笔记本 3 件——vendor tools/list_notebook+write_note+tool_composition
+# （_shared）的平台 MCP 重写，数据层 NotebookManager（per-user JSON 文件）收编留用。
+# has_notebooks/list_notebook 只读；write_note 写文件 → EXEC 两段臂。
+# ---------------------------------------------------------------------------
+from app.services.sishu_full.tools.list_notebook import list_notebooks_or_records as _lnr
+from app.services.sishu_full.tools.write_note import write_note as _wn
+from app.services.sishu_full.agents._shared.tool_composition import user_has_notebooks as _uhn
+
+
+@mcp.tool()
+def has_notebooks() -> dict:
+    """检查当前用户是否已有笔记本（写笔记前必查——无笔记本时先告知用户去建，勿臆造 notebook_id）。"""
+    try:
+        return {"has_notebooks": bool(_uhn())}
+    except Exception as e:
+        return {"has_notebooks": False, "error": str(e)[:200]}
+
+
+@mcp.tool()
+def list_notebook(notebook_id: str = "") -> dict:
+    """列笔记本（空 notebook_id=索引模式：全部笔记本概览）或列指定笔记本的记录（新→旧）。
+    返回 text（LLM 可读清单）+ summary（mode/count）。notebook_id 必须来自本工具索引输出，
+    未知 id 会报错并列出有效 id。"""
+    out = _lnr(notebook_id=(notebook_id or "").strip())
+    if not out.ok:
+        return {"status": "error", "error": out.error}
+    return {"status": "ok", "text": out.text, "summary": out.summary}
+
+
+@mcp.tool()
+def write_note(mode: str, notebook_id: str, record_id: str = "", title: str = "",
+               content: str = "", note: str = "", confirm_token: str = "") -> dict:
+    """写笔记本记录（mode=append 新增 | edit 修改指定 record_id）。
+    append：title/content（或 note 简注）；edit：record_id 必传，title/content 覆盖。
+    notebook_id 须来自 list_notebook 索引。T8a 两段臂：先无 token 调用取
+    pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    args = {"mode": mode, "notebook_id": notebook_id, "record_id": record_id,
+            "title": title, "content": content, "note": note}
+    return _two_arm("write_note", args, confirm_token,
+                    f"写笔记 {mode} → {notebook_id}（{title[:40]}）",
+                    lambda: _wn(mode=mode, notebook_id=notebook_id, record_id=record_id,
+                                title=title, content=content, note=note))
+
+
+# ---------------------------------------------------------------------------
 # 挂载到 FastAPI（SSE 传输，复用 8000 端口）
 # ---------------------------------------------------------------------------
 
