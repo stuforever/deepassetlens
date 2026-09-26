@@ -81,11 +81,14 @@ async def capability(req: CapabilityRequest):
             try:
                 from app.services.sishu_full.multi_user.h5 import h5_user_guarded
                 from app.services.sishu_full.multi_user.paths import user_context
-                from app.services.sishu_full.services.session.sqlite_store import get_sqlite_session_store
+                # 切换 R6/Wave2-4b：持久化换平台 PG store（sishu_sessions 四表族，
+                # 读侧 sishu_sessions.py 同源——写读两张皮与 h5 历史断链一并修复；
+                # vendor sqlite 退役路径随之解锁）。
+                from app.services.learning.h5_session_store import get_h5_pg_session_store
                 h5_ctx = user_context(h5_user_guarded(
                     req.h5_user, req.code or "", req.x_access_code or ""))
                 h5_ctx.__enter__()
-                store = get_sqlite_session_store()
+                store = get_h5_pg_session_store()
                 regen_content = ""
                 if is_regen:
                     # DT unified_ws regenerate 语义（regenerate_last_turn）1:1：
@@ -100,14 +103,16 @@ async def capability(req: CapabilityRequest):
                     if not last_user:
                         raise ValueError("nothing_to_regenerate")
                     regen_content = str(last_user.get("content") or "")
-                    # 三轨M2/H8：regenerate 同样开新 turn——后续 append_turn_event(turn_id)
-                    # 依赖该行（vendor sqlite 契约：turn 不存在抛 Turn not found）。
-                    await store.create_turn(session_id, capability=req.skill_code)
+                    # R6/Wave2-4b：create_turn 接受调用方 turn_id——旧 sqlite 形态
+                    # 自造 id 致 append_turn_event(Turn not found) 被吞（静默丢账）。
+                    await store.create_turn(session_id, capability=req.skill_code,
+                                            turn_id=turn_id)
                 else:
                     if not req.session_id:
                         await store.create_session(title=(req.message or "新对话")[:40],
                                                    session_id=session_id)
-                    await store.create_turn(session_id, capability=req.skill_code)
+                    await store.create_turn(session_id, capability=req.skill_code,
+                                            turn_id=turn_id)
                     await store.add_message(session_id, "user", req.message,
                                             capability=req.skill_code,
                                             attachments=req.attachments)
