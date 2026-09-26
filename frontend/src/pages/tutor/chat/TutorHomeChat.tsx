@@ -920,7 +920,7 @@ function TutorHomeChatInner() {
       <GeogebraTabProvider>
         <div className="relative flex h-full w-full items-stretch overflow-hidden">
         {/* v3 §2.4 空间色：对话页页头 3px 色条（sishu 琥珀） */}
-        <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#D97706', zIndex: 5 }} />
+        <div data-testid="space-color-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'var(--brand, #2563EB)', zIndex: 5 }} />
         <div
           className="chat-preview-shell flex h-full min-w-0 flex-1 flex-col overflow-hidden text-[var(--foreground)]"
           style={{ background: "var(--bg-page, #f7f8fa)" }}  /* UX2批④：背景对齐问数 bgPage */
@@ -983,8 +983,8 @@ function TutorHomeChatInner() {
                       style={{
                         marginTop: 10, display: "inline-flex", alignItems: "center",
                         padding: "4px 12px", borderRadius: 999,
-                        background: "color-mix(in srgb, #D97706 12%, transparent)",
-                        fontSize: 12, fontWeight: 500, color: "#D97706",
+                        background: "color-mix(in srgb, var(--brand, #2563EB) 12%, transparent)",
+                        fontSize: 12, fontWeight: 500, color: "var(--brand, #2563EB)",
                       }}
                     >
                       今日有 {tutorProfile.due_count} 题待复习，已连续学习 {tutorProfile.streak_days} 天
@@ -994,8 +994,8 @@ function TutorHomeChatInner() {
                 {/* 统计胶囊（同问数 S1 卡规格——图标+tabular-nums 数字+12px 说明） */}
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
                   {[
-                    { label: "待复习", value: tutorProfile ? `${tutorProfile.due_count} 题` : "—", icon: <BookMarked className="h-4 w-4" />, color: spaceColors.sishu },
-                    { label: "连续学习", value: tutorProfile ? `${tutorProfile.streak_days} 天` : "—", icon: <Flame className="h-4 w-4" />, color: spaceColors.sishu },  /* 私塾界面T2：紫→琥珀（同一空间单一强调色，AI 紫退场） */
+                    { label: "待复习", value: tutorProfile ? `${tutorProfile.due_count} 题` : "—", icon: <BookMarked className="h-4 w-4" />, color: "var(--brand, #2563EB)" },
+                    { label: "连续学习", value: tutorProfile ? `${tutorProfile.streak_days} 天` : "—", icon: <Flame className="h-4 w-4" />, color: "var(--brand, #2563EB)" },  /* 私塾界面方案A：主色与问数完全同色（琥珀仅留学科徽标场景） */
                   ].map((c) => (
                     <div
                       key={c.label}
@@ -1251,7 +1251,7 @@ function TutorHomeChatInner() {
                   onClick={() => navigate(e.path)}
                   className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-[var(--foreground)] hover:bg-[var(--muted)]"
                 >
-                  <BookMarked className="h-3.5 w-3.5 text-amber-600" />
+                  <BookMarked className="h-3.5 w-3.5" style={{ color: "var(--brand, #2563EB)" }} />
                   {e.label}
                 </button>
               ))}
