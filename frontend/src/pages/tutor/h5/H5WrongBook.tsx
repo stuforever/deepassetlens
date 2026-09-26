@@ -534,6 +534,17 @@ function WrongBookContent() {
       const data = await res.json();
       if (data.fields) {
         const f = data.fields;
+        // 解答步骤：后端已归一化为「每行一步」字符串；防御数组形态（旧后端/直返）拍平
+        const stepsText = Array.isArray(f.solution_steps)
+          ? f.solution_steps
+              .map((s: { step?: number; text?: string } | string, i: number) =>
+                typeof s === "string" ? `${i + 1}. ${s}` : s?.text ? `${s.step ?? i + 1}. ${s.text}` : "",
+              )
+              .filter(Boolean)
+              .join("\n")
+          : typeof f.solution_steps === "string"
+            ? f.solution_steps
+            : "";
         setForm((prev) => ({
           ...prev,
           ...(f.title ? { title: f.title } : {}),
@@ -541,6 +552,7 @@ function WrongBookContent() {
           ...(f.standard_answer ? { standard_answer: f.standard_answer } : {}),
           ...(f.wrong_answer ? { wrong_answer: f.wrong_answer } : {}),
           ...(f.detailed_analysis ? { detailed_analysis: f.detailed_analysis } : {}),
+          ...(stepsText ? { solution_steps: stepsText } : {}),
           ...(f.wrong_reason ? { wrong_reason: f.wrong_reason } : {}),
           ...(f.category ? { category: f.category } : {}),
           ...(f.difficulty ? { difficulty: Number(f.difficulty) } : {}),

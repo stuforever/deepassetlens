@@ -2130,15 +2130,45 @@ _RECOGNIZE_TEXT_PROMPT = """你是一个错题结构化助手。学生会给你�
 - subject: 学科（math/chinese/english/physics/chemistry/biology/history/geography/politics/other）
 - category: 题型（应用题/计算/几何/统计/综合）
 - question_text: 完整题目原文（保留关键数字和符号）
-- standard_answer: 正确答案（如有）
-- solution_steps: 解题步骤数组 [{step: 1, text: "..."}]
+- standard_answer: 最终答案（只要结果本身，简洁，不要过程）
+- detailed_analysis: 详细解题过程（必填，200-600 字）：分步骤讲解，每步说明做了什么、依据的公式/定理/知识点，以及为什么这样做；用编号列表呈现（1. ... 2. ...），语言面向学生通俗易懂
+- solution_steps: 解题步骤数组 [{step: 1, text: "..."}]，与 detailed_analysis 的步骤一一对应、每步一句话概括
 - key_points: 核心知识点数组 ["知识点1", "知识点2"]
 - wrong_reason: 错误原因（粗心/审题/知识点缺失/计算错误/方法错误/其他）
 - difficulty: 难度 1-5
 约束：
-- 只返回 JSON，不要 markdown
-- 解析控制在 100 字以内
-- 缺失字段返回空字符串或空数组"""
+- 只返回 JSON，不要 markdown 代码块包裹
+- standard_answer 只放最终答案；解题过程必须放在 detailed_analysis 和 solution_steps 里，不得省略
+- 缺失字段返回空字符串或空数组，但 detailed_analysis 与 solution_steps 在题目可解时不得为空"""
+
+
+def _normalize_recognize_fields(fields: dict) -> dict:
+    """AI 智能填充出参归一化（2026-09-26 用户需求：答案下要有详细解题过程）：
+
+    1. solution_steps：模型返回数组 [{step,text}]/["..."]，表单是「每行一步」纯文本
+       ——统一拍平为编号多行字符串，前端可直接填入；
+    2. detailed_analysis：模型偶尔缺省——从 solution_steps 合成兜底，保证详解不为空。
+    """
+    if not isinstance(fields, dict):
+        return fields
+    steps = fields.get("solution_steps")
+    if isinstance(steps, list) and steps:
+        lines = []
+        for i, s in enumerate(steps, 1):
+            if isinstance(s, dict):
+                txt = str(s.get("text") or "").strip()
+                no = s.get("step") or i
+            else:
+                txt = str(s).strip()
+                no = i
+            if txt:
+                lines.append(f"{no}. {txt}")
+        fields["solution_steps"] = "\n".join(lines)
+    elif steps is None:
+        fields["solution_steps"] = ""
+    if not str(fields.get("detailed_analysis") or "").strip() and fields["solution_steps"]:
+        fields["detailed_analysis"] = "解题步骤：\n" + fields["solution_steps"]
+    return fields
 
 
 @router.post("/recognize_text")
@@ -2242,6 +2272,7 @@ async def recognize_text(
                     pass
         if fields is None:
             return {"fields": {}, "raw": content[:500], "msg": "模型未返回有效 JSON"}
+        fields = _normalize_recognize_fields(fields)
         return {"fields": fields, "fallback": False}
     except Exception as e:
         return {"fields": {}, "fallback": True, "msg": f"LLM 调用失败: {e}"}

@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException  # noqa: F401  (HTTPException 供各�
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
-from app.services.sishu_full.api.routers import mother_question as mother_router
+from app.api.sishu_learning import mother_question as mother_router
 from app.services.sishu_full.learning.image_pipeline import (
     crop_by_bbox,
     detect_red_strokes,
@@ -805,6 +805,37 @@ def test_recognize_text_extracts_fields_for_h5_user(monkeypatch):
     assert out["fields"]["title"] == "加法题"
     assert out["fields"]["standard_answer"] == "2"
     assert out["fields"]["wrong_reason"] == "计算错误"
+
+
+def test_recognize_text_normalizes_steps_and_synthesizes_analysis(monkeypatch):
+    """2026-09-26 用户需求：AI 填充必须给详细解题过程——
+    solution_steps 数组拍平为「每行一步」字符串；detailed_analysis 缺省时从步骤合成。"""
+    monkeypatch.setattr("app.services.sishu_full.services.llm.config.get_llm_config", lambda: _llm_cfg())
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *a, **k: _llm_content_resp(
+            '{"title":"面积题","question_text":"长3宽2的长方形面积？","standard_answer":"6",'
+            '"solution_steps":[{"step":1,"text":"识别长方形面积公式 S=长×宽"},'
+            '{"step":2,"text":"代入 3×2=6"}],"wrong_reason":"知识点缺失","difficulty":2}'
+        ),
+    )
+    out = asyncio.run(
+        mother_router.recognize_text({"text": "长3宽2的长方形面积？"}, u="小明", code="")
+    )
+    f = out["fields"]
+    assert f["solution_steps"] == "1. 识别长方形面积公式 S=长×宽\n2. 代入 3×2=6"
+    assert "1. 识别长方形面积公式" in f["detailed_analysis"]  # 缺省时从步骤合成，不为空
+
+
+def test_normalize_recognize_fields_pure():
+    """归一化纯函数：字符串 steps 原样透传；空 steps 不合成详解。"""
+    norm = mother_router._normalize_recognize_fields
+    out = norm({"solution_steps": "1. 已就绪", "detailed_analysis": "既有详解"})
+    assert out["solution_steps"] == "1. 已就绪"
+    assert out["detailed_analysis"] == "既有详解"
+    out2 = norm({"solution_steps": []})
+    assert out2["solution_steps"] == ""
+    assert not out2.get("detailed_analysis")
 
 
 # ── 批量 OCR 管线（router 层，stub 引擎）────────────────────────────────────
