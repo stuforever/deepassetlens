@@ -54,6 +54,22 @@ with sync_playwright() as p:
     expect_url = "/e/wenshu/chat?new=1&q=" + urllib.parse.quote(q, safe="")
     # 批⓪ R#6 后契约：落到对话页且 URL 已立即清参（?q=/?new=1 不驻留）
     check("发送直达对话页", "/e/wenshu/chat" in pg.url and "q=" not in pg.url and "new=1" not in pg.url, pg.url[:90])
+    # R#13 正向断言（R队列要求补）：问题气泡出现 + chat 请求到达后端——
+    # 旧形态 cleanup 掐定时器=首问静默丢失（无气泡无请求），此二断言是修法回归门。
+    got_bubble = False
+    got_chat_req = False
+    reqs = []
+    pg.on("request", lambda r: reqs.append(r.url) if (r.method == "POST" and ("chat" in r.url or "capability" in r.url)) else None)
+    t0b = __import__("time").time()
+    while __import__("time").time() - t0b < 30:
+        if "统计用电客户总数" in pg.inner_text("body"):
+            got_bubble = True
+            break
+        pg.wait_for_timeout(500)
+    check("R#13正向：问题气泡出现", got_bubble, f"waited={int(__import__('time').time()-t0b)}s")
+    pg.wait_for_timeout(3000)
+    got_chat_req = any(("chat" in u or "capability" in u) for u in reqs)
+    check("R#13正向：chat请求到达后端", got_chat_req, f"posts={len(reqs)}")
     # 流式回答：等待回答文本或表格（600s 上限——探针实测 330s 交付/偶发 >420s，LLM 多轮推理延迟方差非回归）
     got = False
     import time

@@ -3,6 +3,16 @@
     "playwright": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp@latest", "--browser", "msedge"]
+    },
+    "sap-adt": {
+      "command": "npx",
+      "args": ["-y", "sap-adt-mcp"]
+    },
+    "sap-desktop": {
+      "command": "C:/Users/李钢柱/.local/bin/run-sapgui-mcp-server.exe",
+      "env": {
+        "BACKEND_TYPE": "desktop"
+      }
     }
   }
 }

@@ -4,6 +4,7 @@ import sys
 import time
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # UX2批②：GBK 控制台容错（🤖 emoji）
 from playwright.sync_api import sync_playwright
 
 SCR = Path(__file__).parent
@@ -22,28 +23,16 @@ with sync_playwright() as p:
     b = p.chromium.launch(headless=True)
     pg = login_page(b)
 
-    # ── 首屏 8 宫格：点击回填不直发 ──
-    pg.goto(BASE + "/", timeout=90000, wait_until="domcontentloaded")
-    pg.wait_for_timeout(6000)
-    grid = pg.locator("[data-testid='newchat-templates']")
-    check("宫格渲染", grid.count() > 0)
-    cells = pg.locator("[data-testid='newchat-templates'] [role='button']")
-    check("8 模板格", cells.count() == 8, f"cells={cells.count()}")
-    if cells.count() >= 1:
-        cells.first.click()
-        pg.wait_for_timeout(800)
-        ta = pg.locator("[data-testid='newchat-composer'] textarea").first
-        val = ta.input_value()
-        check("点击回填 composer 值=模板文案", "{主题}" in val, val[:40])
-        check("未直发（URL 仍在 /）", pg.url.rstrip("/") == BASE, pg.url[-30:])
-        focused = pg.evaluate("() => document.activeElement === document.querySelector(\"[data-testid='newchat-composer'] textarea\")")
-        check("回填后聚焦输入框", focused)
-        # 自定义格=空模板聚焦
-        custom = pg.locator("[data-testid='newchat-template-自定义']")
-        if custom.count() > 0:
-            custom.click()
-            pg.wait_for_timeout(500)
-            check("自定义格=空回填", pg.locator("[data-testid='newchat-composer'] textarea").first.input_value() == "")
+    # ── UX2批① 新门户契约（三卡替代旧 8 宫格+composer——用户反馈①正式变更） ──
+    check("① 门户三卡在场", pg.locator("[data-testid='portal-card-wenshu']").count() == 1
+          and pg.locator("[data-testid='portal-card-sishu']").count() == 1
+          and pg.locator("[data-testid='portal-card-h5']").count() == 1)
+    pg.locator("[data-testid='portal-card-wenshu']").click()
+    pg.wait_for_timeout(2000)
+    check("① 问数卡单跳对话页", "/e/wenshu/chat" in pg.url, pg.url[:60])
+    # 回填不直发契约移至对话页建议卡（ExpertChat 2×2 建议卡 setQuestion 不发送）
+    pg.goto(BASE + "/", timeout=60000, wait_until="domcontentloaded")
+    pg.wait_for_timeout(4000)
 
     # ── 对话页附件条 + 右栏（注入种子会话——右栏需已有消息渲染） ──
     import json as _json
@@ -64,27 +53,27 @@ with sync_playwright() as p:
     pg.wait_for_timeout(6000)
     bar = pg.locator("[data-testid='attachment-bar']")
     check("附件条渲染", bar.count() > 0)
-    for tid in ("attach-kb", "attach-skill", "attach-model"):
+    # UX2批② 附件条瘦身后：仅 attach-model（kb/skill/role 选择器移除=用户反馈②合理变更）
+    for tid in ("attach-model",):
         check(f"选择器 {tid} 在场", pg.locator(f"[data-testid='{tid}']").count() > 0)
-    # 选知识库 → localStorage 记忆
-    kb_sel = pg.locator("[data-testid='attach-kb']")
-    kb_sel.click()
+    model_sel = pg.locator("[data-testid='attach-model']")
+    model_sel.click()
     pg.wait_for_timeout(1200)
     opts = pg.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option")
     if opts.count() > 0:
         first_label = opts.first.inner_text()
         opts.first.click()
         pg.wait_for_timeout(800)
-        kb_sel.press("Escape")
+        model_sel.press("Escape")
         pg.wait_for_timeout(300)
-        stored = pg.evaluate("() => localStorage.getItem('attach:wenshu:kb') || ''")
-        check("📚 选择落 localStorage", first_label[:10] in stored or "kb" in stored, stored[:60])
+        stored = pg.evaluate("() => localStorage.getItem('attach:wenshu:model') || ''")
+        check("🤖 选择落 localStorage", first_label[:10] in stored or "model" in stored, stored[:60])
         pg.reload(wait_until="domcontentloaded")
         pg.wait_for_timeout(6000)
-        chips = pg.locator("[data-testid='attach-kb'] .ant-select-selection-item").count()
-        check("reload 后知识库选择保持", chips > 0, f"chips={chips}")
+        chips = pg.locator("[data-testid='attach-model'] .ant-select-selection-item").count()
+        check("reload 后模型选择保持", chips > 0, f"chips={chips}")
     else:
-        check("📚 选择落 localStorage", False, "无知识库选项（库列表空）")
+        check("🤖 选择落 localStorage", False, "无模型选项（连接列表空）")
 
     # 右栏三态：细条→展开→收起
     strip = pg.locator("[data-testid='context-rail-strip']")

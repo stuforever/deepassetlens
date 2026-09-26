@@ -42,12 +42,14 @@ async def _signup_or_get(email: str, password: str) -> str:
 
 
 async def _get_user_by_email(email: str):
+    # 0.29.2 API：list_users_by_account_info 按 email 精确取回（sign_up 重复场景）
     from supertokens_python import asyncio as st_asyncio
+    from supertokens_python.types import AccountInfo
 
-    users = await st_asyncio.get_users_newest_first_with_public_tenant_info(
-        None, None, "emailpassword", email
+    result = await st_asyncio.list_users_by_account_info(
+        "public", AccountInfo(email=email), user_context=None
     )
-    return users
+    return result
 
 
 def _upsert_mirror(sub: str, email: str, username: str) -> None:
