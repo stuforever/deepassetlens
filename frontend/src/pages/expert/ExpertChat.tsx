@@ -12,7 +12,7 @@ import { Button, Input, Popconfirm, Select, Spin, Typography, message } from 'an
 import {
   ApiOutlined, ApartmentOutlined, ArrowDownOutlined, BookOutlined, ClearOutlined,
   DatabaseOutlined, PlayCircleOutlined, ShareAltOutlined, StopOutlined, TeamOutlined,
-  RocketOutlined, EditOutlined, SettingOutlined, DownloadOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import ConversationMessageList from '../../components/conversation/ConversationMessageList';
 import UnifiedComposer from '../../components/chat/UnifiedComposer';
@@ -86,21 +86,9 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
   ? card.suggestions
   : card?.ui_config?.suggestions) ?? FREEPLAN_EXAMPLE_QUERIES;
 
-  // ⑤补补-2：欢迎语动态数（仅 sishu——wenshu 不调接口零变化）
-  // 批16deep 17.1：/api/tutor/profile 随 ⑤R R1 路由退役 404——切平台面 /api/v1/learning/today-panel
-  const [tutorProfile, setTutorProfile] = useState<{ due_count: number; streak_days: number } | null>(null);
-  useEffect(() => {
-    if (slug !== 'sishu') return;
-    (async () => {
-      try {
-        const r = await fetch('/api/v1/learning/today-panel');
-        const j = await r.json();
-        if (j && (j.due_count !== undefined || j.streak_days !== undefined)) {
-          setTutorProfile({ due_count: j.due_count ?? 0, streak_days: j.streak_days ?? 0 });
-        }
-      } catch { /* 画像失败静默——欢迎语回落 */ }
-    })();
-  }, [slug]);
+  // ⑤补补-2 欢迎语动态数（tutorProfile）：已随 R5 死分支清理移除——/e/sishu/chat
+  // 实际渲染 TutorHomeChat（expertPages 静态路由优先），本文件 slug 恒非 sishu，
+  // 此前 sishu 门控的拉取/动态数/双胶囊/宫格均为不可达代码（2026-09-26 五维评估项④）。
 
   // Session 状态来自 Zustand store（与 AppSider 共享）
   const sessions = useStore((s) => s.sessions);
@@ -1196,26 +1184,15 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
             <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-tertiary)' }}>
               {card?.ui_config?.welcome?.tagline ?? '一句话问数 · 受控执行 · 全程可审计'}
             </div>
-            {/* ⑤补补-2：tutor 欢迎语动态数（画像聚合 /api/tutor/profile——N 题待复习/M 天连续） */}
-            {slug === 'sishu' && tutorProfile && (tutorProfile.due_count > 0 || tutorProfile.streak_days > 0) && (
-              <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.info }}>
-                今日有 {tutorProfile.due_count} 题待复习，已连续学习 {tutorProfile.streak_days} 天
-              </div>
-            )}
           </div>
 
-          {/* 统计胶囊（S1 卡：图标 + tabular-nums 数字 + 12px 说明） */}
+          {/* 统计胶囊（S1 卡：图标 + tabular-nums 数字 + 12px 说明）——wenshu 三统计 */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {(slug === 'sishu'
-              ? [
-                  { label: '待复习', value: tutorProfile ? `${tutorProfile.due_count} 题` : '—', icon: <BookOutlined />, color: spaceColors.sishu },
-                  { label: '连续学习', value: tutorProfile ? `${tutorProfile.streak_days} 天` : '—', icon: <RocketOutlined />, color: tokens.colors.ai },
-                ]
-              : [
+            {[
                   { label: '主数据实体', value: stats.master, icon: <DatabaseOutlined />, color: tokens.colors.primary },
                   { label: '业务实体', value: stats.business, icon: <ApartmentOutlined />, color: tokens.colors.ai },
                   { label: '关系', value: stats.relation, icon: <ShareAltOutlined />, color: tokens.colors.info },
-                ]).map((c) => (
+                ].map((c) => (
               <div
                 key={c.label}
                 className="dal-stat-capsule"
@@ -1241,38 +1218,9 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
             {inputCard}
           </div>
 
-          {/* 三轨M7(U2) §3.3：sishu 空间首页宫格——7 功能入口下沉，首条消息发出后随欢迎页退场 */}
-          {slug === 'sishu' && (
-            <div
-              data-testid="sishu-space-grid"
-              style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, width: '100%', maxWidth: CONTENT_WIDTH }}
-            >
-              {[
-                { label: '书籍', path: '/e/sishu/book', icon: <BookOutlined /> },
-                { label: '自主学习', path: '/e/sishu/self-learning', icon: <RocketOutlined /> },
-                { label: 'AI写作', path: '/e/sishu/co-writer', icon: <EditOutlined /> },
-                { label: '伙伴/推送', path: '/e/sishu/partners', icon: <TeamOutlined /> },
-                { label: '母题库', path: '/e/sishu/admin/mother-questions', icon: <BookOutlined /> },
-                { label: '书源', path: '/e/sishu/admin/book', icon: <DatabaseOutlined /> },
-                { label: '教学设置', path: '/e/sishu/admin/settings', icon: <SettingOutlined /> },
-              ].map((e) => (
-                <div
-                  key={e.label}
-                  data-testid={`sishu-grid-${e.label}`}
-                  onClick={() => navigate(e.path)}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                    padding: '14px 8px', borderRadius: tokens.radius.card,
-                    background: 'var(--bg-content)', border: `1px solid ${tokens.colors.border}`,
-                    cursor: 'pointer', boxShadow: tokens.elevation.s1,
-                  }}
-                >
-                  <span style={{ fontSize: 18, color: spaceColors.sishu }}>{e.icon}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{e.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* R5 死分支清理：sishu 空间宫格已删——/e/sishu/chat 由 TutorHomeChat 承接
+              （expertPages 静态路由优先），本文件 slug 恒非 sishu，宫格不可达；
+              sishu 欢迎页功能由 TutorHomeChat 欢迎区提供（2026-09-26）。 */}
           {/* UX3批2：建议卡两空间恒渲染 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: CONTENT_WIDTH }}>
             {SUGGESTIONS.map((item, i) => (
