@@ -412,6 +412,25 @@ async def _agent_stream(req, session_id: str, turn_id: str, parts: List[str],
 async def run_chat(req, session_id: str, turn_id: str, user_prefix: str) -> AsyncGenerator[Dict[str, Any], None]:
     """chat 全链编排（批1 路径——批3 重构后走 _prepare+_agent_stream 共享面）。"""
     req._user_prefix = user_prefix
+    # G1 询问 Future（R1，design §三）：会话有活跃 ask_user 时本条消息=答案——
+    # 代答回流（await 中的工具续跑），不派发新 agent 轮（对话流问答语义）。
+    from app.services import pending_question as _pq
+    _pq_hit = _pq.pending_for_session(user_prefix, session_id)
+    if _pq_hit and req.message.strip():
+        yield _evt("session_meta", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"pending_question": _pq_hit["question_id"]})
+        _ok = _pq.resolve(_pq_hit["question_id"], req.message, source="chat")
+        yield _evt("tool_result", "agent", "tools",
+                   content=f"用户回答：{req.message}",
+                   metadata={"name": "ask_user", "ref": f"tool://ask_user",
+                             "question_id": _pq_hit["question_id"]},
+                   session_id=session_id, turn_id=turn_id)
+        if not _ok:
+            yield _evt("error", "bridge", "run", content="问题已失效（超时或已答）",
+                       session_id=session_id, turn_id=turn_id)
+        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
+                   metadata={"ok": True, "answered_question": True})
+        return
     gen = _prepare(req, session_id, turn_id)
     # 抽出 prepare 帧与块（_prepare 是 async generator——先逐帧转发直到返回值）
     kb_block = ref_block = ""

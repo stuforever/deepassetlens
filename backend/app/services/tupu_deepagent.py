@@ -25,6 +25,7 @@ except ImportError:
     from typing_extensions import NotRequired
 
 import operator
+from langchain_core.runnables import RunnableConfig as _RunnableConfig
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
@@ -981,6 +982,38 @@ def _strip_tutor_tools_for_rollback(tools):
     return dropped, kept
 
 
+def _ask_user_tool():
+    """G1 询问 Future：专家卡 ask_user 进程内工具（design §三 G1）。
+
+    图内暂停语义：注册 pending_question Future 并 await；会话键从注入 config 的
+    thread_id（{user}:{expert}:{session}）首尾段解析；答案经 resume 通道或下一条
+    chat 消息（run_chat 拦截代答）回流。超时=告知模型按假设续跑（不挂死图）。
+    """
+    from langchain_core.tools import tool as _tool
+
+    @_tool
+    async def ask_user(question: str, options: str = "", config: _RunnableConfig = None) -> str:
+        """向用户提出澄清问题并等待回答（question=要问的问题文本；options=可选的
+        备选项，多个用「|」分隔）。用户回答会作为本工具的返回值回流；提问期间不要
+        调用其他工具，等待本工具返回后基于答案继续。"""
+        from app.services import pending_question as _pq
+        thread_id = ((config or {}).get("configurable") or {}).get("thread_id", "")
+        session_id = thread_id.rsplit(":", 1)[-1] if thread_id else ""
+        user_prefix = thread_id.split(":", 1)[0] if thread_id and ":" in thread_id else ""
+        qid, fut, tmo = _pq.create_question(
+            question=question, user_prefix=user_prefix, session_id=session_id)
+        logger.info(f"[G1] ask_user 注册: qid={qid[:8]}… session={session_id[:24]}… tmo={tmo}")
+        try:
+            result = await asyncio.wait_for(fut, timeout=tmo)
+            _pq.drop_question(qid)
+            return f"用户回答：{result.get('answer', '')}（来源={result.get('source')}）"
+        except asyncio.TimeoutError:
+            _pq.drop_question(qid)
+            return "用户未在时限内回答（超时）。请基于已有信息继续，并明确说明你采用的假设。"
+
+    return ask_user
+
+
 async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict = None, role_id: str = None, user=None):
     """按能力开关条件装配 DeepAgent（批13-Q 4.1）。失败抛异常，由 create_tupu_agent 包装器 fail-safe。
     专家地基①（2026-09-12 spec §五）：card=专家配置卡——提示词基座/工具面/路径/权限四类按卡参数化，
@@ -1060,6 +1093,10 @@ async def _build_agent(checkpointer, connection_id: str, caps: dict, card: dict 
         _rf = [t for t in _all_mcp if getattr(t, "name", "") == "read_file"]
         if _rf and "read_file" not in {getattr(t, "name", "") for t in mcp_tools}:
             mcp_tools = mcp_tools + _rf
+        # 切换 R1（G1 询问 Future，design §三）：专家卡挂 ask_user 进程内工具——
+        # vendor ask_user（loop 一等公民）的平台泛化：注册 pending_question Future 并
+        # await（图内暂停），答案经 resume 通道或下一条 chat 消息回流（run_chat 拦截）。
+        mcp_tools = mcp_tools + [_ask_user_tool()]
     # 权限重构T5（design §6.2 装载点）：用户维度过滤——专家白名单（上）∩ 用户/角色
     # 权限（本步），fail-closed。ENABLE_AUTH=0 / admin 原样全量（缓存键无 #u 因子，
     # 开发态零变化）。非注册表面（read_file 等框架工具）按 🛠R14 面外声明放行。

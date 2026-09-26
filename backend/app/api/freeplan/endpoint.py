@@ -1071,18 +1071,32 @@ from pydantic import BaseModel as _PydanticBaseModel
 
 
 class HITLResumeRequest(_PydanticBaseModel):
-    """人审恢复请求：interrupt_id（SSE policy.interrupt 事件携带）+ approve 决定。"""
-    interrupt_id: str
-    approve: bool
+    """人审恢复请求：interrupt_id（SSE policy.interrupt 事件携带）+ approve 决定。
+
+    G1 询问 Future（切换 R1）复用本通道：question_id+answer 二字段真值时路由到
+    pending_question 解析（ask_user 图内暂停恢复），approve 语义不用。"""
+    interrupt_id: str = ""
+    approve: bool = True
     thread_id: str = ""  # 仅日志/观测用；解析按 interrupt_id
+    # G1 询问通道（与 interrupt_id 二选一）
+    question_id: str = ""
+    answer: str = ""
 
 
 async def resume_hitl(body: HITLResumeRequest):
-    """批准/拒绝待审中断，恢复同 thread 的 agent 续跑。
+    """批准/拒绝待审中断（或 G1 问答恢复），恢复同 thread 的 agent 续跑。
 
     会话锁注：**不得**获取会话锁——被中断的流仍持有该锁（agent 在 policy 中断处 await），
-    此处再获取即死锁（S5 验收③）。仅按 interrupt_id 解析 Future，天然幂等。
+    此处再获取即死锁（S5 验收③）。仅按 interrupt_id/question_id 解析 Future，天然幂等。
     """
+    if body.question_id:
+        from app.services import pending_question as _pq
+        ok = _pq.resolve(body.question_id, body.answer, source="resume")
+        if not ok:
+            logger.info(f"[G1] resume 未命中（可能已超时/已答）: question={body.question_id}")
+            return {"code": 404, "message": "问题不存在或已处理（可能已超时）"}
+        logger.info(f"[G1] resume 命中: question={body.question_id} answer={body.answer[:80]}")
+        return {"code": 200, "data": {"question_id": body.question_id, "answered": True}}
     from app.services.skill_policy import resolve_hitl_interrupt
     ok = resolve_hitl_interrupt(body.interrupt_id, body.approve)
     if not ok:
