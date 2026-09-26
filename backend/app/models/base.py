@@ -1121,3 +1121,22 @@ class ExpertEvent(Base):
     action = Column(String(24), nullable=False)
     detail = Column(JSON, nullable=True)
     updated_by = Column(String(64), nullable=True)
+
+
+class SishuSessionMeta(Base):
+    """切换 v3.0 R0-⑥：私塾会话元数据 PG 面（vendor sqlite chat_history.db 的收编终点）。
+
+    会话内容（消息/轮次/状态）走 langgraph checkpointer（thread_id），本表只存
+    会话级元数据（标题/摘要/偏好）供历史列表与审计；R0 由一次性迁移脚本从
+    data/**/chat_history.db 导入（按路径派生 user_prefix），R5 vendor sqlite 删除后
+    本表为唯一会话元数据源。id 沿用 vendor session id（跨源不撞——含 uuid/h5 前缀）。
+    """
+    __tablename__ = "sishu_session_meta"
+    id = Column(String(64), primary_key=True)
+    user_prefix = Column(String(100), nullable=False, default="", index=True)
+    title = Column(String(500), nullable=False, default="")
+    compressed_summary = Column(Text, nullable=True)
+    preferences_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+    migrated_at = Column(DateTime(timezone=True), server_default=func.now())
