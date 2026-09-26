@@ -76,7 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [  // ── 三轨M6(U1) 侧栏 4 区重�
       { menuKey: 'e:wenshu:chat', label: '数据探索对话', path: '/e/wenshu/chat', icon: CommentOutlined },
       { menuKey: 'e:sishu:chat', label: '私塾先生对话', path: '/e/sishu/chat', icon: ReadOutlined },
       { menuKey: 'e:tutor-h5:chat', label: 'h5 展台', path: '/e/tutor-h5/chat', icon: MobileOutlined },
-      { menuKey: 'e:sishu:admin:mq', label: '母题库管理', path: '/e/sishu/admin/mother-questions', icon: BookOutlined },
+      { menuKey: 'e:sishu:admin:mq', label: '错题管理', path: '/e/sishu/admin/mother-questions', icon: BookOutlined },
       { menuKey: 'e:sishu:admin:book', label: '书源管理', path: '/e/sishu/admin/book', icon: BookOutlined },
       { menuKey: 'e:sishu:admin:settings', label: '教学设置', path: '/e/sishu/admin/settings', icon: SettingOutlined },
     ],
@@ -202,7 +202,7 @@ export const NAV_PANEL_GROUPS: NavPanelGroup[] = [
     { menuKey: 'e:sishu:self-learning', label: '自主学习', icon: <ReadOutlined /> },
     { menuKey: 'e:sishu:co-writer', label: 'AI写作', icon: <EditOutlined /> },
     { menuKey: 'e:sishu:partners', label: '伙伴/推送', icon: <TeamOutlined /> },
-    { menuKey: 'e:sishu:admin:mq', label: '母题库', icon: <BookOutlined /> },
+    { menuKey: 'e:sishu:admin:mq', label: '错题管理', icon: <BookOutlined /> },
     { menuKey: 'e:sishu:admin:book', label: '书源', icon: <ReadOutlined /> },
     { menuKey: 'e:sishu:admin:settings', label: '教学设置', icon: <SettingOutlined /> } ] },
   { title: 'H5 发布管理', items: [

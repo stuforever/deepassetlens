@@ -14,7 +14,7 @@ export interface Textbook { id: string; name: string; grade: string | null; subj
 export interface Chapter { id: string; name: string; textbook_id: string; parent_id: string | null; }
 
 // 数据常量：值即后端契约（提交值），必须保持中文原文；显示时经 *_DISPLAY 映射到 i18n key 翻译
-export const GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级"];
+export const GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "七年级", "八年级", "九年级"];
 export const CATEGORIES = ["应用题", "计算", "几何", "统计", "综合"];
 export const SUBJECTS: Record<string, string> = {
   math: "数学", chinese: "语文", english: "英语",
@@ -36,6 +36,7 @@ export const SUBJECT_DISPLAY: Record<string, string> = {
 };
 export const GRADE_DISPLAY: Record<string, string> = {
   "一年级": "grade.1", "二年级": "grade.2", "三年级": "grade.3", "四年级": "grade.4", "五年级": "grade.5", "六年级": "grade.6",
+  "七年级": "grade.7", "八年级": "grade.8", "九年级": "grade.9",
 };
 export const CATEGORY_DISPLAY: Record<string, string> = {
   "应用题": "category.word_problems", "计算": "category.arithmetic", "几何": "category.geometry",

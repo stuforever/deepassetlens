@@ -104,7 +104,7 @@ const SISHU_ADMIN_PAGES: ExpertPageConfig[] = [
   // ⑤R F4（批11）：后台三项顶级入口（adminTop）——AppSider admin 段；子页/详情页 hideInMenu
   // IA 批3 3.4（终审裁定①·诚实账7）：管理三项数据面执法=批6 起平台 require_expert 接管——
   // 守卫 manage→use 对齐（A-4 manage 语义升级登记台账）；伙伴/推送守卫维持 manage（批6）
-  { path: '/e/sishu/admin/mother-questions', element: withUseGuard(MotherQuestionsAdmin, 'sishu'), label: '母题库管理', menuKey: 'e:sishu:admin:mq', adminTop: true },
+  { path: '/e/sishu/admin/mother-questions', element: withUseGuard(MotherQuestionsAdmin, 'sishu'), label: '错题管理', menuKey: 'e:sishu:admin:mq', adminTop: true },
   { path: '/e/sishu/admin/mother-questions/new', element: withUseGuard(MotherQuestionNew, 'sishu'), label: '录题', menuKey: 'e:sishu:admin:mq:new', hideInMenu: true },
   { path: '/e/sishu/admin/mother-questions/photo', element: withUseGuard(MotherQuestionPhoto, 'sishu'), label: '拍照录题', menuKey: 'e:sishu:admin:mq:photo', hideInMenu: true },
   { path: '/e/sishu/admin/mother-questions/photo-center', element: withUseGuard(MotherQuestionPhotoCenter, 'sishu'), label: '拍照中心', menuKey: 'e:sishu:admin:mq:photocenter', hideInMenu: true },

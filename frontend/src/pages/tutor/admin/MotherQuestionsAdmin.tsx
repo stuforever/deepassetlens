@@ -186,7 +186,7 @@ function MotherQuestionsContent() {
     <div style={{ height: '100%', overflowY: 'auto', padding: 24 }} data-testid="mq-page">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }} data-testid="mq-title">
-          <FileSearchOutlined style={{ fontSize: 24, color: PRIMARY }} /> 题库
+          <FileSearchOutlined style={{ fontSize: 24, color: PRIMARY }} /> 错题管理
           <span style={{ fontSize: 14, color: MUTED, fontWeight: 400 }}>（共 {total} 题）</span>
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

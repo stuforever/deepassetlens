@@ -8,7 +8,7 @@ export interface KnowledgePoint { id: string; name: string; parent_id: string | 
 export interface Textbook { id: string; name: string; grade: string | null; subject: string | null; }
 export interface Chapter { id: string; name: string; textbook_id: string; parent_id: string | null; }
 
-export const GRADES = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级'];
+export const GRADES = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '七年级', '八年级', '九年级'];
 export const CATEGORIES = ['应用题', '计算', '几何', '统计', '综合'];
 export const SUBJECTS: Record<string, string> = {
   math: '数学', chinese: '语文', english: '英语',
@@ -31,6 +31,7 @@ export const SUBJECT_DISPLAY: Record<string, string> = {
 export const GRADE_DISPLAY: Record<string, string> = {
   一年级: '一年级', 二年级: '二年级', 三年级: '三年级',
   四年级: '四年级', 五年级: '五年级', 六年级: '六年级',
+  七年级: '七年级', 八年级: '八年级', 九年级: '九年级',
 };
 export const CATEGORY_DISPLAY: Record<string, string> = {
   应用题: '应用题', 计算: '计算', 几何: '几何', 统计: '统计', 综合: '综合',
