@@ -35,12 +35,6 @@ export default memo(function VisualizeConfigPanel({
     val: VisualizeFormConfig[K],
   ) => onChange({ ...value, [key]: val });
 
-  // Manim modes need extra knobs (render quality, style hint) — match what
-  // the legacy Animator panel exposed so users don't lose granularity when
-  // they pick "Animation" / "Storyboard" here.
-  const isManim =
-    value.render_mode === "manim_video" || value.render_mode === "manim_image";
-
   const body = (
     <>
       <Field label={t("Render Mode")} width="w-[140px]">
@@ -55,39 +49,12 @@ export default memo(function VisualizeConfigPanel({
             { value: "svg", label: t("SVG") },
             { value: "mermaid", label: t("Mermaid") },
             { value: "html", label: t("HTML") },
-            { value: "manim_video", label: t("Animation") },
-            { value: "manim_image", label: t("Storyboard") },
+            // manim_video/manim_image 入口下线（2026-09-26 评估裁定：渲染沙箱未部署
+            // 且镜像无 manim，选择即必败；R6 随沙箱部署恢复）。
           ]}
         />
       </Field>
-
-      {isManim ? (
-        <>
-          <Field label={t("Quality")} width="w-[100px]">
-            <AntSelect
-              value={value.quality}
-              onChange={(v) => update("quality", v as VisualizeFormConfig["quality"])}
-              size="small"
-              style={{ width: "100%" }}
-              options={[
-                { value: "low", label: t("Low") },
-                { value: "medium", label: t("Medium") },
-                { value: "high", label: t("High") },
-              ]}
-            />
-          </Field>
-
-          <Field label={t("Style Hint")} width="min-w-[160px] flex-1">
-            <input
-              type="text"
-              value={value.style_hint}
-              onChange={(e) => update("style_hint", e.target.value)}
-              placeholder={t("Style, pacing, color...")}
-              className={`${INPUT_CLS} w-full`}
-            />
-          </Field>
-        </>
-      ) : null}
+      {/* isManim 附加旋钮（quality/style_hint）随 manim 入口下线一并移除 */}
     </>
   );
 

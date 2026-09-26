@@ -1037,64 +1037,23 @@ async def run_visualize(req, session_id: str, turn_id: str, user_prefix: str) ->
                    metadata={"ok": True, "render_mode": render_mode})
         return
 
-    # manim 分支：代码→沙箱（v4批4：平台 SandboxClient 9385 直连——vendor SandboxService 清零）
-    manim_system = ("你是 manim 代码引擎。生成单文件 manim Community 版脚本（Scene 类名 Main），"
-                    "渲染参数由调用方注入。只输出 Python 代码。")
-    code_acc = []
-    try:
-        model = _llm_stream_text(manim_system, user, temperature=0.2)
-        async for chunk in model:
-            c = getattr(chunk, "content", "")
-            if isinstance(c, str) and c:
-                code_acc.append(c)
-    except Exception as e:
-        yield _evt("error", "agent", "generate", content=str(e),
-                   session_id=session_id, turn_id=turn_id)
-        yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
-                   metadata={"ok": False})
-        return
-    code = "".join(code_acc).strip().removeprefix("```python").removeprefix("```").removesuffix("```")
-    exec_res: Dict[str, Any] = {}
-    try:
-        import base64 as _b64
-        from app.services.sandbox_client import SandboxClient
-        client = SandboxClient(timeout_s=300)
-        # 平台 runner 契约：代码须含 main()；manim 源码 b64 嵌入落盘后经 CLI 渲染
-        # （平台镜像无 manim/subsystem 受限时→runner_error→走下方 degraded 通道，4.3 登记）。
-        code_b64 = _b64.b64encode(code.encode("utf-8")).decode("ascii")
-        out_flag = "-ql" if render_mode == "manim_video" else "-qm"
-        script = (
-            "import base64, subprocess, sys\n"
-            "def main():\n"
-            f"    src = base64.b64decode('{code_b64}').decode('utf-8')\n"
-            "    open('/tmp/manim_scene.py', 'w', encoding='utf-8').write(src)\n"
-            f"    r = subprocess.run(['manim', '{out_flag}', '/tmp/manim_scene.py', 'Main'],\n"
-            "                       capture_output=True, text=True, timeout=270)\n"
-            "    print(r.stdout[-6000:])\n"
-            "    sys.stderr.write(r.stderr[-6000:])\n"
-            "    raise SystemExit(r.returncode)\n")
-        result = await client.execute(script)
-        exec_res = {"exit_code": result.exit_code, "stdout": result.stdout[-2000:], "stderr": result.stderr[-2000:],
-                    "error": result.error, "timed_out": result.timed_out}
-    except Exception as e:
-        logger.warning(f"[bridge] manim 沙箱执行失败: {e}")
-        exec_res = {"error": str(e)[:300]}
-    ok = not exec_res.get("error") and exec_res.get("exit_code") == 0
+    # manim 入口下线（2026-09-26 五维评估裁定：执行沙箱 9385 未部署且镜像无 manim，
+    # manim 渲染必败——即时明示降级，不再烧 LLM 生成必败代码；R6 随沙箱部署重开）。
     yield _evt("artifact", "agent", "answer", content="manim 产物",
                metadata={"render_mode": render_mode, "render_type": render_mode,
-                         "exec": exec_res, "ok": ok, "code": code[:4000]},
+                         "exec": {"error": "sandbox_unavailable"}, "ok": False,
+                         "code": "", "degraded": True},
                session_id=session_id, turn_id=turn_id)
     yield _evt("stage_end", "bridge", "generate", session_id=session_id, turn_id=turn_id)
-    if ok:
-        yield _evt("result", "agent", "answer", content="manim 产物已生成（见 artifact）",
-                   metadata={"render_mode": render_mode, "artifact": True},
-                   session_id=session_id, turn_id=turn_id)
-    else:
-        yield _evt("result", "agent", "answer", content="manim 执行未成功（沙箱环境缺 manim 或超时）",
-                   metadata={"render_mode": render_mode, "artifact": True, "degraded": True},
-                   session_id=session_id, turn_id=turn_id)
+    yield _evt("result", "agent", "answer",
+               content=("Manim 动画/分镜渲染暂不可用：执行沙箱（9385）未部署且镜像无 manim。"
+                        "请改用 图表 Chart.js / SVG / Mermaid / HTML 文本模式产出可视化，"
+                        "或联系管理员部署渲染沙箱。"),
+               metadata={"render_mode": render_mode, "artifact": True, "degraded": True},
+               session_id=session_id, turn_id=turn_id)
     yield _evt("done", "bridge", "session", session_id=session_id, turn_id=turn_id,
-               metadata={"ok": True, "render_mode": render_mode, "manim_ok": ok})
+               metadata={"ok": True, "render_mode": render_mode, "manim_ok": False,
+                         "manim_disabled": True})
 
 
 _RESEARCH_SYSTEM_OUTLINE = (
