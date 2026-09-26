@@ -10,8 +10,11 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.services.sishu.agents.notebook import NotebookSummarizeAgent
-from app.services.sishu.services.llm import clean_thinking_tags
+from app.services.learning.notebook_summarizer import (
+    clean_summary_text,
+    stream_record_summary,
+    summarize_record,
+)
 from app.services.sishu.services.notebook import notebook_manager
 
 from app.api.sishu_learning._enforce import SISHU_ROUTER_DEPS  # v4批6 执法面：require_expert(use)+?u= binding
@@ -90,15 +93,16 @@ class UpdateRecordRequest(BaseModel):
 
 async def _build_record_summary(request: AddRecordRequest) -> str:
     if request.summary.strip():
-        return clean_thinking_tags(request.summary).strip()
-    agent = NotebookSummarizeAgent(language=str(request.metadata.get("ui_language", "en")))
-    return clean_thinking_tags(
-        await agent.summarize(
+        return clean_summary_text(request.summary).strip()
+    # 切换 R6/Wave2：NotebookSummarizeAgent 平台化重写（提示词逐字内联+get_chat_model）
+    return clean_summary_text(
+        await summarize_record(
             title=request.title,
             record_type=request.record_type,
             user_query=request.user_query,
             output=request.output,
             metadata=request.metadata,
+            language=str(request.metadata.get("ui_language", "en")),
         )
     ).strip()
 
@@ -107,30 +111,30 @@ async def _stream_add_record_with_summary(
     request: AddRecordRequest,
 ) -> AsyncGenerator[str, None]:
     try:
-        agent = NotebookSummarizeAgent(language=str(request.metadata.get("ui_language", "en")))
         summary_parts: list[str] = []
         if request.summary.strip():
-            summary = clean_thinking_tags(request.summary).strip()
+            summary = clean_summary_text(request.summary).strip()
             summary_parts.append(summary)
             if summary:
                 yield f"data: {json.dumps({'type': 'summary_chunk', 'content': summary}, ensure_ascii=False)}\n\n"
         else:
-            async for chunk in agent.stream_summary(
+            async for chunk in stream_record_summary(
                 title=request.title,
                 record_type=request.record_type,
                 user_query=request.user_query,
                 output=request.output,
                 metadata=request.metadata,
+                language=str(request.metadata.get("ui_language", "en")),
             ):
                 if not chunk:
                     continue
                 summary_parts.append(chunk)
 
-            summary = clean_thinking_tags("".join(summary_parts)).strip()
+            summary = clean_summary_text("".join(summary_parts)).strip()
             if summary:
                 yield f"data: {json.dumps({'type': 'summary_chunk', 'content': summary}, ensure_ascii=False)}\n\n"
 
-        summary = clean_thinking_tags("".join(summary_parts)).strip()
+        summary = clean_summary_text("".join(summary_parts)).strip()
         result = notebook_manager.add_record(
             notebook_ids=request.notebook_ids,
             record_type=request.record_type,
