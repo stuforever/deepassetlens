@@ -951,10 +951,13 @@ function TutorHomeChatInner() {
           {/* 消息区（DT L1982-2075 1:1） */}
           <div className="flex w-full flex-1 min-h-0 flex-col">
             {!hasMessages ? (
-              <div className="animate-fade-in flex w-full flex-1 flex-col items-center justify-center px-6 pb-8" style={{ minHeight: "fit-content" }}>
+              /* 私塾界面T1（设计 2026-09-26 §二.5）：挤压式居中修正——容器去 justify-center/flex-1
+                 争抢，首块 margin-top:auto + 末块 margin-bottom:auto 实现少内容自然居中、
+                 多内容顶部对齐可滚动（问数同构 Zone A：主视觉→胶囊→composer→建议卡）。 */
+              <div className="animate-fade-in flex w-full flex-col items-center px-6 pb-8" style={{ minHeight: "fit-content" }}>
                 {/* UX3修复：欢迎区对齐问数视觉语言（色素/像素）——渐变大标题+副标语+today-panel 动态数。
                     问候语文案是功能保留（DT L660-696 时段桶），仅呈现样式从衬线收敛为问数渐变题 */}
-                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{ textAlign: "center", marginBottom: 16, marginTop: "auto", paddingTop: 8 }}>
                   <div
                     style={{
                       fontSize: tokens.fontSize.display,
@@ -980,7 +983,7 @@ function TutorHomeChatInner() {
                   )}
                 </div>
                 {/* 统计胶囊（同问数 S1 卡规格——图标+tabular-nums 数字+12px 说明） */}
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
                   {[
                     { label: "待复习", value: tutorProfile ? `${tutorProfile.due_count} 题` : "—", icon: <BookMarked className="h-4 w-4" />, color: spaceColors.sishu },
                     { label: "连续学习", value: tutorProfile ? `${tutorProfile.streak_days} 天` : "—", icon: <Flame className="h-4 w-4" />, color: tokens.colors.ai },
@@ -1159,7 +1162,7 @@ function TutorHomeChatInner() {
             {/* UX3修复：建议卡（问数同款两列卡规格）——仅欢迎视图渲染；点击经 prefill 预填不直发，
                 送信链路仍是桥 send（功能不换）。宽度对齐 ChatComposer 欢迎态 max-w-[768px]。 */}
             {!hasMessages && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, width: "100%", maxWidth: 768, margin: "0 auto", padding: "0 24px 16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, width: "100%", maxWidth: 768, margin: "0 auto", marginBottom: "auto", padding: "0 24px 16px" }}>
                 {sishuSuggestions.map((item, i) => (
                   <div
                     key={`suggest-${i}`}
@@ -1183,11 +1186,8 @@ function TutorHomeChatInner() {
                 ))}
               </div>
             )}
-            <div
-              aria-hidden="true"
-              className="shrink-0"
-              style={{ flexGrow: hasMessages ? 0 : 1.4, transition: "flex-grow 650ms cubic-bezier(0.16, 1, 0.3, 1)" }}
-            />
+            {/* T1：欢迎态底部弹性 spacer 已由首块 margin-top:auto + 末块 margin-bottom:auto
+                取代（挤压式居中修正，见欢迎区注）——原 flexGrow 1.4 与之争抢，删除。 */}
           </div>
 
           {/* 浮层族（DT L2162-2213 1:1） */}
