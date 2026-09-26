@@ -521,6 +521,60 @@ def write_note(mode: str, notebook_id: str, record_id: str = "", title: str = ""
 
 
 # ---------------------------------------------------------------------------
+# 切换 R4（G4）：协同写作 3 件——vendor co_writer/storage.py（per-user JSON 文档）
+# 数据层收编留用，注册面走平台 MCP。list/read 只读；write 增改 → EXEC 两段臂。
+# 长任务（动画渲染）已在双轨 run_visualize 图内+SSE 进度承接（G4 图内异步方案）。
+# ---------------------------------------------------------------------------
+from app.services.sishu_full.co_writer.storage import get_co_writer_storage as _cws
+
+
+@mcp.tool()
+def list_documents() -> dict:
+    """列出当前用户的协同写作文档（id/标题/预览/更新时间）。写文档前先查重。"""
+    try:
+        items = [{"id": d.id, "title": d.title, "preview": d.preview,
+                  "updated_at": d.updated_at} for d in _cws().list_documents()]
+        return {"status": "ok", "items": items, "count": len(items)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)[:200]}
+
+
+@mcp.tool()
+def read_document(doc_id: str) -> dict:
+    """读取指定协同写作文档全文（Markdown）。doc_id 来自 list_documents。"""
+    doc = _cws().load_document((doc_id or "").strip())
+    if doc is None:
+        return {"status": "error", "error": f"文档不存在: {doc_id}"}
+    return {"status": "ok", "id": doc.id, "title": doc.title,
+            "content": doc.content, "updated_at": doc.updated_at}
+
+
+@mcp.tool()
+def write_document(doc_id: str = "", title: str = "", content: str = "",
+                   confirm_token: str = "") -> dict:
+    """写协同写作文档（doc_id 空=新建；非空=更新该文档的标题/内容，Markdown 全文覆盖）。
+    返回文档 id 与标题。T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，
+    再携 token 原参数重调执行。"""
+    args = {"doc_id": doc_id, "title": title, "content": content}
+    return _two_arm("write_document", args, confirm_token,
+                    f"写作文档 {'更新 ' + doc_id if doc_id else '新建'}：{title[:40]}",
+                    lambda: _exec_write_document(doc_id, title, content))
+
+
+def _exec_write_document(doc_id: str, title: str, content: str) -> dict:
+    storage = _cws()
+    did = (doc_id or "").strip()
+    if did:
+        doc = storage.update_document(did, title=(title or None), content=content or None)
+        if doc is None:
+            return {"status": "error", "error": f"文档不存在: {did}"}
+    else:
+        doc = storage.create_document(title=(title or None), content=content or "")
+    return {"status": "ok", "id": doc.id, "title": doc.title,
+            "chars": len(doc.content or "")}
+
+
+# ---------------------------------------------------------------------------
 # 挂载到 FastAPI（SSE 传输，复用 8000 端口）
 # ---------------------------------------------------------------------------
 

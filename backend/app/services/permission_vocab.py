@@ -71,6 +71,8 @@ TOOL_REGISTRY: FrozenSet[str] = frozenset({
     "generate_docx", "generate_pptx", "generate_xlsx", "generate_pdf",
     # 切换 R2：笔记本 3 件（读 2 只读、写 1 EXEC 两段臂）
     "has_notebooks", "list_notebook", "write_note",
+    # 切换 R4：协同写作 3 件（读 2 只读、写 1 EXEC 两段臂）
+    "list_documents", "read_document", "write_document",
 })
 
 # 执行类（T8a 后 8 件：原 4 execute_* + 教学写 4）：仅 ACL 显式授予（🛠R5）
@@ -84,6 +86,8 @@ EXEC_TOOLS: FrozenSet[str] = frozenset({
     "generate_docx", "generate_pptx", "generate_xlsx", "generate_pdf",
     # R2 笔记写 1 件（笔记本记录增改，写前确认）
     "write_note",
+    # R4 写作文档 1 件（新建/覆盖更新，写前确认）
+    "write_document",
 })
 
 # T8a 教学写 4 件（EXEC 的子集——种子/两段臂定位用）
