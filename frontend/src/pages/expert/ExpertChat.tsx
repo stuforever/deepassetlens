@@ -122,10 +122,7 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     }
   }, [location.search]);
   // v3 §3.1（Task2）：新建对话直达——?new=1&q=... 预填并自动发出（门户/⌘K 发送链路落点）。
-  // sendQuestion 以显式入参取文本（不依赖 question state 时序）；autoSentRef 防重复发出。
   // UX2批③（反馈③）：?new=1 无 q=卡进入新建意图——强制新会话不复用残留活跃位。
-  const autoSentRef = useRef(false);
-  const selfNavRef = useRef(false);
   useEffect(() => {
     const sp = new URLSearchParams(location.search);
     if (sp.get('new') !== '1') return;
@@ -139,23 +136,26 @@ const SUGGESTIONS = (card?.suggestions && card.suggestions.length > 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
   useEffect(() => {
-    if (autoSentRef.current) return;
     const m = location.search.match(/[?&]q=([^&]+)/);
     if (!m) return;
-    autoSentRef.current = true;
     newChatIntentRef.current = true; // UX2批③（反馈③）：?new=1=新建契约——强制新会话
-    let q = decodeURIComponent(m[1]);
+    const q = decodeURIComponent(m[1]);
     setQuestion(q);
-    // R#6：立即清 ?q=/?new=1（replace 不留历史）——刷新/后退不再重发（审查更正形态）；
-    // 其余参数（session= 等）保留；setTimeout 补 cleanup——600ms 内切走/卸载则取消发出。
     const sp = new URLSearchParams(location.search);
     sp.delete('q');
     sp.delete('new');
-    selfNavRef.current = true; // UX2批③：自身 replace 触发的 cleanup 不掐定时器
-    navigate({ pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: true });
-    // UX2批③：自身 replace 触发的 cleanup 不掐定时器（硬加载 ?q= 场景）；用户 600ms 内切走仍取消
-    const t = window.setTimeout(() => { void sendQuestionRef.current?.(q); }, 600);
-    return () => { if (!selfNavRef.current) window.clearTimeout(t); selfNavRef.current = false; };
+    const cleared = { pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : '' };
+    // R#13 修（终形态·幂等化）：**「URL 里有 ?q= 即待发」**，不用 autoSentRef 门——
+    // React 18 StrictMode 双跑（mount→cleanup→re-run）下 autoSentRef 在首次跑置位、
+    // cleanup 取消定时器后重跑被门拦死 → 首问静默丢失（确定性复现，门户/⌘K 首发全灭）。
+    // 幂等形态：每次 run 排 600ms 定时器、cleanup 恒取消（真卸载/StrictMode 模拟卸载
+    // 都会重排）；清参延后进发送回调 → ?q= 留存到发送时，remount（页签首挂）凭 URL
+    // 自动补发；发送完成后刷新/后退不重发（R#6 契约保持）。
+    const t = window.setTimeout(() => {
+      navigate(cleared, { replace: true });
+      void sendQuestionRef.current?.(q);
+    }, 600);
+    return () => { window.clearTimeout(t); };
   }, [location.search, location.pathname, navigate]);
   // 批⓪：路由模拟器审计入口下线（simOpen/Drawer 移除）——批⑥ 引擎台「路由模拟」Tab 后台承接
   const [status, setStatus] = useState<ChatStatus>('ready');
