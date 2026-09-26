@@ -1201,7 +1201,8 @@ class TurnRuntimeManager:
 
         try:
             from app.services.sishu_full.agents.notebook import NotebookAnalysisAgent
-            from app.services.sishu_full.book.context import build_book_context
+            # 切换 R6-b：书页上下文读平台 PG（sishu_data.book_context 同签名换芯）
+            from app.services.sishu_data.book_context import build_book_context
             from app.services.sishu_full.core.context import Attachment, UnifiedContext
             from app.services.sishu_full.runtime.orchestrator import ChatOrchestrator
             from app.services.sishu_full.services.memory import get_memory_store
