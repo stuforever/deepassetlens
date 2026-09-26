@@ -150,12 +150,10 @@ def test_confirm_token_binding():
     assert verify("t1", args, "u1", tok, now=10**12)[0] is False  # 过期
 
 
-def test_switch_off_strips_tutor_tools(monkeypatch):
-    """灰度开关=0：_build_agent 剥教学 11 件（回滚路径——秒级零重部署，§8.3）。"""
+def test_twin_rollback_switch_removed():
+    """切换 R6 twin 收尾：灰度回滚开关已摘除（教学 11 件 MCP 面为唯一路径）。"""
     import app.services.tupu_deepagent as td
 
-    from types import SimpleNamespace as NS
-    tools = [NS(name="fsrs_due"), NS(name="execute_sql"), NS(name="search_kb")]
-    dropped, kept = td._strip_tutor_tools_for_rollback(tools)
-    assert [d.name for d in dropped] == ["fsrs_due"]
-    assert [k.name for k in kept] == ["execute_sql", "search_kb"]
+    assert not hasattr(td, "_strip_tutor_tools_for_rollback"), \
+        "灰度回滚开关应已删除（双轨期结束——回滚=git revert，不留长尾开关）"
+    assert not hasattr(td, "_TUTOR_TOOL_NAMES")

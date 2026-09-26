@@ -366,8 +366,8 @@ def sample_column_values(entity_code: str, column: str, limit: int = 50) -> dict
 # （拷贝源纪律：description 逐字沿用 SPECS，不许手抄）；user 由 /mcp 面 UserContext
 # 中间件置位（X-Tupu-User+HMAC），impl 内 current_user_strict fail-closed（🔴-4）；
 # 写 4 件走 EXEC 两段臂（design §8.4：无 confirm_token=预检臂①，携 token=执行臂②）。
-# 只读 7 件直通（user_strict 解析后调 impl）。灰度开关 SISHU_MCP_TUTOR_TOOLS=0 时
-# _build_agent 剥离本面回退编排承接（twin/编排=回滚路径，design §8.3）。
+# 只读 7 件直通（user_strict 解析后调 impl）。T8a 灰度开关已随 twin 收尾摘除——
+# 本面为唯一教学工具路径（切换 R6）。
 # ---------------------------------------------------------------------------
 from app.services.learning.tutor_inprocess import SPECS as _TUTOR_SPECS
 from app.services.memory_runtime import current_user_strict as _tutor_user_strict
