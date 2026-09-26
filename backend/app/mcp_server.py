@@ -235,13 +235,15 @@ def _with_result_ref(result: dict) -> dict:
 
 
 @mcp.tool()
-def execute_sql(sql: str, entity_code: str = "") -> dict:
+def execute_sql(sql: str, entity_code: str = "", confirm_token: str = "") -> dict:
     """执行 SELECT SQL 并返回结果（columns/rows/row_count）。自动修复 Unknown column。
-    physical_table 模式必传 entity_code 以锁定数据源+模式守卫（非物理表模式会被拦截）。"""
-    body = {"sql": sql}
-    if entity_code:
-        body["entity_code"] = entity_code
-    return _with_result_ref(dispatch_kg_action("execute_sql", body))
+    physical_table 模式必传 entity_code 以锁定数据源+模式守卫（非物理表模式会被拦截）。
+    T8a 两段臂：先无 token 调用取 pending_confirmation+confirm_token，再携 token 原参数重调执行。"""
+    args = {"sql": sql, "entity_code": entity_code}
+    return _two_arm("execute_sql", args, confirm_token,
+                    f"执行物理表 SQL：{sql[:120]}",
+                    lambda: _with_result_ref(dispatch_kg_action("execute_sql", {
+                        "sql": sql, **({"entity_code": entity_code} if entity_code else {})})))
 
 
 @mcp.tool()
