@@ -4,9 +4,6 @@
 # -*- coding: utf-8 -*-
 from fastapi import Depends
 
-# 原导入路径零改码（vendor 子树原结构）
-from app.services.sishu_full.api.routers import chat as chat_router  # noqa: E402
-
 # 原仓 main.py `_auth = [Depends(require_auth)]` 的同位接线。
 # 权限重构T6.1（design §7 批1）：换轨平台依赖——require_expert("use","sishu") 执法
 # + 平台→vendor ContextVar 桥（platform_require_auth，path_service 分目录语义不变）。
@@ -63,7 +60,9 @@ tutor_routers = [
     # 路由（⑥-2a auth 面/chat 引擎）先注册恒优先。T6批3：vendor auth 面退役，
     # /api/v1/auth 前缀仅余 codex OAuth 回调投递点（vendor_bridge 承接）。
     (codex_callback_router, "/api/v1/auth", ["auth"], None),                   # 原 L421（public）
-    (chat_router.router, "/api/v1", ["chat"], _auth),                          # 原 L440
+    # 切换 Wave2：vendor chat 路由行删除（R6-c2）——chat/sessions REST 前端零消费
+    # （getLegacyChatSession 死导出已删）、WS /chat 统一栈退役、POST /chat 消费方
+    # ChatDrawer 死件已删；book 流历史走平台 /api/v1/sessions（M14 PG 面）。
 ]
 
 

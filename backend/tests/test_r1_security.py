@@ -368,7 +368,7 @@ class _FakeStore:
     async def create_session(self, title, session_id):
         self.calls.append(("create_session", session_id))
 
-    async def create_turn(self, session_id, capability=""):
+    async def create_turn(self, session_id, capability="", turn_id=None):
         self.calls.append(("create_turn", session_id))
 
     async def add_message(self, session_id, role, content, **kw):
@@ -398,10 +398,11 @@ def _h5_env(monkeypatch, store, ctx):
         _sys.path.insert(0, _vendor)
     import app.services.sishu_full.multi_user.h5 as vh5
     import app.services.sishu_full.multi_user.paths as vpaths
-    import app.services.sishu_full.services.session.sqlite_store as vstore
+    # R6/Wave2-4b：持久化已换平台 PG store——桩点随迁（原 sqlite_store 桩位退役）
+    import app.services.learning.h5_session_store as pstore
     monkeypatch.setattr(vh5, "h5_user_guarded", lambda u, code="", xac="": f"h5_{u}")
     monkeypatch.setattr(vpaths, "user_context", lambda user: ctx)
-    monkeypatch.setattr(vstore, "get_sqlite_session_store", lambda: store)
+    monkeypatch.setattr(pstore, "get_h5_pg_session_store", lambda: store)
 
 
 def _run_gen(resp):
