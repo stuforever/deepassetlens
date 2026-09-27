@@ -160,3 +160,7 @@ gitmsg_*.txt
 
 # R3 I5：判分/探针凭据缓存不入库
 backend/scripts/dt_baseline/tokens.json
+
+# dt_baseline 活体快照含 API key（GitHub Push Protection 拦截实证）——只留本地不入库
+backend/scripts/dt_baseline/b8_llm_connections_before.json
+backend/scripts/dt_baseline/endpoints/get/api__v1__settings.json
