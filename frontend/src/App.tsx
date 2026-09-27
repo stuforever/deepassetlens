@@ -262,7 +262,7 @@ const App: React.FC = () => {
     [switchToMenu]
   );
 
-  const headerTitle = useMemo(() => 'DeepAssetLens', []);
+  const headerTitle = useMemo(() => 'DeepZxkh', []);
 
   // 三轨M6(U1) §2.1：⌘K/Ctrl+K 全局聚焦搜索（window keydown 一处）
   const searchRef = useRef<HTMLElement | null>(null);

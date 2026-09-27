@@ -79,6 +79,8 @@ interface ComposerInputProps {
    * composer so the resting box looks inviting rather than crammed.
    */
   minHeight?: number;
+  /** 空闲态 auto-size 上限（默认 200）——欢迎态大输入框（1/4 视口）用。 */
+  maxHeight?: number;
 }
 
 export interface ComposerInputHandle {
@@ -153,6 +155,7 @@ export const ComposerInput = memo(
       onOpenPersonaSelector,
       placeholder,
       minHeight = 28,
+      maxHeight = 200,
     },
     ref,
   ) {
@@ -215,7 +218,7 @@ export const ComposerInput = memo(
       [setInputBoth, onInputChange, textareaRef],
     );
 
-    useAutoSizedTextarea(textareaRef, input, { min: minHeight, max: 200 });
+    useAutoSizedTextarea(textareaRef, input, { min: minHeight, max: maxHeight });
 
     const handleInputChange = useCallback(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {

@@ -954,10 +954,10 @@ function TutorHomeChatInner() {
               /* 私塾界面T1（设计 2026-09-26 §二.5）：挤压式居中修正——容器去 justify-center/flex-1
                  争抢，首块 margin-top:auto + 末块 margin-bottom:auto 实现少内容自然居中、
                  多内容顶部对齐可滚动（问数同构 Zone A：主视觉→胶囊→composer→建议卡）。 */
-              <div className="animate-fade-in flex w-full flex-col items-center px-6 pb-8" style={{ minHeight: "fit-content" }}>
+              <div className="animate-fade-in flex w-full flex-col items-center justify-center px-6 pb-4" style={{ minHeight: "fit-content", flexGrow: 0.8 }}>
                 {/* UX3修复：欢迎区对齐问数视觉语言（色素/像素）——渐变大标题+副标语+today-panel 动态数。
                     问候语文案是功能保留（DT L660-696 时段桶），仅呈现样式从衬线收敛为问数渐变题 */}
-                <div style={{ textAlign: "center", marginBottom: 16, marginTop: "auto", paddingTop: 8 }}>
+                <div style={{ textAlign: "center", marginBottom: 16 }}>
                   <div
                     style={{
                       fontSize: tokens.fontSize.display,
@@ -1035,7 +1035,7 @@ function TutorHomeChatInner() {
                       : undefined
                   }
                 >
-                  <div data-chat-column="true" className="mx-auto w-full space-y-9 px-6" style={{ maxWidth: "min(100%, max(720px, 60vw))" }}>
+                  <div data-chat-column="true" className="mx-auto w-full space-y-9 px-6" style={{ maxWidth: "100%" }}>
                     <ChatMessageList
                       messages={state.messages as never}
                       isStreaming={state.isStreaming}
@@ -1092,6 +1092,8 @@ function TutorHomeChatInner() {
 
             <div style={{ borderRadius: 24, boxShadow: '0 12px 32px rgba(15, 23, 42, 0.10)', background: 'var(--bg-content, #fff)', overflow: 'hidden' }}  /* UX2批④：composer 卡片化对齐问数 S3 面板 */>
             <ChatComposer
+              welcomeMinHeight={200}
+              welcomeMaxHeight={320}
               composerRef={composerRef}
               capMenuRef={capMenuRef}
               capBtnRef={capBtnRef}
@@ -1171,7 +1173,7 @@ function TutorHomeChatInner() {
             {/* UX3修复：建议卡（问数同款两列卡规格）——仅欢迎视图渲染；点击经 prefill 预填不直发，
                 送信链路仍是桥 send（功能不换）。宽度对齐 ChatComposer 欢迎态 max-w-[768px]。 */}
             {!hasMessages && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, width: "100%", maxWidth: 768, margin: "0 auto", marginBottom: "auto", padding: "0 24px 16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, width: "100%", maxWidth: 768, margin: "0 auto", padding: "0 24px 16px" }}>
                 {sishuSuggestions.map((item, i) => (
                   <div
                     key={`suggest-${i}`}
@@ -1196,8 +1198,10 @@ function TutorHomeChatInner() {
                 ))}
               </div>
             )}
-            {/* T1：欢迎态底部弹性 spacer 已由首块 margin-top:auto + 末块 margin-bottom:auto
-                取代（挤压式居中修正，见欢迎区注）——原 flexGrow 1.4 与之争抢，删除。 */}
+            {/* 私塾界面二改（用户 2026-09-27）：文字上调/举例下调=显式弹性比
+                （欢迎块 0.8 : 底部 spacer 1.2）；对话框占 1/4 视口高（welcomeMinHeight 200/
+                max 320，见 ChatComposer 传参）；消息列全页宽（画布=全部页面）。 */}
+            <div aria-hidden="true" className="shrink-0" style={{ flexGrow: 1.2 }} />
           </div>
 
           {/* 浮层族（DT L2162-2213 1:1） */}

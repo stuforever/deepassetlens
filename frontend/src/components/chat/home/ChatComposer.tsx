@@ -248,6 +248,8 @@ export default memo(function ChatComposer({
   onCancelStreaming,
   prefillInputRef,
   inputPlaceholder,
+  welcomeMinHeight,
+  welcomeMaxHeight,
 }: {
   composerRef: RefObject<HTMLDivElement>;
   capMenuRef: RefObject<HTMLDivElement>;
@@ -361,6 +363,9 @@ export default memo(function ChatComposer({
   prefillInputRef?: React.MutableRefObject<((text: string) => void) | null>;
   /** Override the composer placeholder (e.g. quiz follow-up). */
   inputPlaceholder?: string;
+  /** 欢迎态输入框 min/max 高（px）——私塾 1/4 视口档。 */
+  welcomeMinHeight?: number;
+  welcomeMaxHeight?: number;
 }) {
   const { t } = useTranslation();
   const CapIcon = activeCap.icon;
@@ -748,7 +753,8 @@ export default memo(function ChatComposer({
                 : undefined
             }
             placeholder={inputPlaceholder}
-            minHeight={hasMessages ? 28 : 64}
+            minHeight={hasMessages ? 28 : (welcomeMinHeight ?? 64)}
+            maxHeight={welcomeMaxHeight}
           />
 
           {!!attachments.length && (

@@ -51,7 +51,7 @@ const Login: React.FC<Props> = ({ onSuccess }) => {
       >
         <div style={{ textAlign: 'center', marginBottom: 4 }}>
           <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary, #222)' }}>
-            DeepAssetLens
+            DeepZxkh
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-tertiary, #999)', marginTop: 4 }}>
             资产深度探查平台

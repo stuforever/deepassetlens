@@ -2,7 +2,7 @@
   "name": "deep-asset-lens-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "DeepAssetLens 资产深度探查平台（前端）",
+  "description": "DeepZxkh 资产深度探查平台（前端）",
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
     "@antv/g6": "^4.8.24",
